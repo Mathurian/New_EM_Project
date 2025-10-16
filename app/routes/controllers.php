@@ -245,7 +245,164 @@ class ContestController {
 		$stmt->execute();
 		$judges = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 		
-		view('contests/archived_details', compact('contest', 'categories', 'subcategories', 'contestants', 'judges'));
+		// Calculate category winners
+		$categoryWinners = [];
+		foreach ($categories as $category) {
+			// Get all subcategories for this category
+			$stmt = DB::pdo()->prepare('SELECT id FROM archived_subcategories WHERE archived_category_id = ?');
+			$stmt->execute([$category['id']]);
+			$subcategoryIds = array_column($stmt->fetchAll(\PDO::FETCH_ASSOC), 'id');
+			
+			if (!empty($subcategoryIds)) {
+				// Calculate total scores for each contestant in this category
+				$placeholders = str_repeat('?,', count($subcategoryIds) - 1) . '?';
+				$stmt = DB::pdo()->prepare("
+					SELECT 
+						ac.id as contestant_id,
+						ac.name as contestant_name,
+						ac.contestant_number,
+						SUM(s.score) as total_score,
+						COUNT(s.score) as score_count
+					FROM archived_contestants ac
+					LEFT JOIN archived_scores s ON ac.id = s.contestant_id AND s.subcategory_id IN ($placeholders)
+					GROUP BY ac.id, ac.name, ac.contestant_number
+					HAVING score_count > 0
+					ORDER BY total_score DESC
+					LIMIT 1
+				");
+				$stmt->execute($subcategoryIds);
+				$winner = $stmt->fetch(\PDO::FETCH_ASSOC);
+				
+				if ($winner) {
+					$categoryWinners[$category['id']] = $winner;
+				}
+			}
+		}
+		
+		view('contests/archived_details', compact('contest', 'categories', 'subcategories', 'contestants', 'judges', 'categoryWinners'));
+	}
+	
+	public function archivedContestPrint(array $params): void {
+		require_organizer();
+		$contestId = param('id', $params);
+		
+		// Get archived contest details
+		$stmt = DB::pdo()->prepare('SELECT * FROM archived_contests WHERE id = ?');
+		$stmt->execute([$contestId]);
+		$contest = $stmt->fetch(\PDO::FETCH_ASSOC);
+		
+		if (!$contest) {
+			http_response_code(404);
+			echo 'Archived contest not found';
+			return;
+		}
+		
+		// Get comprehensive score data
+		$stmt = DB::pdo()->prepare('
+			SELECT 
+				c.name as category_name,
+				sc.name as subcategory_name,
+				ac.name as contestant_name,
+				ac.contestant_number,
+				aj.name as judge_name,
+				cr.name as criterion_name,
+				s.score,
+				jc.comment,
+				od.amount as deduction_amount,
+				od.comment as deduction_comment
+			FROM archived_categories c
+			JOIN archived_subcategories sc ON c.id = sc.archived_category_id
+			JOIN archived_contestants ac ON 1=1
+			LEFT JOIN archived_scores s ON s.subcategory_id = sc.id AND s.contestant_id = ac.id
+			LEFT JOIN archived_judges aj ON s.judge_id = aj.id
+			LEFT JOIN archived_criteria cr ON s.criterion_id = cr.id
+			LEFT JOIN archived_judge_comments jc ON jc.subcategory_id = sc.id AND jc.contestant_id = ac.id AND jc.judge_id = aj.id
+			LEFT JOIN archived_overall_deductions od ON od.subcategory_id = sc.id AND od.contestant_id = ac.id
+			WHERE c.archived_contest_id = ?
+			ORDER BY c.name, sc.name, ac.contestant_number, ac.name, aj.name, cr.name
+		');
+		$stmt->execute([$contestId]);
+		$scoreData = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+		
+		// Organize data by category and subcategory
+		$organizedData = [];
+		foreach ($scoreData as $row) {
+			$categoryName = $row['category_name'];
+			$subcategoryName = $row['subcategory_name'];
+			$contestantName = $row['contestant_name'];
+			$contestantNumber = $row['contestant_number'];
+			
+			if (!isset($organizedData[$categoryName])) {
+				$organizedData[$categoryName] = [];
+			}
+			if (!isset($organizedData[$categoryName][$subcategoryName])) {
+				$organizedData[$categoryName][$subcategoryName] = [];
+			}
+			if (!isset($organizedData[$categoryName][$subcategoryName][$contestantName])) {
+				$organizedData[$categoryName][$subcategoryName][$contestantName] = [
+					'contestant_number' => $contestantNumber,
+					'scores' => [],
+					'comments' => [],
+					'deductions' => []
+				];
+			}
+			
+			if ($row['score'] !== null) {
+				$organizedData[$categoryName][$subcategoryName][$contestantName]['scores'][] = [
+					'judge' => $row['judge_name'],
+					'criterion' => $row['criterion_name'],
+					'score' => $row['score']
+				];
+			}
+			
+			if ($row['comment']) {
+				$organizedData[$categoryName][$subcategoryName][$contestantName]['comments'][] = [
+					'judge' => $row['judge_name'],
+					'comment' => $row['comment']
+				];
+			}
+			
+			if ($row['deduction_amount'] !== null) {
+				$organizedData[$categoryName][$subcategoryName][$contestantName]['deductions'][] = [
+					'amount' => $row['deduction_amount'],
+					'comment' => $row['deduction_comment']
+				];
+			}
+		}
+		
+		// Calculate totals and rankings
+		$categoryTotals = [];
+		foreach ($organizedData as $categoryName => $subcategories) {
+			$categoryTotals[$categoryName] = [];
+			foreach ($subcategories as $subcategoryName => $contestants) {
+				foreach ($contestants as $contestantName => $data) {
+					$totalScore = 0;
+					foreach ($data['scores'] as $score) {
+						$totalScore += $score['score'];
+					}
+					
+					// Subtract deductions
+					foreach ($data['deductions'] as $deduction) {
+						$totalScore -= $deduction['amount'];
+					}
+					
+					if (!isset($categoryTotals[$categoryName][$contestantName])) {
+						$categoryTotals[$categoryName][$contestantName] = [
+							'contestant_number' => $data['contestant_number'],
+							'total_score' => 0
+						];
+					}
+					$categoryTotals[$categoryName][$contestantName]['total_score'] += $totalScore;
+				}
+			}
+			
+			// Sort by total score descending
+			uasort($categoryTotals[$categoryName], function($a, $b) {
+				return $b['total_score'] <=> $a['total_score'];
+			});
+		}
+		
+		view('contests/archived_print', compact('contest', 'organizedData', 'categoryTotals'));
 	}
 }
 

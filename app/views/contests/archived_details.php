@@ -2,6 +2,7 @@
 <h2>Archived Contest Details</h2>
 <div class="navigation-buttons">
 	<a href="<?= url('admin/archived-contests') ?>" class="btn btn-secondary">← Back to Archived Contests</a>
+	<a href="<?= url('admin/archived-contest/' . urlencode($contest['id']) . '/print') ?>" class="btn btn-primary">🖨️ Print All Scores</a>
 	<a href="<?= home_url() ?>" class="btn btn-outline">🏠 Home</a>
 </div>
 
@@ -17,6 +18,36 @@
 		<?php endif; ?>
 	</div>
 </div>
+
+<?php if (!empty($categoryWinners)): ?>
+<div class="card">
+	<h4>🏆 Category Winners</h4>
+	<div class="row">
+		<?php foreach ($categoryWinners as $categoryId => $winner): ?>
+			<?php 
+			$category = array_filter($categories, function($cat) use ($categoryId) {
+				return $cat['id'] === $categoryId;
+			});
+			$category = reset($category);
+			?>
+			<div class="col-6">
+				<div class="winner-card">
+					<h5><?= htmlspecialchars($category['name']) ?></h5>
+					<div class="winner-info">
+						<p><strong>Winner:</strong> 
+							<?php if (!empty($winner['contestant_number'])): ?>
+								#<?= htmlspecialchars($winner['contestant_number']) ?> - 
+							<?php endif; ?>
+							<?= htmlspecialchars($winner['contestant_name']) ?>
+						</p>
+						<p><strong>Total Score:</strong> <?= number_format($winner['total_score'], 1) ?></p>
+					</div>
+				</div>
+			</div>
+		<?php endforeach; ?>
+	</div>
+</div>
+<?php endif; ?>
 
 <div class="row">
 	<div class="col-6">
@@ -95,5 +126,24 @@
 <div class="card">
 	<div class="alert alert-info">
 		<p><strong>Note:</strong> This contest has been archived. All data has been preserved for historical reference but is no longer active for scoring or management.</p>
+		<p><strong>Print Report:</strong> Use the "Print All Scores" button above to generate a comprehensive report of all scores, comments, and deductions for this archived contest.</p>
 	</div>
 </div>
+
+<style>
+.winner-card {
+	background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+	border: 2px solid #28a745;
+	border-radius: 8px;
+	padding: 15px;
+	margin-bottom: 15px;
+}
+.winner-card h5 {
+	color: #28a745;
+	margin-top: 0;
+	font-weight: bold;
+}
+.winner-info p {
+	margin: 5px 0;
+}
+</style>
