@@ -585,26 +585,9 @@ class BackupController {
 		$stmt->execute();
 		$backupLogs = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 		
-		// Convert timestamps to browser timezone for display
-		foreach ($backupLogs as &$backup) {
-			if ($backup['created_at']) {
-				$backup['created_at'] = $this->convertToBrowserTimezone($backup['created_at']);
-			}
-		}
-		
 		// Get backup settings
 		$stmt = DB::pdo()->query('SELECT * FROM backup_settings ORDER BY backup_type');
 		$backupSettings = $stmt->fetchAll(\PDO::FETCH_ASSOC);
-		
-		// Convert timestamps to browser timezone for display
-		foreach ($backupSettings as &$setting) {
-			if ($setting['last_run']) {
-				$setting['last_run'] = $this->convertToBrowserTimezone($setting['last_run']);
-			}
-			if ($setting['next_run']) {
-				$setting['next_run'] = $this->convertToBrowserTimezone($setting['next_run']);
-			}
-		}
 		
 		// If no backup settings exist, create defaults
 		if (empty($backupSettings)) {
@@ -791,12 +774,14 @@ class BackupController {
 			$pdo->beginTransaction();
 			
 			// Update schema backup settings
-			$stmt = $pdo->prepare('UPDATE backup_settings SET enabled = ?, frequency = ?, frequency_value = ?, retention_days = ?, updated_at = CURRENT_TIMESTAMP WHERE backup_type = ?');
-			$stmt->execute([$schemaEnabled, $schemaFrequency, $schemaFrequencyValue, $schemaRetention, 'schema']);
+			$schemaNextRun = $schemaEnabled ? $this->calculateNextRun($schemaFrequency, $schemaFrequencyValue) : null;
+			$stmt = $pdo->prepare('UPDATE backup_settings SET enabled = ?, frequency = ?, frequency_value = ?, retention_days = ?, next_run = ?, updated_at = CURRENT_TIMESTAMP WHERE backup_type = ?');
+			$stmt->execute([$schemaEnabled, $schemaFrequency, $schemaFrequencyValue, $schemaRetention, $schemaNextRun, 'schema']);
 			
 			// Update full backup settings
-			$stmt = $pdo->prepare('UPDATE backup_settings SET enabled = ?, frequency = ?, frequency_value = ?, retention_days = ?, updated_at = CURRENT_TIMESTAMP WHERE backup_type = ?');
-			$stmt->execute([$fullEnabled, $fullFrequency, $fullFrequencyValue, $fullRetention, 'full']);
+			$fullNextRun = $fullEnabled ? $this->calculateNextRun($fullFrequency, $fullFrequencyValue) : null;
+			$stmt = $pdo->prepare('UPDATE backup_settings SET enabled = ?, frequency = ?, frequency_value = ?, retention_days = ?, next_run = ?, updated_at = CURRENT_TIMESTAMP WHERE backup_type = ?');
+			$stmt->execute([$fullEnabled, $fullFrequency, $fullFrequencyValue, $fullRetention, $fullNextRun, 'full']);
 			
 			$pdo->commit();
 			
@@ -1592,12 +1577,6 @@ class BackupController {
 			echo '<pre>Error: ' . $e->getMessage() . '</pre>';
 			exit;
 		}
-	}
-	
-	private function convertToBrowserTimezone(string $timestamp): string {
-		// For now, we'll use JavaScript to convert timestamps on the client side
-		// This method just returns the timestamp with a data attribute for JS processing
-		return $timestamp;
 	}
 	
 	private function ensureBackupSettingsTable(): void {
@@ -3726,6 +3705,66 @@ class AdminController {
 		\App\Logger::logAdminAction('log_cleanup', 'system', null, "Cleaned up {$deletedCount} log files older than {$daysToKeep} days");
 		
 		redirect('/admin/log-files?success=cleanup_complete&deleted=' . $deletedCount);
+	}
+	
+	public function debugScheduledBackups(): void {
+		require_organizer();
+		
+		try {
+			$pdo = DB::pdo();
+			$now = date('Y-m-d H:i:s');
+			
+			echo '<pre>=== Scheduled Backup Debug Information ===</pre>';
+			echo '<pre>Current time: ' . $now . '</pre>';
+			echo '<pre>Current timestamp: ' . strtotime($now) . '</pre>';
+			
+			// Get all backup settings (enabled and disabled)
+			$stmt = $pdo->query('SELECT * FROM backup_settings ORDER BY backup_type');
+			$settings = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+			
+			echo '<pre>Found ' . count($settings) . ' backup settings:</pre>';
+			
+			foreach ($settings as $setting) {
+				$nextRun = $setting['next_run'];
+				$nextRunTimestamp = $nextRun ? strtotime($nextRun) : null;
+				$shouldRun = false;
+				
+				if (empty($nextRun)) {
+					$shouldRun = true;
+				} else {
+					$shouldRun = strtotime($now) >= $nextRunTimestamp;
+				}
+				
+				echo '<pre>';
+				echo "Backup Type: {$setting['backup_type']}\n";
+				echo "Enabled: " . ($setting['enabled'] ? 'YES' : 'NO') . "\n";
+				echo "Frequency: {$setting['frequency']} (every {$setting['frequency_value']})\n";
+				echo "Retention: {$setting['retention_days']} days\n";
+				echo "Last Run: " . ($setting['last_run'] ?: 'Never') . "\n";
+				echo "Next Run: " . ($nextRun ?: 'Not set') . "\n";
+				echo "Should Run: " . ($shouldRun ? 'YES' : 'NO') . "\n";
+				echo "Calculated Next Run: " . $this->calculateNextRun($setting['frequency'], $setting['frequency_value'] ?? 1) . "\n";
+				echo '</pre>';
+			}
+			
+			// Test if we can run scheduled backups
+			echo '<pre>=== Testing Scheduled Backup Execution ===</pre>';
+			$enabledSettings = array_filter($settings, function($s) { return $s['enabled']; });
+			echo '<pre>Enabled settings: ' . count($enabledSettings) . '</pre>';
+			
+			if (empty($enabledSettings)) {
+				echo '<pre>⚠️ No enabled backup settings found!</pre>';
+				echo '<pre>To enable backups, go to the backup settings and check the "Enable" checkbox.</pre>';
+			} else {
+				echo '<pre>✓ Found enabled backup settings</pre>';
+			}
+			
+			exit;
+			
+		} catch (\Exception $e) {
+			echo '<pre>Error: ' . $e->getMessage() . '</pre>';
+			exit;
+		}
 	}
 	
 	public function forceLogoutAll(): void {
