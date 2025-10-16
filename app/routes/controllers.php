@@ -1995,6 +1995,8 @@ class SubcategoryController {
 		
 		redirect('/categories/' . $categoryId . '/subcategories?error=creation_failed');
 	}
+	}
+	
 	public function templates(array $params): void {
 		require_organizer();
 		$categoryId = param('id', $params);
