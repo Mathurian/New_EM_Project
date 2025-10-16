@@ -31,7 +31,7 @@
 </head>
 <body>
     <div class="container">
-        <a href="<?= url('people') ?>" class="print-button" style="background-color: #6c757d;">Back to People</a>
+        <a href="<?= url('admin/print-reports') ?>" class="print-button" style="background-color: #6c757d;">Back to Print Reports</a>
         <a href="#" onclick="window.print()" class="print-button">Print Report</a>
 
         <h1>Judge Score Report</h1>

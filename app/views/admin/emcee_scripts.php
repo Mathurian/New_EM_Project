@@ -99,7 +99,7 @@
 							<td><?= htmlspecialchars($script['description'] ?: 'No description') ?></td>
 							<td><?= htmlspecialchars($script['file_name']) ?></td>
 							<td><?= number_format($script['file_size'] / 1024, 1) ?> KB</td>
-							<td><?= htmlspecialchars($script['uploaded_by_name']) ?></td>
+							<td><?= htmlspecialchars($script['uploaded_by_name'] ?: 'Unknown') ?></td>
 							<td><?= date('M j, Y g:i A', strtotime($script['uploaded_at'])) ?></td>
 							<td>
 								<span class="badge <?= $script['is_active'] ? 'badge-success' : 'badge-secondary' ?>">

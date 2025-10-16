@@ -2188,7 +2188,12 @@ class AdminController {
 		// Calculate total pages
 		$totalPages = ceil($totalLogs / $perPage);
 		
-		view('admin/logs', compact('logs', 'totalLogs', 'totalPages', 'page', 'perPage', 'currentLogLevel', 'logLevel', 'userRole', 'action', 'dateFrom', 'dateTo'));
+		// Get available roles and actions for filter dropdowns
+		$availableRoles = ['organizer', 'judge', 'emcee', 'contestant'];
+		$stmt = DB::pdo()->query('SELECT DISTINCT action FROM activity_logs ORDER BY action');
+		$availableActions = $stmt->fetchAll(\PDO::FETCH_COLUMN);
+		
+		view('admin/logs', compact('logs', 'totalLogs', 'totalPages', 'page', 'perPage', 'currentLogLevel', 'logLevel', 'userRole', 'action', 'dateFrom', 'dateTo', 'availableRoles', 'availableActions'));
 	}
 	
 	public function forceLogoutAll(): void {
@@ -2226,7 +2231,7 @@ class AdminController {
 	
 	public function emceeScripts(): void {
 		require_organizer();
-		$scripts = DB::pdo()->query('SELECT *, COALESCE(created_at, "Unknown") as created_at FROM emcee_scripts ORDER BY COALESCE(created_at, "1970-01-01 00:00:00") DESC')->fetchAll(\PDO::FETCH_ASSOC);
+		$scripts = DB::pdo()->query('SELECT es.*, u.preferred_name as uploaded_by_name FROM emcee_scripts es LEFT JOIN users u ON es.uploaded_by = u.id ORDER BY COALESCE(es.created_at, "1970-01-01 00:00:00") DESC')->fetchAll(\PDO::FETCH_ASSOC);
 		view('admin/emcee_scripts', compact('scripts'));
 	}
 	
@@ -2247,8 +2252,13 @@ class AdminController {
 		$filepath = $uploadDir . $filename;
 		
 		if (move_uploaded_file($_FILES['script']['tmp_name'], $filepath)) {
-			$stmt = DB::pdo()->prepare('INSERT INTO emcee_scripts (id, filename, filepath, is_active, created_at) VALUES (?, ?, ?, ?, ?)');
-			$stmt->execute([uuid(), $filename, '/uploads/emcee-scripts/' . $filename, 1, date('Y-m-d H:i:s')]);
+			$title = $_POST['title'] ?? '';
+			$description = $_POST['description'] ?? '';
+			$fileSize = $_FILES['script']['size'];
+			$uploadedAt = date('Y-m-d H:i:s');
+			
+			$stmt = DB::pdo()->prepare('INSERT INTO emcee_scripts (id, filename, filepath, is_active, created_at, uploaded_by, title, description, file_name, file_size, uploaded_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+			$stmt->execute([uuid(), $filename, '/uploads/emcee-scripts/' . $filename, 1, date('Y-m-d H:i:s'), $_SESSION['user']['id'], $title, $description, $filename, $fileSize, $uploadedAt]);
 			redirect('/admin/emcee-scripts?success=script_uploaded');
 		} else {
 			redirect('/admin/emcee-scripts?error=upload_failed');

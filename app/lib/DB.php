@@ -356,8 +356,17 @@ SQL;
 		self::addColumnIfMissing('overall_deductions', 'signature_name', 'TEXT');
 		self::addColumnIfMissing('overall_deductions', 'signed_at', 'TEXT');
 		
+		// users table new fields
+		self::addColumnIfMissing('users', 'contestant_id', 'TEXT');
+		
 		// emcee_scripts new fields
 		self::addColumnIfMissing('emcee_scripts', 'created_at', 'TEXT');
+		self::addColumnIfMissing('emcee_scripts', 'uploaded_by', 'TEXT');
+		self::addColumnIfMissing('emcee_scripts', 'title', 'TEXT');
+		self::addColumnIfMissing('emcee_scripts', 'description', 'TEXT');
+		self::addColumnIfMissing('emcee_scripts', 'file_name', 'TEXT');
+		self::addColumnIfMissing('emcee_scripts', 'file_size', 'INTEGER');
+		self::addColumnIfMissing('emcee_scripts', 'uploaded_at', 'TEXT');
 		
 		// Migrate judge_certifications to include contestant_id
 		self::migrateJudgeCertifications();
