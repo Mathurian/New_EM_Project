@@ -192,6 +192,7 @@
 		<p><a href="<?= url('admin/backups/restore-settings') ?>" class="btn btn-sm btn-info" onclick="return confirm('This will restore default backup settings if they are missing. Continue?')">🔄 Restore Backup Settings</a></p>
 		<p><a href="<?= url('admin/backups/reset-sessions') ?>" class="btn btn-sm btn-warning" onclick="return confirm('This will reset all user session versions to fix login issues. Continue?')">🔐 Reset Session Versions</a></p>
 		<p><a href="<?= url('admin/backups/debug-scheduled') ?>" class="btn btn-sm btn-secondary">🔍 Debug Scheduled Backups</a></p>
+		<p><a href="<?= url('admin/backups/check-time') ?>" class="btn btn-sm btn-secondary">🕒 Check System Time</a></p>
 	</div>
 	<h6>Setting up Scheduled Backups:</h6>
 	<p>Add this to your crontab to run scheduled backups every hour:</p>

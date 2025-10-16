@@ -1556,7 +1556,33 @@ class BackupController {
 					echo '<pre>  ' . $setting['backup_type'] . ': ' . ($setting['enabled'] ? 'enabled' : 'disabled') . ', ' . $setting['frequency'] . ' (' . $setting['frequency_value'] . '), ' . $setting['retention_days'] . ' days retention</pre>';
 				}
 				
-				echo '<pre>No action needed.</pre>';
+				// Check if we're missing schema or full backup settings
+				$hasSchema = false;
+				$hasFull = false;
+				foreach ($settings as $setting) {
+					if ($setting['backup_type'] === 'schema') $hasSchema = true;
+					if ($setting['backup_type'] === 'full') $hasFull = true;
+				}
+				
+				if (!$hasSchema) {
+					echo '<pre>⚠️ Missing schema backup setting, creating it...</pre>';
+					$stmt = $pdo->prepare('INSERT INTO backup_settings (id, backup_type, enabled, frequency, frequency_value, retention_days) VALUES (?, ?, ?, ?, ?, ?)');
+					$stmt->execute([uuid(), 'schema', 0, 'daily', 1, 30]);
+					echo '<pre>✓ Created schema backup setting</pre>';
+				}
+				
+				if (!$hasFull) {
+					echo '<pre>⚠️ Missing full backup setting, creating it...</pre>';
+					$stmt = $pdo->prepare('INSERT INTO backup_settings (id, backup_type, enabled, frequency, frequency_value, retention_days) VALUES (?, ?, ?, ?, ?, ?)');
+					$stmt->execute([uuid(), 'full', 0, 'weekly', 1, 30]);
+					echo '<pre>✓ Created full backup setting</pre>';
+				}
+				
+				if ($hasSchema && $hasFull) {
+					echo '<pre>✓ Both schema and full backup settings exist</pre>';
+				}
+				
+				echo '<pre>Backup settings check completed!</pre>';
 				exit;
 			}
 			
@@ -1615,6 +1641,37 @@ class BackupController {
 			echo '<pre>Error: ' . $e->getMessage() . '</pre>';
 			exit;
 		}
+	}
+	
+	public function checkSystemTime(): void {
+		require_organizer();
+		
+		echo '<pre>=== System Time Check ===</pre>';
+		echo '<pre>PHP date(): ' . date('Y-m-d H:i:s') . '</pre>';
+		echo '<pre>PHP time(): ' . time() . '</pre>';
+		echo '<pre>PHP strtotime("now"): ' . strtotime('now') . '</pre>';
+		echo '<pre>PHP date("c"): ' . date('c') . '</pre>';
+		echo '<pre>PHP timezone: ' . date_default_timezone_get() . '</pre>';
+		
+		// Check if we can get system time
+		if (function_exists('shell_exec')) {
+			$systemTime = shell_exec('date');
+			echo '<pre>System date command: ' . trim($systemTime) . '</pre>';
+		}
+		
+		// Check database time
+		try {
+			$pdo = DB::pdo();
+			$stmt = $pdo->query('SELECT datetime("now") as db_time, strftime("%s", "now") as db_timestamp');
+			$result = $stmt->fetch(\PDO::FETCH_ASSOC);
+			echo '<pre>Database datetime: ' . $result['db_time'] . '</pre>';
+			echo '<pre>Database timestamp: ' . $result['db_timestamp'] . '</pre>';
+		} catch (\Exception $e) {
+			echo '<pre>Database time error: ' . $e->getMessage() . '</pre>';
+		}
+		
+		echo '<pre>=== Time Check Complete ===</pre>';
+		exit;
 	}
 	
 	private function ensureBackupSettingsTable(): void {
