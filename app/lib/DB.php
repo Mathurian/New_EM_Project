@@ -333,6 +333,28 @@ CREATE TABLE IF NOT EXISTS system_settings (
 	updated_by TEXT,
 	FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
 );
+CREATE TABLE IF NOT EXISTS backup_logs (
+	id TEXT PRIMARY KEY,
+	backup_type TEXT NOT NULL CHECK (backup_type IN ('schema', 'full', 'scheduled')),
+	file_path TEXT NOT NULL,
+	file_size INTEGER NOT NULL,
+	status TEXT NOT NULL CHECK (status IN ('success', 'failed', 'in_progress')),
+	created_by TEXT,
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	error_message TEXT,
+	FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+);
+CREATE TABLE IF NOT EXISTS backup_settings (
+	id TEXT PRIMARY KEY,
+	backup_type TEXT NOT NULL CHECK (backup_type IN ('schema', 'full')),
+	enabled BOOLEAN NOT NULL DEFAULT 0,
+	frequency TEXT NOT NULL CHECK (frequency IN ('daily', 'weekly', 'monthly')),
+	retention_days INTEGER NOT NULL DEFAULT 30,
+	last_run TEXT,
+	next_run TEXT,
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 
 -- Emcee scripts
 CREATE TABLE IF NOT EXISTS emcee_scripts (
@@ -406,6 +428,11 @@ SQL;
 		// Insert default log level
 		$stmt = $pdo->prepare('INSERT INTO system_settings (id, setting_key, setting_value, description) VALUES (?, ?, ?, ?)');
 		$stmt->execute([uuid(), 'log_level', 'info', 'Logging level: debug, info, warn, error (default: info)']);
+		
+		// Seed default backup settings
+		$stmt = $pdo->prepare('INSERT INTO backup_settings (id, backup_type, enabled, frequency, retention_days) VALUES (?, ?, ?, ?, ?)');
+		$stmt->execute([uuid(), 'schema', 0, 'daily', 30]);
+		$stmt->execute([uuid(), 'full', 0, 'weekly', 30]);
 	}
 
 	private static function updateRoleConstraint(): void {

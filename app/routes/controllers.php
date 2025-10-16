@@ -570,6 +570,379 @@ class ContestController {
 	}
 }
 
+class BackupController {
+	public function index(): void {
+		require_organizer();
+		
+		// Get backup logs
+		$stmt = DB::pdo()->prepare('
+			SELECT bl.*, u.preferred_name as created_by_name
+			FROM backup_logs bl
+			LEFT JOIN users u ON bl.created_by = u.id
+			ORDER BY bl.created_at DESC
+			LIMIT 50
+		');
+		$stmt->execute();
+		$backupLogs = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+		
+		// Get backup settings
+		$stmt = DB::pdo()->query('SELECT * FROM backup_settings ORDER BY backup_type');
+		$backupSettings = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+		
+		view('admin/backups', compact('backupLogs', 'backupSettings'));
+	}
+	
+	public function createSchemaBackup(): void {
+		require_organizer();
+		
+		try {
+			$backupId = uuid();
+			$timestamp = date('Y-m-d_H-i-s');
+			$backupDir = __DIR__ . '/../backups';
+			
+			// Create backup directory if it doesn't exist
+			if (!is_dir($backupDir)) {
+				mkdir($backupDir, 0755, true);
+			}
+			
+			$fileName = "schema_backup_{$timestamp}.sql";
+			$filePath = $backupDir . '/' . $fileName;
+			
+			// Log backup start
+			$stmt = DB::pdo()->prepare('INSERT INTO backup_logs (id, backup_type, file_path, file_size, status, created_by) VALUES (?, ?, ?, ?, ?, ?)');
+			$stmt->execute([$backupId, 'schema', $filePath, 0, 'in_progress', $_SESSION['user']['id']]);
+			
+			// Get database schema
+			$schema = $this->getDatabaseSchema();
+			
+			// Write schema to file
+			file_put_contents($filePath, $schema);
+			$fileSize = filesize($filePath);
+			
+			// Update backup log
+			$stmt = DB::pdo()->prepare('UPDATE backup_logs SET file_size = ?, status = ? WHERE id = ?');
+			$stmt->execute([$fileSize, 'success', $backupId]);
+			
+			\App\Logger::logAdminAction('schema_backup_created', 'backup', $backupId, "Schema backup created: {$fileName}");
+			
+			redirect('/admin/backups?success=schema_backup_created');
+		} catch (\Exception $e) {
+			// Update backup log with error
+			if (isset($backupId)) {
+				$stmt = DB::pdo()->prepare('UPDATE backup_logs SET status = ?, error_message = ? WHERE id = ?');
+				$stmt->execute(['failed', $e->getMessage(), $backupId]);
+			}
+			
+			redirect('/admin/backups?error=schema_backup_failed');
+		}
+	}
+	
+	public function createFullBackup(): void {
+		require_organizer();
+		
+		try {
+			$backupId = uuid();
+			$timestamp = date('Y-m-d_H-i-s');
+			$backupDir = __DIR__ . '/../backups';
+			
+			// Create backup directory if it doesn't exist
+			if (!is_dir($backupDir)) {
+				mkdir($backupDir, 0755, true);
+			}
+			
+			$fileName = "full_backup_{$timestamp}.db";
+			$filePath = $backupDir . '/' . $fileName;
+			
+			// Log backup start
+			$stmt = DB::pdo()->prepare('INSERT INTO backup_logs (id, backup_type, file_path, file_size, status, created_by) VALUES (?, ?, ?, ?, ?, ?)');
+			$stmt->execute([$backupId, 'full', $filePath, 0, 'in_progress', $_SESSION['user']['id']]);
+			
+			// Copy database file
+			$dbPath = __DIR__ . '/../db/database.db';
+			if (!copy($dbPath, $filePath)) {
+				throw new \Exception('Failed to copy database file');
+			}
+			
+			$fileSize = filesize($filePath);
+			
+			// Update backup log
+			$stmt = DB::pdo()->prepare('UPDATE backup_logs SET file_size = ?, status = ? WHERE id = ?');
+			$stmt->execute([$fileSize, 'success', $backupId]);
+			
+			\App\Logger::logAdminAction('full_backup_created', 'backup', $backupId, "Full backup created: {$fileName}");
+			
+			redirect('/admin/backups?success=full_backup_created');
+		} catch (\Exception $e) {
+			// Update backup log with error
+			if (isset($backupId)) {
+				$stmt = DB::pdo()->prepare('UPDATE backup_logs SET status = ?, error_message = ? WHERE id = ?');
+				$stmt->execute(['failed', $e->getMessage(), $backupId]);
+			}
+			
+			redirect('/admin/backups?error=full_backup_failed');
+		}
+	}
+	
+	public function downloadBackup(array $params): void {
+		require_organizer();
+		$backupId = param('id', $params);
+		
+		$stmt = DB::pdo()->prepare('SELECT * FROM backup_logs WHERE id = ? AND status = ?');
+		$stmt->execute([$backupId, 'success']);
+		$backup = $stmt->fetch(\PDO::FETCH_ASSOC);
+		
+		if (!$backup || !file_exists($backup['file_path'])) {
+			redirect('/admin/backups?error=backup_not_found');
+			return;
+		}
+		
+		$fileName = basename($backup['file_path']);
+		$fileSize = filesize($backup['file_path']);
+		
+		header('Content-Type: application/octet-stream');
+		header('Content-Disposition: attachment; filename="' . $fileName . '"');
+		header('Content-Length: ' . $fileSize);
+		header('Cache-Control: no-cache, must-revalidate');
+		
+		readfile($backup['file_path']);
+		exit;
+	}
+	
+	public function deleteBackup(array $params): void {
+		require_organizer();
+		$backupId = param('id', $params);
+		
+		$stmt = DB::pdo()->prepare('SELECT * FROM backup_logs WHERE id = ?');
+		$stmt->execute([$backupId]);
+		$backup = $stmt->fetch(\PDO::FETCH_ASSOC);
+		
+		if (!$backup) {
+			redirect('/admin/backups?error=backup_not_found');
+			return;
+		}
+		
+		try {
+			// Delete file if it exists
+			if (file_exists($backup['file_path'])) {
+				unlink($backup['file_path']);
+			}
+			
+			// Delete from database
+			$stmt = DB::pdo()->prepare('DELETE FROM backup_logs WHERE id = ?');
+			$stmt->execute([$backupId]);
+			
+			\App\Logger::logAdminAction('backup_deleted', 'backup', $backupId, "Backup deleted: " . basename($backup['file_path']));
+			
+			redirect('/admin/backups?success=backup_deleted');
+		} catch (\Exception $e) {
+			redirect('/admin/backups?error=backup_delete_failed');
+		}
+	}
+	
+	public function updateSettings(): void {
+		require_organizer();
+		
+		$schemaEnabled = isset($_POST['schema_enabled']) ? 1 : 0;
+		$schemaFrequency = $_POST['schema_frequency'] ?? 'daily';
+		$schemaRetention = (int)($_POST['schema_retention'] ?? 30);
+		
+		$fullEnabled = isset($_POST['full_enabled']) ? 1 : 0;
+		$fullFrequency = $_POST['full_frequency'] ?? 'weekly';
+		$fullRetention = (int)($_POST['full_retention'] ?? 30);
+		
+		try {
+			$pdo = DB::pdo();
+			$pdo->beginTransaction();
+			
+			// Update schema backup settings
+			$stmt = $pdo->prepare('UPDATE backup_settings SET enabled = ?, frequency = ?, retention_days = ?, updated_at = CURRENT_TIMESTAMP WHERE backup_type = ?');
+			$stmt->execute([$schemaEnabled, $schemaFrequency, $schemaRetention, 'schema']);
+			
+			// Update full backup settings
+			$stmt = $pdo->prepare('UPDATE backup_settings SET enabled = ?, frequency = ?, retention_days = ?, updated_at = CURRENT_TIMESTAMP WHERE backup_type = ?');
+			$stmt->execute([$fullEnabled, $fullFrequency, $fullRetention, 'full']);
+			
+			$pdo->commit();
+			
+			\App\Logger::logAdminAction('backup_settings_updated', 'settings', null, 'Backup settings updated');
+			
+			redirect('/admin/backups?success=settings_updated');
+		} catch (\Exception $e) {
+			$pdo->rollBack();
+			redirect('/admin/backups?error=settings_update_failed');
+		}
+	}
+	
+	public function runScheduledBackups(): void {
+		// This method can be called by cron or scheduled task
+		// No authentication required as it's an internal process
+		
+		try {
+			$pdo = DB::pdo();
+			$now = date('Y-m-d H:i:s');
+			
+			// Get enabled backup settings
+			$stmt = $pdo->query('SELECT * FROM backup_settings WHERE enabled = 1');
+			$settings = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+			
+			foreach ($settings as $setting) {
+				$shouldRun = false;
+				
+				// Check if it's time to run
+				if (empty($setting['next_run'])) {
+					$shouldRun = true;
+				} else {
+					$shouldRun = $now >= $setting['next_run'];
+				}
+				
+				if ($shouldRun) {
+					$this->performScheduledBackup($setting);
+					
+					// Update next run time
+					$nextRun = $this->calculateNextRun($setting['frequency']);
+					$stmt = $pdo->prepare('UPDATE backup_settings SET last_run = ?, next_run = ? WHERE id = ?');
+					$stmt->execute([$now, $nextRun, $setting['id']]);
+				}
+			}
+			
+			// Clean up old backups
+			$this->cleanupOldBackups();
+			
+		} catch (\Exception $e) {
+			\App\Logger::error('Scheduled backup failed: ' . $e->getMessage());
+		}
+	}
+	
+	private function performScheduledBackup(array $setting): void {
+		$backupId = uuid();
+		$timestamp = date('Y-m-d_H-i-s');
+		$backupDir = __DIR__ . '/../backups';
+		
+		// Create backup directory if it doesn't exist
+		if (!is_dir($backupDir)) {
+			mkdir($backupDir, 0755, true);
+		}
+		
+		try {
+			if ($setting['backup_type'] === 'schema') {
+				$fileName = "scheduled_schema_backup_{$timestamp}.sql";
+				$filePath = $backupDir . '/' . $fileName;
+				
+				// Log backup start
+				$stmt = DB::pdo()->prepare('INSERT INTO backup_logs (id, backup_type, file_path, file_size, status, created_by) VALUES (?, ?, ?, ?, ?, ?)');
+				$stmt->execute([$backupId, 'scheduled', $filePath, 0, 'in_progress', null]);
+				
+				// Get database schema
+				$schema = $this->getDatabaseSchema();
+				
+				// Write schema to file
+				file_put_contents($filePath, $schema);
+				$fileSize = filesize($filePath);
+				
+				// Update backup log
+				$stmt = DB::pdo()->prepare('UPDATE backup_logs SET file_size = ?, status = ? WHERE id = ?');
+				$stmt->execute([$fileSize, 'success', $backupId]);
+				
+			} else { // full backup
+				$fileName = "scheduled_full_backup_{$timestamp}.db";
+				$filePath = $backupDir . '/' . $fileName;
+				
+				// Log backup start
+				$stmt = DB::pdo()->prepare('INSERT INTO backup_logs (id, backup_type, file_path, file_size, status, created_by) VALUES (?, ?, ?, ?, ?, ?)');
+				$stmt->execute([$backupId, 'scheduled', $filePath, 0, 'in_progress', null]);
+				
+				// Copy database file
+				$dbPath = __DIR__ . '/../db/database.db';
+				if (!copy($dbPath, $filePath)) {
+					throw new \Exception('Failed to copy database file');
+				}
+				
+				$fileSize = filesize($filePath);
+				
+				// Update backup log
+				$stmt = DB::pdo()->prepare('UPDATE backup_logs SET file_size = ?, status = ? WHERE id = ?');
+				$stmt->execute([$fileSize, 'success', $backupId]);
+			}
+			
+			\App\Logger::info("Scheduled {$setting['backup_type']} backup completed: {$fileName}");
+			
+		} catch (\Exception $e) {
+			// Update backup log with error
+			$stmt = DB::pdo()->prepare('UPDATE backup_logs SET status = ?, error_message = ? WHERE id = ?');
+			$stmt->execute(['failed', $e->getMessage(), $backupId]);
+			
+			\App\Logger::error("Scheduled {$setting['backup_type']} backup failed: " . $e->getMessage());
+		}
+	}
+	
+	private function calculateNextRun(string $frequency): string {
+		switch ($frequency) {
+			case 'daily':
+				return date('Y-m-d H:i:s', strtotime('+1 day'));
+			case 'weekly':
+				return date('Y-m-d H:i:s', strtotime('+1 week'));
+			case 'monthly':
+				return date('Y-m-d H:i:s', strtotime('+1 month'));
+			default:
+				return date('Y-m-d H:i:s', strtotime('+1 day'));
+		}
+	}
+	
+	private function cleanupOldBackups(): void {
+		$pdo = DB::pdo();
+		
+		// Get retention settings
+		$stmt = $pdo->query('SELECT backup_type, retention_days FROM backup_settings WHERE enabled = 1');
+		$settings = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+		
+		foreach ($settings as $setting) {
+			$cutoffDate = date('Y-m-d H:i:s', strtotime("-{$setting['retention_days']} days"));
+			
+			// Find old backups
+			$stmt = $pdo->prepare('SELECT * FROM backup_logs WHERE backup_type = ? AND created_at < ?');
+			$stmt->execute([$setting['backup_type'], $cutoffDate]);
+			$oldBackups = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+			
+			foreach ($oldBackups as $backup) {
+				// Delete file if it exists
+				if (file_exists($backup['file_path'])) {
+					unlink($backup['file_path']);
+				}
+				
+				// Delete from database
+				$stmt = $pdo->prepare('DELETE FROM backup_logs WHERE id = ?');
+				$stmt->execute([$backup['id']]);
+			}
+		}
+	}
+	
+	private function getDatabaseSchema(): string {
+		$pdo = DB::pdo();
+		$schema = "-- Database Schema Export\n";
+		$schema .= "-- Generated on: " . date('Y-m-d H:i:s') . "\n\n";
+		
+		// Get all table creation statements
+		$stmt = $pdo->query("SELECT sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name");
+		$tables = $stmt->fetchAll(\PDO::FETCH_COLUMN);
+		
+		foreach ($tables as $tableSql) {
+			$schema .= $tableSql . ";\n\n";
+		}
+		
+		// Get all indexes
+		$stmt = $pdo->query("SELECT sql FROM sqlite_master WHERE type='index' AND name NOT LIKE 'sqlite_%' ORDER BY name");
+		$indexes = $stmt->fetchAll(\PDO::FETCH_COLUMN);
+		
+		foreach ($indexes as $indexSql) {
+			if ($indexSql) {
+				$schema .= $indexSql . ";\n\n";
+			}
+		}
+		
+		return $schema;
+	}
+}
+
 class CategoryController {
 	public function index(array $params): void {
 		require_organizer();

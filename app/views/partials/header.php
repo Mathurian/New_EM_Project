@@ -46,7 +46,7 @@
 							<a href="#" onclick="toggleDropdown('admin')" style="color: white; text-decoration: none; cursor: pointer;">
 								Admin ▼
 							</a>
-                            <div id="admin-dropdown" class="dropdown-content" style="display: none;">
+                                <div id="admin-dropdown" class="dropdown-content" style="display: none;">
 								<a href="/admin">Dashboard</a>
 								<a href="/admin/settings">Settings</a>
 								<a href="/admin/logs">Activity Logs</a>
@@ -54,6 +54,7 @@
 								<a href="/admin/print-reports">Print Reports</a>
 								<a href="/admin/templates">Templates</a>
 								<a href="/admin/emcee-scripts">Emcee Scripts</a>
+								<a href="/admin/backups">Database Backups</a>
 							</div>
 						</div>
 					<?php endif; ?>
