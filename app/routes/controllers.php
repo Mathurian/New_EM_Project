@@ -1765,6 +1765,37 @@ class BackupController {
 		exit;
 	}
 	
+	public function testLogging(): void {
+		require_organizer();
+		
+		echo '<pre>=== Logging Test ===</pre>';
+		
+		// Get current Logger level
+		$currentLevel = \App\Logger::getLevel();
+		echo '<pre>Current Logger Level: ' . $currentLevel . '</pre>';
+		
+		// Test each log level
+		echo '<pre>Testing debug log...</pre>';
+		\App\Logger::debug('test_debug', 'system', null, 'This is a debug message');
+		
+		echo '<pre>Testing info log...</pre>';
+		\App\Logger::info('test_info', 'system', null, 'This is an info message');
+		
+		echo '<pre>Testing warn log...</pre>';
+		\App\Logger::warn('test_warn', 'system', null, 'This is a warning message');
+		
+		echo '<pre>Testing error log...</pre>';
+		\App\Logger::error('test_error', 'system', null, 'This is an error message');
+		
+		echo '<pre>Testing custom log methods...</pre>';
+		\App\Logger::logAdminAction('test_action', 'system', null, 'Testing admin action logging');
+		\App\Logger::logDataAccess('test_resource', 'test_id', 'test_action');
+		
+		echo '<pre>=== Test Complete ===</pre>';
+		echo '<pre>Check the Activity Logs page to see which messages were logged based on the current level.</pre>';
+		exit;
+	}
+	
 	private function ensureBackupSettingsTable(): void {
 		$pdo = DB::pdo();
 		
@@ -3709,7 +3740,10 @@ class AdminController {
 			$settings[$row['setting_key']] = $row['setting_value'];
 		}
 		
-		view('admin/settings', compact('settings'));
+		// Get the actual Logger level (what's currently active)
+		$currentLoggerLevel = \App\Logger::getLevel();
+		
+		view('admin/settings', compact('settings', 'currentLoggerLevel'));
 	}
 	
 	public function updateSettings(): void {
@@ -3752,7 +3786,7 @@ class AdminController {
 		$currentLogLevel = \App\Logger::getLevel();
 		
 		// Get filter parameters
-		$logLevel = $_GET['log_level'] ?? $currentLogLevel; // Default to current Logger level
+		$logLevel = $_GET['log_level'] ?? ''; // Don't default to Logger level - allow manual filtering
 		$userRole = $_GET['user_role'] ?? '';
 		$action = $_GET['action'] ?? '';
 		$dateFrom = $_GET['date_from'] ?? '';

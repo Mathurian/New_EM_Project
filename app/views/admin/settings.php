@@ -64,7 +64,8 @@
 				</select>
 				<br>
 				<small style="color: #666;">
-					Current: <?= htmlspecialchars(ucfirst($settingsArray['log_level']['setting_value'] ?? 'info')) ?> level
+					Database: <?= htmlspecialchars(ucfirst($settingsArray['log_level']['setting_value'] ?? 'info')) ?> level
+					| Active Logger: <strong><?= htmlspecialchars(ucfirst($currentLoggerLevel)) ?></strong> level
 				</small>
 			</label>
 			
