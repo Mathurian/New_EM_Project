@@ -28,8 +28,8 @@ function fixConstraint() {
             $pdo->exec('PRAGMA cache_size=10000');
             $pdo->exec('PRAGMA temp_store=MEMORY');
             
-            // Try to get an immediate lock
-            $pdo->exec('BEGIN IMMEDIATE');
+            // Start a transaction
+            $pdo->beginTransaction();
             
             // Create new table with updated constraint
             $pdo->exec('CREATE TABLE backup_settings_new (

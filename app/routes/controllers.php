@@ -1258,8 +1258,8 @@ class BackupController {
 				$pdo->exec('PRAGMA cache_size=10000');
 				$pdo->exec('PRAGMA temp_store=MEMORY');
 				
-				// Try to get an immediate lock
-				$pdo->exec('BEGIN IMMEDIATE');
+				// Start a transaction
+				$pdo->beginTransaction();
 				
 				// Create new table with updated constraint
 				$pdo->exec('CREATE TABLE backup_settings_new (
@@ -1333,6 +1333,43 @@ class BackupController {
 		exec("php \"$scriptPath\" 2>&1", $output, $returnCode);
 		
 		echo '<pre>CLI Script Output:</pre>';
+		echo '<pre>' . implode("\n", $output) . '</pre>';
+		
+		if ($returnCode === 0) {
+			echo '<pre>Constraint fix completed successfully!</pre>';
+		} else {
+			echo '<pre>Constraint fix failed with return code: ' . $returnCode . '</pre>';
+		}
+		
+		exit;
+	}
+	
+	public function runSqlite3ConstraintFix(): void {
+		require_organizer();
+		
+		echo '<pre>Running sqlite3 command-line constraint fix...</pre>';
+		echo '<pre>This bypasses PHP PDO transaction issues...</pre>';
+		
+		// Flush output to show progress
+		if (ob_get_level()) {
+			ob_flush();
+		}
+		flush();
+		
+		$scriptPath = __DIR__ . '/../../fix_constraint_sqlite3.php';
+		
+		if (!file_exists($scriptPath)) {
+			echo '<pre>Error: SQLite3 script not found at: ' . $scriptPath . '</pre>';
+			exit;
+		}
+		
+		// Run the SQLite3 script
+		$output = [];
+		$returnCode = 0;
+		
+		exec("php \"$scriptPath\" 2>&1", $output, $returnCode);
+		
+		echo '<pre>SQLite3 Script Output:</pre>';
 		echo '<pre>' . implode("\n", $output) . '</pre>';
 		
 		if ($returnCode === 0) {
