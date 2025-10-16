@@ -68,6 +68,7 @@
 								<?php if (is_organizer()): ?>
 									<div style="border-top: 1px solid #ccc; margin: 5px 0;"></div>
 									<a href="/results">📋 Complete Results Overview</a>
+								<a href="/results/contestants">👤 Contestants</a>
 									<a href="/admin/print-reports">🖨️ Print Reports</a>
 								<?php endif; ?>
 								<?php if (($_SESSION['user']['role'] ?? '') === 'judge'): ?>

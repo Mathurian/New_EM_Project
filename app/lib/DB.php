@@ -357,6 +357,9 @@ SQL;
 		self::addColumnIfMissing('users', 'preferred_name', 'TEXT');
 		self::addColumnIfMissing('users', 'session_version', 'INTEGER NOT NULL DEFAULT 1');
 		self::addColumnIfMissing('activity_logs', 'log_level', 'TEXT DEFAULT "info"');
+		// overall_deductions new fields
+		self::addColumnIfMissing('overall_deductions', 'signature_name', 'TEXT');
+		self::addColumnIfMissing('overall_deductions', 'signed_at', 'TEXT');
 		
 		// Migrate judge_certifications to include contestant_id
 		self::migrateJudgeCertifications();
