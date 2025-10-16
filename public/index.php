@@ -61,6 +61,8 @@ $router->get('/print/judge/{id}', 'PrintController@judge');
 $router->get('/print/category/{id}', 'PrintController@category');
 $router->get('/admin/settings', 'AdminController@settings');
 $router->post('/admin/settings', 'AdminController@updateSettings');
+$router->get('/admin/settings/test-log-level', 'AdminController@testLogLevel');
+$router->get('/admin/settings/test-logging', 'AdminController@testLogging');
 $router->get('/admin/logs', 'AdminController@logs');
 $router->get('/admin/log-files', 'AdminController@logFiles');
 $router->get('/admin/log-files/{filename}', 'AdminController@viewLogFile');
@@ -78,8 +80,6 @@ $router->get('/admin/backups/reset-sessions', 'BackupController@resetSessionVers
 $router->get('/admin/backups/debug-scheduled', 'BackupController@debugScheduledBackups');
 $router->get('/admin/backups/check-time', 'BackupController@checkSystemTime');
 $router->get('/admin/backups/debug-settings', 'BackupController@debugBackupSettings');
-$router->get('/admin/backups/test-log-level', 'BackupController@testLogLevel');
-$router->get('/admin/backups/test-logging', 'BackupController@testLogging');
 $router->post('/admin/users/force-logout-all', 'AdminController@forceLogoutAll');
 $router->post('/admin/users/{id}/force-logout', 'AdminController@forceLogoutUser');
 $router->get('/admin/print-reports', 'AdminController@printReports');

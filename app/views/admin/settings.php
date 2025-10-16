@@ -33,13 +33,13 @@
 			<label style="display: block; margin-bottom: 10px;">
 				<strong>Session Timeout (seconds):</strong><br>
 				<input type="number" name="session_timeout" 
-					   value="<?= htmlspecialchars($settingsArray['session_timeout']['setting_value'] ?? '1800') ?>" 
+					   value="<?= htmlspecialchars($settings['session_timeout'] ?? '1800') ?>" 
 					   min="60" max="86400" step="60" required 
 					   style="width: 200px; padding: 5px; margin-top: 5px;" />
 				<br>
 				<small style="color: #666;">
-					Current: <?= htmlspecialchars($settingsArray['session_timeout']['setting_value'] ?? '1800') ?> seconds 
-					(<?= round(($settingsArray['session_timeout']['setting_value'] ?? 1800) / 60, 1) ?> minutes)
+					Current: <?= htmlspecialchars($settings['session_timeout'] ?? '1800') ?> seconds 
+					(<?= round(($settings['session_timeout'] ?? 1800) / 60, 1) ?> minutes)
 				</small>
 			</label>
 			
@@ -57,14 +57,14 @@
 			<label style="display: block; margin-bottom: 10px;">
 				<strong>Log Level:</strong><br>
 				<select name="log_level" required style="width: 200px; padding: 5px; margin-top: 5px;">
-					<option value="debug" <?= ($settingsArray['log_level']['setting_value'] ?? 'info') === 'debug' ? 'selected' : '' ?>>Debug - All messages</option>
-					<option value="info" <?= ($settingsArray['log_level']['setting_value'] ?? 'info') === 'info' ? 'selected' : '' ?>>Info - Informational messages and above</option>
-					<option value="warn" <?= ($settingsArray['log_level']['setting_value'] ?? 'info') === 'warn' ? 'selected' : '' ?>>Warning - Warning messages and above</option>
-					<option value="error" <?= ($settingsArray['log_level']['setting_value'] ?? 'info') === 'error' ? 'selected' : '' ?>>Error - Error messages only</option>
+					<option value="debug" <?= ($settings['log_level'] ?? 'info') === 'debug' ? 'selected' : '' ?>>Debug - All messages</option>
+					<option value="info" <?= ($settings['log_level'] ?? 'info') === 'info' ? 'selected' : '' ?>>Info - Informational messages and above</option>
+					<option value="warn" <?= ($settings['log_level'] ?? 'info') === 'warn' ? 'selected' : '' ?>>Warning - Warning messages and above</option>
+					<option value="error" <?= ($settings['log_level'] ?? 'info') === 'error' ? 'selected' : '' ?>>Error - Error messages only</option>
 				</select>
 				<br>
 				<small style="color: #666;">
-					Database: <?= htmlspecialchars(ucfirst($settingsArray['log_level']['setting_value'] ?? 'info')) ?> level
+					Database: <?= htmlspecialchars(ucfirst($settings['log_level'] ?? 'info')) ?> level
 					| Active Logger: <strong><?= htmlspecialchars(ucfirst($currentLoggerLevel)) ?></strong> level
 				</small>
 			</label>
@@ -85,6 +85,13 @@
 				<li><strong>Warning:</strong> Records potential issues like failed logins, user deletions</li>
 				<li><strong>Error:</strong> Records only system errors and critical issues</li>
 			</ul>
+		</div>
+		
+		<div style="margin-bottom: 20px; padding: 15px; background: #e8f5e8; border: 1px solid #c3e6c3; border-radius: 5px;">
+			<h4>Logging Test Tools</h4>
+			<p>Use these tools to test and verify logging functionality:</p>
+			<p><a href="<?= url('admin/settings/test-log-level') ?>" class="btn btn-sm btn-secondary">🧪 Test Log Level</a> - Test all log levels and filtering</p>
+			<p><a href="<?= url('admin/settings/test-logging') ?>" class="btn btn-sm btn-secondary">📝 Test Logging</a> - Send test log messages</p>
 		</div>
 		
 		<button type="submit" style="background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer;">

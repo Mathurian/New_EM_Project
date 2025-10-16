@@ -1743,59 +1743,6 @@ class BackupController {
 		exit;
 	}
 	
-	public function testLogLevel(): void {
-		require_organizer();
-		
-		echo '<pre>=== Log Level Test ===</pre>';
-		
-		// Test all log levels
-		$levels = ['debug', 'info', 'warn', 'error'];
-		foreach ($levels as $level) {
-			echo '<pre>Testing ' . $level . ' level:</pre>';
-			\App\Logger::setLevel($level);
-			echo '<pre>  Current level: ' . \App\Logger::getLevel() . '</pre>';
-			echo '<pre>  Should log debug: ' . (\App\Logger::shouldLog('debug') ? 'YES' : 'NO') . '</pre>';
-			echo '<pre>  Should log info: ' . (\App\Logger::shouldLog('info') ? 'YES' : 'NO') . '</pre>';
-			echo '<pre>  Should log warn: ' . (\App\Logger::shouldLog('warn') ? 'YES' : 'NO') . '</pre>';
-			echo '<pre>  Should log error: ' . (\App\Logger::shouldLog('error') ? 'YES' : 'NO') . '</pre>';
-			echo '<pre></pre>';
-		}
-		
-		echo '<pre>=== Test Complete ===</pre>';
-		exit;
-	}
-	
-	public function testLogging(): void {
-		require_organizer();
-		
-		echo '<pre>=== Logging Test ===</pre>';
-		
-		// Get current Logger level
-		$currentLevel = \App\Logger::getLevel();
-		echo '<pre>Current Logger Level: ' . $currentLevel . '</pre>';
-		
-		// Test each log level
-		echo '<pre>Testing debug log...</pre>';
-		\App\Logger::debug('test_debug', 'system', null, 'This is a debug message');
-		
-		echo '<pre>Testing info log...</pre>';
-		\App\Logger::info('test_info', 'system', null, 'This is an info message');
-		
-		echo '<pre>Testing warn log...</pre>';
-		\App\Logger::warn('test_warn', 'system', null, 'This is a warning message');
-		
-		echo '<pre>Testing error log...</pre>';
-		\App\Logger::error('test_error', 'system', null, 'This is an error message');
-		
-		echo '<pre>Testing custom log methods...</pre>';
-		\App\Logger::logAdminAction('test_action', 'system', null, 'Testing admin action logging');
-		\App\Logger::logDataAccess('test_resource', 'test_id', 'test_action');
-		
-		echo '<pre>=== Test Complete ===</pre>';
-		echo '<pre>Check the Activity Logs page to see which messages were logged based on the current level.</pre>';
-		exit;
-	}
-	
 	private function ensureBackupSettingsTable(): void {
 		$pdo = DB::pdo();
 		
@@ -3744,6 +3691,71 @@ class AdminController {
 		$currentLoggerLevel = \App\Logger::getLevel();
 		
 		view('admin/settings', compact('settings', 'currentLoggerLevel'));
+	}
+	
+	public function testLogLevel(): void {
+		require_organizer();
+		
+		echo '<pre>=== Log Level Test ===</pre>';
+		
+		// Test all log levels
+		$levels = ['debug', 'info', 'warn', 'error'];
+		foreach ($levels as $level) {
+			echo '<pre>Testing ' . $level . ' level:</pre>';
+			\App\Logger::setLevel($level);
+			echo '<pre>  Current level: ' . \App\Logger::getLevel() . '</pre>';
+			echo '<pre>  Should log debug: ' . (\App\Logger::shouldLog('debug') ? 'YES' : 'NO') . '</pre>';
+			echo '<pre>  Should log info: ' . (\App\Logger::shouldLog('info') ? 'YES' : 'NO') . '</pre>';
+			echo '<pre>  Should log warn: ' . (\App\Logger::shouldLog('warn') ? 'YES' : 'NO') . '</pre>';
+			echo '<pre>  Should log error: ' . (\App\Logger::shouldLog('error') ? 'YES' : 'NO') . '</pre>';
+			echo '<pre></pre>';
+		}
+		
+		echo '<pre>=== Test Complete ===</pre>';
+		exit;
+	}
+	
+	public function testLogging(): void {
+		require_organizer();
+		
+		echo '<pre>=== Logging Test ===</pre>';
+		
+		// Get current Logger level
+		$currentLevel = \App\Logger::getLevel();
+		echo '<pre>Current Logger Level: ' . $currentLevel . '</pre>';
+		
+		// Get database level for comparison
+		$stmt = DB::pdo()->prepare('SELECT setting_value FROM system_settings WHERE setting_key = ?');
+		$stmt->execute(['log_level']);
+		$dbLevel = $stmt->fetchColumn();
+		echo '<pre>Database Level: ' . ($dbLevel ?: 'NOT SET') . '</pre>';
+		
+		// Force refresh and check again
+		echo '<pre>Forcing Logger refresh...</pre>';
+		\App\Logger::refreshLevel();
+		$refreshedLevel = \App\Logger::getLevel();
+		echo '<pre>After refresh: ' . $refreshedLevel . '</pre>';
+		
+		// Test each log level
+		echo '<pre>Testing debug log...</pre>';
+		\App\Logger::debug('test_debug', 'system', null, 'This is a debug message');
+		
+		echo '<pre>Testing info log...</pre>';
+		\App\Logger::info('test_info', 'system', null, 'This is an info message');
+		
+		echo '<pre>Testing warn log...</pre>';
+		\App\Logger::warn('test_warn', 'system', null, 'This is a warning message');
+		
+		echo '<pre>Testing error log...</pre>';
+		\App\Logger::error('test_error', 'system', null, 'This is an error message');
+		
+		echo '<pre>Testing custom log methods...</pre>';
+		\App\Logger::logAdminAction('test_action', 'system', null, 'Testing admin action logging');
+		\App\Logger::logDataAccess('test_resource', 'test_id', 'test_action');
+		
+		echo '<pre>=== Test Complete ===</pre>';
+		echo '<pre>Check the Activity Logs page to see which messages were logged based on the current level.</pre>';
+		exit;
 	}
 	
 	public function updateSettings(): void {

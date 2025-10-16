@@ -178,8 +178,6 @@
 		<p><a href="<?= url('admin/backups/debug-scheduled') ?>" class="btn btn-sm btn-secondary">🔍 Debug Scheduled Backups</a></p>
 		<p><a href="<?= url('admin/backups/check-time') ?>" class="btn btn-sm btn-secondary">🕒 Check System Time</a></p>
 		<p><a href="<?= url('admin/backups/debug-settings') ?>" class="btn btn-sm btn-secondary">🔧 Debug Backup Settings</a></p>
-		<p><a href="<?= url('admin/backups/test-log-level') ?>" class="btn btn-sm btn-secondary">🧪 Test Log Level</a></p>
-		<p><a href="<?= url('admin/backups/test-logging') ?>" class="btn btn-sm btn-secondary">📝 Test Logging</a></p>
 	</div>
 	<h6>Setting up Scheduled Backups:</h6>
 	<?php if (!empty($backupSettings)): ?>
