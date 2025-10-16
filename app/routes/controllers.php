@@ -209,6 +209,44 @@ class ContestController {
 		$rows = DB::pdo()->query('SELECT * FROM archived_contests ORDER BY archived_at DESC')->fetchAll(\PDO::FETCH_ASSOC);
 		view('contests/archived', compact('rows'));
 	}
+	
+	public function archivedContestDetails(array $params): void {
+		require_organizer();
+		$contestId = param('id', $params);
+		
+		// Get archived contest details
+		$stmt = DB::pdo()->prepare('SELECT * FROM archived_contests WHERE id = ?');
+		$stmt->execute([$contestId]);
+		$contest = $stmt->fetch(\PDO::FETCH_ASSOC);
+		
+		if (!$contest) {
+			http_response_code(404);
+			echo 'Archived contest not found';
+			return;
+		}
+		
+		// Get archived categories for this contest
+		$stmt = DB::pdo()->prepare('SELECT * FROM archived_categories WHERE archived_contest_id = ? ORDER BY name');
+		$stmt->execute([$contestId]);
+		$categories = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+		
+		// Get archived subcategories
+		$stmt = DB::pdo()->prepare('SELECT sc.*, c.name as category_name FROM archived_subcategories sc JOIN archived_categories c ON sc.archived_category_id = c.id WHERE c.archived_contest_id = ? ORDER BY c.name, sc.name');
+		$stmt->execute([$contestId]);
+		$subcategories = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+		
+		// Get archived contestants
+		$stmt = DB::pdo()->prepare('SELECT * FROM archived_contestants ORDER BY contestant_number IS NULL, contestant_number, name');
+		$stmt->execute();
+		$contestants = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+		
+		// Get archived judges
+		$stmt = DB::pdo()->prepare('SELECT * FROM archived_judges ORDER BY name');
+		$stmt->execute();
+		$judges = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+		
+		view('contests/archived_details', compact('contest', 'categories', 'subcategories', 'contestants', 'judges'));
+	}
 }
 
 class CategoryController {

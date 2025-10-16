@@ -53,6 +53,7 @@ $router->get('/contests/new', 'ContestController@new');
 $router->post('/contests', 'ContestController@create');
 $router->post('/contests/{id}/archive', 'ContestController@archive');
 $router->get('/admin/archived-contests', 'ContestController@archivedContests');
+$router->get('/admin/archived-contest/{id}', 'ContestController@archivedContestDetails');
 $router->get('/print/contestant/{id}', 'PrintController@contestant');
 $router->get('/print/judge/{id}', 'PrintController@judge');
 $router->get('/print/category/{id}', 'PrintController@category');

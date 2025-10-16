@@ -149,7 +149,7 @@ $roleLabels = [
 	<?php endif; ?>
 <?php endforeach; ?>
 
-<?php if (empty($users)): ?>
+<?php if (empty($usersByRole) || array_sum(array_map('count', $usersByRole)) === 0): ?>
 	<p>No users found. <a href="<?= url('users/new') ?>">Create the first user</a></p>
 <?php endif; ?>
 
