@@ -21,14 +21,45 @@ class ContestController {
 	public function new(): void { require_organizer(); view('contests/new'); }
 	public function create(): void {
 		require_organizer();
-		$stmt = DB::pdo()->prepare('INSERT INTO contests (id, name, start_date, end_date) VALUES (?, ?, ?, ?)');
-		$stmt->execute([uuid(), post('name'), post('start_date'), post('end_date')]);
-		redirect('/contests');
+		
+		$name = post('name');
+		$startDate = post('start_date');
+		$endDate = post('end_date');
+		
+		// Debug log contest creation attempt
+		\App\Logger::debug('contest_creation_attempt', 'contest', null, 
+			"Attempting to create contest: name={$name}, start_date={$startDate}, end_date={$endDate}");
+		
+		try {
+			$contestId = uuid();
+			$stmt = DB::pdo()->prepare('INSERT INTO contests (id, name, start_date, end_date) VALUES (?, ?, ?, ?)');
+			$stmt->execute([$contestId, $name, $startDate, $endDate]);
+			
+			// Log successful outcome
+			\App\Logger::debug('contest_creation_success', 'contest', $contestId, 
+				"Contest created successfully: contest_id={$contestId}, name={$name}");
+			\App\Logger::logAdminAction('contest_created', 'contest', $contestId, 
+				"Contest created: {$name} ({$startDate} to {$endDate})");
+			
+			redirect('/contests');
+		} catch (\Exception $e) {
+			// Log failure outcome
+			\App\Logger::debug('contest_creation_failed', 'contest', null, 
+				"Contest creation failed: " . $e->getMessage());
+			\App\Logger::error('contest_creation_failed', 'contest', null, 
+				"Contest creation failed: " . $e->getMessage());
+			
+			redirect('/contests?error=creation_failed');
+		}
 	}
 	
 	public function archive(array $params): void {
 		require_organizer();
 		$contestId = param('id', $params);
+		
+		// Debug log archiving attempt
+		\App\Logger::debug('contest_archiving_attempt', 'contest', $contestId, 
+			"Attempting to archive contest: contest_id={$contestId}");
 		
 		// Get contest information
 		$stmt = DB::pdo()->prepare('SELECT * FROM contests WHERE id = ?');
@@ -36,6 +67,8 @@ class ContestController {
 		$contest = $stmt->fetch(\PDO::FETCH_ASSOC);
 		
 		if (!$contest) {
+			\App\Logger::debug('contest_archiving_failed', 'contest', $contestId, 
+				"Contest archiving failed: contest not found");
 			redirect('/contests?error=contest_not_found');
 			return;
 		}
@@ -50,6 +83,8 @@ class ContestController {
 			// Archive the contest
 			$stmt = $pdo->prepare('INSERT INTO archived_contests (id, name, description, start_date, end_date, archived_by) VALUES (?, ?, ?, ?, ?, ?)');
 			$stmt->execute([$archivedContestId, $contest['name'], $contest['description'] ?? null, $contest['start_date'], $contest['end_date'], $archivedBy]);
+			\App\Logger::debug('contest_archived', 'contest', $archivedContestId, 
+				"Contest archived: contest_id={$contestId}, archived_id={$archivedContestId}, name={$contest['name']}");
 			
 			// Get all categories for this contest
 			$stmt = $pdo->prepare('SELECT * FROM categories WHERE contest_id = ?');
@@ -207,10 +242,22 @@ class ContestController {
 			$pdo->prepare('DELETE FROM contests WHERE id = ?')->execute([$contestId]);
 			
 			$pdo->commit();
+			
+			// Log successful outcome
+			\App\Logger::debug('contest_archiving_success', 'contest', $archivedContestId, 
+				"Contest archiving completed successfully: contest_id={$contestId}, archived_id={$archivedContestId}, name={$contest['name']}");
 			\App\Logger::logContestArchive($contestId, $contest['name']);
+			
 			redirect('/contests?success=contest_archived');
 		} catch (\Exception $e) {
 			$pdo->rollBack();
+			
+			// Log failure outcome
+			\App\Logger::debug('contest_archiving_failed', 'contest', $contestId, 
+				"Contest archiving failed: " . $e->getMessage());
+			\App\Logger::error('contest_archiving_failed', 'contest', $contestId, 
+				"Contest archiving failed: " . $e->getMessage());
+			
 			redirect('/contests?error=archive_failed');
 		}
 	}
@@ -1808,9 +1855,33 @@ class CategoryController {
 	public function create(array $params): void {
 		require_organizer();
 		$contestId = param('id', $params);
-		$stmt = DB::pdo()->prepare('INSERT INTO categories (id, contest_id, name) VALUES (?, ?, ?)');
-		$stmt->execute([uuid(), $contestId, post('name')]);
-		redirect('/contests/' . $contestId . '/categories');
+		$name = post('name');
+		
+		// Debug log category creation attempt
+		\App\Logger::debug('category_creation_attempt', 'category', null, 
+			"Attempting to create category: contest_id={$contestId}, name={$name}");
+		
+		try {
+			$categoryId = uuid();
+			$stmt = DB::pdo()->prepare('INSERT INTO categories (id, contest_id, name) VALUES (?, ?, ?)');
+			$stmt->execute([$categoryId, $contestId, $name]);
+			
+			// Log successful outcome
+			\App\Logger::debug('category_creation_success', 'category', $categoryId, 
+				"Category created successfully: category_id={$categoryId}, contest_id={$contestId}, name={$name}");
+			\App\Logger::logAdminAction('category_created', 'category', $categoryId, 
+				"Category created: {$name} in contest {$contestId}");
+			
+			redirect('/contests/' . $contestId . '/categories');
+		} catch (\Exception $e) {
+			// Log failure outcome
+			\App\Logger::debug('category_creation_failed', 'category', null, 
+				"Category creation failed: " . $e->getMessage());
+			\App\Logger::error('category_creation_failed', 'category', null, 
+				"Category creation failed: " . $e->getMessage());
+			
+			redirect('/contests/' . $contestId . '/categories?error=creation_failed');
+		}
 	}
 }
 
@@ -1859,12 +1930,23 @@ class SubcategoryController {
 	public function create(array $params): void {
 		require_organizer();
 		$categoryId = param('id', $params);
+		$name = post('name');
+		$description = post('description') ?: null;
+		$scoreCap = post('score_cap') ?: null;
+		
+		// Debug log subcategory creation attempt
+		\App\Logger::debug('subcategory_creation_attempt', 'subcategory', null, 
+			"Attempting to create subcategory: category_id={$categoryId}, name={$name}, score_cap={$scoreCap}");
+		
 		$pdo = DB::pdo();
 		$pdo->beginTransaction();
 		
-		$subcategoryId = uuid();
-		$stmt = $pdo->prepare('INSERT INTO subcategories (id, category_id, name, description, score_cap) VALUES (?, ?, ?, ?, ?)');
-		$stmt->execute([$subcategoryId, $categoryId, post('name'), post('description') ?: null, post('score_cap') ?: null]);
+		try {
+			$subcategoryId = uuid();
+			$stmt = $pdo->prepare('INSERT INTO subcategories (id, category_id, name, description, score_cap) VALUES (?, ?, ?, ?, ?)');
+			$stmt->execute([$subcategoryId, $categoryId, $name, $description, $scoreCap]);
+			\App\Logger::debug('subcategory_created', 'subcategory', $subcategoryId, 
+				"Subcategory created: subcategory_id={$subcategoryId}, category_id={$categoryId}, name={$name}");
 		
 		// Automatically assign category-level contestants and judges to this new subcategory
 		$categoryContestants = $pdo->prepare('SELECT contestant_id FROM category_contestants WHERE category_id = ?');
@@ -1884,13 +1966,34 @@ class SubcategoryController {
 		foreach ($judgeIds as $id) {
 			$insJ->execute([$subcategoryId, $id]);
 		}
+		\App\Logger::debug('subcategory_assignments', 'subcategory', $subcategoryId, 
+			"Subcategory assignments: contestants=" . count($contestantIds) . ", judges=" . count($judgeIds));
 		
 		// Create a default criterion with max score 60 if none exist
 		$insC = $pdo->prepare('INSERT INTO criteria (id, subcategory_id, name, max_score) VALUES (?, ?, ?, ?)');
 		$insC->execute([uuid(), $subcategoryId, 'Overall Performance', 60]);
+		\App\Logger::debug('subcategory_default_criterion', 'subcategory', $subcategoryId, 
+			"Default criterion created: 'Overall Performance' with max_score=60");
 		
 		$pdo->commit();
+		
+		// Log successful outcome
+		\App\Logger::debug('subcategory_creation_success', 'subcategory', $subcategoryId, 
+			"Subcategory creation completed successfully: subcategory_id={$subcategoryId}, category_id={$categoryId}, name={$name}");
+		\App\Logger::logAdminAction('subcategory_created', 'subcategory', $subcategoryId, 
+			"Subcategory created: {$name} in category {$categoryId}");
+		
 		redirect('/categories/' . $categoryId . '/subcategories');
+	} catch (\Exception $e) {
+		$pdo->rollBack();
+		
+		// Log failure outcome
+		\App\Logger::debug('subcategory_creation_failed', 'subcategory', null, 
+			"Subcategory creation failed: " . $e->getMessage());
+		\App\Logger::error('subcategory_creation_failed', 'subcategory', null, 
+			"Subcategory creation failed: " . $e->getMessage());
+		
+		redirect('/categories/' . $categoryId . '/subcategories?error=creation_failed');
 	}
 	public function templates(array $params): void {
 		require_organizer();
@@ -2138,6 +2241,15 @@ class PeopleController {
 	public function updateContestant(array $params): void {
 		require_organizer();
 		$id = param('id', $params);
+		$name = post('name');
+		$email = post('email') ?: null;
+		$contestantNumber = post('contestant_number') ?: null;
+		$bio = post('bio') ?: null;
+		
+		// Debug log contestant update attempt
+		\App\Logger::debug('contestant_update_attempt', 'contestant', $id, 
+			"Attempting to update contestant: contestant_id={$id}, name={$name}, email={$email}");
+		
 		$imagePath = null;
 		
 		// Handle image upload
@@ -2168,6 +2280,13 @@ class PeopleController {
 		
 		$stmt = DB::pdo()->prepare('UPDATE contestants SET name = ?, email = ?, gender = ?, contestant_number = ?, bio = ?, image_path = ? WHERE id = ?');
 		$stmt->execute([post('name'), post('email') ?: null, post('gender') ?: null, post('contestant_number') ?: null, post('bio') ?: null, $imagePath, $id]);
+		
+		// Log successful outcome
+		\App\Logger::debug('contestant_update_success', 'contestant', $id, 
+			"Contestant updated successfully: contestant_id={$id}, name={$name}, email={$email}");
+		\App\Logger::logAdminAction('contestant_updated', 'contestant', $id, 
+			"Contestant updated: {$name}");
+		
 		$_SESSION['success_message'] = 'Contestant updated successfully!';
 		redirect('/people');
 	}
@@ -2230,6 +2349,14 @@ class PeopleController {
 	public function updateJudge(array $params): void {
 		require_organizer();
 		$id = param('id', $params);
+		$name = post('name');
+		$email = post('email') ?: null;
+		$bio = post('bio') ?: null;
+		
+		// Debug log judge update attempt
+		\App\Logger::debug('judge_update_attempt', 'judge', $id, 
+			"Attempting to update judge: judge_id={$id}, name={$name}, email={$email}");
+		
 		$imagePath = null;
 		
 		// Handle image upload
@@ -2260,6 +2387,13 @@ class PeopleController {
 		
 		$stmt = DB::pdo()->prepare('UPDATE judges SET name = ?, email = ?, gender = ?, bio = ?, image_path = ? WHERE id = ?');
 		$stmt->execute([post('name'), post('email') ?: null, post('gender') ?: null, post('bio') ?: null, $imagePath, $id]);
+		
+		// Log successful outcome
+		\App\Logger::debug('judge_update_success', 'judge', $id, 
+			"Judge updated successfully: judge_id={$id}, name={$name}, email={$email}");
+		\App\Logger::logAdminAction('judge_updated', 'judge', $id, 
+			"Judge updated: {$name}");
+		
 		$_SESSION['success_message'] = 'Judge updated successfully!';
 		redirect('/people');
 	}
@@ -2365,6 +2499,10 @@ class CriteriaController {
 		$subcategoryId = param('id', $params);
 		$maxScore = post('max_score') ?: 60; // Default to 60 if not provided
 		
+		// Debug log criteria creation attempt
+		\App\Logger::debug('criteria_creation_attempt', 'criteria', null, 
+			"Attempting to create criteria: subcategory_id={$subcategoryId}, max_score={$maxScore}");
+		
 		// Auto-generate criterion name
 		$stmt = DB::pdo()->prepare('SELECT COUNT(*) as count FROM criteria WHERE subcategory_id = ?');
 		$stmt->execute([$subcategoryId]);
@@ -2372,7 +2510,15 @@ class CriteriaController {
 		$criterionName = 'Criterion ' . ($count + 1);
 		
 		$stmt = DB::pdo()->prepare('INSERT INTO criteria (id, subcategory_id, name, max_score) VALUES (?, ?, ?, ?)');
-		$stmt->execute([uuid(), $subcategoryId, $criterionName, (int)$maxScore]);
+		$criterionId = uuid();
+		$stmt->execute([$criterionId, $subcategoryId, $criterionName, (int)$maxScore]);
+		
+		// Log successful outcome
+		\App\Logger::debug('criteria_creation_success', 'criteria', $criterionId, 
+			"Criteria created successfully: criterion_id={$criterionId}, subcategory_id={$subcategoryId}, name={$criterionName}, max_score={$maxScore}");
+		\App\Logger::logAdminAction('criteria_created', 'criteria', $criterionId, 
+			"Criteria created: {$criterionName} (max: {$maxScore})");
+		
 		redirect('/subcategories/' . $subcategoryId . '/criteria');
 	}
 	
@@ -3311,10 +3457,22 @@ class UserController {
 			}
 			
 			$pdo->commit();
+			
+			// Log successful outcome
+			\App\Logger::debug('user_creation_success', 'user', $userId, 
+				"User creation completed successfully: user_id={$userId}, name={$name}, role={$role}");
 			\App\Logger::logUserCreation($userId, $name, $role);
+			
 			redirect('/admin/users?success=user_created');
 		} catch (\Exception $e) {
 			$pdo->rollBack();
+			
+			// Log failure outcome
+			\App\Logger::debug('user_creation_failed', 'user', null, 
+				"User creation failed: " . $e->getMessage());
+			\App\Logger::error('user_creation_failed', 'user', null, 
+				"User creation failed: " . $e->getMessage());
+			
 			redirect('/users/new?error=creation_failed');
 		}
 	}
@@ -3404,6 +3562,10 @@ class UserController {
 		require_organizer();
 		$id = param('id', $params);
 		
+		// Debug log deletion attempt
+		\App\Logger::debug('user_deletion_attempt', 'user', $id, 
+			"Attempting to delete user: user_id={$id}");
+		
 		$pdo = DB::pdo();
 		$pdo->beginTransaction();
 		
@@ -3414,9 +3576,14 @@ class UserController {
 			$user = $stmt->fetch(\PDO::FETCH_ASSOC);
 			
 			if (!$user) {
+				\App\Logger::debug('user_deletion_failed', 'user', $id, 
+					"User deletion failed: user not found");
 				redirect('/admin/users?error=user_not_found');
 				return;
 			}
+			
+			\App\Logger::debug('user_deletion_details', 'user', $id, 
+				"User deletion details: name={$user['name']}, email={$user['email']}, role={$user['role']}");
 			
 			// Delete based on role
 			if ($user['role'] === 'judge' && $user['judge_id']) {
@@ -3460,10 +3627,22 @@ class UserController {
 			$pdo->prepare('DELETE FROM users WHERE id = ?')->execute([$id]);
 			
 			$pdo->commit();
+			
+			// Log successful outcome
+			\App\Logger::debug('user_deletion_success', 'user', $id, 
+				"User deletion completed successfully: user_id={$id}, name={$user['name']}, role={$user['role']}");
 			\App\Logger::logUserDeletion($id, $user['name'], $user['role']);
+			
 			redirect('/admin/users?success=user_deleted');
 		} catch (\Exception $e) {
 			$pdo->rollBack();
+			
+			// Log failure outcome
+			\App\Logger::debug('user_deletion_failed', 'user', $id, 
+				"User deletion failed: " . $e->getMessage());
+			\App\Logger::error('user_deletion_failed', 'user', $id, 
+				"User deletion failed: " . $e->getMessage());
+			
 			redirect('/admin/users?error=delete_failed');
 		}
 	}
