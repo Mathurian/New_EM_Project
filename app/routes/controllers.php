@@ -2226,7 +2226,7 @@ class AdminController {
 	
 	public function emceeScripts(): void {
 		require_organizer();
-		$scripts = DB::pdo()->query('SELECT * FROM emcee_scripts ORDER BY created_at DESC')->fetchAll(\PDO::FETCH_ASSOC);
+		$scripts = DB::pdo()->query('SELECT *, COALESCE(created_at, "Unknown") as created_at FROM emcee_scripts ORDER BY COALESCE(created_at, "1970-01-01 00:00:00") DESC')->fetchAll(\PDO::FETCH_ASSOC);
 		view('admin/emcee_scripts', compact('scripts'));
 	}
 	
@@ -2247,8 +2247,8 @@ class AdminController {
 		$filepath = $uploadDir . $filename;
 		
 		if (move_uploaded_file($_FILES['script']['tmp_name'], $filepath)) {
-			$stmt = DB::pdo()->prepare('INSERT INTO emcee_scripts (id, filename, filepath, is_active) VALUES (?, ?, ?, ?)');
-			$stmt->execute([uuid(), $filename, '/uploads/emcee-scripts/' . $filename, 1]);
+			$stmt = DB::pdo()->prepare('INSERT INTO emcee_scripts (id, filename, filepath, is_active, created_at) VALUES (?, ?, ?, ?, ?)');
+			$stmt->execute([uuid(), $filename, '/uploads/emcee-scripts/' . $filename, 1, date('Y-m-d H:i:s')]);
 			redirect('/admin/emcee-scripts?success=script_uploaded');
 		} else {
 			redirect('/admin/emcee-scripts?error=upload_failed');
@@ -2553,7 +2553,7 @@ class EmceeController {
 		require_emcee();
 		
 		// Get active emcee scripts
-		$scripts = DB::pdo()->query('SELECT * FROM emcee_scripts WHERE is_active = 1 ORDER BY created_at DESC')->fetchAll(\PDO::FETCH_ASSOC);
+		$scripts = DB::pdo()->query('SELECT *, COALESCE(created_at, "Unknown") as created_at FROM emcee_scripts WHERE is_active = 1 ORDER BY COALESCE(created_at, "1970-01-01 00:00:00") DESC')->fetchAll(\PDO::FETCH_ASSOC);
 		
 		// Get all contestants with numbers
 		$contestants = DB::pdo()->query('SELECT * FROM contestants WHERE contestant_number IS NOT NULL ORDER BY contestant_number')->fetchAll(\PDO::FETCH_ASSOC);
