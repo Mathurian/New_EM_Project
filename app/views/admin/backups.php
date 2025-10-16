@@ -12,7 +12,8 @@
 		'schema_backup_created' => 'Schema backup created successfully!',
 		'full_backup_created' => 'Full database backup created successfully!',
 		'backup_deleted' => 'Backup deleted successfully!',
-		'settings_updated' => 'Backup settings updated successfully!'
+		'settings_updated' => 'Backup settings updated successfully!',
+		'scheduled_backups_run' => isset($_GET['message']) ? htmlspecialchars($_GET['message']) : 'Scheduled backups completed successfully!'
 	];
 	$successMessage = $successMessages[$_GET['success']] ?? 'Operation completed successfully!';
 	?>
@@ -26,7 +27,8 @@
 		'full_backup_failed' => 'Failed to create full backup. Please try again.',
 		'backup_not_found' => 'Backup not found.',
 		'backup_delete_failed' => 'Failed to delete backup. Please try again.',
-		'settings_update_failed' => 'Failed to update backup settings. Please try again.'
+		'settings_update_failed' => 'Failed to update backup settings. Please try again.',
+		'scheduled_backups_failed' => isset($_GET['message']) ? 'Scheduled backup failed: ' . htmlspecialchars($_GET['message']) : 'Scheduled backup failed. Please try again.'
 	];
 	$errorMessage = $errorMessages[$_GET['error']] ?? 'An error occurred';
 	?>
@@ -44,6 +46,7 @@
 				<form method="post" action="<?= url('admin/backups/full') ?>" style="display: inline-block;">
 					<button type="submit" class="btn btn-success">💾 Create Full Backup</button>
 				</form>
+				<a href="<?= url('admin/backups/run-scheduled') ?>" class="btn btn-warning">⏰ Run Scheduled Backups Now</a>
 			</div>
 			<div class="backup-info">
 				<p><strong>Schema Backup:</strong> Exports only the database structure (tables, indexes, constraints)</p>
@@ -171,6 +174,7 @@
 		<p><strong>Scheduled Backups:</strong> Automatically create backups based on your configured schedule. Use cron jobs or scheduled tasks to run <code>/admin/backups/run-scheduled</code> regularly.</p>
 		<p><strong>Retention:</strong> Old backups are automatically deleted based on your retention settings to save disk space.</p>
 		<p><a href="<?= url('admin/backups/debug-path') ?>" class="btn btn-sm btn-info">🔍 Debug Database Path</a></p>
+		<p><a href="<?= url('admin/backups/debug-scheduled') ?>" class="btn btn-sm btn-info">⏰ Debug Scheduled Backups</a></p>
 	</div>
 	<h6>Setting up Scheduled Backups:</h6>
 	<p>Add this to your crontab to run scheduled backups every hour:</p>

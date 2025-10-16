@@ -785,6 +785,8 @@ class BackupController {
 		try {
 			$pdo = DB::pdo();
 			$now = date('Y-m-d H:i:s');
+			$backupsRun = 0;
+			$errors = [];
 			
 			// Get enabled backup settings
 			$stmt = $pdo->query('SELECT * FROM backup_settings WHERE enabled = 1');
@@ -797,24 +799,46 @@ class BackupController {
 				if (empty($setting['next_run'])) {
 					$shouldRun = true;
 				} else {
-					$shouldRun = $now >= $setting['next_run'];
+					// Use proper datetime comparison
+					$nowTimestamp = strtotime($now);
+					$nextRunTimestamp = strtotime($setting['next_run']);
+					$shouldRun = $nowTimestamp >= $nextRunTimestamp;
 				}
 				
 				if ($shouldRun) {
-					$this->performScheduledBackup($setting);
-					
-					// Update next run time
-					$nextRun = $this->calculateNextRun($setting['frequency'], $setting['frequency_value'] ?? 1);
-					$stmt = $pdo->prepare('UPDATE backup_settings SET last_run = ?, next_run = ? WHERE id = ?');
-					$stmt->execute([$now, $nextRun, $setting['id']]);
+					try {
+						$this->performScheduledBackup($setting);
+						$backupsRun++;
+						
+						// Update next run time
+						$nextRun = $this->calculateNextRun($setting['frequency'], $setting['frequency_value'] ?? 1);
+						$stmt = $pdo->prepare('UPDATE backup_settings SET last_run = ?, next_run = ? WHERE id = ?');
+						$stmt->execute([$now, $nextRun, $setting['id']]);
+					} catch (\Exception $e) {
+						$errors[] = "Failed to run {$setting['backup_type']} backup: " . $e->getMessage();
+					}
 				}
 			}
 			
 			// Clean up old backups
 			$this->cleanupOldBackups();
 			
+			// If called via web browser, show results
+			if (isset($_SERVER['HTTP_HOST'])) {
+				$message = "Scheduled backups completed. {$backupsRun} backups run.";
+				if (!empty($errors)) {
+					$message .= " Errors: " . implode('; ', $errors);
+				}
+				redirect('/admin/backups?success=scheduled_backups_run&message=' . urlencode($message));
+			}
+			
 		} catch (\Exception $e) {
 			\App\Logger::error('Scheduled backup failed: ' . $e->getMessage());
+			
+			// If called via web browser, show error
+			if (isset($_SERVER['HTTP_HOST'])) {
+				redirect('/admin/backups?error=scheduled_backups_failed&message=' . urlencode($e->getMessage()));
+			}
 		}
 	}
 	
@@ -1036,6 +1060,55 @@ class BackupController {
 		
 		echo '<pre>' . print_r($debugInfo, true) . '</pre>';
 		exit;
+	}
+	
+	public function debugScheduledBackups(): void {
+		require_organizer();
+		
+		try {
+			$pdo = DB::pdo();
+			$now = date('Y-m-d H:i:s');
+			
+			// Get all backup settings (enabled and disabled)
+			$stmt = $pdo->query('SELECT * FROM backup_settings ORDER BY backup_type');
+			$settings = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+			
+			$debugInfo = [
+				'current_time' => $now,
+				'current_timestamp' => strtotime($now),
+				'settings' => []
+			];
+			
+			foreach ($settings as $setting) {
+				$nextRun = $setting['next_run'];
+				$nextRunTimestamp = $nextRun ? strtotime($nextRun) : null;
+				$shouldRun = false;
+				
+				if (empty($nextRun)) {
+					$shouldRun = true;
+				} else {
+					$shouldRun = strtotime($now) >= $nextRunTimestamp;
+				}
+				
+				$debugInfo['settings'][] = [
+					'backup_type' => $setting['backup_type'],
+					'enabled' => $setting['enabled'],
+					'frequency' => $setting['frequency'],
+					'frequency_value' => $setting['frequency_value'],
+					'last_run' => $setting['last_run'],
+					'next_run' => $nextRun,
+					'next_run_timestamp' => $nextRunTimestamp,
+					'should_run' => $shouldRun,
+					'calculated_next_run' => $this->calculateNextRun($setting['frequency'], $setting['frequency_value'] ?? 1)
+				];
+			}
+			
+			echo '<pre>' . print_r($debugInfo, true) . '</pre>';
+			exit;
+		} catch (\Exception $e) {
+			echo '<pre>Error: ' . $e->getMessage() . '</pre>';
+			exit;
+		}
 	}
 }
 
