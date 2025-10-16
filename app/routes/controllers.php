@@ -1742,6 +1742,38 @@ class BackupController {
 		exit;
 	}
 	
+	public function refreshLogLevel(): void {
+		require_organizer();
+		
+		echo '<pre>=== Log Level Refresh ===</pre>';
+		
+		// Get current log level from database
+		try {
+			$pdo = DB::pdo();
+			$stmt = $pdo->prepare('SELECT setting_value FROM system_settings WHERE setting_key = ?');
+			$stmt->execute(['log_level']);
+			$dbLogLevel = $stmt->fetchColumn();
+			
+			echo '<pre>Database log level: ' . ($dbLogLevel ?: 'NOT SET') . '</pre>';
+			echo '<pre>Logger current level: ' . \App\Logger::getLevel() . '</pre>';
+			
+			// Refresh the logger level
+			\App\Logger::refreshLevel();
+			
+			echo '<pre>Logger level after refresh: ' . \App\Logger::getLevel() . '</pre>';
+			
+			// Test debug logging
+			\App\Logger::debug('log_level_test', 'system', null, 'Testing debug logging after refresh');
+			echo '<pre>✓ Debug log test sent</pre>';
+			
+		} catch (\Exception $e) {
+			echo '<pre>Error: ' . $e->getMessage() . '</pre>';
+		}
+		
+		echo '<pre>=== Refresh Complete ===</pre>';
+		exit;
+	}
+	
 	private function ensureBackupSettingsTable(): void {
 		$pdo = DB::pdo();
 		
@@ -3705,6 +3737,10 @@ class AdminController {
 			$stmt->execute(['log_level', $logLevel]);
 			
 			$pdo->commit();
+			
+			// Apply the new log level immediately
+			\App\Logger::setLevel($logLevel);
+			
 			redirect('/admin/settings?success=settings_updated');
 		} catch (\Exception $e) {
 			$pdo->rollBack();

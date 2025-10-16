@@ -12,11 +12,39 @@ class Logger {
 	
 	private static $currentLevel = self::LEVEL_INFO;
 	private static $logDirectory = null;
+	private static $initialized = false;
 	
 	public static function setLevel(string $level): void {
 		if (in_array($level, [self::LEVEL_DEBUG, self::LEVEL_INFO, self::LEVEL_WARN, self::LEVEL_ERROR])) {
 			self::$currentLevel = $level;
 		}
+	}
+	
+	public static function initialize(): void {
+		if (self::$initialized) {
+			return;
+		}
+		
+		try {
+			$pdo = DB::pdo();
+			$stmt = $pdo->prepare('SELECT setting_value FROM system_settings WHERE setting_key = ?');
+			$stmt->execute(['log_level']);
+			$logLevel = $stmt->fetchColumn();
+			
+			if ($logLevel && in_array($logLevel, [self::LEVEL_DEBUG, self::LEVEL_INFO, self::LEVEL_WARN, self::LEVEL_ERROR])) {
+				self::$currentLevel = $logLevel;
+			}
+		} catch (\Exception $e) {
+			// If we can't load the setting, stick with the default
+			error_log('Failed to load log level from database: ' . $e->getMessage());
+		}
+		
+		self::$initialized = true;
+	}
+	
+	public static function refreshLevel(): void {
+		self::$initialized = false;
+		self::initialize();
 	}
 	
 	public static function getLevel(): string {
@@ -81,6 +109,9 @@ class Logger {
 	}
 	
 	public static function log(string $action, string $resourceType = null, string $resourceId = null, string $details = null, string $level = self::LEVEL_INFO): void {
+		// Initialize Logger if not already done
+		self::initialize();
+		
 		if (!self::shouldLog($level)) {
 			return;
 		}
