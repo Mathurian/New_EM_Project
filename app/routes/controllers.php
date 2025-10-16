@@ -766,7 +766,6 @@ class AssignmentController {
 		redirect('/subcategories/' . $subcategoryId . '/assign');
 	}
 }
-
 class CriteriaController {
 	public function index(array $params): void {
 		require_organizer(); // Only organizers can manage criteria
@@ -1187,7 +1186,7 @@ class ResultsController {
 					return $row['categoryId'] === $category['id'];
 				});
 				if (!empty($categoryResults)) {
-					$leadContestants[$category['id']] = reset($categoryResults); // First result has highest score
+					$leadContestants[$category['id']] = reset($categoryResults);
 				}
 			}
 		}
@@ -1484,7 +1483,6 @@ class ContestSubcategoryController {
 		view('contests/subcategories', compact('contest','subcategories'));
 	}
 }
-
 class SubcategoryController {
 	public function index(array $params): void {
 		require_organizer();
@@ -2098,7 +2096,6 @@ class SubcategoryAdminController {
 		redirect('/categories/' . (string)post('category_id') . '/subcategories');
 	}
 }
-
 class ScoringController {
 	public function scoreContestant(array $params): void {
 		require_login();
@@ -2410,7 +2407,7 @@ class ResultsController {
 					return $row['categoryId'] === $category['id'];
 				});
 				if (!empty($categoryResults)) {
-					$leadContestants[$category['id']] = reset($categoryResults); // First result has highest score
+					$leadContestants[$category['id']] = reset($categoryResults);
 				}
 			}
 		}
@@ -2707,7 +2704,6 @@ class ContestSubcategoryController {
 		view('contests/subcategories', compact('contest','subcategories'));
 	}
 }
-
 class SubcategoryController {
 	public function index(array $params): void {
 		require_organizer();
@@ -3321,7 +3317,6 @@ class SubcategoryAdminController {
 		redirect('/categories/' . (string)post('category_id') . '/subcategories');
 	}
 }
-
 class ScoringController {
 	public function scoreContestant(array $params): void {
 		require_login();
@@ -3633,7 +3628,7 @@ class ResultsController {
 					return $row['categoryId'] === $category['id'];
 				});
 				if (!empty($categoryResults)) {
-					$leadContestants[$category['id']] = reset($categoryResults); // First result has highest score
+					$leadContestants[$category['id']] = reset($categoryResults);
 				}
 			}
 		}
@@ -3930,7 +3925,6 @@ class ContestSubcategoryController {
 		view('contests/subcategories', compact('contest','subcategories'));
 	}
 }
-
 class SubcategoryController {
 	public function index(array $params): void {
 		require_organizer();
@@ -4544,7 +4538,6 @@ class SubcategoryAdminController {
 		redirect('/categories/' . (string)post('category_id') . '/subcategories');
 	}
 }
-
 class ScoringController {
 	public function scoreContestant(array $params): void {
 		require_login();
@@ -4856,7 +4849,7 @@ class ResultsController {
 					return $row['categoryId'] === $category['id'];
 				});
 				if (!empty($categoryResults)) {
-					$leadContestants[$category['id']] = reset($categoryResults); // First result has highest score
+					$leadContestants[$category['id']] = reset($categoryResults);
 				}
 			}
 		}
@@ -5153,7 +5146,6 @@ class ContestSubcategoryController {
 		view('contests/subcategories', compact('contest','subcategories'));
 	}
 }
-
 class SubcategoryController {
 	public function index(array $params): void {
 		require_organizer();
@@ -5767,7 +5759,6 @@ class SubcategoryAdminController {
 		redirect('/categories/' . (string)post('category_id') . '/subcategories');
 	}
 }
-
 class ScoringController {
 	public function scoreContestant(array $params): void {
 		require_login();
@@ -6079,7 +6070,7 @@ class ResultsController {
 					return $row['categoryId'] === $category['id'];
 				});
 				if (!empty($categoryResults)) {
-					$leadContestants[$category['id']] = reset($categoryResults); // First result has highest score
+					$leadContestants[$category['id']] = reset($categoryResults);
 				}
 			}
 		}
@@ -6376,7 +6367,6 @@ class ContestSubcategoryController {
 		view('contests/subcategories', compact('contest','subcategories'));
 	}
 }
-
 class SubcategoryController {
 	public function index(array $params): void {
 		require_organizer();
@@ -6990,7 +6980,6 @@ class SubcategoryAdminController {
 		redirect('/categories/' . (string)post('category_id') . '/subcategories');
 	}
 }
-
 class ScoringController {
 	public function scoreContestant(array $params): void {
 		require_login();
@@ -7302,4 +7291,11 @@ class ResultsController {
 					return $row['categoryId'] === $category['id'];
 				});
 				if (!empty($categoryResults)) {
-					$leadContestants[$category['id']] =
+					$leadContestants[$category['id']] = reset($categoryResults);
+				}
+			}
+		}
+		
+		view('results/categories', compact('rows','categories','subcategories','leadContestants'));
+	}
+}
