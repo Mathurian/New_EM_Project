@@ -176,6 +176,7 @@
 		<p><a href="<?= url('admin/backups/debug-path') ?>" class="btn btn-sm btn-info">🔍 Debug Database Path</a></p>
 		<p><a href="<?= url('admin/backups/debug-scheduled') ?>" class="btn btn-sm btn-info">⏰ Debug Scheduled Backups</a></p>
 		<p><a href="<?= url('admin/backups/test-constraint') ?>" class="btn btn-sm btn-warning">🧪 Test Database Constraint</a></p>
+		<p><a href="<?= url('admin/backups/force-constraint-update') ?>" class="btn btn-sm btn-danger" onclick="return confirm('This will force update the database constraint. Continue?')">🔧 Force Constraint Update</a></p>
 		<p><strong>Debug Form Submission:</strong></p>
 		<form method="post" action="<?= url('admin/backups/debug-form') ?>" style="border: 1px solid #ccc; padding: 10px; margin: 10px 0;">
 			<div class="form-group">

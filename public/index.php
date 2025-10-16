@@ -73,6 +73,7 @@ $router->get('/admin/backups/debug-path', 'BackupController@debugDatabasePath');
 $router->get('/admin/backups/debug-scheduled', 'BackupController@debugScheduledBackups');
 $router->get('/admin/backups/test-constraint', 'BackupController@testDatabaseConstraint');
 $router->post('/admin/backups/debug-form', 'BackupController@debugFormSubmission');
+$router->get('/admin/backups/force-constraint-update', 'BackupController@forceConstraintUpdate');
 $router->post('/admin/users/force-logout-all', 'AdminController@forceLogoutAll');
 $router->post('/admin/users/{id}/force-logout', 'AdminController@forceLogoutUser');
 $router->get('/admin/print-reports', 'AdminController@printReports');

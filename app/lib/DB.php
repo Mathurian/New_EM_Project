@@ -508,6 +508,11 @@ SQL;
 		} catch (\PDOException $e) {
 			// Constraint needs updating - use retry mechanism
 			try {
+				// Ensure we're not in a transaction before setting WAL mode
+				if ($pdo->inTransaction()) {
+					$pdo->rollBack();
+				}
+				
 				// Set WAL mode to reduce locking issues (outside transaction)
 				$pdo->exec('PRAGMA journal_mode=WAL');
 				$pdo->exec('PRAGMA busy_timeout=30000');

@@ -1184,6 +1184,59 @@ class BackupController {
 		echo '</pre>';
 		exit;
 	}
+	
+	public function forceConstraintUpdate(): void {
+		require_organizer();
+		
+		try {
+			$pdo = DB::pdo();
+			
+			// Ensure we're not in a transaction
+			if ($pdo->inTransaction()) {
+				$pdo->rollBack();
+			}
+			
+			// Set WAL mode
+			$pdo->exec('PRAGMA journal_mode=WAL');
+			$pdo->exec('PRAGMA busy_timeout=30000');
+			
+			// Force the constraint update
+			$pdo->beginTransaction();
+			
+			// Create new table with updated constraint
+			$pdo->exec('CREATE TABLE backup_settings_new (
+				id TEXT PRIMARY KEY,
+				backup_type TEXT NOT NULL CHECK (backup_type IN (\'schema\', \'full\')),
+				enabled BOOLEAN NOT NULL DEFAULT 0,
+				frequency TEXT NOT NULL CHECK (frequency IN (\'minutes\', \'hours\', \'daily\', \'weekly\', \'monthly\')),
+				frequency_value INTEGER NOT NULL DEFAULT 1,
+				retention_days INTEGER NOT NULL DEFAULT 30,
+				last_run TEXT,
+				next_run TEXT,
+				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+			)');
+			
+			// Copy data from old table
+			$pdo->exec('INSERT INTO backup_settings_new SELECT * FROM backup_settings');
+			
+			// Drop old table and rename new one
+			$pdo->exec('DROP TABLE backup_settings');
+			$pdo->exec('ALTER TABLE backup_settings_new RENAME TO backup_settings');
+			
+			$pdo->commit();
+			
+			echo '<pre>Constraint update completed successfully!</pre>';
+			exit;
+			
+		} catch (\Exception $e) {
+			if ($pdo->inTransaction()) {
+				$pdo->rollBack();
+			}
+			echo '<pre>Error: ' . $e->getMessage() . '</pre>';
+			exit;
+		}
+	}
 }
 
 class CategoryController {
