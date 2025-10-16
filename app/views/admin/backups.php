@@ -72,18 +72,24 @@
 										Enable
 									</label>
 								</div>
-								<div class="col-4">
-									<label>Frequency:</label>
-									<select name="<?= $setting['backup_type'] ?>_frequency" class="form-control">
-										<option value="daily" <?= $setting['frequency'] === 'daily' ? 'selected' : '' ?>>Daily</option>
-										<option value="weekly" <?= $setting['frequency'] === 'weekly' ? 'selected' : '' ?>>Weekly</option>
-										<option value="monthly" <?= $setting['frequency'] === 'monthly' ? 'selected' : '' ?>>Monthly</option>
-									</select>
-								</div>
-								<div class="col-4">
-									<label>Retention (days):</label>
-									<input type="number" name="<?= $setting['backup_type'] ?>_retention" value="<?= $setting['retention_days'] ?>" min="1" max="365" class="form-control">
-								</div>
+							<div class="col-4">
+								<label>Frequency:</label>
+								<select name="<?= $setting['backup_type'] ?>_frequency" class="form-control" onchange="toggleFrequencyValue(this)">
+									<option value="minutes" <?= $setting['frequency'] === 'minutes' ? 'selected' : '' ?>>Minutes</option>
+									<option value="hours" <?= $setting['frequency'] === 'hours' ? 'selected' : '' ?>>Hours</option>
+									<option value="daily" <?= $setting['frequency'] === 'daily' ? 'selected' : '' ?>>Daily</option>
+									<option value="weekly" <?= $setting['frequency'] === 'weekly' ? 'selected' : '' ?>>Weekly</option>
+									<option value="monthly" <?= $setting['frequency'] === 'monthly' ? 'selected' : '' ?>>Monthly</option>
+								</select>
+							</div>
+							<div class="col-2">
+								<label>Every:</label>
+								<input type="number" name="<?= $setting['backup_type'] ?>_frequency_value" value="<?= $setting['frequency_value'] ?? 1 ?>" min="1" max="999" class="form-control" id="<?= $setting['backup_type'] ?>_frequency_value">
+							</div>
+							<div class="col-3">
+								<label>Retention (days):</label>
+								<input type="number" name="<?= $setting['backup_type'] ?>_retention" value="<?= $setting['retention_days'] ?>" min="1" max="365" class="form-control">
+							</div>
 							</div>
 							<?php if ($setting['last_run']): ?>
 								<p><small>Last run: <?= htmlspecialchars($setting['last_run']) ?></small></p>
@@ -157,18 +163,17 @@
 </div>
 
 <div class="card">
-	<div class="alert alert-info">
-		<h5>Backup Information</h5>
-		<ul>
-			<li><strong>Schema Backups:</strong> Export the database structure (tables, indexes, constraints) as SQL files. Useful for recreating the database structure.</li>
-			<li><strong>Full Backups:</strong> Create complete copies of the database file. Includes all data and can be used to restore the entire database.</li>
-			<li><strong>Scheduled Backups:</strong> Automatically create backups based on your configured schedule. Use cron jobs or scheduled tasks to run <code>/admin/backups/run-scheduled</code> regularly.</li>
-			<li><strong>Retention:</strong> Old backups are automatically deleted based on your retention settings to save disk space.</li>
-		</ul>
-		<h6>Setting up Scheduled Backups:</h6>
-		<p>Add this to your crontab to run scheduled backups every hour:</p>
-		<code>0 * * * * curl -s "http://your-domain.com/admin/backups/run-scheduled" > /dev/null 2>&1</code>
+	<h4>Backup Information</h4>
+	<div class="backup-info">
+		<p><strong>Backup Location:</strong> <?= htmlspecialchars($backupDirectory) ?></p>
+		<p><strong>Schema Backups:</strong> Export the database structure (tables, indexes, constraints) as SQL files. Useful for recreating the database structure.</p>
+		<p><strong>Full Backups:</strong> Create complete copies of the database file. Includes all data and can be used to restore the entire database.</p>
+		<p><strong>Scheduled Backups:</strong> Automatically create backups based on your configured schedule. Use cron jobs or scheduled tasks to run <code>/admin/backups/run-scheduled</code> regularly.</p>
+		<p><strong>Retention:</strong> Old backups are automatically deleted based on your retention settings to save disk space.</p>
 	</div>
+	<h6>Setting up Scheduled Backups:</h6>
+	<p>Add this to your crontab to run scheduled backups every hour:</p>
+	<code>0 * * * * curl -s "http://your-domain.com/admin/backups/run-scheduled" > /dev/null 2>&1</code>
 </div>
 
 <style>
@@ -204,3 +209,45 @@
 	overflow-x: auto;
 }
 </style>
+
+<script>
+function toggleFrequencyValue(selectElement) {
+	const frequencyValue = selectElement.parentElement.nextElementSibling.querySelector('input[type="number"]');
+	const frequency = selectElement.value;
+	
+	// Set appropriate max values based on frequency
+	switch (frequency) {
+		case 'minutes':
+			frequencyValue.max = 59;
+			frequencyValue.placeholder = '1-59';
+			break;
+		case 'hours':
+			frequencyValue.max = 23;
+			frequencyValue.placeholder = '1-23';
+			break;
+		case 'daily':
+			frequencyValue.max = 30;
+			frequencyValue.placeholder = '1-30';
+			break;
+		case 'weekly':
+			frequencyValue.max = 4;
+			frequencyValue.placeholder = '1-4';
+			break;
+		case 'monthly':
+			frequencyValue.max = 12;
+			frequencyValue.placeholder = '1-12';
+			break;
+	}
+	
+	// Ensure the current value is within the new max
+	if (parseInt(frequencyValue.value) > parseInt(frequencyValue.max)) {
+		frequencyValue.value = frequencyValue.max;
+	}
+}
+
+// Initialize frequency value fields on page load
+document.addEventListener('DOMContentLoaded', function() {
+	const frequencySelects = document.querySelectorAll('select[name$="_frequency"]');
+	frequencySelects.forEach(toggleFrequencyValue);
+});
+</script>

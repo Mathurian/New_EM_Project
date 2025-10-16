@@ -601,7 +601,8 @@ class BackupController {
 			$backupSettings = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 		}
 		
-		view('admin/backups', compact('backupLogs', 'backupSettings'));
+		$backupDirectory = $this->getBackupDirectory();
+		view('admin/backups', compact('backupLogs', 'backupSettings', 'backupDirectory'));
 	}
 	
 	public function createSchemaBackup(): void {
@@ -610,12 +611,7 @@ class BackupController {
 		try {
 			$backupId = uuid();
 			$timestamp = date('Y-m-d_H-i-s');
-			$backupDir = __DIR__ . '/../backups';
-			
-			// Create backup directory if it doesn't exist
-			if (!is_dir($backupDir)) {
-				mkdir($backupDir, 0755, true);
-			}
+			$backupDir = $this->getBackupDirectory();
 			
 			$fileName = "schema_backup_{$timestamp}.sql";
 			$filePath = $backupDir . '/' . $fileName;
@@ -655,12 +651,7 @@ class BackupController {
 		try {
 			$backupId = uuid();
 			$timestamp = date('Y-m-d_H-i-s');
-			$backupDir = __DIR__ . '/../backups';
-			
-			// Create backup directory if it doesn't exist
-			if (!is_dir($backupDir)) {
-				mkdir($backupDir, 0755, true);
-			}
+			$backupDir = $this->getBackupDirectory();
 			
 			$fileName = "full_backup_{$timestamp}.db";
 			$filePath = $backupDir . '/' . $fileName;
@@ -670,7 +661,7 @@ class BackupController {
 			$stmt->execute([$backupId, 'full', $filePath, 0, 'in_progress', $_SESSION['user']['id']]);
 			
 			// Copy database file
-			$dbPath = __DIR__ . '/../db/database.db';
+			$dbPath = $this->getDatabasePath();
 			if (!copy($dbPath, $filePath)) {
 				throw new \Exception('Failed to copy database file');
 			}
@@ -756,10 +747,12 @@ class BackupController {
 		
 		$schemaEnabled = isset($_POST['schema_enabled']) ? 1 : 0;
 		$schemaFrequency = $_POST['schema_frequency'] ?? 'daily';
+		$schemaFrequencyValue = (int)($_POST['schema_frequency_value'] ?? 1);
 		$schemaRetention = (int)($_POST['schema_retention'] ?? 30);
 		
 		$fullEnabled = isset($_POST['full_enabled']) ? 1 : 0;
 		$fullFrequency = $_POST['full_frequency'] ?? 'weekly';
+		$fullFrequencyValue = (int)($_POST['full_frequency_value'] ?? 1);
 		$fullRetention = (int)($_POST['full_retention'] ?? 30);
 		
 		try {
@@ -767,12 +760,12 @@ class BackupController {
 			$pdo->beginTransaction();
 			
 			// Update schema backup settings
-			$stmt = $pdo->prepare('UPDATE backup_settings SET enabled = ?, frequency = ?, retention_days = ?, updated_at = CURRENT_TIMESTAMP WHERE backup_type = ?');
-			$stmt->execute([$schemaEnabled, $schemaFrequency, $schemaRetention, 'schema']);
+			$stmt = $pdo->prepare('UPDATE backup_settings SET enabled = ?, frequency = ?, frequency_value = ?, retention_days = ?, updated_at = CURRENT_TIMESTAMP WHERE backup_type = ?');
+			$stmt->execute([$schemaEnabled, $schemaFrequency, $schemaFrequencyValue, $schemaRetention, 'schema']);
 			
 			// Update full backup settings
-			$stmt = $pdo->prepare('UPDATE backup_settings SET enabled = ?, frequency = ?, retention_days = ?, updated_at = CURRENT_TIMESTAMP WHERE backup_type = ?');
-			$stmt->execute([$fullEnabled, $fullFrequency, $fullRetention, 'full']);
+			$stmt = $pdo->prepare('UPDATE backup_settings SET enabled = ?, frequency = ?, frequency_value = ?, retention_days = ?, updated_at = CURRENT_TIMESTAMP WHERE backup_type = ?');
+			$stmt->execute([$fullEnabled, $fullFrequency, $fullFrequencyValue, $fullRetention, 'full']);
 			
 			$pdo->commit();
 			
@@ -811,7 +804,7 @@ class BackupController {
 					$this->performScheduledBackup($setting);
 					
 					// Update next run time
-					$nextRun = $this->calculateNextRun($setting['frequency']);
+					$nextRun = $this->calculateNextRun($setting['frequency'], $setting['frequency_value'] ?? 1);
 					$stmt = $pdo->prepare('UPDATE backup_settings SET last_run = ?, next_run = ? WHERE id = ?');
 					$stmt->execute([$now, $nextRun, $setting['id']]);
 				}
@@ -828,12 +821,7 @@ class BackupController {
 	private function performScheduledBackup(array $setting): void {
 		$backupId = uuid();
 		$timestamp = date('Y-m-d_H-i-s');
-		$backupDir = __DIR__ . '/../backups';
-		
-		// Create backup directory if it doesn't exist
-		if (!is_dir($backupDir)) {
-			mkdir($backupDir, 0755, true);
-		}
+		$backupDir = $this->getBackupDirectory();
 		
 		try {
 			if ($setting['backup_type'] === 'schema') {
@@ -864,7 +852,7 @@ class BackupController {
 				$stmt->execute([$backupId, 'scheduled', $filePath, 0, 'in_progress', null]);
 				
 				// Copy database file
-				$dbPath = __DIR__ . '/../db/database.db';
+				$dbPath = $this->getDatabasePath();
 				if (!copy($dbPath, $filePath)) {
 					throw new \Exception('Failed to copy database file');
 				}
@@ -887,14 +875,18 @@ class BackupController {
 		}
 	}
 	
-	private function calculateNextRun(string $frequency): string {
+	private function calculateNextRun(string $frequency, int $frequencyValue = 1): string {
 		switch ($frequency) {
+			case 'minutes':
+				return date('Y-m-d H:i:s', strtotime("+{$frequencyValue} minutes"));
+			case 'hours':
+				return date('Y-m-d H:i:s', strtotime("+{$frequencyValue} hours"));
 			case 'daily':
-				return date('Y-m-d H:i:s', strtotime('+1 day'));
+				return date('Y-m-d H:i:s', strtotime("+{$frequencyValue} days"));
 			case 'weekly':
-				return date('Y-m-d H:i:s', strtotime('+1 week'));
+				return date('Y-m-d H:i:s', strtotime("+{$frequencyValue} weeks"));
 			case 'monthly':
-				return date('Y-m-d H:i:s', strtotime('+1 month'));
+				return date('Y-m-d H:i:s', strtotime("+{$frequencyValue} months"));
 			default:
 				return date('Y-m-d H:i:s', strtotime('+1 day'));
 		}
@@ -952,6 +944,54 @@ class BackupController {
 		}
 		
 		return $schema;
+	}
+	
+	private function getBackupDirectory(): string {
+		// Try multiple possible backup locations
+		$possiblePaths = [
+			'/var/www/html/backups',  // Web server accessible
+			'/tmp/event_manager_backups',  // Temporary directory
+			__DIR__ . '/../backups',  // Relative to app directory
+			sys_get_temp_dir() . '/event_manager_backups'  // System temp directory
+		];
+		
+		foreach ($possiblePaths as $path) {
+			if (is_dir($path) && is_writable($path)) {
+				return $path;
+			}
+			
+			// Try to create the directory
+			if (!is_dir($path)) {
+				if (@mkdir($path, 0755, true)) {
+					return $path;
+				}
+			}
+		}
+		
+		// If all else fails, use a subdirectory of the current directory
+		$fallbackPath = __DIR__ . '/../backups';
+		if (!is_dir($fallbackPath)) {
+			@mkdir($fallbackPath, 0755, true);
+		}
+		
+		return $fallbackPath;
+	}
+	
+	private function getDatabasePath(): string {
+		// Try multiple possible database locations
+		$possiblePaths = [
+			__DIR__ . '/../db/database.db',
+			'/var/www/html/app/db/database.db',
+			__DIR__ . '/../../app/db/database.db'
+		];
+		
+		foreach ($possiblePaths as $path) {
+			if (file_exists($path) && is_readable($path)) {
+				return $path;
+			}
+		}
+		
+		throw new \Exception('Database file not found or not readable');
 	}
 }
 

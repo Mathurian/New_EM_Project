@@ -348,7 +348,8 @@ CREATE TABLE IF NOT EXISTS backup_settings (
 	id TEXT PRIMARY KEY,
 	backup_type TEXT NOT NULL CHECK (backup_type IN ('schema', 'full')),
 	enabled BOOLEAN NOT NULL DEFAULT 0,
-	frequency TEXT NOT NULL CHECK (frequency IN ('daily', 'weekly', 'monthly')),
+	frequency TEXT NOT NULL CHECK (frequency IN ('minutes', 'hours', 'daily', 'weekly', 'monthly')),
+	frequency_value INTEGER NOT NULL DEFAULT 1,
 	retention_days INTEGER NOT NULL DEFAULT 30,
 	last_run TEXT,
 	next_run TEXT,
@@ -433,9 +434,12 @@ SQL;
 		$stmt = $pdo->query('SELECT COUNT(*) FROM backup_settings');
 		if ($stmt->fetchColumn() == 0) {
 			// Seed default backup settings
-			$stmt = $pdo->prepare('INSERT INTO backup_settings (id, backup_type, enabled, frequency, retention_days) VALUES (?, ?, ?, ?, ?)');
-			$stmt->execute([uuid(), 'schema', 0, 'daily', 30]);
-			$stmt->execute([uuid(), 'full', 0, 'weekly', 30]);
+			$stmt = $pdo->prepare('INSERT INTO backup_settings (id, backup_type, enabled, frequency, frequency_value, retention_days) VALUES (?, ?, ?, ?, ?, ?)');
+			$stmt->execute([uuid(), 'schema', 0, 'daily', 1, 30]);
+			$stmt->execute([uuid(), 'full', 0, 'weekly', 1, 30]);
+		} else {
+			// Migrate existing backup settings to include frequency_value
+			self::addColumnIfMissing('backup_settings', 'frequency_value', 'INTEGER NOT NULL DEFAULT 1');
 		}
 	}
 
