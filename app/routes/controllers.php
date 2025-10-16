@@ -264,7 +264,7 @@ class ContestController {
 						SUM(s.score) as total_score,
 						COUNT(s.score) as score_count
 					FROM archived_contestants ac
-					LEFT JOIN archived_scores s ON ac.id = s.contestant_id AND s.subcategory_id IN ($placeholders)
+					LEFT JOIN archived_scores s ON ac.id = s.archived_contestant_id AND s.archived_subcategory_id IN ($placeholders)
 					GROUP BY ac.id, ac.name, ac.contestant_number
 					HAVING score_count > 0
 					ORDER BY total_score DESC
@@ -307,17 +307,14 @@ class ContestController {
 				aj.name as judge_name,
 				cr.name as criterion_name,
 				s.score,
-				jc.comment,
-				od.amount as deduction_amount,
-				od.comment as deduction_comment
+				jc.comment
 			FROM archived_categories c
 			JOIN archived_subcategories sc ON c.id = sc.archived_category_id
 			JOIN archived_contestants ac ON 1=1
-			LEFT JOIN archived_scores s ON s.subcategory_id = sc.id AND s.contestant_id = ac.id
-			LEFT JOIN archived_judges aj ON s.judge_id = aj.id
-			LEFT JOIN archived_criteria cr ON s.criterion_id = cr.id
-			LEFT JOIN archived_judge_comments jc ON jc.subcategory_id = sc.id AND jc.contestant_id = ac.id AND jc.judge_id = aj.id
-			LEFT JOIN archived_overall_deductions od ON od.subcategory_id = sc.id AND od.contestant_id = ac.id
+			LEFT JOIN archived_scores s ON s.archived_subcategory_id = sc.id AND s.archived_contestant_id = ac.id
+			LEFT JOIN archived_judges aj ON s.archived_judge_id = aj.id
+			LEFT JOIN archived_criteria cr ON s.archived_criterion_id = cr.id
+			LEFT JOIN archived_judge_comments jc ON jc.archived_subcategory_id = sc.id AND jc.archived_contestant_id = ac.id AND jc.archived_judge_id = aj.id
 			WHERE c.archived_contest_id = ?
 			ORDER BY c.name, sc.name, ac.contestant_number, ac.name, aj.name, cr.name
 		');
@@ -342,8 +339,7 @@ class ContestController {
 				$organizedData[$categoryName][$subcategoryName][$contestantName] = [
 					'contestant_number' => $contestantNumber,
 					'scores' => [],
-					'comments' => [],
-					'deductions' => []
+					'comments' => []
 				];
 			}
 			
@@ -361,13 +357,6 @@ class ContestController {
 					'comment' => $row['comment']
 				];
 			}
-			
-			if ($row['deduction_amount'] !== null) {
-				$organizedData[$categoryName][$subcategoryName][$contestantName]['deductions'][] = [
-					'amount' => $row['deduction_amount'],
-					'comment' => $row['deduction_comment']
-				];
-			}
 		}
 		
 		// Calculate totals and rankings
@@ -379,11 +368,6 @@ class ContestController {
 					$totalScore = 0;
 					foreach ($data['scores'] as $score) {
 						$totalScore += $score['score'];
-					}
-					
-					// Subtract deductions
-					foreach ($data['deductions'] as $deduction) {
-						$totalScore -= $deduction['amount'];
 					}
 					
 					if (!isset($categoryTotals[$categoryName][$contestantName])) {
