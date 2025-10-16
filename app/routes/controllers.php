@@ -799,7 +799,16 @@ class BackupController {
 			
 			$stmt = $pdo->prepare('UPDATE backup_settings SET enabled = ?, frequency = ?, frequency_value = ?, retention_days = ?, next_run = ?, updated_at = CURRENT_TIMESTAMP WHERE backup_type = ?');
 			$result = $stmt->execute([$schemaEnabled, $schemaFrequency, $schemaFrequencyValue, $schemaRetention, $schemaNextRun, 'schema']);
-			\App\Logger::debug("Schema update result: " . ($result ? 'success' : 'failed') . ", rows affected: " . $stmt->rowCount());
+			$rowsAffected = $stmt->rowCount();
+			\App\Logger::debug("Schema update result: " . ($result ? 'success' : 'failed') . ", rows affected: " . $rowsAffected);
+			
+			// If no rows were affected, the schema backup setting doesn't exist - create it
+			if ($rowsAffected === 0) {
+				\App\Logger::debug("Schema backup setting not found, creating new record");
+				$stmt = $pdo->prepare('INSERT INTO backup_settings (id, backup_type, enabled, frequency, frequency_value, retention_days, next_run) VALUES (?, ?, ?, ?, ?, ?, ?)');
+				$stmt->execute([uuid(), 'schema', $schemaEnabled, $schemaFrequency, $schemaFrequencyValue, $schemaRetention, $schemaNextRun]);
+				\App\Logger::debug("Schema backup setting created successfully");
+			}
 			
 			// Update full backup settings
 			$fullNextRun = $fullEnabled ? $this->calculateNextRun($fullFrequency, $fullFrequencyValue) : null;
@@ -807,7 +816,16 @@ class BackupController {
 			
 			$stmt = $pdo->prepare('UPDATE backup_settings SET enabled = ?, frequency = ?, frequency_value = ?, retention_days = ?, next_run = ?, updated_at = CURRENT_TIMESTAMP WHERE backup_type = ?');
 			$result = $stmt->execute([$fullEnabled, $fullFrequency, $fullFrequencyValue, $fullRetention, $fullNextRun, 'full']);
-			\App\Logger::debug("Full update result: " . ($result ? 'success' : 'failed') . ", rows affected: " . $stmt->rowCount());
+			$rowsAffected = $stmt->rowCount();
+			\App\Logger::debug("Full update result: " . ($result ? 'success' : 'failed') . ", rows affected: " . $rowsAffected);
+			
+			// If no rows were affected, the full backup setting doesn't exist - create it
+			if ($rowsAffected === 0) {
+				\App\Logger::debug("Full backup setting not found, creating new record");
+				$stmt = $pdo->prepare('INSERT INTO backup_settings (id, backup_type, enabled, frequency, frequency_value, retention_days, next_run) VALUES (?, ?, ?, ?, ?, ?, ?)');
+				$stmt->execute([uuid(), 'full', $fullEnabled, $fullFrequency, $fullFrequencyValue, $fullRetention, $fullNextRun]);
+				\App\Logger::debug("Full backup setting created successfully");
+			}
 			
 			$pdo->commit();
 			\App\Logger::debug("Transaction committed successfully");

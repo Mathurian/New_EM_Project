@@ -499,11 +499,12 @@ SQL;
 		
 		try {
 			// Check if the constraint needs updating by trying to insert a test value
+			$testId = uuid();
 			$testStmt = $pdo->prepare('INSERT INTO backup_settings (id, backup_type, enabled, frequency, frequency_value, retention_days) VALUES (?, ?, ?, ?, ?, ?)');
-			$testStmt->execute([uuid(), 'schema', 0, 'minutes', 1, 30]);
+			$testStmt->execute([$testId, 'schema', 0, 'minutes', 1, 30]);
 			
-			// If successful, delete the test record
-			$pdo->prepare('DELETE FROM backup_settings WHERE backup_type = ? AND frequency = ?')->execute(['schema', 'minutes']);
+			// If successful, delete ONLY the test record by ID
+			$pdo->prepare('DELETE FROM backup_settings WHERE id = ?')->execute([$testId]);
 			
 		} catch (\PDOException $e) {
 			// Constraint needs updating - use retry mechanism
