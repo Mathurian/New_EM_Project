@@ -2296,16 +2296,37 @@ class PeopleController {
 		require_organizer();
 		$id = param('id', $params);
 		
+		// Debug log deletion attempt
+		\App\Logger::debug('contestant_deletion_attempt', 'contestant', $id, 
+			"Attempting to delete contestant: contestant_id={$id}");
+		
 		$pdo = DB::pdo();
 		$pdo->beginTransaction();
 		
 		try {
+			// Get contestant info for logging
+			$stmt = $pdo->prepare('SELECT * FROM contestants WHERE id = ?');
+			$stmt->execute([$id]);
+			$contestant = $stmt->fetch(\PDO::FETCH_ASSOC);
+			
+			if (!$contestant) {
+				\App\Logger::debug('contestant_deletion_failed', 'contestant', $id, 
+					"Contestant deletion failed: contestant not found");
+				redirect('/people?error=contestant_not_found');
+				return;
+			}
+			
+			\App\Logger::debug('contestant_deletion_details', 'contestant', $id, 
+				"Contestant deletion details: name={$contestant['name']}, email={$contestant['email']}");
+			
 			// Delete associated image file
 			$stmt = $pdo->prepare('SELECT image_path FROM contestants WHERE id = ?');
 			$stmt->execute([$id]);
 			$imagePath = $stmt->fetchColumn();
 			if ($imagePath && file_exists(__DIR__ . '/../../public' . $imagePath)) {
 				unlink(__DIR__ . '/../../public' . $imagePath);
+				\App\Logger::debug('contestant_image_deleted', 'contestant', $id, 
+					"Contestant image file deleted: {$imagePath}");
 			}
 			
 			// Delete all related data
@@ -2316,10 +2337,23 @@ class PeopleController {
 			$pdo->prepare('DELETE FROM contestants WHERE id = ?')->execute([$id]);
 			
 			$pdo->commit();
+			
+			// Log successful outcome
+			\App\Logger::debug('contestant_deletion_success', 'contestant', $id, 
+				"Contestant deletion completed successfully: contestant_id={$id}, name={$contestant['name']}");
+			\App\Logger::logUserDeletion($id, $contestant['name'], 'contestant');
+			
 			$_SESSION['success_message'] = 'Contestant and all associated data deleted successfully!';
 			redirect('/people');
 		} catch (\Exception $e) {
 			$pdo->rollBack();
+			
+			// Log failure outcome
+			\App\Logger::debug('contestant_deletion_failed', 'contestant', $id, 
+				"Contestant deletion failed: " . $e->getMessage());
+			\App\Logger::error('contestant_deletion_failed', 'contestant', $id, 
+				"Contestant deletion failed: " . $e->getMessage());
+			
 			$_SESSION['error_message'] = 'Failed to delete contestant: ' . $e->getMessage();
 			redirect('/people');
 		}
@@ -2403,16 +2437,37 @@ class PeopleController {
 		require_organizer();
 		$id = param('id', $params);
 		
+		// Debug log deletion attempt
+		\App\Logger::debug('judge_deletion_attempt', 'judge', $id, 
+			"Attempting to delete judge: judge_id={$id}");
+		
 		$pdo = DB::pdo();
 		$pdo->beginTransaction();
 		
 		try {
+			// Get judge info for logging
+			$stmt = $pdo->prepare('SELECT * FROM judges WHERE id = ?');
+			$stmt->execute([$id]);
+			$judge = $stmt->fetch(\PDO::FETCH_ASSOC);
+			
+			if (!$judge) {
+				\App\Logger::debug('judge_deletion_failed', 'judge', $id, 
+					"Judge deletion failed: judge not found");
+				redirect('/people?error=judge_not_found');
+				return;
+			}
+			
+			\App\Logger::debug('judge_deletion_details', 'judge', $id, 
+				"Judge deletion details: name={$judge['name']}, email={$judge['email']}");
+			
 			// Delete associated image file
 			$stmt = $pdo->prepare('SELECT image_path FROM judges WHERE id = ?');
 			$stmt->execute([$id]);
 			$imagePath = $stmt->fetchColumn();
 			if ($imagePath && file_exists(__DIR__ . '/../../public' . $imagePath)) {
 				unlink(__DIR__ . '/../../public' . $imagePath);
+				\App\Logger::debug('judge_image_deleted', 'judge', $id, 
+					"Judge image file deleted: {$imagePath}");
 			}
 			
 			// Delete all related data
@@ -2424,10 +2479,23 @@ class PeopleController {
 			$pdo->prepare('DELETE FROM judges WHERE id = ?')->execute([$id]);
 			
 			$pdo->commit();
+			
+			// Log successful outcome
+			\App\Logger::debug('judge_deletion_success', 'judge', $id, 
+				"Judge deletion completed successfully: judge_id={$id}, name={$judge['name']}");
+			\App\Logger::logUserDeletion($id, $judge['name'], 'judge');
+			
 			$_SESSION['success_message'] = 'Judge and all associated data deleted successfully!';
 			redirect('/people');
 		} catch (\Exception $e) {
 			$pdo->rollBack();
+			
+			// Log failure outcome
+			\App\Logger::debug('judge_deletion_failed', 'judge', $id, 
+				"Judge deletion failed: " . $e->getMessage());
+			\App\Logger::error('judge_deletion_failed', 'judge', $id, 
+				"Judge deletion failed: " . $e->getMessage());
+			
 			$_SESSION['error_message'] = 'Failed to delete judge: ' . $e->getMessage();
 			redirect('/people');
 		}
@@ -3652,12 +3720,20 @@ class UserController {
 	public function removeAllJudges(): void {
 		require_organizer();
 		
+		// Debug log bulk removal attempt
+		\App\Logger::debug('bulk_judge_removal_attempt', 'judge', null, 
+			"Attempting to remove all judges");
+		
 		$pdo = DB::pdo();
 		$pdo->beginTransaction();
 		
 		try {
 			// Get all judge users
 			$judgeUsers = $pdo->query('SELECT * FROM users WHERE role = "judge"')->fetchAll(\PDO::FETCH_ASSOC);
+			$judgeCount = count($judgeUsers);
+			
+			\App\Logger::debug('bulk_judge_removal_details', 'judge', null, 
+				"Found {$judgeCount} judges to remove");
 			
 			foreach ($judgeUsers as $user) {
 				if ($user['judge_id']) {
@@ -3667,6 +3743,8 @@ class UserController {
 					$imagePath = $stmt->fetchColumn();
 					if ($imagePath && file_exists(__DIR__ . '/../../public' . $imagePath)) {
 						unlink(__DIR__ . '/../../public' . $imagePath);
+						\App\Logger::debug('judge_image_deleted', 'judge', $user['judge_id'], 
+							"Judge image file deleted: {$imagePath}");
 					}
 					
 					$pdo->prepare('DELETE FROM judge_certifications WHERE judge_id = ?')->execute([$user['judge_id']]);
@@ -3682,9 +3760,23 @@ class UserController {
 			$pdo->prepare('DELETE FROM users WHERE role = "judge"')->execute();
 			
 			$pdo->commit();
+			
+			// Log successful outcome
+			\App\Logger::debug('bulk_judge_removal_success', 'judge', null, 
+				"Bulk judge removal completed successfully: removed {$judgeCount} judges");
+			\App\Logger::logBulkOperation('judge_removal', 'judge', null, 
+				"Removed all {$judgeCount} judges and associated data");
+			
 			redirect('/admin/users?success=all_judges_removed');
 		} catch (\Exception $e) {
 			$pdo->rollBack();
+			
+			// Log failure outcome
+			\App\Logger::debug('bulk_judge_removal_failed', 'judge', null, 
+				"Bulk judge removal failed: " . $e->getMessage());
+			\App\Logger::error('bulk_judge_removal_failed', 'judge', null, 
+				"Bulk judge removal failed: " . $e->getMessage());
+			
 			redirect('/admin/users?error=remove_failed');
 		}
 	}
@@ -3692,12 +3784,20 @@ class UserController {
 	public function removeAllContestants(): void {
 		require_organizer();
 		
+		// Debug log bulk removal attempt
+		\App\Logger::debug('bulk_contestant_removal_attempt', 'contestant', null, 
+			"Attempting to remove all contestants");
+		
 		$pdo = DB::pdo();
 		$pdo->beginTransaction();
 		
 		try {
 			// Get all contestant users
 			$contestantUsers = $pdo->query('SELECT * FROM users WHERE role = "contestant"')->fetchAll(\PDO::FETCH_ASSOC);
+			$contestantCount = count($contestantUsers);
+			
+			\App\Logger::debug('bulk_contestant_removal_details', 'contestant', null, 
+				"Found {$contestantCount} contestants to remove");
 			
 			foreach ($contestantUsers as $user) {
 				if ($user['contestant_id']) {
@@ -3707,6 +3807,8 @@ class UserController {
 					$imagePath = $stmt->fetchColumn();
 					if ($imagePath && file_exists(__DIR__ . '/../../public' . $imagePath)) {
 						unlink(__DIR__ . '/../../public' . $imagePath);
+						\App\Logger::debug('contestant_image_deleted', 'contestant', $user['contestant_id'], 
+							"Contestant image file deleted: {$imagePath}");
 					}
 					
 					$pdo->prepare('DELETE FROM judge_comments WHERE contestant_id = ?')->execute([$user['contestant_id']]);
@@ -3721,9 +3823,23 @@ class UserController {
 			$pdo->prepare('DELETE FROM users WHERE role = "contestant"')->execute();
 			
 			$pdo->commit();
+			
+			// Log successful outcome
+			\App\Logger::debug('bulk_contestant_removal_success', 'contestant', null, 
+				"Bulk contestant removal completed successfully: removed {$contestantCount} contestants");
+			\App\Logger::logBulkOperation('contestant_removal', 'contestant', null, 
+				"Removed all {$contestantCount} contestants and associated data");
+			
 			redirect('/admin/users?success=all_contestants_removed');
 		} catch (\Exception $e) {
 			$pdo->rollBack();
+			
+			// Log failure outcome
+			\App\Logger::debug('bulk_contestant_removal_failed', 'contestant', null, 
+				"Bulk contestant removal failed: " . $e->getMessage());
+			\App\Logger::error('bulk_contestant_removal_failed', 'contestant', null, 
+				"Bulk contestant removal failed: " . $e->getMessage());
+			
 			redirect('/admin/users?error=remove_failed');
 		}
 	}
@@ -3731,24 +3847,69 @@ class UserController {
 	public function removeAllEmcees(): void {
 		require_organizer();
 		
+		// Debug log bulk removal attempt
+		\App\Logger::debug('bulk_emcee_removal_attempt', 'emcee', null, 
+			"Attempting to remove all emcees");
+		
 		$pdo = DB::pdo();
 		$pdo->beginTransaction();
 		
 		try {
+			// Get count before deletion for logging
+			$emceeCount = $pdo->query('SELECT COUNT(*) FROM users WHERE role = "emcee"')->fetchColumn();
+			
+			\App\Logger::debug('bulk_emcee_removal_details', 'emcee', null, 
+				"Found {$emceeCount} emcees to remove");
+			
 			// Delete all emcee users
 			$pdo->prepare('DELETE FROM users WHERE role = "emcee"')->execute();
 			
 			$pdo->commit();
+			
+			// Log successful outcome
+			\App\Logger::debug('bulk_emcee_removal_success', 'emcee', null, 
+				"Bulk emcee removal completed successfully: removed {$emceeCount} emcees");
+			\App\Logger::logBulkOperation('emcee_removal', 'emcee', null, 
+				"Removed all {$emceeCount} emcees");
+			
 			redirect('/admin/users?success=all_emcees_removed');
 		} catch (\Exception $e) {
 			$pdo->rollBack();
+			
+			// Log failure outcome
+			\App\Logger::debug('bulk_emcee_removal_failed', 'emcee', null, 
+				"Bulk emcee removal failed: " . $e->getMessage());
+			\App\Logger::error('bulk_emcee_removal_failed', 'emcee', null, 
+				"Bulk emcee removal failed: " . $e->getMessage());
+			
 			redirect('/admin/users?error=remove_failed');
 		}
 	}
 	
 	public function forceRefresh(): void {
 		require_organizer();
-		redirect('/admin/users?success=tables_refreshed');
+		
+		// Debug log refresh attempt
+		\App\Logger::debug('table_refresh_attempt', 'system', null, 
+			"Attempting to force refresh user tables");
+		
+		try {
+			// Log successful outcome
+			\App\Logger::debug('table_refresh_success', 'system', null, 
+				"Table refresh completed successfully");
+			\App\Logger::logAdminAction('table_refresh', 'system', null, 
+				"User tables refreshed");
+			
+			redirect('/admin/users?success=tables_refreshed');
+		} catch (\Exception $e) {
+			// Log failure outcome
+			\App\Logger::debug('table_refresh_failed', 'system', null, 
+				"Table refresh failed: " . $e->getMessage());
+			\App\Logger::error('table_refresh_failed', 'system', null, 
+				"Table refresh failed: " . $e->getMessage());
+			
+			redirect('/admin/users?error=refresh_failed');
+		}
 	}
 }
 
@@ -3785,10 +3946,31 @@ class AdminController {
 		$gender = post('gender') ?: null;
 		$isHeadJudge = post('is_head_judge') ? 1 : 0;
 		
-		$stmt = DB::pdo()->prepare('INSERT INTO judges (id, name, email, gender, is_head_judge) VALUES (?, ?, ?, ?, ?)');
-		$stmt->execute([uuid(), $name, $email, $gender, $isHeadJudge]);
+		// Debug log creation attempt
+		\App\Logger::debug('judge_creation_attempt', 'judge', null, 
+			"Attempting to create judge: name={$name}, email={$email}, gender={$gender}, is_head_judge={$isHeadJudge}");
 		
-		redirect('/admin/judges?success=judge_created');
+		try {
+			$judgeId = uuid();
+			$stmt = DB::pdo()->prepare('INSERT INTO judges (id, name, email, gender, is_head_judge) VALUES (?, ?, ?, ?, ?)');
+			$stmt->execute([$judgeId, $name, $email, $gender, $isHeadJudge]);
+			
+			// Log successful outcome
+			\App\Logger::debug('judge_creation_success', 'judge', $judgeId, 
+				"Judge created successfully: judge_id={$judgeId}, name={$name}, email={$email}, is_head_judge={$isHeadJudge}");
+			\App\Logger::logAdminAction('judge_created', 'judge', $judgeId, 
+				"Judge created: {$name}" . ($isHeadJudge ? " (Head Judge)" : ""));
+			
+			redirect('/admin/judges?success=judge_created');
+		} catch (\Exception $e) {
+			// Log failure outcome
+			\App\Logger::debug('judge_creation_failed', 'judge', null, 
+				"Judge creation failed: " . $e->getMessage());
+			\App\Logger::error('judge_creation_failed', 'judge', null, 
+				"Judge creation failed: " . $e->getMessage());
+			
+			redirect('/admin/judges?error=creation_failed');
+		}
 	}
 	
 	public function updateJudge(array $params): void {
@@ -3799,26 +3981,67 @@ class AdminController {
 		$gender = post('gender') ?: null;
 		$isHeadJudge = post('is_head_judge') ? 1 : 0;
 		
-		$stmt = DB::pdo()->prepare('UPDATE judges SET name = ?, email = ?, gender = ?, is_head_judge = ? WHERE id = ?');
-		$stmt->execute([$name, $email, $gender, $isHeadJudge, $id]);
+		// Debug log update attempt
+		\App\Logger::debug('judge_update_attempt', 'judge', $id, 
+			"Attempting to update judge: judge_id={$id}, name={$name}, email={$email}, is_head_judge={$isHeadJudge}");
 		
-		redirect('/admin/judges?success=judge_updated');
+		try {
+			$stmt = DB::pdo()->prepare('UPDATE judges SET name = ?, email = ?, gender = ?, is_head_judge = ? WHERE id = ?');
+			$stmt->execute([$name, $email, $gender, $isHeadJudge, $id]);
+			
+			// Log successful outcome
+			\App\Logger::debug('judge_update_success', 'judge', $id, 
+				"Judge updated successfully: judge_id={$id}, name={$name}, email={$email}, is_head_judge={$isHeadJudge}");
+			\App\Logger::logAdminAction('judge_updated', 'judge', $id, 
+				"Judge updated: {$name}" . ($isHeadJudge ? " (Head Judge)" : ""));
+			
+			redirect('/admin/judges?success=judge_updated');
+		} catch (\Exception $e) {
+			// Log failure outcome
+			\App\Logger::debug('judge_update_failed', 'judge', $id, 
+				"Judge update failed: " . $e->getMessage());
+			\App\Logger::error('judge_update_failed', 'judge', $id, 
+				"Judge update failed: " . $e->getMessage());
+			
+			redirect('/admin/judges?error=update_failed');
+		}
 	}
 	
 	public function deleteJudge(): void {
 		require_organizer();
 		$id = post('judge_id');
 		
+		// Debug log deletion attempt
+		\App\Logger::debug('judge_deletion_attempt', 'judge', $id, 
+			"Attempting to delete judge: judge_id={$id}");
+		
 		$pdo = DB::pdo();
 		$pdo->beginTransaction();
 		
 		try {
+			// Get judge info for logging
+			$stmt = $pdo->prepare('SELECT * FROM judges WHERE id = ?');
+			$stmt->execute([$id]);
+			$judge = $stmt->fetch(\PDO::FETCH_ASSOC);
+			
+			if (!$judge) {
+				\App\Logger::debug('judge_deletion_failed', 'judge', $id, 
+					"Judge deletion failed: judge not found");
+				redirect('/admin/judges?error=judge_not_found');
+				return;
+			}
+			
+			\App\Logger::debug('judge_deletion_details', 'judge', $id, 
+				"Judge deletion details: name={$judge['name']}, email={$judge['email']}");
+			
 			// Delete associated image file
 			$stmt = $pdo->prepare('SELECT image_path FROM judges WHERE id = ?');
 			$stmt->execute([$id]);
 			$imagePath = $stmt->fetchColumn();
 			if ($imagePath && file_exists(__DIR__ . '/../../public' . $imagePath)) {
 				unlink(__DIR__ . '/../../public' . $imagePath);
+				\App\Logger::debug('judge_image_deleted', 'judge', $id, 
+					"Judge image file deleted: {$imagePath}");
 			}
 			
 			// Delete all related data
@@ -3830,9 +4053,22 @@ class AdminController {
 			$pdo->prepare('DELETE FROM judges WHERE id = ?')->execute([$id]);
 			
 			$pdo->commit();
+			
+			// Log successful outcome
+			\App\Logger::debug('judge_deletion_success', 'judge', $id, 
+				"Judge deletion completed successfully: judge_id={$id}, name={$judge['name']}");
+			\App\Logger::logUserDeletion($id, $judge['name'], 'judge');
+			
 			redirect('/admin/judges?success=judge_deleted');
 		} catch (\Exception $e) {
 			$pdo->rollBack();
+			
+			// Log failure outcome
+			\App\Logger::debug('judge_deletion_failed', 'judge', $id, 
+				"Judge deletion failed: " . $e->getMessage());
+			\App\Logger::error('judge_deletion_failed', 'judge', $id, 
+				"Judge deletion failed: " . $e->getMessage());
+			
 			redirect('/admin/judges?error=delete_failed');
 		}
 	}
@@ -3850,26 +4086,68 @@ class AdminController {
 		$gender = post('gender') ?: null;
 		$contestantNumber = post('contestant_number') ?: null;
 		
-		$stmt = DB::pdo()->prepare('INSERT INTO contestants (id, name, email, gender, contestant_number) VALUES (?, ?, ?, ?, ?)');
-		$stmt->execute([uuid(), $name, $email, $gender, $contestantNumber]);
+		// Debug log creation attempt
+		\App\Logger::debug('contestant_creation_attempt', 'contestant', null, 
+			"Attempting to create contestant: name={$name}, email={$email}, gender={$gender}");
 		
-		redirect('/admin/contestants?success=contestant_created');
+		try {
+			$contestantId = uuid();
+			$stmt = DB::pdo()->prepare('INSERT INTO contestants (id, name, email, gender, contestant_number) VALUES (?, ?, ?, ?, ?)');
+			$stmt->execute([$contestantId, $name, $email, $gender, $contestantNumber]);
+			
+			// Log successful outcome
+			\App\Logger::debug('contestant_creation_success', 'contestant', $contestantId, 
+				"Contestant created successfully: contestant_id={$contestantId}, name={$name}, email={$email}");
+			\App\Logger::logAdminAction('contestant_created', 'contestant', $contestantId, 
+				"Contestant created: {$name}");
+			
+			redirect('/admin/contestants?success=contestant_created');
+		} catch (\Exception $e) {
+			// Log failure outcome
+			\App\Logger::debug('contestant_creation_failed', 'contestant', null, 
+				"Contestant creation failed: " . $e->getMessage());
+			\App\Logger::error('contestant_creation_failed', 'contestant', null, 
+				"Contestant creation failed: " . $e->getMessage());
+			
+			redirect('/admin/contestants?error=creation_failed');
+		}
 	}
 	
 	public function deleteContestant(): void {
 		require_organizer();
 		$id = post('contestant_id');
 		
+		// Debug log deletion attempt
+		\App\Logger::debug('contestant_deletion_attempt', 'contestant', $id, 
+			"Attempting to delete contestant: contestant_id={$id}");
+		
 		$pdo = DB::pdo();
 		$pdo->beginTransaction();
 		
 		try {
+			// Get contestant info for logging
+			$stmt = $pdo->prepare('SELECT * FROM contestants WHERE id = ?');
+			$stmt->execute([$id]);
+			$contestant = $stmt->fetch(\PDO::FETCH_ASSOC);
+			
+			if (!$contestant) {
+				\App\Logger::debug('contestant_deletion_failed', 'contestant', $id, 
+					"Contestant deletion failed: contestant not found");
+				redirect('/admin/contestants?error=contestant_not_found');
+				return;
+			}
+			
+			\App\Logger::debug('contestant_deletion_details', 'contestant', $id, 
+				"Contestant deletion details: name={$contestant['name']}, email={$contestant['email']}");
+			
 			// Delete associated image file
 			$stmt = $pdo->prepare('SELECT image_path FROM contestants WHERE id = ?');
 			$stmt->execute([$id]);
 			$imagePath = $stmt->fetchColumn();
 			if ($imagePath && file_exists(__DIR__ . '/../../public' . $imagePath)) {
 				unlink(__DIR__ . '/../../public' . $imagePath);
+				\App\Logger::debug('contestant_image_deleted', 'contestant', $id, 
+					"Contestant image file deleted: {$imagePath}");
 			}
 			
 			// Delete all related data
@@ -3880,9 +4158,22 @@ class AdminController {
 			$pdo->prepare('DELETE FROM contestants WHERE id = ?')->execute([$id]);
 			
 			$pdo->commit();
+			
+			// Log successful outcome
+			\App\Logger::debug('contestant_deletion_success', 'contestant', $id, 
+				"Contestant deletion completed successfully: contestant_id={$id}, name={$contestant['name']}");
+			\App\Logger::logUserDeletion($id, $contestant['name'], 'contestant');
+			
 			redirect('/admin/contestants?success=contestant_deleted');
 		} catch (\Exception $e) {
 			$pdo->rollBack();
+			
+			// Log failure outcome
+			\App\Logger::debug('contestant_deletion_failed', 'contestant', $id, 
+				"Contestant deletion failed: " . $e->getMessage());
+			\App\Logger::error('contestant_deletion_failed', 'contestant', $id, 
+				"Contestant deletion failed: " . $e->getMessage());
+			
 			redirect('/admin/contestants?error=delete_failed');
 		}
 	}
@@ -3901,26 +4192,84 @@ class AdminController {
 		$preferredName = post('preferred_name') ?: $name;
 		$gender = post('gender') ?: null;
 		
-		$passwordHash = !empty($password) ? password_hash($password, PASSWORD_DEFAULT) : null;
+		// Debug log creation attempt
+		\App\Logger::debug('organizer_creation_attempt', 'organizer', null, 
+			"Attempting to create organizer: name={$name}, email={$email}, gender={$gender}");
 		
-		$stmt = DB::pdo()->prepare('INSERT INTO users (id, name, email, password_hash, role, preferred_name, gender) VALUES (?, ?, ?, ?, ?, ?, ?)');
-		$stmt->execute([uuid(), $name, $email, $passwordHash, 'organizer', $preferredName, $gender]);
-		
-		redirect('/admin/organizers?success=organizer_created');
+		try {
+			$organizerId = uuid();
+			$passwordHash = !empty($password) ? password_hash($password, PASSWORD_DEFAULT) : null;
+			
+			$stmt = DB::pdo()->prepare('INSERT INTO users (id, name, email, password_hash, role, preferred_name, gender) VALUES (?, ?, ?, ?, ?, ?, ?)');
+			$stmt->execute([$organizerId, $name, $email, $passwordHash, 'organizer', $preferredName, $gender]);
+			
+			// Log successful outcome
+			\App\Logger::debug('organizer_creation_success', 'organizer', $organizerId, 
+				"Organizer created successfully: organizer_id={$organizerId}, name={$name}, email={$email}");
+			\App\Logger::logAdminAction('organizer_created', 'organizer', $organizerId, 
+				"Organizer created: {$name}");
+			
+			redirect('/admin/organizers?success=organizer_created');
+		} catch (\Exception $e) {
+			// Log failure outcome
+			\App\Logger::debug('organizer_creation_failed', 'organizer', null, 
+				"Organizer creation failed: " . $e->getMessage());
+			\App\Logger::error('organizer_creation_failed', 'organizer', null, 
+				"Organizer creation failed: " . $e->getMessage());
+			
+			redirect('/admin/organizers?error=creation_failed');
+		}
 	}
 	
 	public function deleteOrganizer(): void {
 		require_organizer();
 		$id = post('organizer_id');
 		
+		// Debug log deletion attempt
+		\App\Logger::debug('organizer_deletion_attempt', 'organizer', $id, 
+			"Attempting to delete organizer: organizer_id={$id}");
+		
 		// Don't allow deleting yourself
 		if ($id === ($_SESSION['user']['id'] ?? '')) {
+			\App\Logger::debug('organizer_deletion_failed', 'organizer', $id, 
+				"Organizer deletion failed: cannot delete self");
 			redirect('/admin/organizers?error=cannot_delete_self');
 			return;
 		}
 		
-		DB::pdo()->prepare('DELETE FROM users WHERE id = ? AND role = "organizer"')->execute([$id]);
-		redirect('/admin/organizers?success=organizer_deleted');
+		try {
+			// Get organizer info for logging
+			$stmt = DB::pdo()->prepare('SELECT * FROM users WHERE id = ? AND role = "organizer"');
+			$stmt->execute([$id]);
+			$organizer = $stmt->fetch(\PDO::FETCH_ASSOC);
+			
+			if (!$organizer) {
+				\App\Logger::debug('organizer_deletion_failed', 'organizer', $id, 
+					"Organizer deletion failed: organizer not found");
+				redirect('/admin/organizers?error=organizer_not_found');
+				return;
+			}
+			
+			\App\Logger::debug('organizer_deletion_details', 'organizer', $id, 
+				"Organizer deletion details: name={$organizer['name']}, email={$organizer['email']}");
+			
+			DB::pdo()->prepare('DELETE FROM users WHERE id = ? AND role = "organizer"')->execute([$id]);
+			
+			// Log successful outcome
+			\App\Logger::debug('organizer_deletion_success', 'organizer', $id, 
+				"Organizer deletion completed successfully: organizer_id={$id}, name={$organizer['name']}");
+			\App\Logger::logUserDeletion($id, $organizer['name'], 'organizer');
+			
+			redirect('/admin/organizers?success=organizer_deleted');
+		} catch (\Exception $e) {
+			// Log failure outcome
+			\App\Logger::debug('organizer_deletion_failed', 'organizer', $id, 
+				"Organizer deletion failed: " . $e->getMessage());
+			\App\Logger::error('organizer_deletion_failed', 'organizer', $id, 
+				"Organizer deletion failed: " . $e->getMessage());
+			
+			redirect('/admin/organizers?error=delete_failed');
+		}
 	}
 	
 	public function settings(): void {
@@ -4214,23 +4563,74 @@ class AdminController {
 	public function forceLogoutAll(): void {
 		require_organizer();
 		
-		// Increment session version for all users
-		DB::pdo()->prepare('UPDATE users SET session_version = ?')->execute([uuid()]);
+		// Debug log logout attempt
+		\App\Logger::debug('force_logout_all_attempt', 'system', null, 
+			"Attempting to force logout all users");
 		
-		\App\Logger::logAdminAction('force_logout_all', 'system', '', 'All users logged out');
-		redirect('/admin/users?success=all_users_logged_out');
+		try {
+			// Increment session version for all users
+			DB::pdo()->prepare('UPDATE users SET session_version = ?')->execute([uuid()]);
+			
+			// Log successful outcome
+			\App\Logger::debug('force_logout_all_success', 'system', null, 
+				"Force logout all users completed successfully");
+			\App\Logger::logAdminAction('force_logout_all', 'system', '', 'All users logged out');
+			
+			redirect('/admin/users?success=all_users_logged_out');
+		} catch (\Exception $e) {
+			// Log failure outcome
+			\App\Logger::debug('force_logout_all_failed', 'system', null, 
+				"Force logout all users failed: " . $e->getMessage());
+			\App\Logger::error('force_logout_all_failed', 'system', null, 
+				"Force logout all users failed: " . $e->getMessage());
+			
+			redirect('/admin/users?error=logout_failed');
+		}
 	}
 	
 	public function forceLogoutUser(array $params): void {
 		require_organizer();
 		$userId = param('id', $params);
 		
-		// Generate new session version for this user
-		$newSessionVersion = uuid();
-		DB::pdo()->prepare('UPDATE users SET session_version = ? WHERE id = ?')->execute([$newSessionVersion, $userId]);
+		// Debug log logout attempt
+		\App\Logger::debug('force_logout_user_attempt', 'user', $userId, 
+			"Attempting to force logout user: user_id={$userId}");
 		
-		\App\Logger::logAdminAction('force_logout_user', 'user', $userId, 'User logged out');
-		redirect('/admin/users?success=user_logged_out');
+		try {
+			// Get user info for logging
+			$stmt = DB::pdo()->prepare('SELECT name, email FROM users WHERE id = ?');
+			$stmt->execute([$userId]);
+			$user = $stmt->fetch(\PDO::FETCH_ASSOC);
+			
+			if (!$user) {
+				\App\Logger::debug('force_logout_user_failed', 'user', $userId, 
+					"Force logout user failed: user not found");
+				redirect('/admin/users?error=user_not_found');
+				return;
+			}
+			
+			\App\Logger::debug('force_logout_user_details', 'user', $userId, 
+				"Force logout user details: name={$user['name']}, email={$user['email']}");
+			
+			// Generate new session version for this user
+			$newSessionVersion = uuid();
+			DB::pdo()->prepare('UPDATE users SET session_version = ? WHERE id = ?')->execute([$newSessionVersion, $userId]);
+			
+			// Log successful outcome
+			\App\Logger::debug('force_logout_user_success', 'user', $userId, 
+				"Force logout user completed successfully: user_id={$userId}, name={$user['name']}");
+			\App\Logger::logAdminAction('force_logout_user', 'user', $userId, 'User logged out');
+			
+			redirect('/admin/users?success=user_logged_out');
+		} catch (\Exception $e) {
+			// Log failure outcome
+			\App\Logger::debug('force_logout_user_failed', 'user', $userId, 
+				"Force logout user failed: " . $e->getMessage());
+			\App\Logger::error('force_logout_user_failed', 'user', $userId, 
+				"Force logout user failed: " . $e->getMessage());
+			
+			redirect('/admin/users?error=logout_failed');
+		}
 	}
 	
 	public function printReports(): void {

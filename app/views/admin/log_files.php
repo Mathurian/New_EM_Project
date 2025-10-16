@@ -1,4 +1,4 @@
-<?php
+<?php use function App\{url, hierarchical_back_url, home_url}; ?>
 $title = 'Log Files';
 ?>
 
