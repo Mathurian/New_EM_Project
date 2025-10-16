@@ -52,6 +52,10 @@ sudo systemctl reload apache2
 
 ## Notes
 - Database file: `app/db/contest.sqlite` auto-created; ensure `www-data` can write to `app/db`.
-- No authentication included; add as needed.
+- Login with: 
 
+admintester2 / Admintester123! - admin user
 
+judgetester2 / Judgetester123! - judge user
+
+emceetester2 / Emceetester123! - emcee user 
