@@ -589,12 +589,11 @@ class BackupController {
 		$stmt = DB::pdo()->query('SELECT * FROM backup_settings ORDER BY backup_type');
 		$backupSettings = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 		
-		// Debug: Log backup settings
-		\App\Logger::debug('Backup settings query result: ' . json_encode($backupSettings));
+		// Debug: Log backup settings retrieval
+		\App\Logger::debug('Retrieved backup settings: ' . json_encode($backupSettings));
 		
 		// If no backup settings exist, create defaults
 		if (empty($backupSettings)) {
-			\App\Logger::debug('No backup settings found, creating defaults');
 			$pdo = DB::pdo();
 			
 			// Ensure the table exists and has the correct structure
@@ -607,9 +606,6 @@ class BackupController {
 			// Re-fetch the settings
 			$stmt = $pdo->query('SELECT * FROM backup_settings ORDER BY backup_type');
 			$backupSettings = $stmt->fetchAll(\PDO::FETCH_ASSOC);
-			
-			// Debug: Log created settings
-			\App\Logger::debug('Created backup settings: ' . json_encode($backupSettings));
 			
 			// Log that we created default settings
 			\App\Logger::info('Created default backup settings: schema and full');
@@ -632,9 +628,6 @@ class BackupController {
 				$backup['created_at'] = date('c', strtotime($backup['created_at']));
 			}
 		}
-		
-		// Debug: Log final backup settings before passing to view
-		\App\Logger::debug('Final backup settings being passed to view: ' . json_encode($backupSettings));
 		
 		view('admin/backups', compact('backupLogs', 'backupSettings', 'backupDirectory'));
 	}
@@ -802,15 +795,22 @@ class BackupController {
 			
 			// Update schema backup settings
 			$schemaNextRun = $schemaEnabled ? $this->calculateNextRun($schemaFrequency, $schemaFrequencyValue) : null;
+			\App\Logger::debug("Schema next run calculated: " . ($schemaNextRun ?: 'null'));
+			
 			$stmt = $pdo->prepare('UPDATE backup_settings SET enabled = ?, frequency = ?, frequency_value = ?, retention_days = ?, next_run = ?, updated_at = CURRENT_TIMESTAMP WHERE backup_type = ?');
-			$stmt->execute([$schemaEnabled, $schemaFrequency, $schemaFrequencyValue, $schemaRetention, $schemaNextRun, 'schema']);
+			$result = $stmt->execute([$schemaEnabled, $schemaFrequency, $schemaFrequencyValue, $schemaRetention, $schemaNextRun, 'schema']);
+			\App\Logger::debug("Schema update result: " . ($result ? 'success' : 'failed') . ", rows affected: " . $stmt->rowCount());
 			
 			// Update full backup settings
 			$fullNextRun = $fullEnabled ? $this->calculateNextRun($fullFrequency, $fullFrequencyValue) : null;
+			\App\Logger::debug("Full next run calculated: " . ($fullNextRun ?: 'null'));
+			
 			$stmt = $pdo->prepare('UPDATE backup_settings SET enabled = ?, frequency = ?, frequency_value = ?, retention_days = ?, next_run = ?, updated_at = CURRENT_TIMESTAMP WHERE backup_type = ?');
-			$stmt->execute([$fullEnabled, $fullFrequency, $fullFrequencyValue, $fullRetention, $fullNextRun, 'full']);
+			$result = $stmt->execute([$fullEnabled, $fullFrequency, $fullFrequencyValue, $fullRetention, $fullNextRun, 'full']);
+			\App\Logger::debug("Full update result: " . ($result ? 'success' : 'failed') . ", rows affected: " . $stmt->rowCount());
 			
 			$pdo->commit();
+			\App\Logger::debug("Transaction committed successfully");
 			
 			\App\Logger::logAdminAction('backup_settings_updated', 'settings', null, 'Backup settings updated');
 			
@@ -818,6 +818,7 @@ class BackupController {
 		} catch (\Exception $e) {
 			$pdo->rollBack();
 			\App\Logger::error('Backup settings update failed: ' . $e->getMessage());
+			\App\Logger::debug('Exception details: ' . $e->getTraceAsString());
 			redirect('/admin/backups?error=settings_update_failed');
 		}
 	}
@@ -1671,6 +1672,73 @@ class BackupController {
 		}
 		
 		echo '<pre>=== Time Check Complete ===</pre>';
+		exit;
+	}
+	
+	public function debugBackupSettings(): void {
+		require_organizer();
+		
+		echo '<pre>=== Backup Settings Debug ===</pre>';
+		
+		try {
+			$pdo = DB::pdo();
+			
+			// Check if table exists
+			$stmt = $pdo->query("SELECT name FROM sqlite_master WHERE type='table' AND name='backup_settings'");
+			if ($stmt->fetch()) {
+				echo '<pre>✓ backup_settings table exists</pre>';
+				
+				// Get table schema
+				$stmt = $pdo->query("PRAGMA table_info(backup_settings)");
+				$columns = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+				echo '<pre>Table columns:</pre>';
+				foreach ($columns as $column) {
+					echo '<pre>  - ' . $column['name'] . ' (' . $column['type'] . ')</pre>';
+				}
+				
+				// Get all settings
+				$stmt = $pdo->query('SELECT * FROM backup_settings ORDER BY backup_type');
+				$settings = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+				
+				echo '<pre>Found ' . count($settings) . ' backup settings:</pre>';
+				foreach ($settings as $setting) {
+					echo '<pre>';
+					echo "ID: {$setting['id']}\n";
+					echo "Type: {$setting['backup_type']}\n";
+					echo "Enabled: " . ($setting['enabled'] ? 'YES' : 'NO') . "\n";
+					echo "Frequency: {$setting['frequency']}\n";
+					echo "Frequency Value: {$setting['frequency_value']}\n";
+					echo "Retention: {$setting['retention_days']} days\n";
+					echo "Last Run: " . ($setting['last_run'] ?: 'Never') . "\n";
+					echo "Next Run: " . ($setting['next_run'] ?: 'Not set') . "\n";
+					echo "Created: {$setting['created_at']}\n";
+					echo "Updated: {$setting['updated_at']}\n";
+					echo '</pre>';
+				}
+				
+				// Check for constraint violations
+				echo '<pre>=== Testing Constraint ===</pre>';
+				try {
+					$testId = uuid();
+					$stmt = $pdo->prepare('INSERT INTO backup_settings (id, backup_type, enabled, frequency, frequency_value, retention_days) VALUES (?, ?, ?, ?, ?, ?)');
+					$stmt->execute([$testId, 'schema', 0, 'minutes', 5, 30]);
+					
+					// Clean up test record
+					$pdo->prepare('DELETE FROM backup_settings WHERE id = ?')->execute([$testId]);
+					echo '<pre>✓ Constraint allows minutes frequency</pre>';
+				} catch (\Exception $e) {
+					echo '<pre>✗ Constraint error: ' . $e->getMessage() . '</pre>';
+				}
+				
+			} else {
+				echo '<pre>✗ backup_settings table does NOT exist</pre>';
+			}
+			
+		} catch (\Exception $e) {
+			echo '<pre>Error: ' . $e->getMessage() . '</pre>';
+		}
+		
+		echo '<pre>=== Debug Complete ===</pre>';
 		exit;
 	}
 	

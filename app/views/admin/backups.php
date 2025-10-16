@@ -1,14 +1,6 @@
 <?php use function App\{url, hierarchical_back_url, home_url}; ?>
 <h2>Database Backups</h2>
 
-<!-- Debug: Show variables passed to view -->
-<div class="alert alert-info" style="font-size: 12px; margin-bottom: 15px;">
-	<strong>Debug Variables:</strong><br>
-	backupSettings: <?= isset($backupSettings) ? count($backupSettings) . ' items' : 'NOT SET' ?><br>
-	backupLogs: <?= isset($backupLogs) ? count($backupLogs) . ' items' : 'NOT SET' ?><br>
-	backupDirectory: <?= isset($backupDirectory) ? htmlspecialchars($backupDirectory) : 'NOT SET' ?>
-</div>
-
 <div class="navigation-buttons">
 	<a href="<?= hierarchical_back_url('/admin') ?>" class="btn btn-secondary">← Back to Admin</a>
 	<a href="<?= home_url() ?>" class="btn btn-outline">🏠 Home</a>
@@ -69,17 +61,9 @@
 			<?php if (empty($backupSettings)): ?>
 				<div class="alert alert-warning">
 					<p>No backup settings found. Default settings will be created automatically.</p>
-					<p><strong>Debug:</strong> backupSettings variable is empty or not set.</p>
 					<p><a href="<?= url('admin/backups') ?>" class="btn btn-sm btn-primary">Refresh Page</a></p>
 				</div>
 			<?php else: ?>
-				<!-- Debug: Show backup settings count -->
-				<div class="alert alert-info" style="font-size: 12px; margin-bottom: 15px;">
-					<strong>Debug:</strong> Found <?= count($backupSettings) ?> backup settings:
-					<?php foreach ($backupSettings as $setting): ?>
-						<br>• <?= $setting['backup_type'] ?>: <?= $setting['enabled'] ? 'enabled' : 'disabled' ?> (<?= $setting['frequency'] ?>, <?= $setting['frequency_value'] ?? 1 ?>)
-					<?php endforeach; ?>
-				</div>
 				<form method="post" action="<?= url('admin/backups/settings') ?>">
 					<?php foreach ($backupSettings as $setting): ?>
 						<div class="form-group">
@@ -193,10 +177,87 @@
 		<p><a href="<?= url('admin/backups/reset-sessions') ?>" class="btn btn-sm btn-warning" onclick="return confirm('This will reset all user session versions to fix login issues. Continue?')">🔐 Reset Session Versions</a></p>
 		<p><a href="<?= url('admin/backups/debug-scheduled') ?>" class="btn btn-sm btn-secondary">🔍 Debug Scheduled Backups</a></p>
 		<p><a href="<?= url('admin/backups/check-time') ?>" class="btn btn-sm btn-secondary">🕒 Check System Time</a></p>
+		<p><a href="<?= url('admin/backups/debug-settings') ?>" class="btn btn-sm btn-secondary">🔧 Debug Backup Settings</a></p>
 	</div>
 	<h6>Setting up Scheduled Backups:</h6>
-	<p>Add this to your crontab to run scheduled backups every hour:</p>
-	<code>0 * * * * curl -s "http://your-domain.com/admin/backups/run-scheduled" > /dev/null 2>&1</code>
+	<?php if (!empty($backupSettings)): ?>
+		<?php 
+		$enabledBackups = array_filter($backupSettings, function($s) { return $s['enabled']; });
+		$mostFrequentInterval = null;
+		$mostFrequentMinutes = 60; // Default to hourly
+		
+		foreach ($enabledBackups as $backup) {
+			$minutes = 60; // Default
+			switch ($backup['frequency']) {
+				case 'minutes':
+					$minutes = $backup['frequency_value'];
+					break;
+				case 'hours':
+					$minutes = $backup['frequency_value'] * 60;
+					break;
+				case 'daily':
+					$minutes = $backup['frequency_value'] * 24 * 60;
+					break;
+				case 'weekly':
+					$minutes = $backup['frequency_value'] * 7 * 24 * 60;
+					break;
+				case 'monthly':
+					$minutes = $backup['frequency_value'] * 30 * 24 * 60; // Approximate
+					break;
+			}
+			
+			if ($minutes < $mostFrequentMinutes) {
+				$mostFrequentMinutes = $minutes;
+				$mostFrequentInterval = $backup['frequency'] . ' (' . $backup['frequency_value'] . ')';
+			}
+		}
+		
+		// Generate cron expression
+		$cronExpression = '0 * * * *'; // Default hourly
+		if ($mostFrequentMinutes <= 1) {
+			$cronExpression = '* * * * *'; // Every minute
+		} elseif ($mostFrequentMinutes <= 5) {
+			$cronExpression = '*/5 * * * *'; // Every 5 minutes
+		} elseif ($mostFrequentMinutes <= 15) {
+			$cronExpression = '*/15 * * * *'; // Every 15 minutes
+		} elseif ($mostFrequentMinutes <= 30) {
+			$cronExpression = '*/30 * * * *'; // Every 30 minutes
+		} elseif ($mostFrequentMinutes < 60) {
+			$cronExpression = '*/' . $mostFrequentMinutes . ' * * * *'; // Custom minutes
+		}
+		?>
+		
+		<?php if (!empty($enabledBackups)): ?>
+			<div class="alert alert-info">
+				<p><strong>Current Schedule:</strong></p>
+				<?php foreach ($enabledBackups as $backup): ?>
+					<p>• <?= ucfirst($backup['backup_type']) ?> backup: Every <?= $backup['frequency_value'] ?> <?= $backup['frequency'] ?></p>
+				<?php endforeach; ?>
+				<p><strong>Recommended cron frequency:</strong> <?= $mostFrequentInterval ?: 'hourly' ?></p>
+			</div>
+			
+			<p>Add this to your crontab to run scheduled backups:</p>
+			<div class="code-block">
+				<code><?= $cronExpression ?> curl -s "<?= $_SERVER['HTTP_HOST'] ?>/admin/backups/run-scheduled" > /dev/null 2>&1</code>
+			</div>
+			
+			<p><strong>To set up:</strong></p>
+			<ol>
+				<li>Open terminal and run: <code>crontab -e</code></li>
+				<li>Add the line above</li>
+				<li>Save and exit</li>
+			</ol>
+		<?php else: ?>
+			<div class="alert alert-warning">
+				<p><strong>No scheduled backups enabled.</strong></p>
+				<p>Enable scheduled backups above, then return here for cron instructions.</p>
+			</div>
+		<?php endif; ?>
+	<?php else: ?>
+		<div class="alert alert-warning">
+			<p>Configure scheduled backup settings above to see cron instructions.</p>
+		</div>
+	<?php endif; ?>
 </div>
 
 <style>
@@ -214,6 +275,20 @@
 }
 .backup-info p {
 	margin: 5px 0;
+}
+.code-block {
+	background-color: #f8f9fa;
+	border: 1px solid #e9ecef;
+	border-radius: 4px;
+	padding: 10px;
+	margin: 10px 0;
+	font-family: monospace;
+}
+.code-block code {
+	background: none;
+	padding: 0;
+	color: #e83e8c;
+	font-size: 0.9em;
 }
 .form-row {
 	display: flex;

@@ -77,6 +77,7 @@ $router->get('/admin/backups/restore-settings', 'BackupController@restoreBackupS
 $router->get('/admin/backups/reset-sessions', 'BackupController@resetSessionVersions');
 $router->get('/admin/backups/debug-scheduled', 'BackupController@debugScheduledBackups');
 $router->get('/admin/backups/check-time', 'BackupController@checkSystemTime');
+$router->get('/admin/backups/debug-settings', 'BackupController@debugBackupSettings');
 $router->post('/admin/users/force-logout-all', 'AdminController@forceLogoutAll');
 $router->post('/admin/users/{id}/force-logout', 'AdminController@forceLogoutUser');
 $router->get('/admin/print-reports', 'AdminController@printReports');
