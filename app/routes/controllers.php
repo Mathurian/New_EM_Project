@@ -1666,7 +1666,15 @@ class UserController {
 	
 	public function index(): void {
 		require_organizer();
-		$users = DB::pdo()->query('SELECT * FROM users ORDER BY role, name')->fetchAll(\PDO::FETCH_ASSOC);
+		$users = DB::pdo()->query('
+			SELECT u.*, 
+			       c.contestant_number,
+			       j.is_head_judge
+			FROM users u 
+			LEFT JOIN contestants c ON u.contestant_id = c.id 
+			LEFT JOIN judges j ON u.judge_id = j.id
+			ORDER BY u.role, u.name
+		')->fetchAll(\PDO::FETCH_ASSOC);
 		
 		// Group users by role
 		$usersByRole = [];
@@ -2177,7 +2185,10 @@ class AdminController {
 		$stmt->execute(['log_level']);
 		$currentLogLevel = $stmt->fetchColumn() ?: 'INFO';
 		
-		view('admin/logs', compact('logs', 'totalLogs', 'page', 'perPage', 'currentLogLevel', 'logLevel', 'userRole', 'action', 'dateFrom', 'dateTo'));
+		// Calculate total pages
+		$totalPages = ceil($totalLogs / $perPage);
+		
+		view('admin/logs', compact('logs', 'totalLogs', 'totalPages', 'page', 'perPage', 'currentLogLevel', 'logLevel', 'userRole', 'action', 'dateFrom', 'dateTo'));
 	}
 	
 	public function forceLogoutAll(): void {
@@ -2613,8 +2624,8 @@ class EmceeController {
 class TemplateController {
 	public function index(): void {
 		require_organizer();
-		$templates = DB::pdo()->query('SELECT * FROM subcategory_templates ORDER BY name')->fetchAll(\PDO::FETCH_ASSOC);
-		view('templates/index', compact('templates'));
+		$rows = DB::pdo()->query('SELECT * FROM subcategory_templates ORDER BY name')->fetchAll(\PDO::FETCH_ASSOC);
+		view('templates/index', compact('rows'));
 	}
 	
 	public function new(): void {

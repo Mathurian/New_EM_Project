@@ -356,6 +356,9 @@ SQL;
 		self::addColumnIfMissing('overall_deductions', 'signature_name', 'TEXT');
 		self::addColumnIfMissing('overall_deductions', 'signed_at', 'TEXT');
 		
+		// emcee_scripts new fields
+		self::addColumnIfMissing('emcee_scripts', 'created_at', 'TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP');
+		
 		// Migrate judge_certifications to include contestant_id
 		self::migrateJudgeCertifications();
 		

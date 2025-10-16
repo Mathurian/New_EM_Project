@@ -58,10 +58,10 @@
 			<?php 
 			$groupedStructure = [];
 			foreach ($structure as $row) {
-				if ($row['category_id']) {
-					$groupedStructure[$row['contest_id']][$row['category_id']] = [
+				if ($row['id']) {
+					$groupedStructure[$row['contest_id']][$row['id']] = [
 						'contest_name' => $row['contest_name'],
-						'category_name' => $row['category_name']
+						'category_name' => $row['name']
 					];
 				}
 			}
