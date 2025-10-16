@@ -15,11 +15,40 @@ function fixConstraintWithSqlite3() {
     }
     
     echo "Database path: $dbPath\n";
+    
+    // Check for WAL and SHM files that might be locking the database
+    $walFile = $dbPath . '-wal';
+    $shmFile = $dbPath . '-shm';
+    
+    if (file_exists($walFile)) {
+        echo "Found WAL file: $walFile\n";
+        echo "Attempting to remove WAL file to unlock database...\n";
+        if (unlink($walFile)) {
+            echo "WAL file removed successfully\n";
+        } else {
+            echo "Failed to remove WAL file\n";
+        }
+    }
+    
+    if (file_exists($shmFile)) {
+        echo "Found SHM file: $shmFile\n";
+        echo "Attempting to remove SHM file to unlock database...\n";
+        if (unlink($shmFile)) {
+            echo "SHM file removed successfully\n";
+        } else {
+            echo "Failed to remove SHM file\n";
+        }
+    }
+    
     echo "Starting constraint fix using sqlite3 command line...\n";
     
-    // Create a temporary SQL file
+    // Create a temporary SQL file with better error handling
     $sqlFile = tempnam(sys_get_temp_dir(), 'fix_constraint_');
     $sql = "
+-- Set journal mode to DELETE to avoid WAL issues
+PRAGMA journal_mode=DELETE;
+PRAGMA busy_timeout=60000;
+
 -- Create new table with updated constraint
 CREATE TABLE backup_settings_new (
     id TEXT PRIMARY KEY,
@@ -44,47 +73,68 @@ ALTER TABLE backup_settings_new RENAME TO backup_settings;
     
     file_put_contents($sqlFile, $sql);
     
-    // Execute the SQL using sqlite3 command line
-    $command = "sqlite3 \"$dbPath\" < \"$sqlFile\" 2>&1";
-    echo "Executing: $command\n";
+    // Execute the SQL using sqlite3 command line with retry logic
+    $maxRetries = 5;
+    $retryDelay = 2;
     
-    $output = [];
-    $returnCode = 0;
-    exec($command, $output, $returnCode);
+    for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
+        echo "Attempt $attempt of $maxRetries...\n";
+        
+        $command = "sqlite3 \"$dbPath\" < \"$sqlFile\" 2>&1";
+        echo "Executing: $command\n";
+        
+        $output = [];
+        $returnCode = 0;
+        exec($command, $output, $returnCode);
+        
+        echo "Output:\n";
+        foreach ($output as $line) {
+            echo "$line\n";
+        }
+        
+        if ($returnCode === 0) {
+            echo "Constraint update completed successfully!\n";
+            
+            // Test the constraint
+            echo "\nTesting constraint...\n";
+            $testCommand = "sqlite3 \"$dbPath\" \"INSERT INTO backup_settings (id, backup_type, enabled, frequency, frequency_value, retention_days) VALUES ('test-schema', 'schema', 0, 'minutes', 1, 30); DELETE FROM backup_settings WHERE id = 'test-schema';\" 2>&1";
+            
+            $testOutput = [];
+            $testReturnCode = 0;
+            exec($testCommand, $testOutput, $testReturnCode);
+            
+            if ($testReturnCode === 0) {
+                echo "Constraint test: SUCCESS\n";
+            } else {
+                echo "Constraint test: FAILED\n";
+                foreach ($testOutput as $line) {
+                    echo "$line\n";
+                }
+            }
+            
+            // Clean up temp file
+            unlink($sqlFile);
+            return true;
+        } else {
+            echo "Attempt $attempt failed with return code: $returnCode\n";
+            
+            if ($attempt < $maxRetries) {
+                echo "Waiting $retryDelay seconds before retry...\n";
+                sleep($retryDelay);
+                $retryDelay *= 1.5; // Exponential backoff
+            } else {
+                echo "All attempts failed. Database may be heavily locked.\n";
+                echo "Try:\n";
+                echo "1. Stopping all web servers and PHP processes\n";
+                echo "2. Waiting a few minutes\n";
+                echo "3. Running this script again\n";
+            }
+        }
+    }
     
     // Clean up temp file
     unlink($sqlFile);
-    
-    echo "Output:\n";
-    foreach ($output as $line) {
-        echo "$line\n";
-    }
-    
-    if ($returnCode === 0) {
-        echo "Constraint update completed successfully!\n";
-        
-        // Test the constraint
-        echo "\nTesting constraint...\n";
-        $testCommand = "sqlite3 \"$dbPath\" \"INSERT INTO backup_settings (id, backup_type, enabled, frequency, frequency_value, retention_days) VALUES ('test-schema', 'schema', 0, 'minutes', 1, 30); DELETE FROM backup_settings WHERE id = 'test-schema';\" 2>&1";
-        
-        $testOutput = [];
-        $testReturnCode = 0;
-        exec($testCommand, $testOutput, $testReturnCode);
-        
-        if ($testReturnCode === 0) {
-            echo "Constraint test: SUCCESS\n";
-        } else {
-            echo "Constraint test: FAILED\n";
-            foreach ($testOutput as $line) {
-                echo "$line\n";
-            }
-        }
-        
-        return true;
-    } else {
-        echo "Constraint update failed with return code: $returnCode\n";
-        return false;
-    }
+    return false;
 }
 
 // Run the fix

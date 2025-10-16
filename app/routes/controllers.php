@@ -1380,6 +1380,43 @@ class BackupController {
 		
 		exit;
 	}
+	
+	public function runShellConstraintFix(): void {
+		require_organizer();
+		
+		echo '<pre>Running shell script constraint fix...</pre>';
+		echo '<pre>This will stop web server, fix constraint, and restart...</pre>';
+		
+		// Flush output to show progress
+		if (ob_get_level()) {
+			ob_flush();
+		}
+		flush();
+		
+		$scriptPath = __DIR__ . '/../../fix_constraint.sh';
+		
+		if (!file_exists($scriptPath)) {
+			echo '<pre>Error: Shell script not found at: ' . $scriptPath . '</pre>';
+			exit;
+		}
+		
+		// Run the shell script
+		$output = [];
+		$returnCode = 0;
+		
+		exec("bash \"$scriptPath\" 2>&1", $output, $returnCode);
+		
+		echo '<pre>Shell Script Output:</pre>';
+		echo '<pre>' . implode("\n", $output) . '</pre>';
+		
+		if ($returnCode === 0) {
+			echo '<pre>Constraint fix completed successfully!</pre>';
+		} else {
+			echo '<pre>Constraint fix failed with return code: ' . $returnCode . '</pre>';
+		}
+		
+		exit;
+	}
 }
 
 class CategoryController {

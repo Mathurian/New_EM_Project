@@ -77,6 +77,7 @@ $router->get('/admin/backups/force-constraint-update', 'BackupController@forceCo
 $router->get('/admin/backups/force-constraint-update-simple', 'BackupController@forceConstraintUpdateSimple');
 $router->get('/admin/backups/run-cli-constraint-fix', 'BackupController@runCliConstraintFix');
 $router->get('/admin/backups/run-sqlite3-constraint-fix', 'BackupController@runSqlite3ConstraintFix');
+$router->get('/admin/backups/run-shell-constraint-fix', 'BackupController@runShellConstraintFix');
 $router->post('/admin/users/force-logout-all', 'AdminController@forceLogoutAll');
 $router->post('/admin/users/{id}/force-logout', 'AdminController@forceLogoutUser');
 $router->get('/admin/print-reports', 'AdminController@printReports');
