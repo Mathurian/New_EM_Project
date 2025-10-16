@@ -1,4 +1,4 @@
-<?php use function App\{url, is_organizer}; ?>
+<?php use function App\{url, is_organizer, is_judge}; ?>
 <h2>Detailed Results: <?= htmlspecialchars($subcategory['category_name']) ?> - <?= htmlspecialchars($subcategory['name']) ?></h2>
 <p><a href="<?= url('results') ?>">Back to Results</a></p>
 
@@ -36,42 +36,34 @@
 			<th rowspan="2">Comments</th>
 		</tr>
 		<tr>
-			<?php foreach ($criteria as $criterion): ?>
-				<?php foreach ($judges as $judge): ?>
-					<th><?= htmlspecialchars($judge['name']) ?></th>
-				<?php endforeach; ?>
-			<?php endforeach; ?>
+            <?php foreach ($criteria as $criterion): ?>
+                <?php foreach ($judges as $judge): ?>
+                    <th><?= htmlspecialchars($judge['name']) ?></th>
+                <?php endforeach; ?>
+            <?php endforeach; ?>
 		</tr>
 		<?php foreach ($contestants as $contestant): ?>
 			<tr>
 				<td><?= htmlspecialchars($contestant['name']) ?></td>
-				<?php 
-				$contestantTotal = 0;
-				foreach ($criteria as $criterion): 
-					$criterionTotal = 0;
-					$judgeCount = 0;
-					foreach ($judges as $judge): 
-						$score = '';
-						foreach ($scores as $s) {
-							if ($s['contestant_id'] === $contestant['id'] && 
-								$s['criterion_id'] === $criterion['id'] && 
-								$s['judge_id'] === $judge['id']) {
-								$score = $s['score'];
-								$criterionTotal += (float)$s['score'];
-								$judgeCount++;
-								break;
-							}
-						}
-				?>
-					<td style="text-align: center;"><?= htmlspecialchars($score) ?></td>
-				<?php endforeach; ?>
-				<?php 
-				if ($judgeCount > 0) {
-					$contestantTotal += $criterionTotal / $judgeCount;
-				}
-				?>
-				<?php endforeach; ?>
-				<td style="text-align: center; font-weight: bold;"><?= number_format($contestantTotal, 2) ?></td>
+                <?php 
+                $contestantTotal = 0;
+                foreach ($criteria as $criterion): 
+                    foreach ($judges as $judge): 
+                        $score = '';
+                        foreach ($scores as $s) {
+                            if ($s['contestant_id'] === $contestant['id'] && 
+                                $s['criterion_id'] === $criterion['id'] && 
+                                $s['judge_id'] === $judge['id']) {
+                                $score = $s['score'];
+                                $contestantTotal += (float)$s['score'];
+                                break;
+                            }
+                        }
+                ?>
+                    <td style="text-align: center;"><?= htmlspecialchars($score) ?></td>
+                <?php endforeach; endforeach; ?>
+                <?php $deductionTotal = (float)($deductionsByContestant[$contestant['id']]['total'] ?? 0); ?>
+                <td style="text-align: center; font-weight: bold;"><?= number_format($contestantTotal - $deductionTotal, 2) ?></td>
 				<td>
 					<?php 
 					$contestantComments = array_filter($comments, function($c) use ($contestant) {
@@ -91,8 +83,29 @@
 							<?= htmlspecialchars($comment['comment']) ?>
 						</div>
 					<?php endforeach; ?>
-				</td>
+                </td>
 			</tr>
+            <?php if (is_organizer() || (!empty($isHeadJudge) && $isHeadJudge)): ?>
+            <tr>
+                <td colspan="<?= 1 + (count($criteria)*count($judges)) ?>" style="text-align:right;">
+                    <form method="post" action="<?= url('results/' . urlencode($subcategory['id']) . '/contestant/' . urlencode($contestant['id']) . '/deduction') ?>" style="display:inline-block;">
+                        <input type="number" name="amount" step="0.01" placeholder="Deduction amount" required>
+                        <input type="text" name="comment" placeholder="Comment (optional)" style="width: 240px;">
+                        <button type="submit" class="btn btn-secondary">Add Deduction</button>
+                    </form>
+                    <?php if (!empty($deductionsByContestant[$contestant['id']]['rows'])): ?>
+                        <div style="margin-top:8px; font-size: 0.9em;">
+                            <strong>Deductions:</strong>
+                            <?php foreach ($deductionsByContestant[$contestant['id']]['rows'] as $d): ?>
+                                <div>-<?= number_format((float)$d['amount'], 2) ?> <?= $d['comment'] ? ' — ' . htmlspecialchars($d['comment']) : '' ?></div>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php endif; ?>
+                </td>
+                <td style="font-weight:bold;">-<?= number_format($deductionTotal, 2) ?></td>
+                <td></td>
+            </tr>
+            <?php endif; ?>
 		<?php endforeach; ?>
 	</table>
 <?php endif; ?>

@@ -1232,6 +1232,35 @@ class ResultsController {
 		
 		view('results/detailed', compact('subcategory','contestants','criteria','judges','scores','comments','deductions'));
 	}
+
+	public function addDeduction(array $params): void {
+		require_login();
+		$subcategoryId = param('subcategoryId', $params);
+		$contestantId = param('contestantId', $params);
+		$amount = (float)($_POST['amount'] ?? 0);
+		$comment = trim((string)($_POST['comment'] ?? '')) ?: null;
+
+		$allowed = is_organizer();
+		if (!$allowed && is_judge()) {
+			$jid = $_SESSION['user']['judge_id'] ?? null;
+			if ($jid) {
+				$st = DB::pdo()->prepare('SELECT is_head_judge FROM judges WHERE id = ?');
+				$st->execute([$jid]);
+				$row = $st->fetch(\PDO::FETCH_ASSOC);
+				$allowed = !empty($row) && (int)$row['is_head_judge'] === 1;
+			}
+		}
+		if (!$allowed) { http_response_code(403); echo 'Forbidden'; return; }
+
+		if ($amount <= 0) { $_SESSION['success_message'] = 'Deduction must be greater than 0.'; redirect('/results/' . $subcategoryId . '/detailed'); return; }
+		$uid = $_SESSION['user']['id'] ?? null;
+		DB::pdo()->prepare('INSERT INTO overall_deductions (id, subcategory_id, contestant_id, amount, comment, created_by) VALUES (?,?,?,?,?,?)')
+			->execute([uuid(), $subcategoryId, $contestantId, $amount, $comment, $uid]);
+		\App\Logger::logAdminAction('add_overall_deduction', 'subcategory', $subcategoryId, 'Contestant ' . $contestantId . ' amount ' . $amount);
+		$_SESSION['success_message'] = 'Deduction added.';
+		redirect('/results/' . $subcategoryId . '/detailed');
+	}
+
 	public function contestantDetailed(array $params): void {
 		require_organizer(); // Only organizers can view detailed contestant scores
 		$contestantId = param('contestantId', $params);

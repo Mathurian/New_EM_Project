@@ -133,6 +133,7 @@ $router->get('/results/{id}', 'ResultsController@index');
 $router->get('/results', 'ResultsController@resultsIndex');
 $router->get('/results/categories', 'ResultsController@categoryIndex');
 $router->get('/results/{id}/detailed', 'ResultsController@detailed');
+$router->post('/results/{subcategoryId}/contestant/{contestantId}/deduction', 'ResultsController@addDeduction');
 $router->get('/results/contestant/{contestantId}/category/{categoryId}', 'ResultsController@contestantDetailed');
 $router->post('/results/{id}/unsign-all', 'ResultsController@unsignAll');
 $router->post('/results/category/{categoryId}/unsign-all', 'ResultsController@unsignAllByCategory');
