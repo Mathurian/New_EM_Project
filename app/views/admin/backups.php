@@ -1,6 +1,14 @@
 <?php use function App\{url, hierarchical_back_url, home_url}; ?>
 <h2>Database Backups</h2>
 
+<!-- Debug: Show variables passed to view -->
+<div class="alert alert-info" style="font-size: 12px; margin-bottom: 15px;">
+	<strong>Debug Variables:</strong><br>
+	backupSettings: <?= isset($backupSettings) ? count($backupSettings) . ' items' : 'NOT SET' ?><br>
+	backupLogs: <?= isset($backupLogs) ? count($backupLogs) . ' items' : 'NOT SET' ?><br>
+	backupDirectory: <?= isset($backupDirectory) ? htmlspecialchars($backupDirectory) : 'NOT SET' ?>
+</div>
+
 <div class="navigation-buttons">
 	<a href="<?= hierarchical_back_url('/admin') ?>" class="btn btn-secondary">← Back to Admin</a>
 	<a href="<?= home_url() ?>" class="btn btn-outline">🏠 Home</a>
@@ -61,9 +69,17 @@
 			<?php if (empty($backupSettings)): ?>
 				<div class="alert alert-warning">
 					<p>No backup settings found. Default settings will be created automatically.</p>
+					<p><strong>Debug:</strong> backupSettings variable is empty or not set.</p>
 					<p><a href="<?= url('admin/backups') ?>" class="btn btn-sm btn-primary">Refresh Page</a></p>
 				</div>
 			<?php else: ?>
+				<!-- Debug: Show backup settings count -->
+				<div class="alert alert-info" style="font-size: 12px; margin-bottom: 15px;">
+					<strong>Debug:</strong> Found <?= count($backupSettings) ?> backup settings:
+					<?php foreach ($backupSettings as $setting): ?>
+						<br>• <?= $setting['backup_type'] ?>: <?= $setting['enabled'] ? 'enabled' : 'disabled' ?> (<?= $setting['frequency'] ?>, <?= $setting['frequency_value'] ?? 1 ?>)
+					<?php endforeach; ?>
+				</div>
 				<form method="post" action="<?= url('admin/backups/settings') ?>">
 					<?php foreach ($backupSettings as $setting): ?>
 						<div class="form-group">

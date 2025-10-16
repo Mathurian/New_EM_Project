@@ -589,8 +589,12 @@ class BackupController {
 		$stmt = DB::pdo()->query('SELECT * FROM backup_settings ORDER BY backup_type');
 		$backupSettings = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 		
+		// Debug: Log backup settings
+		\App\Logger::debug('Backup settings query result: ' . json_encode($backupSettings));
+		
 		// If no backup settings exist, create defaults
 		if (empty($backupSettings)) {
+			\App\Logger::debug('No backup settings found, creating defaults');
 			$pdo = DB::pdo();
 			
 			// Ensure the table exists and has the correct structure
@@ -604,11 +608,34 @@ class BackupController {
 			$stmt = $pdo->query('SELECT * FROM backup_settings ORDER BY backup_type');
 			$backupSettings = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 			
+			// Debug: Log created settings
+			\App\Logger::debug('Created backup settings: ' . json_encode($backupSettings));
+			
 			// Log that we created default settings
 			\App\Logger::info('Created default backup settings: schema and full');
 		}
 		
 		$backupDirectory = $this->getBackupDirectory();
+		
+		// Convert timestamps to ISO format for JavaScript compatibility
+		foreach ($backupSettings as &$setting) {
+			if ($setting['last_run']) {
+				$setting['last_run'] = date('c', strtotime($setting['last_run']));
+			}
+			if ($setting['next_run']) {
+				$setting['next_run'] = date('c', strtotime($setting['next_run']));
+			}
+		}
+		
+		foreach ($backupLogs as &$backup) {
+			if ($backup['created_at']) {
+				$backup['created_at'] = date('c', strtotime($backup['created_at']));
+			}
+		}
+		
+		// Debug: Log final backup settings before passing to view
+		\App\Logger::debug('Final backup settings being passed to view: ' . json_encode($backupSettings));
+		
 		view('admin/backups', compact('backupLogs', 'backupSettings', 'backupDirectory'));
 	}
 	
@@ -1098,15 +1125,15 @@ class BackupController {
 			$pdo = DB::pdo();
 			$now = date('Y-m-d H:i:s');
 			
+			echo '<pre>=== Scheduled Backup Debug Information ===</pre>';
+			echo '<pre>Current time: ' . $now . '</pre>';
+			echo '<pre>Current timestamp: ' . strtotime($now) . '</pre>';
+			
 			// Get all backup settings (enabled and disabled)
 			$stmt = $pdo->query('SELECT * FROM backup_settings ORDER BY backup_type');
 			$settings = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 			
-			$debugInfo = [
-				'current_time' => $now,
-				'current_timestamp' => strtotime($now),
-				'settings' => []
-			];
+			echo '<pre>Found ' . count($settings) . ' backup settings:</pre>';
 			
 			foreach ($settings as $setting) {
 				$nextRun = $setting['next_run'];
@@ -1119,28 +1146,39 @@ class BackupController {
 					$shouldRun = strtotime($now) >= $nextRunTimestamp;
 				}
 				
-				$debugInfo['settings'][] = [
-					'backup_type' => $setting['backup_type'],
-					'enabled' => $setting['enabled'],
-					'frequency' => $setting['frequency'],
-					'frequency_value' => $setting['frequency_value'],
-					'last_run' => $setting['last_run'],
-					'next_run' => $nextRun,
-					'next_run_timestamp' => $nextRunTimestamp,
-					'should_run' => $shouldRun,
-					'calculated_next_run' => $this->calculateNextRun($setting['frequency'], $setting['frequency_value'] ?? 1)
-				];
+				echo '<pre>';
+				echo "Backup Type: {$setting['backup_type']}\n";
+				echo "Enabled: " . ($setting['enabled'] ? 'YES' : 'NO') . "\n";
+				echo "Frequency: {$setting['frequency']} (every {$setting['frequency_value']})\n";
+				echo "Retention: {$setting['retention_days']} days\n";
+				echo "Last Run: " . ($setting['last_run'] ?: 'Never') . "\n";
+				echo "Next Run: " . ($nextRun ?: 'Not set') . "\n";
+				echo "Should Run: " . ($shouldRun ? 'YES' : 'NO') . "\n";
+				echo "Calculated Next Run: " . $this->calculateNextRun($setting['frequency'], $setting['frequency_value'] ?? 1) . "\n";
+				echo '</pre>';
 			}
 			
-			echo '<pre>' . print_r($debugInfo, true) . '</pre>';
+			// Test if we can run scheduled backups
+			echo '<pre>=== Testing Scheduled Backup Execution ===</pre>';
+			$enabledSettings = array_filter($settings, function($s) { return $s['enabled']; });
+			echo '<pre>Enabled settings: ' . count($enabledSettings) . '</pre>';
+			
+			if (empty($enabledSettings)) {
+				echo '<pre>⚠️ No enabled backup settings found!</pre>';
+				echo '<pre>To enable backups, go to the backup settings and check the "Enable" checkbox.</pre>';
+			} else {
+				echo '<pre>✓ Found enabled backup settings</pre>';
+			}
+			
 			exit;
+			
 		} catch (\Exception $e) {
 			echo '<pre>Error: ' . $e->getMessage() . '</pre>';
 			exit;
 		}
 	}
 	
-	public function testDatabaseConstraint(): void {
+	public function forceLogoutAll(): void {
 		require_organizer();
 		
 		try {
@@ -3705,66 +3743,6 @@ class AdminController {
 		\App\Logger::logAdminAction('log_cleanup', 'system', null, "Cleaned up {$deletedCount} log files older than {$daysToKeep} days");
 		
 		redirect('/admin/log-files?success=cleanup_complete&deleted=' . $deletedCount);
-	}
-	
-	public function debugScheduledBackups(): void {
-		require_organizer();
-		
-		try {
-			$pdo = DB::pdo();
-			$now = date('Y-m-d H:i:s');
-			
-			echo '<pre>=== Scheduled Backup Debug Information ===</pre>';
-			echo '<pre>Current time: ' . $now . '</pre>';
-			echo '<pre>Current timestamp: ' . strtotime($now) . '</pre>';
-			
-			// Get all backup settings (enabled and disabled)
-			$stmt = $pdo->query('SELECT * FROM backup_settings ORDER BY backup_type');
-			$settings = $stmt->fetchAll(\PDO::FETCH_ASSOC);
-			
-			echo '<pre>Found ' . count($settings) . ' backup settings:</pre>';
-			
-			foreach ($settings as $setting) {
-				$nextRun = $setting['next_run'];
-				$nextRunTimestamp = $nextRun ? strtotime($nextRun) : null;
-				$shouldRun = false;
-				
-				if (empty($nextRun)) {
-					$shouldRun = true;
-				} else {
-					$shouldRun = strtotime($now) >= $nextRunTimestamp;
-				}
-				
-				echo '<pre>';
-				echo "Backup Type: {$setting['backup_type']}\n";
-				echo "Enabled: " . ($setting['enabled'] ? 'YES' : 'NO') . "\n";
-				echo "Frequency: {$setting['frequency']} (every {$setting['frequency_value']})\n";
-				echo "Retention: {$setting['retention_days']} days\n";
-				echo "Last Run: " . ($setting['last_run'] ?: 'Never') . "\n";
-				echo "Next Run: " . ($nextRun ?: 'Not set') . "\n";
-				echo "Should Run: " . ($shouldRun ? 'YES' : 'NO') . "\n";
-				echo "Calculated Next Run: " . $this->calculateNextRun($setting['frequency'], $setting['frequency_value'] ?? 1) . "\n";
-				echo '</pre>';
-			}
-			
-			// Test if we can run scheduled backups
-			echo '<pre>=== Testing Scheduled Backup Execution ===</pre>';
-			$enabledSettings = array_filter($settings, function($s) { return $s['enabled']; });
-			echo '<pre>Enabled settings: ' . count($enabledSettings) . '</pre>';
-			
-			if (empty($enabledSettings)) {
-				echo '<pre>⚠️ No enabled backup settings found!</pre>';
-				echo '<pre>To enable backups, go to the backup settings and check the "Enable" checkbox.</pre>';
-			} else {
-				echo '<pre>✓ Found enabled backup settings</pre>';
-			}
-			
-			exit;
-			
-		} catch (\Exception $e) {
-			echo '<pre>Error: ' . $e->getMessage() . '</pre>';
-			exit;
-		}
 	}
 	
 	public function forceLogoutAll(): void {
