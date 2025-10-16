@@ -1433,3 +1433,1243 @@ class ResultsController {
 	}
 }
 
+class AuthController {
+	public function loginForm(): void {
+		if (is_logged_in()) {
+			redirect('/');
+			return;
+		}
+		view('auth/login');
+	}
+	
+	public function login(): void {
+		$email = post('email');
+		$password = post('password');
+		
+		if (empty($email) || empty($password)) {
+			redirect('/login?error=missing_fields');
+			return;
+		}
+		
+		// Try to find user by email or preferred name
+		$stmt = DB::pdo()->prepare('SELECT * FROM users WHERE email = ? OR preferred_name = ?');
+		$stmt->execute([$email, $email]);
+		$user = $stmt->fetch(\PDO::FETCH_ASSOC);
+		
+		if (!$user || !password_verify($password, $user['password_hash'])) {
+			\App\Logger::logLogin($email, false);
+			redirect('/login?error=invalid_credentials');
+			return;
+		}
+		
+		// Check if user's session has been invalidated
+		if ($user['session_version'] !== ($_SESSION['session_version'] ?? '')) {
+			\App\Logger::logLogin($user['email'] ?? $user['preferred_name'], false, 'session_invalidated');
+			redirect('/login?error=session_invalidated');
+			return;
+		}
+		
+		$_SESSION['user'] = $user;
+		$_SESSION['session_version'] = $user['session_version'];
+		
+		\App\Logger::logLogin($user['email'] ?? $user['preferred_name'], true);
+		
+		// Redirect based on role
+		if ($user['role'] === 'organizer') {
+			redirect('/admin');
+		} elseif ($user['role'] === 'judge') {
+			redirect('/judge');
+		} elseif ($user['role'] === 'emcee') {
+			redirect('/emcee');
+		} else {
+			redirect('/');
+		}
+	}
+	
+	public function logout(): void {
+		if (isset($_SESSION['user'])) {
+			\App\Logger::logLogout($_SESSION['user']['email'] ?? $_SESSION['user']['preferred_name']);
+		}
+		session_destroy();
+		redirect('/');
+	}
+	
+	public function judgeDashboard(): void {
+		require_login();
+		if (!is_judge()) {
+			http_response_code(403);
+			echo 'Forbidden';
+			return;
+		}
+		
+		$judgeId = current_user()['judge_id'] ?? '';
+		if (empty($judgeId)) {
+			http_response_code(403);
+			echo 'Judge account not properly linked. Please contact administrator.';
+			return;
+		}
+		
+		// Get assigned subcategories for this judge
+		$stmt = DB::pdo()->prepare('
+			SELECT DISTINCT s.*, c.name as category_name 
+			FROM subcategories s 
+			JOIN categories c ON s.category_id = c.id 
+			JOIN subcategory_judges sj ON s.id = sj.subcategory_id 
+			WHERE sj.judge_id = ? 
+			ORDER BY c.name, s.name
+		');
+		$stmt->execute([$judgeId]);
+		$subcategories = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+		
+		view('auth/judge', compact('subcategories'));
+	}
+	
+	public function judgeSubcategoryContestants(array $params): void {
+		require_login();
+		if (!is_judge()) {
+			http_response_code(403);
+			echo 'Forbidden';
+			return;
+		}
+		
+		$subcategoryId = param('id', $params);
+		$judgeId = current_user()['judge_id'] ?? '';
+		
+		// Verify judge is assigned to this subcategory
+		$stmt = DB::pdo()->prepare('SELECT COUNT(*) FROM subcategory_judges WHERE subcategory_id = ? AND judge_id = ?');
+		$stmt->execute([$subcategoryId, $judgeId]);
+		if ($stmt->fetchColumn() == 0) {
+			http_response_code(403);
+			echo 'You are not assigned to this subcategory.';
+			return;
+		}
+		
+		// Get subcategory info
+		$stmt = DB::pdo()->prepare('SELECT s.*, c.name as category_name FROM subcategories s JOIN categories c ON s.category_id = c.id WHERE s.id = ?');
+		$stmt->execute([$subcategoryId]);
+		$subcategory = $stmt->fetch(\PDO::FETCH_ASSOC);
+		
+		// Get contestants assigned to this subcategory
+		$stmt = DB::pdo()->prepare('
+			SELECT con.* 
+			FROM contestants con 
+			JOIN subcategory_contestants sc ON con.id = sc.contestant_id 
+			WHERE sc.subcategory_id = ? 
+			ORDER BY con.contestant_number IS NULL, con.contestant_number, con.name
+		');
+		$stmt->execute([$subcategoryId]);
+		$contestants = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+		
+		view('auth/judge_contestants', compact('subcategory', 'contestants'));
+	}
+}
+
+class UserController {
+	public function new(): void {
+		require_organizer();
+		$categories = DB::pdo()->query('SELECT * FROM categories ORDER BY name')->fetchAll(\PDO::FETCH_ASSOC);
+		view('users/new', compact('categories'));
+	}
+	
+	public function create(): void {
+		require_organizer();
+		
+		$name = post('name');
+		$email = post('email') ?: null;
+		$password = post('password');
+		$role = post('role');
+		$preferredName = post('preferred_name') ?: $name;
+		$gender = post('gender') ?: null;
+		$categoryId = post('category_id') ?: null;
+		$isHeadJudge = post('is_head_judge') ? 1 : 0;
+		
+		// Validate required fields
+		if (empty($name) || empty($role)) {
+			redirect('/users/new?error=missing_fields');
+			return;
+		}
+		
+		// Validate password complexity if provided
+		if (!empty($password)) {
+			if (strlen($password) < 8) {
+				redirect('/users/new?error=password_too_short');
+				return;
+			}
+			if (!preg_match('/[A-Z]/', $password)) {
+				redirect('/users/new?error=password_no_uppercase');
+				return;
+			}
+			if (!preg_match('/[a-z]/', $password)) {
+				redirect('/users/new?error=password_no_lowercase');
+				return;
+			}
+			if (!preg_match('/[0-9]/', $password)) {
+				redirect('/users/new?error=password_no_number');
+				return;
+			}
+			if (!preg_match('/[^A-Za-z0-9]/', $password)) {
+				redirect('/users/new?error=password_no_symbol');
+				return;
+			}
+		}
+		
+		$pdo = DB::pdo();
+		$pdo->beginTransaction();
+		
+		try {
+			$userId = uuid();
+			$passwordHash = !empty($password) ? password_hash($password, PASSWORD_DEFAULT) : null;
+			
+			// Create user
+			$stmt = $pdo->prepare('INSERT INTO users (id, name, email, password_hash, role, preferred_name, gender) VALUES (?, ?, ?, ?, ?, ?, ?)');
+			$stmt->execute([$userId, $name, $email, $passwordHash, $role, $preferredName, $gender]);
+			
+			// Handle role-specific creation
+			if ($role === 'judge') {
+				$judgeId = uuid();
+				$stmt = $pdo->prepare('INSERT INTO judges (id, name, email, gender, is_head_judge) VALUES (?, ?, ?, ?, ?)');
+				$stmt->execute([$judgeId, $name, $email, $gender, $isHeadJudge]);
+				
+				// Link user to judge
+				$stmt = $pdo->prepare('UPDATE users SET judge_id = ? WHERE id = ?');
+				$stmt->execute([$judgeId, $userId]);
+				
+				// Assign to category if provided
+				if ($categoryId) {
+					$stmt = $pdo->prepare('INSERT INTO category_judges (category_id, judge_id) VALUES (?, ?)');
+					$stmt->execute([$categoryId, $judgeId]);
+				}
+			} elseif ($role === 'contestant') {
+				$contestantId = uuid();
+				$stmt = $pdo->prepare('INSERT INTO contestants (id, name, email, gender) VALUES (?, ?, ?, ?)');
+				$stmt->execute([$contestantId, $name, $email, $gender]);
+				
+				// Link user to contestant
+				$stmt = $pdo->prepare('UPDATE users SET contestant_id = ? WHERE id = ?');
+				$stmt->execute([$contestantId, $userId]);
+				
+				// Assign to category if provided
+				if ($categoryId) {
+					$stmt = $pdo->prepare('INSERT INTO category_contestants (category_id, contestant_id) VALUES (?, ?)');
+					$stmt->execute([$categoryId, $contestantId]);
+				}
+			}
+			
+			$pdo->commit();
+			\App\Logger::logUserCreation($userId, $name, $role);
+			redirect('/admin/users?success=user_created');
+		} catch (\Exception $e) {
+			$pdo->rollBack();
+			redirect('/users/new?error=creation_failed');
+		}
+	}
+	
+	public function index(): void {
+		require_organizer();
+		$users = DB::pdo()->query('SELECT * FROM users ORDER BY role, name')->fetchAll(\PDO::FETCH_ASSOC);
+		view('users/index', compact('users'));
+	}
+	
+	public function edit(array $params): void {
+		require_organizer();
+		$id = param('id', $params);
+		$stmt = DB::pdo()->prepare('SELECT * FROM users WHERE id = ?');
+		$stmt->execute([$id]);
+		$user = $stmt->fetch(\PDO::FETCH_ASSOC);
+		if (!$user) {
+			redirect('/admin/users');
+			return;
+		}
+		view('users/edit', compact('user'));
+	}
+	
+	public function update(array $params): void {
+		require_organizer();
+		$id = param('id', $params);
+		$name = post('name');
+		$email = post('email') ?: null;
+		$password = post('password');
+		$role = post('role');
+		$preferredName = post('preferred_name') ?: $name;
+		$gender = post('gender') ?: null;
+		
+		// Validate password complexity if provided
+		if (!empty($password)) {
+			if (strlen($password) < 8) {
+				redirect('/admin/users/' . $id . '/edit?error=password_too_short');
+				return;
+			}
+			if (!preg_match('/[A-Z]/', $password)) {
+				redirect('/admin/users/' . $id . '/edit?error=password_no_uppercase');
+				return;
+			}
+			if (!preg_match('/[a-z]/', $password)) {
+				redirect('/admin/users/' . $id . '/edit?error=password_no_lowercase');
+				return;
+			}
+			if (!preg_match('/[0-9]/', $password)) {
+				redirect('/admin/users/' . $id . '/edit?error=password_no_number');
+				return;
+			}
+			if (!preg_match('/[^A-Za-z0-9]/', $password)) {
+				redirect('/admin/users/' . $id . '/edit?error=password_no_symbol');
+				return;
+			}
+		}
+		
+		$passwordHash = !empty($password) ? password_hash($password, PASSWORD_DEFAULT) : null;
+		
+		if ($passwordHash) {
+			$stmt = DB::pdo()->prepare('UPDATE users SET name = ?, email = ?, password_hash = ?, role = ?, preferred_name = ?, gender = ? WHERE id = ?');
+			$stmt->execute([$name, $email, $passwordHash, $role, $preferredName, $gender, $id]);
+		} else {
+			$stmt = DB::pdo()->prepare('UPDATE users SET name = ?, email = ?, role = ?, preferred_name = ?, gender = ? WHERE id = ?');
+			$stmt->execute([$name, $email, $role, $preferredName, $gender, $id]);
+		}
+		
+		redirect('/admin/users?success=user_updated');
+	}
+	
+	public function delete(array $params): void {
+		require_organizer();
+		$id = param('id', $params);
+		
+		$pdo = DB::pdo();
+		$pdo->beginTransaction();
+		
+		try {
+			// Get user info for logging
+			$stmt = $pdo->prepare('SELECT * FROM users WHERE id = ?');
+			$stmt->execute([$id]);
+			$user = $stmt->fetch(\PDO::FETCH_ASSOC);
+			
+			if (!$user) {
+				redirect('/admin/users?error=user_not_found');
+				return;
+			}
+			
+			// Delete based on role
+			if ($user['role'] === 'judge' && $user['judge_id']) {
+				// Delete judge and all associated data
+				$judgeId = $user['judge_id'];
+				
+				// Delete associated image file
+				$stmt = $pdo->prepare('SELECT image_path FROM judges WHERE id = ?');
+				$stmt->execute([$judgeId]);
+				$imagePath = $stmt->fetchColumn();
+				if ($imagePath && file_exists(__DIR__ . '/../../public' . $imagePath)) {
+					unlink(__DIR__ . '/../../public' . $imagePath);
+				}
+				
+				$pdo->prepare('DELETE FROM judge_certifications WHERE judge_id = ?')->execute([$judgeId]);
+				$pdo->prepare('DELETE FROM judge_comments WHERE judge_id = ?')->execute([$judgeId]);
+				$pdo->prepare('DELETE FROM scores WHERE judge_id = ?')->execute([$judgeId]);
+				$pdo->prepare('DELETE FROM subcategory_judges WHERE judge_id = ?')->execute([$judgeId]);
+				$pdo->prepare('DELETE FROM category_judges WHERE judge_id = ?')->execute([$judgeId]);
+				$pdo->prepare('DELETE FROM judges WHERE id = ?')->execute([$judgeId]);
+			} elseif ($user['role'] === 'contestant' && $user['contestant_id']) {
+				// Delete contestant and all associated data
+				$contestantId = $user['contestant_id'];
+				
+				// Delete associated image file
+				$stmt = $pdo->prepare('SELECT image_path FROM contestants WHERE id = ?');
+				$stmt->execute([$contestantId]);
+				$imagePath = $stmt->fetchColumn();
+				if ($imagePath && file_exists(__DIR__ . '/../../public' . $imagePath)) {
+					unlink(__DIR__ . '/../../public' . $imagePath);
+				}
+				
+				$pdo->prepare('DELETE FROM judge_comments WHERE contestant_id = ?')->execute([$contestantId]);
+				$pdo->prepare('DELETE FROM scores WHERE contestant_id = ?')->execute([$contestantId]);
+				$pdo->prepare('DELETE FROM subcategory_contestants WHERE contestant_id = ?')->execute([$contestantId]);
+				$pdo->prepare('DELETE FROM category_contestants WHERE contestant_id = ?')->execute([$contestantId]);
+				$pdo->prepare('DELETE FROM contestants WHERE id = ?')->execute([$contestantId]);
+			}
+			
+			// Delete the user
+			$pdo->prepare('DELETE FROM users WHERE id = ?')->execute([$id]);
+			
+			$pdo->commit();
+			\App\Logger::logUserDeletion($id, $user['name'], $user['role']);
+			redirect('/admin/users?success=user_deleted');
+		} catch (\Exception $e) {
+			$pdo->rollBack();
+			redirect('/admin/users?error=delete_failed');
+		}
+	}
+	
+	public function removeAllJudges(): void {
+		require_organizer();
+		
+		$pdo = DB::pdo();
+		$pdo->beginTransaction();
+		
+		try {
+			// Get all judge users
+			$judgeUsers = $pdo->query('SELECT * FROM users WHERE role = "judge"')->fetchAll(\PDO::FETCH_ASSOC);
+			
+			foreach ($judgeUsers as $user) {
+				if ($user['judge_id']) {
+					// Delete associated image file
+					$stmt = $pdo->prepare('SELECT image_path FROM judges WHERE id = ?');
+					$stmt->execute([$user['judge_id']]);
+					$imagePath = $stmt->fetchColumn();
+					if ($imagePath && file_exists(__DIR__ . '/../../public' . $imagePath)) {
+						unlink(__DIR__ . '/../../public' . $imagePath);
+					}
+					
+					$pdo->prepare('DELETE FROM judge_certifications WHERE judge_id = ?')->execute([$user['judge_id']]);
+					$pdo->prepare('DELETE FROM judge_comments WHERE judge_id = ?')->execute([$user['judge_id']]);
+					$pdo->prepare('DELETE FROM scores WHERE judge_id = ?')->execute([$user['judge_id']]);
+					$pdo->prepare('DELETE FROM subcategory_judges WHERE judge_id = ?')->execute([$user['judge_id']]);
+					$pdo->prepare('DELETE FROM category_judges WHERE judge_id = ?')->execute([$user['judge_id']]);
+					$pdo->prepare('DELETE FROM judges WHERE id = ?')->execute([$user['judge_id']]);
+				}
+			}
+			
+			// Delete all judge users
+			$pdo->prepare('DELETE FROM users WHERE role = "judge"')->execute();
+			
+			$pdo->commit();
+			redirect('/admin/users?success=all_judges_removed');
+		} catch (\Exception $e) {
+			$pdo->rollBack();
+			redirect('/admin/users?error=remove_failed');
+		}
+	}
+	
+	public function removeAllContestants(): void {
+		require_organizer();
+		
+		$pdo = DB::pdo();
+		$pdo->beginTransaction();
+		
+		try {
+			// Get all contestant users
+			$contestantUsers = $pdo->query('SELECT * FROM users WHERE role = "contestant"')->fetchAll(\PDO::FETCH_ASSOC);
+			
+			foreach ($contestantUsers as $user) {
+				if ($user['contestant_id']) {
+					// Delete associated image file
+					$stmt = $pdo->prepare('SELECT image_path FROM contestants WHERE id = ?');
+					$stmt->execute([$user['contestant_id']]);
+					$imagePath = $stmt->fetchColumn();
+					if ($imagePath && file_exists(__DIR__ . '/../../public' . $imagePath)) {
+						unlink(__DIR__ . '/../../public' . $imagePath);
+					}
+					
+					$pdo->prepare('DELETE FROM judge_comments WHERE contestant_id = ?')->execute([$user['contestant_id']]);
+					$pdo->prepare('DELETE FROM scores WHERE contestant_id = ?')->execute([$user['contestant_id']]);
+					$pdo->prepare('DELETE FROM subcategory_contestants WHERE contestant_id = ?')->execute([$user['contestant_id']]);
+					$pdo->prepare('DELETE FROM category_contestants WHERE contestant_id = ?')->execute([$user['contestant_id']]);
+					$pdo->prepare('DELETE FROM contestants WHERE id = ?')->execute([$user['contestant_id']]);
+				}
+			}
+			
+			// Delete all contestant users
+			$pdo->prepare('DELETE FROM users WHERE role = "contestant"')->execute();
+			
+			$pdo->commit();
+			redirect('/admin/users?success=all_contestants_removed');
+		} catch (\Exception $e) {
+			$pdo->rollBack();
+			redirect('/admin/users?error=remove_failed');
+		}
+	}
+	
+	public function removeAllEmcees(): void {
+		require_organizer();
+		
+		$pdo = DB::pdo();
+		$pdo->beginTransaction();
+		
+		try {
+			// Delete all emcee users
+			$pdo->prepare('DELETE FROM users WHERE role = "emcee"')->execute();
+			
+			$pdo->commit();
+			redirect('/admin/users?success=all_emcees_removed');
+		} catch (\Exception $e) {
+			$pdo->rollBack();
+			redirect('/admin/users?error=remove_failed');
+		}
+	}
+	
+	public function forceRefresh(): void {
+		require_organizer();
+		redirect('/admin/users?success=tables_refreshed');
+	}
+}
+
+class AdminController {
+	public function index(): void {
+		require_organizer();
+		
+		// Get quick stats
+		$stats = [
+			'total_contests' => DB::pdo()->query('SELECT COUNT(*) FROM contests')->fetchColumn(),
+			'total_categories' => DB::pdo()->query('SELECT COUNT(*) FROM categories')->fetchColumn(),
+			'total_subcategories' => DB::pdo()->query('SELECT COUNT(*) FROM subcategories')->fetchColumn(),
+			'total_contestants' => DB::pdo()->query('SELECT COUNT(*) FROM contestants')->fetchColumn(),
+			'total_judges' => DB::pdo()->query('SELECT COUNT(*) FROM judges')->fetchColumn(),
+			'total_users' => DB::pdo()->query('SELECT COUNT(*) FROM users')->fetchColumn(),
+		];
+		
+		// Get recent activity
+		$recentLogs = DB::pdo()->query('SELECT * FROM activity_logs ORDER BY created_at DESC LIMIT 10')->fetchAll(\PDO::FETCH_ASSOC);
+		
+		view('admin/index', compact('stats', 'recentLogs'));
+	}
+	
+	public function judges(): void {
+		require_organizer();
+		$judges = DB::pdo()->query('SELECT j.*, u.preferred_name FROM judges j LEFT JOIN users u ON j.id = u.judge_id ORDER BY j.name')->fetchAll(\PDO::FETCH_ASSOC);
+		view('admin/judges', compact('judges'));
+	}
+	
+	public function createJudge(): void {
+		require_organizer();
+		$name = post('name');
+		$email = post('email') ?: null;
+		$gender = post('gender') ?: null;
+		$isHeadJudge = post('is_head_judge') ? 1 : 0;
+		
+		$stmt = DB::pdo()->prepare('INSERT INTO judges (id, name, email, gender, is_head_judge) VALUES (?, ?, ?, ?, ?)');
+		$stmt->execute([uuid(), $name, $email, $gender, $isHeadJudge]);
+		
+		redirect('/admin/judges?success=judge_created');
+	}
+	
+	public function updateJudge(array $params): void {
+		require_organizer();
+		$id = param('id', $params);
+		$name = post('name');
+		$email = post('email') ?: null;
+		$gender = post('gender') ?: null;
+		$isHeadJudge = post('is_head_judge') ? 1 : 0;
+		
+		$stmt = DB::pdo()->prepare('UPDATE judges SET name = ?, email = ?, gender = ?, is_head_judge = ? WHERE id = ?');
+		$stmt->execute([$name, $email, $gender, $isHeadJudge, $id]);
+		
+		redirect('/admin/judges?success=judge_updated');
+	}
+	
+	public function deleteJudge(): void {
+		require_organizer();
+		$id = post('judge_id');
+		
+		$pdo = DB::pdo();
+		$pdo->beginTransaction();
+		
+		try {
+			// Delete associated image file
+			$stmt = $pdo->prepare('SELECT image_path FROM judges WHERE id = ?');
+			$stmt->execute([$id]);
+			$imagePath = $stmt->fetchColumn();
+			if ($imagePath && file_exists(__DIR__ . '/../../public' . $imagePath)) {
+				unlink(__DIR__ . '/../../public' . $imagePath);
+			}
+			
+			// Delete all related data
+			$pdo->prepare('DELETE FROM judge_certifications WHERE judge_id = ?')->execute([$id]);
+			$pdo->prepare('DELETE FROM judge_comments WHERE judge_id = ?')->execute([$id]);
+			$pdo->prepare('DELETE FROM scores WHERE judge_id = ?')->execute([$id]);
+			$pdo->prepare('DELETE FROM subcategory_judges WHERE judge_id = ?')->execute([$id]);
+			$pdo->prepare('DELETE FROM category_judges WHERE judge_id = ?')->execute([$id]);
+			$pdo->prepare('DELETE FROM judges WHERE id = ?')->execute([$id]);
+			
+			$pdo->commit();
+			redirect('/admin/judges?success=judge_deleted');
+		} catch (\Exception $e) {
+			$pdo->rollBack();
+			redirect('/admin/judges?error=delete_failed');
+		}
+	}
+	
+	public function contestants(): void {
+		require_organizer();
+		$contestants = DB::pdo()->query('SELECT c.*, u.preferred_name FROM contestants c LEFT JOIN users u ON c.id = u.contestant_id ORDER BY c.contestant_number IS NULL, c.contestant_number, c.name')->fetchAll(\PDO::FETCH_ASSOC);
+		view('admin/contestants', compact('contestants'));
+	}
+	
+	public function createContestant(): void {
+		require_organizer();
+		$name = post('name');
+		$email = post('email') ?: null;
+		$gender = post('gender') ?: null;
+		$contestantNumber = post('contestant_number') ?: null;
+		
+		$stmt = DB::pdo()->prepare('INSERT INTO contestants (id, name, email, gender, contestant_number) VALUES (?, ?, ?, ?, ?)');
+		$stmt->execute([uuid(), $name, $email, $gender, $contestantNumber]);
+		
+		redirect('/admin/contestants?success=contestant_created');
+	}
+	
+	public function deleteContestant(): void {
+		require_organizer();
+		$id = post('contestant_id');
+		
+		$pdo = DB::pdo();
+		$pdo->beginTransaction();
+		
+		try {
+			// Delete associated image file
+			$stmt = $pdo->prepare('SELECT image_path FROM contestants WHERE id = ?');
+			$stmt->execute([$id]);
+			$imagePath = $stmt->fetchColumn();
+			if ($imagePath && file_exists(__DIR__ . '/../../public' . $imagePath)) {
+				unlink(__DIR__ . '/../../public' . $imagePath);
+			}
+			
+			// Delete all related data
+			$pdo->prepare('DELETE FROM judge_comments WHERE contestant_id = ?')->execute([$id]);
+			$pdo->prepare('DELETE FROM scores WHERE contestant_id = ?')->execute([$id]);
+			$pdo->prepare('DELETE FROM subcategory_contestants WHERE contestant_id = ?')->execute([$id]);
+			$pdo->prepare('DELETE FROM category_contestants WHERE contestant_id = ?')->execute([$id]);
+			$pdo->prepare('DELETE FROM contestants WHERE id = ?')->execute([$id]);
+			
+			$pdo->commit();
+			redirect('/admin/contestants?success=contestant_deleted');
+		} catch (\Exception $e) {
+			$pdo->rollBack();
+			redirect('/admin/contestants?error=delete_failed');
+		}
+	}
+	
+	public function organizers(): void {
+		require_organizer();
+		$organizers = DB::pdo()->query('SELECT * FROM users WHERE role = "organizer" ORDER BY name')->fetchAll(\PDO::FETCH_ASSOC);
+		view('admin/organizers', compact('organizers'));
+	}
+	
+	public function createOrganizer(): void {
+		require_organizer();
+		$name = post('name');
+		$email = post('email') ?: null;
+		$password = post('password');
+		$preferredName = post('preferred_name') ?: $name;
+		$gender = post('gender') ?: null;
+		
+		$passwordHash = !empty($password) ? password_hash($password, PASSWORD_DEFAULT) : null;
+		
+		$stmt = DB::pdo()->prepare('INSERT INTO users (id, name, email, password_hash, role, preferred_name, gender) VALUES (?, ?, ?, ?, ?, ?, ?)');
+		$stmt->execute([uuid(), $name, $email, $passwordHash, 'organizer', $preferredName, $gender]);
+		
+		redirect('/admin/organizers?success=organizer_created');
+	}
+	
+	public function deleteOrganizer(): void {
+		require_organizer();
+		$id = post('organizer_id');
+		
+		// Don't allow deleting yourself
+		if ($id === ($_SESSION['user']['id'] ?? '')) {
+			redirect('/admin/organizers?error=cannot_delete_self');
+			return;
+		}
+		
+		DB::pdo()->prepare('DELETE FROM users WHERE id = ? AND role = "organizer"')->execute([$id]);
+		redirect('/admin/organizers?success=organizer_deleted');
+	}
+	
+	public function settings(): void {
+		require_organizer();
+		
+		// Get current settings
+		$settings = [];
+		$stmt = DB::pdo()->query('SELECT setting_key, setting_value FROM system_settings');
+		while ($row = $stmt->fetch(\PDO::FETCH_ASSOC)) {
+			$settings[$row['setting_key']] = $row['setting_value'];
+		}
+		
+		view('admin/settings', compact('settings'));
+	}
+	
+	public function updateSettings(): void {
+		require_organizer();
+		
+		$sessionTimeout = (int)post('session_timeout');
+		$logLevel = post('log_level');
+		
+		$pdo = DB::pdo();
+		$pdo->beginTransaction();
+		
+		try {
+			// Update session timeout
+			$stmt = $pdo->prepare('INSERT OR REPLACE INTO system_settings (setting_key, setting_value) VALUES (?, ?)');
+			$stmt->execute(['session_timeout', $sessionTimeout]);
+			
+			// Update log level
+			$stmt = $pdo->prepare('INSERT OR REPLACE INTO system_settings (setting_key, setting_value) VALUES (?, ?)');
+			$stmt->execute(['log_level', $logLevel]);
+			
+			$pdo->commit();
+			redirect('/admin/settings?success=settings_updated');
+		} catch (\Exception $e) {
+			$pdo->rollBack();
+			redirect('/admin/settings?error=update_failed');
+		}
+	}
+	
+	public function logs(): void {
+		require_organizer();
+		
+		// Get filter parameters
+		$logLevel = $_GET['log_level'] ?? '';
+		$userRole = $_GET['user_role'] ?? '';
+		$action = $_GET['action'] ?? '';
+		$dateFrom = $_GET['date_from'] ?? '';
+		$dateTo = $_GET['date_to'] ?? '';
+		$page = (int)($_GET['page'] ?? 1);
+		$perPage = 50;
+		$offset = ($page - 1) * $perPage;
+		
+		// Build query
+		$where = [];
+		$params = [];
+		
+		if ($logLevel) {
+			$where[] = 'log_level = ?';
+			$params[] = $logLevel;
+		}
+		if ($userRole) {
+			$where[] = 'user_role = ?';
+			$params[] = $userRole;
+		}
+		if ($action) {
+			$where[] = 'action = ?';
+			$params[] = $action;
+		}
+		if ($dateFrom) {
+			$where[] = 'created_at >= ?';
+			$params[] = $dateFrom;
+		}
+		if ($dateTo) {
+			$where[] = 'created_at <= ?';
+			$params[] = $dateTo;
+		}
+		
+		$whereClause = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
+		
+		// Get total count
+		$countSql = "SELECT COUNT(*) FROM activity_logs $whereClause";
+		$stmt = DB::pdo()->prepare($countSql);
+		$stmt->execute($params);
+		$totalLogs = $stmt->fetchColumn();
+		
+		// Get logs
+		$sql = "SELECT * FROM activity_logs $whereClause ORDER BY created_at DESC LIMIT ? OFFSET ?";
+		$params[] = $perPage;
+		$params[] = $offset;
+		$stmt = DB::pdo()->prepare($sql);
+		$stmt->execute($params);
+		$logs = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+		
+		// Get current log level setting
+		$stmt = DB::pdo()->prepare('SELECT setting_value FROM system_settings WHERE setting_key = ?');
+		$stmt->execute(['log_level']);
+		$currentLogLevel = $stmt->fetchColumn() ?: 'INFO';
+		
+		view('admin/logs', compact('logs', 'totalLogs', 'page', 'perPage', 'currentLogLevel', 'logLevel', 'userRole', 'action', 'dateFrom', 'dateTo'));
+	}
+	
+	public function forceLogoutAll(): void {
+		require_organizer();
+		
+		// Increment session version for all users
+		DB::pdo()->prepare('UPDATE users SET session_version = ?')->execute([uuid()]);
+		
+		\App\Logger::logAdminAction('force_logout_all', 'system', '', 'All users logged out');
+		redirect('/admin/users?success=all_users_logged_out');
+	}
+	
+	public function forceLogoutUser(array $params): void {
+		require_organizer();
+		$userId = param('id', $params);
+		
+		// Generate new session version for this user
+		$newSessionVersion = uuid();
+		DB::pdo()->prepare('UPDATE users SET session_version = ? WHERE id = ?')->execute([$newSessionVersion, $userId]);
+		
+		\App\Logger::logAdminAction('force_logout_user', 'user', $userId, 'User logged out');
+		redirect('/admin/users?success=user_logged_out');
+	}
+	
+	public function printReports(): void {
+		require_organizer();
+		
+		// Get all contestants, judges, and categories for print options
+		$contestants = DB::pdo()->query('SELECT * FROM contestants ORDER BY contestant_number IS NULL, contestant_number, name')->fetchAll(\PDO::FETCH_ASSOC);
+		$judges = DB::pdo()->query('SELECT * FROM judges ORDER BY name')->fetchAll(\PDO::FETCH_ASSOC);
+		$categories = DB::pdo()->query('SELECT c.*, co.name as contest_name FROM categories c JOIN contests co ON c.contest_id = co.id ORDER BY co.name, c.name')->fetchAll(\PDO::FETCH_ASSOC);
+		
+		view('admin/print_reports', compact('contestants', 'judges', 'categories'));
+	}
+	
+	public function emceeScripts(): void {
+		require_organizer();
+		$scripts = DB::pdo()->query('SELECT * FROM emcee_scripts ORDER BY created_at DESC')->fetchAll(\PDO::FETCH_ASSOC);
+		view('admin/emcee_scripts', compact('scripts'));
+	}
+	
+	public function uploadEmceeScript(): void {
+		require_organizer();
+		
+		if (!isset($_FILES['script']) || $_FILES['script']['error'] !== UPLOAD_ERR_OK) {
+			redirect('/admin/emcee-scripts?error=upload_failed');
+			return;
+		}
+		
+		$uploadDir = __DIR__ . '/../../public/uploads/emcee-scripts/';
+		if (!is_dir($uploadDir)) {
+			mkdir($uploadDir, 0755, true);
+		}
+		
+		$filename = $_FILES['script']['name'];
+		$filepath = $uploadDir . $filename;
+		
+		if (move_uploaded_file($_FILES['script']['tmp_name'], $filepath)) {
+			$stmt = DB::pdo()->prepare('INSERT INTO emcee_scripts (id, filename, filepath, is_active) VALUES (?, ?, ?, ?)');
+			$stmt->execute([uuid(), $filename, '/uploads/emcee-scripts/' . $filename, 1]);
+			redirect('/admin/emcee-scripts?success=script_uploaded');
+		} else {
+			redirect('/admin/emcee-scripts?error=upload_failed');
+		}
+	}
+	
+	public function deleteEmceeScript(array $params): void {
+		require_organizer();
+		$id = param('id', $params);
+		
+		$stmt = DB::pdo()->prepare('SELECT filepath FROM emcee_scripts WHERE id = ?');
+		$stmt->execute([$id]);
+		$filepath = $stmt->fetchColumn();
+		
+		if ($filepath && file_exists(__DIR__ . '/../../public' . $filepath)) {
+			unlink(__DIR__ . '/../../public' . $filepath);
+		}
+		
+		DB::pdo()->prepare('DELETE FROM emcee_scripts WHERE id = ?')->execute([$id]);
+		redirect('/admin/emcee-scripts?success=script_deleted');
+	}
+	
+	public function toggleEmceeScript(array $params): void {
+		require_organizer();
+		$id = param('id', $params);
+		
+		$stmt = DB::pdo()->prepare('UPDATE emcee_scripts SET is_active = NOT is_active WHERE id = ?');
+		$stmt->execute([$id]);
+		
+		redirect('/admin/emcee-scripts?success=script_toggled');
+	}
+	
+	public function contestantScores(array $params): void {
+		require_organizer();
+		$contestantId = param('contestantId', $params);
+		
+		// Get contestant info
+		$contestant = DB::pdo()->prepare('SELECT * FROM contestants WHERE id = ?');
+		$contestant->execute([$contestantId]);
+		$contestant = $contestant->fetch(\PDO::FETCH_ASSOC);
+		
+		if (!$contestant) {
+			redirect('/admin/users?error=contestant_not_found');
+			return;
+		}
+		
+		// Get all subcategories this contestant is assigned to
+		$subcategories = DB::pdo()->prepare('
+			SELECT s.*, c.name as category_name 
+			FROM subcategories s 
+			JOIN categories c ON s.category_id = c.id 
+			JOIN subcategory_contestants sc ON s.id = sc.subcategory_id 
+			WHERE sc.contestant_id = ? 
+			ORDER BY c.name, s.name
+		');
+		$subcategories->execute([$contestantId]);
+		$subcategories = $subcategories->fetchAll(\PDO::FETCH_ASSOC);
+		
+		// Get all scores for this contestant
+		$scores = DB::pdo()->prepare('
+			SELECT s.*, sc.name as subcategory_name, cr.name as criterion_name, j.name as judge_name
+			FROM scores s 
+			JOIN subcategories sc ON s.subcategory_id = sc.id 
+			JOIN criteria cr ON s.criterion_id = cr.id 
+			JOIN judges j ON s.judge_id = j.id 
+			WHERE s.contestant_id = ? 
+			ORDER BY sc.name, cr.name, j.name
+		');
+		$scores->execute([$contestantId]);
+		$scores = $scores->fetchAll(\PDO::FETCH_ASSOC);
+		
+		// Get comments for this contestant
+		$comments = DB::pdo()->prepare('
+			SELECT jc.*, sc.name as subcategory_name, j.name as judge_name
+			FROM judge_comments jc 
+			JOIN subcategories sc ON jc.subcategory_id = sc.id 
+			JOIN judges j ON jc.judge_id = j.id 
+			WHERE jc.contestant_id = ? 
+			ORDER BY sc.name, j.name
+		');
+		$comments->execute([$contestantId]);
+		$comments = $comments->fetchAll(\PDO::FETCH_ASSOC);
+		
+		view('admin/contestant_scores', compact('contestant', 'subcategories', 'scores', 'comments'));
+	}
+}
+
+class ProfileController {
+	public function edit(): void {
+		require_login();
+		$user = current_user();
+		view('profile/edit', compact('user'));
+	}
+	
+	public function update(): void {
+		require_login();
+		$userId = $_SESSION['user']['id'];
+		$name = post('name');
+		$email = post('email') ?: null;
+		$password = post('password');
+		$preferredName = post('preferred_name') ?: $name;
+		$gender = post('gender') ?: null;
+		$theme = post('theme') ?: 'light';
+		
+		// Validate password complexity if provided
+		if (!empty($password)) {
+			if (strlen($password) < 8) {
+				redirect('/profile?error=password_too_short');
+				return;
+			}
+			if (!preg_match('/[A-Z]/', $password)) {
+				redirect('/profile?error=password_no_uppercase');
+				return;
+			}
+			if (!preg_match('/[a-z]/', $password)) {
+				redirect('/profile?error=password_no_lowercase');
+				return;
+			}
+			if (!preg_match('/[0-9]/', $password)) {
+				redirect('/profile?error=password_no_number');
+				return;
+			}
+			if (!preg_match('/[^A-Za-z0-9]/', $password)) {
+				redirect('/profile?error=password_no_symbol');
+				return;
+			}
+		}
+		
+		$passwordHash = !empty($password) ? password_hash($password, PASSWORD_DEFAULT) : null;
+		
+		if ($passwordHash) {
+			$stmt = DB::pdo()->prepare('UPDATE users SET name = ?, email = ?, password_hash = ?, preferred_name = ?, gender = ?, theme = ? WHERE id = ?');
+			$stmt->execute([$name, $email, $passwordHash, $preferredName, $gender, $theme, $userId]);
+		} else {
+			$stmt = DB::pdo()->prepare('UPDATE users SET name = ?, email = ?, preferred_name = ?, gender = ?, theme = ? WHERE id = ?');
+			$stmt->execute([$name, $email, $preferredName, $gender, $theme, $userId]);
+		}
+		
+		// Update session
+		$_SESSION['user']['name'] = $name;
+		$_SESSION['user']['email'] = $email;
+		$_SESSION['user']['preferred_name'] = $preferredName;
+		$_SESSION['user']['gender'] = $gender;
+		$_SESSION['user']['theme'] = $theme;
+		
+		redirect('/profile?success=profile_updated');
+	}
+}
+
+class PrintController {
+	public function contestant(array $params): void {
+		require_organizer();
+		$contestantId = param('id', $params);
+		
+		// Get contestant info
+		$contestant = DB::pdo()->prepare('SELECT * FROM contestants WHERE id = ?');
+		$contestant->execute([$contestantId]);
+		$contestant = $contestant->fetch(\PDO::FETCH_ASSOC);
+		
+		if (!$contestant) {
+			redirect('/admin/print-reports?error=contestant_not_found');
+			return;
+		}
+		
+		// Get all subcategories this contestant is assigned to
+		$subcategories = DB::pdo()->prepare('
+			SELECT s.*, c.name as category_name 
+			FROM subcategories s 
+			JOIN categories c ON s.category_id = c.id 
+			JOIN subcategory_contestants sc ON s.id = sc.subcategory_id 
+			WHERE sc.contestant_id = ? 
+			ORDER BY c.name, s.name
+		');
+		$subcategories->execute([$contestantId]);
+		$subcategories = $subcategories->fetchAll(\PDO::FETCH_ASSOC);
+		
+		// Get all scores for this contestant
+		$scores = DB::pdo()->prepare('
+			SELECT s.*, sc.name as subcategory_name, cr.name as criterion_name, j.name as judge_name
+			FROM scores s 
+			JOIN subcategories sc ON s.subcategory_id = sc.id 
+			JOIN criteria cr ON s.criterion_id = cr.id 
+			JOIN judges j ON s.judge_id = j.id 
+			WHERE s.contestant_id = ? 
+			ORDER BY sc.name, cr.name, j.name
+		');
+		$scores->execute([$contestantId]);
+		$scores = $scores->fetchAll(\PDO::FETCH_ASSOC);
+		
+		// Get overall deductions for this contestant
+		$deductions = DB::pdo()->prepare('
+			SELECT od.*, sc.name as subcategory_name
+			FROM overall_deductions od
+			JOIN subcategories sc ON od.subcategory_id = sc.id
+			WHERE od.contestant_id = ?
+			ORDER BY sc.name
+		');
+		$deductions->execute([$contestantId]);
+		$deductions = $deductions->fetchAll(\PDO::FETCH_ASSOC);
+		
+		view('print/contestant', compact('contestant', 'subcategories', 'scores', 'deductions'));
+	}
+	
+	public function judge(array $params): void {
+		require_organizer();
+		$judgeId = param('id', $params);
+		
+		// Get judge info
+		$judge = DB::pdo()->prepare('SELECT * FROM judges WHERE id = ?');
+		$judge->execute([$judgeId]);
+		$judge = $judge->fetch(\PDO::FETCH_ASSOC);
+		
+		if (!$judge) {
+			redirect('/admin/print-reports?error=judge_not_found');
+			return;
+		}
+		
+		// Get all subcategories this judge is assigned to
+		$subcategories = DB::pdo()->prepare('
+			SELECT s.*, c.name as category_name 
+			FROM subcategories s 
+			JOIN categories c ON s.category_id = c.id 
+			JOIN subcategory_judges sj ON s.id = sj.subcategory_id 
+			WHERE sj.judge_id = ? 
+			ORDER BY c.name, s.name
+		');
+		$subcategories->execute([$judgeId]);
+		$subcategories = $subcategories->fetchAll(\PDO::FETCH_ASSOC);
+		
+		// Get all scores for this judge
+		$scores = DB::pdo()->prepare('
+			SELECT s.*, sc.name as subcategory_name, cr.name as criterion_name, con.name as contestant_name
+			FROM scores s 
+			JOIN subcategories sc ON s.subcategory_id = sc.id 
+			JOIN criteria cr ON s.criterion_id = cr.id 
+			JOIN contestants con ON s.contestant_id = con.id 
+			WHERE s.judge_id = ? 
+			ORDER BY sc.name, con.name, cr.name
+		');
+		$scores->execute([$judgeId]);
+		$scores = $scores->fetchAll(\PDO::FETCH_ASSOC);
+		
+		view('print/judge', compact('judge', 'subcategories', 'scores'));
+	}
+	
+	public function category(array $params): void {
+		require_organizer();
+		$categoryId = param('id', $params);
+		
+		// Get category info
+		$category = DB::pdo()->prepare('SELECT c.*, co.name as contest_name FROM categories c JOIN contests co ON c.contest_id = co.id WHERE c.id = ?');
+		$category->execute([$categoryId]);
+		$category = $category->fetch(\PDO::FETCH_ASSOC);
+		
+		if (!$category) {
+			redirect('/admin/print-reports?error=category_not_found');
+			return;
+		}
+		
+		// Get all subcategories for this category
+		$subcategories = DB::pdo()->prepare('SELECT * FROM subcategories WHERE category_id = ? ORDER BY name');
+		$subcategories->execute([$categoryId]);
+		$subcategories = $subcategories->fetchAll(\PDO::FETCH_ASSOC);
+		
+		// Get all scores for this category
+		$scores = DB::pdo()->prepare('
+			SELECT s.*, sc.name as subcategory_name, cr.name as criterion_name, con.name as contestant_name, j.name as judge_name
+			FROM scores s 
+			JOIN subcategories sc ON s.subcategory_id = sc.id 
+			JOIN criteria cr ON s.criterion_id = cr.id 
+			JOIN contestants con ON s.contestant_id = con.id 
+			JOIN judges j ON s.judge_id = j.id 
+			WHERE sc.category_id = ? 
+			ORDER BY sc.name, con.name, cr.name, j.name
+		');
+		$scores->execute([$categoryId]);
+		$scores = $scores->fetchAll(\PDO::FETCH_ASSOC);
+		
+		view('print/category', compact('category', 'subcategories', 'scores'));
+	}
+}
+
+class EmceeController {
+	public function index(): void {
+		require_emcee();
+		
+		// Get active emcee scripts
+		$scripts = DB::pdo()->query('SELECT * FROM emcee_scripts WHERE is_active = 1 ORDER BY created_at DESC')->fetchAll(\PDO::FETCH_ASSOC);
+		
+		// Get all contestants with numbers
+		$contestants = DB::pdo()->query('SELECT * FROM contestants WHERE contestant_number IS NOT NULL ORDER BY contestant_number')->fetchAll(\PDO::FETCH_ASSOC);
+		
+		view('emcee/index', compact('scripts', 'contestants'));
+	}
+	
+	public function streamScript(array $params): void {
+		require_emcee();
+		$scriptId = param('id', $params);
+		
+		$stmt = DB::pdo()->prepare('SELECT * FROM emcee_scripts WHERE id = ? AND is_active = 1');
+		$stmt->execute([$scriptId]);
+		$script = $stmt->fetch(\PDO::FETCH_ASSOC);
+		
+		if (!$script) {
+			http_response_code(404);
+			echo 'Script not found';
+			return;
+		}
+		
+		$filepath = __DIR__ . '/../../public' . $script['filepath'];
+		if (!file_exists($filepath)) {
+			http_response_code(404);
+			echo 'File not found';
+			return;
+		}
+		
+		$mimeType = mime_content_type($filepath);
+		header('Content-Type: ' . $mimeType);
+		header('Content-Disposition: inline; filename="' . $script['filename'] . '"');
+		readfile($filepath);
+	}
+	
+	public function contestantBio(array $params): void {
+		require_emcee();
+		$number = param('number', $params);
+		
+		$stmt = DB::pdo()->prepare('SELECT * FROM contestants WHERE contestant_number = ?');
+		$stmt->execute([$number]);
+		$contestant = $stmt->fetch(\PDO::FETCH_ASSOC);
+		
+		if (!$contestant) {
+			http_response_code(404);
+			echo 'Contestant not found';
+			return;
+		}
+		
+		view('emcee/contestant_bio', compact('contestant'));
+	}
+	
+	public function judgesByCategory(): void {
+		require_emcee();
+		
+		// Get judges grouped by category
+		$judges = DB::pdo()->query('
+			SELECT j.*, c.name as category_name, c.id as category_id
+			FROM judges j
+			JOIN category_judges cj ON j.id = cj.judge_id
+			JOIN categories c ON cj.category_id = c.id
+			ORDER BY c.name, j.name
+		')->fetchAll(\PDO::FETCH_ASSOC);
+		
+		view('emcee/judges', compact('judges'));
+	}
+}
+
+class TemplateController {
+	public function index(): void {
+		require_organizer();
+		$templates = DB::pdo()->query('SELECT * FROM subcategory_templates ORDER BY name')->fetchAll(\PDO::FETCH_ASSOC);
+		view('templates/index', compact('templates'));
+	}
+	
+	public function new(): void {
+		require_organizer();
+		view('templates/new');
+	}
+	
+	public function create(): void {
+		require_organizer();
+		$name = post('name');
+		$description = post('description') ?: null;
+		$subcategoryNames = post('subcategory_names');
+		$maxScore = (int)post('max_score') ?: 60;
+		
+		// Parse subcategory names
+		$names = array_filter(array_map('trim', explode("\n", $subcategoryNames)));
+		
+		$stmt = DB::pdo()->prepare('INSERT INTO subcategory_templates (id, name, description, subcategory_names, max_score) VALUES (?, ?, ?, ?, ?)');
+		$stmt->execute([uuid(), $name, $description, json_encode($names), $maxScore]);
+		
+		redirect('/admin/templates?success=template_created');
+	}
+	
+	public function delete(array $params): void {
+		require_organizer();
+		$id = param('id', $params);
+		
+		$pdo = DB::pdo();
+		$pdo->beginTransaction();
+		
+		try {
+			// Delete template criteria first
+			$pdo->prepare('DELETE FROM template_criteria WHERE template_id = ?')->execute([$id]);
+			// Delete template
+			$pdo->prepare('DELETE FROM subcategory_templates WHERE id = ?')->execute([$id]);
+			
+			$pdo->commit();
+			redirect('/admin/templates?success=template_deleted');
+		} catch (\Exception $e) {
+			$pdo->rollBack();
+			redirect('/admin/templates?error=delete_failed');
+		}
+	}
+}
+
+class CategoryAssignmentController {
+	public function edit(array $params): void {
+		require_organizer();
+		$categoryId = param('id', $params);
+		$category = DB::pdo()->prepare('SELECT * FROM categories WHERE id = ?');
+		$category->execute([$categoryId]);
+		$category = $category->fetch(\PDO::FETCH_ASSOC);
+		$contestants = DB::pdo()->query('SELECT * FROM contestants ORDER BY contestant_number IS NULL, contestant_number, name')->fetchAll(\PDO::FETCH_ASSOC);
+		$judges = DB::pdo()->query('SELECT * FROM judges ORDER BY name')->fetchAll(\PDO::FETCH_ASSOC);
+		$assignedContestants = DB::pdo()->prepare('SELECT contestant_id FROM category_contestants WHERE category_id = ?');
+		$assignedContestants->execute([$categoryId]);
+		$assignedContestants = array_column($assignedContestants->fetchAll(\PDO::FETCH_ASSOC), 'contestant_id');
+		$assignedJudges = DB::pdo()->prepare('SELECT judge_id FROM category_judges WHERE category_id = ?');
+		$assignedJudges->execute([$categoryId]);
+		$assignedJudges = array_column($assignedJudges->fetchAll(\PDO::FETCH_ASSOC), 'judge_id');
+		view('category_assignments/edit', compact('category','contestants','judges','assignedContestants','assignedJudges'));
+	}
+	
+	public function update(array $params): void {
+		require_organizer();
+		$categoryId = param('id', $params);
+		$contestants = request_array('contestants');
+		$judges = request_array('judges');
+		$pdo = DB::pdo();
+		$pdo->beginTransaction();
+		$pdo->prepare('DELETE FROM category_contestants WHERE category_id = ?')->execute([$categoryId]);
+		$pdo->prepare('DELETE FROM category_judges WHERE category_id = ?')->execute([$categoryId]);
+		$insC = $pdo->prepare('INSERT INTO category_contestants (category_id, contestant_id) VALUES (?, ?)');
+		$insJ = $pdo->prepare('INSERT INTO category_judges (category_id, judge_id) VALUES (?, ?)');
+		foreach ($contestants as $id) { if ($id) $insC->execute([$categoryId, $id]); }
+		foreach ($judges as $id) { if ($id) $insJ->execute([$categoryId, $id]); }
+		$pdo->commit();
+		$_SESSION['success_message'] = 'Category assignments updated successfully!';
+		redirect('/categories/' . $categoryId . '/assign');
+	}
+}
+

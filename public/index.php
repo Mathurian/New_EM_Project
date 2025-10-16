@@ -129,12 +129,12 @@ $router->get('/subcategories/{id}/admin', 'SubcategoryAdminController@edit');
 $router->post('/subcategories/{id}/admin', 'SubcategoryAdminController@update');
 
 // results
-$router->get('/results/{id}', 'ResultsController@index');
 $router->get('/results', 'ResultsController@resultsIndex');
 $router->get('/results/categories', 'ResultsController@categoryIndex');
-$router->get('/results/{id}/detailed', 'ResultsController@detailed');
 $router->get('/results/contestants', 'ResultsController@contestantsIndex');
 $router->get('/results/contestants/{id}', 'ResultsController@contestantOverview');
+$router->get('/results/{id}', 'ResultsController@index');
+$router->get('/results/{id}/detailed', 'ResultsController@detailed');
 $router->post('/results/contestants/{contestantId}/subcategory/{subcategoryId}/deduction', 'ResultsController@addDeduction');
 $router->post('/results/{subcategoryId}/contestant/{contestantId}/deduction', 'ResultsController@addDeduction');
 $router->get('/results/contestant/{contestantId}/category/{categoryId}', 'ResultsController@contestantDetailed');
