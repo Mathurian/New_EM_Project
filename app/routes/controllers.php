@@ -1532,6 +1532,46 @@ class BackupController {
 			exit;
 		}
 	}
+	
+	public function resetSessionVersions(): void {
+		require_organizer();
+		
+		try {
+			$pdo = DB::pdo();
+			
+			echo '<pre>Resetting all user session versions...</pre>';
+			
+			// Get all users
+			$stmt = $pdo->query("SELECT id, email, preferred_name, role, session_version FROM users");
+			$users = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+			
+			echo '<pre>Found ' . count($users) . ' users</pre>';
+			
+			$resetCount = 0;
+			
+			foreach ($users as $user) {
+				// Generate a new session version
+				$newSessionVersion = uuid();
+				
+				// Update the user's session version
+				$stmt = $pdo->prepare("UPDATE users SET session_version = ? WHERE id = ?");
+				$stmt->execute([$newSessionVersion, $user['id']]);
+				
+				echo '<pre>Reset session version for: ' . ($user['email'] ?: $user['preferred_name']) . ' (' . $user['role'] . ')</pre>';
+				
+				$resetCount++;
+			}
+			
+			echo '<pre>Reset session versions for ' . $resetCount . ' users</pre>';
+			echo '<pre>All users should now be able to log in normally</pre>';
+			echo '<pre>Session version reset completed successfully!</pre>';
+			exit;
+			
+		} catch (\Exception $e) {
+			echo '<pre>Error: ' . $e->getMessage() . '</pre>';
+			exit;
+		}
+	}
 }
 
 class CategoryController {
@@ -2787,10 +2827,16 @@ class AuthController {
 			}
 			
 			// Check if user's session has been invalidated
-			if ($user['session_version'] !== ($_SESSION['session_version'] ?? '')) {
-				\App\Logger::logLogin($user['email'] ?? $user['preferred_name'], false, 'session_invalidated');
-				redirect('/login?error=session_invalidated');
-				return;
+			// This check is only relevant if the user is already logged in
+			// For fresh logins, we don't need to check session version mismatch
+			if (isset($_SESSION['user']) && isset($_SESSION['session_version'])) {
+				$dbSessionVersion = $user['session_version'] ?? '1';
+				$sessionVersion = $_SESSION['session_version'] ?? '1';
+				if ($dbSessionVersion !== $sessionVersion) {
+					\App\Logger::logLogin($user['email'] ?? $user['preferred_name'], false, 'session_invalidated');
+					redirect('/login?error=session_invalidated');
+					return;
+				}
 			}
 			
 			$_SESSION['user'] = $user;
