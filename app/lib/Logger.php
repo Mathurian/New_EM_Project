@@ -182,14 +182,30 @@ class Logger {
 	public static function logLogin(string $emailOrName, bool $success): void {
 		$action = $success ? 'login_success' : 'login_failed';
 		$level = $success ? self::LEVEL_INFO : self::LEVEL_WARN;
+		
+		// Only log if the appropriate level is enabled
+		if (!self::shouldLog($level)) {
+			return;
+		}
+		
 		self::log($action, 'user', null, 'Email/Name: ' . $emailOrName, $level);
 	}
 	
 	public static function logLogout(): void {
+		// Only log if INFO level or higher is enabled
+		if (!self::shouldLog(self::LEVEL_INFO)) {
+			return;
+		}
+		
 		self::log('logout', 'user', null, null, self::LEVEL_INFO);
 	}
 
 	public static function logSessionTimeout(?string $userId, ?string $name, ?string $role): void {
+		// Only log if WARN level or higher is enabled
+		if (!self::shouldLog(self::LEVEL_WARN)) {
+			return;
+		}
+		
 		// Temporarily spoof session user context for this log
 		$prev = $_SESSION['user'] ?? null;
 		$_SESSION['user'] = ['id' => $userId, 'name' => $name, 'preferred_name' => $name, 'role' => $role];
@@ -198,6 +214,11 @@ class Logger {
 	}
 	
 	public static function logScoreSubmission(string $subcategoryId, string $contestantId, string $judgeId, int $scoreCount): void {
+		// Only log if INFO level or higher is enabled
+		if (!self::shouldLog(self::LEVEL_INFO)) {
+			return;
+		}
+		
 		self::log(
 			'score_submission',
 			'subcategory',
@@ -208,6 +229,11 @@ class Logger {
 	}
 	
 	public static function logScoreCertification(string $subcategoryId, string $judgeId): void {
+		// Only log if INFO level or higher is enabled
+		if (!self::shouldLog(self::LEVEL_INFO)) {
+			return;
+		}
+		
 		self::log(
 			'score_certification',
 			'subcategory',
@@ -218,6 +244,11 @@ class Logger {
 	}
 	
 	public static function logUserCreation(string $userId, string $role, string $name): void {
+		// Only log if INFO level or higher is enabled
+		if (!self::shouldLog(self::LEVEL_INFO)) {
+			return;
+		}
+		
 		self::log(
 			'user_creation',
 			'user',
@@ -228,6 +259,11 @@ class Logger {
 	}
 	
 	public static function logUserDeletion(string $userId, string $role, string $name): void {
+		// Only log if WARN level or higher is enabled
+		if (!self::shouldLog(self::LEVEL_WARN)) {
+			return;
+		}
+		
 		self::log(
 			'user_deletion',
 			'user',
@@ -238,6 +274,11 @@ class Logger {
 	}
 	
 	public static function logContestArchive(string $contestId, string $contestName): void {
+		// Only log if INFO level or higher is enabled
+		if (!self::shouldLog(self::LEVEL_INFO)) {
+			return;
+		}
+		
 		self::log(
 			'contest_archive',
 			'contest',
@@ -248,6 +289,11 @@ class Logger {
 	}
 	
 	public static function logAdminAction(string $action, string $resourceType = null, string $resourceId = null, string $details = null): void {
+		// Only log if INFO level or higher is enabled
+		if (!self::shouldLog(self::LEVEL_INFO)) {
+			return;
+		}
+		
 		self::log(
 			'admin_' . $action,
 			$resourceType,
@@ -258,6 +304,11 @@ class Logger {
 	}
 	
 	public static function logBulkOperation(string $operation, string $resourceType, int $count): void {
+		// Only log if INFO level or higher is enabled
+		if (!self::shouldLog(self::LEVEL_INFO)) {
+			return;
+		}
+		
 		self::log(
 			'bulk_' . $operation,
 			$resourceType,
@@ -268,14 +319,29 @@ class Logger {
 	}
 
 	public static function logSystemError(string $error, string $context = null): void {
+		// Only log if ERROR level or higher is enabled
+		if (!self::shouldLog(self::LEVEL_ERROR)) {
+			return;
+		}
+		
 		self::log('system_error', 'system', null, $context ? "Error: {$error} in context: {$context}" : "Error: {$error}", self::LEVEL_ERROR);
 	}
 
 	public static function logSecurityEvent(string $event, string $details = null): void {
+		// Only log if WARN level or higher is enabled
+		if (!self::shouldLog(self::LEVEL_WARN)) {
+			return;
+		}
+		
 		self::log('security_event', 'security', null, $details ?: $event, self::LEVEL_WARN);
 	}
 
 	public static function logDataAccess(string $resourceType, string $resourceId, string $action): void {
+		// Only log if DEBUG level or higher is enabled
+		if (!self::shouldLog(self::LEVEL_DEBUG)) {
+			return;
+		}
+		
 		self::log('data_access', $resourceType, $resourceId, "Accessed {$resourceType} {$resourceId} for {$action}", self::LEVEL_DEBUG);
 	}
 	
