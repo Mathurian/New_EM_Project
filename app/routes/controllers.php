@@ -1239,52 +1239,109 @@ class BackupController {
 	public function forceConstraintUpdateSimple(): void {
 		require_organizer();
 		
-		try {
-			// Create a completely new database connection to avoid any existing transactions
-			$dbPath = DB::getDatabasePath();
-			$pdo = new \PDO('sqlite:' . $dbPath);
-			$pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
-			
-			// Don't use WAL mode - just use normal journal mode
-			$pdo->exec('PRAGMA journal_mode=DELETE');
-			$pdo->exec('PRAGMA busy_timeout=30000');
-			
-			// Force the constraint update
-			$pdo->beginTransaction();
-			
-			// Create new table with updated constraint
-			$pdo->exec('CREATE TABLE backup_settings_new (
-				id TEXT PRIMARY KEY,
-				backup_type TEXT NOT NULL CHECK (backup_type IN (\'schema\', \'full\')),
-				enabled BOOLEAN NOT NULL DEFAULT 0,
-				frequency TEXT NOT NULL CHECK (frequency IN (\'minutes\', \'hours\', \'daily\', \'weekly\', \'monthly\')),
-				frequency_value INTEGER NOT NULL DEFAULT 1,
-				retention_days INTEGER NOT NULL DEFAULT 30,
-				last_run TEXT,
-				next_run TEXT,
-				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-				updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-			)');
-			
-			// Copy data from old table
-			$pdo->exec('INSERT INTO backup_settings_new SELECT * FROM backup_settings');
-			
-			// Drop old table and rename new one
-			$pdo->exec('DROP TABLE backup_settings');
-			$pdo->exec('ALTER TABLE backup_settings_new RENAME TO backup_settings');
-			
-			$pdo->commit();
-			
-			echo '<pre>Constraint update completed successfully!</pre>';
-			exit;
-			
-		} catch (\Exception $e) {
-			if (isset($pdo) && $pdo->inTransaction()) {
-				$pdo->rollBack();
+		$maxRetries = 10;
+		$retryDelay = 2; // seconds
+		
+		for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
+			try {
+				echo "<pre>Attempt $attempt of $maxRetries...</pre>";
+				
+				// Create a completely new database connection to avoid any existing transactions
+				$dbPath = DB::getDatabasePath();
+				$pdo = new \PDO('sqlite:' . $dbPath);
+				$pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+				
+				// Set aggressive timeout settings
+				$pdo->exec('PRAGMA journal_mode=DELETE');
+				$pdo->exec('PRAGMA busy_timeout=60000'); // 60 seconds
+				$pdo->exec('PRAGMA synchronous=NORMAL');
+				$pdo->exec('PRAGMA cache_size=10000');
+				$pdo->exec('PRAGMA temp_store=MEMORY');
+				
+				// Try to get an immediate lock
+				$pdo->exec('BEGIN IMMEDIATE');
+				
+				// Create new table with updated constraint
+				$pdo->exec('CREATE TABLE backup_settings_new (
+					id TEXT PRIMARY KEY,
+					backup_type TEXT NOT NULL CHECK (backup_type IN (\'schema\', \'full\')),
+					enabled BOOLEAN NOT NULL DEFAULT 0,
+					frequency TEXT NOT NULL CHECK (frequency IN (\'minutes\', \'hours\', \'daily\', \'weekly\', \'monthly\')),
+					frequency_value INTEGER NOT NULL DEFAULT 1,
+					retention_days INTEGER NOT NULL DEFAULT 30,
+					last_run TEXT,
+					next_run TEXT,
+					created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+					updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+				)');
+				
+				// Copy data from old table
+				$pdo->exec('INSERT INTO backup_settings_new SELECT * FROM backup_settings');
+				
+				// Drop old table and rename new one
+				$pdo->exec('DROP TABLE backup_settings');
+				$pdo->exec('ALTER TABLE backup_settings_new RENAME TO backup_settings');
+				
+				$pdo->commit();
+				
+				echo '<pre>Constraint update completed successfully!</pre>';
+				exit;
+				
+			} catch (\Exception $e) {
+				if (isset($pdo) && $pdo->inTransaction()) {
+					$pdo->rollBack();
+				}
+				
+				echo "<pre>Attempt $attempt failed: " . $e->getMessage() . "</pre>";
+				
+				if ($attempt < $maxRetries) {
+					echo "<pre>Waiting $retryDelay seconds before retry...</pre>";
+					sleep($retryDelay);
+					$retryDelay *= 1.5; // Exponential backoff
+				} else {
+					echo '<pre>All attempts failed. Database may be heavily locked.</pre>';
+					echo '<pre>Try closing all browser tabs and waiting a few minutes before trying again.</pre>';
+					exit;
+				}
 			}
-			echo '<pre>Error: ' . $e->getMessage() . '</pre>';
+		}
+	}
+	
+	public function runCliConstraintFix(): void {
+		require_organizer();
+		
+		echo '<pre>Running command-line constraint fix...</pre>';
+		echo '<pre>This may take a few moments...</pre>';
+		
+		// Flush output to show progress
+		if (ob_get_level()) {
+			ob_flush();
+		}
+		flush();
+		
+		$scriptPath = __DIR__ . '/../../fix_constraint_cli.php';
+		
+		if (!file_exists($scriptPath)) {
+			echo '<pre>Error: CLI script not found at: ' . $scriptPath . '</pre>';
 			exit;
 		}
+		
+		// Run the CLI script
+		$output = [];
+		$returnCode = 0;
+		
+		exec("php \"$scriptPath\" 2>&1", $output, $returnCode);
+		
+		echo '<pre>CLI Script Output:</pre>';
+		echo '<pre>' . implode("\n", $output) . '</pre>';
+		
+		if ($returnCode === 0) {
+			echo '<pre>Constraint fix completed successfully!</pre>';
+		} else {
+			echo '<pre>Constraint fix failed with return code: ' . $returnCode . '</pre>';
+		}
+		
+		exit;
 	}
 }
 
