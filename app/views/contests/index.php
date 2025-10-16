@@ -5,7 +5,8 @@
 <?php if (!empty($_GET['success'])): ?>
 	<?php 
 	$successMessages = [
-		'contest_archived' => 'Contest archived successfully!'
+		'contest_archived' => 'Contest archived successfully!',
+		'contest_reactivated' => 'Contest reactivated successfully!'
 	];
 	$successMessage = $successMessages[$_GET['success']] ?? 'Operation completed successfully!';
 	?>
@@ -16,7 +17,8 @@
 	<?php 
 	$errorMessages = [
 		'contest_not_found' => 'Contest not found',
-		'archive_failed' => 'Failed to archive contest. Please try again.'
+		'archive_failed' => 'Failed to archive contest. Please try again.',
+		'reactivation_failed' => 'Failed to reactivate contest. Please try again.'
 	];
 	$errorMessage = $errorMessages[$_GET['error']] ?? 'An error occurred';
 	?>

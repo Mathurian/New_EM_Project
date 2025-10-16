@@ -129,6 +129,19 @@
                                     <p><em>No scores recorded</em></p>
                                 <?php endif; ?>
                                 
+                                <?php if (!empty($data['deductions'])): ?>
+                                    <div class="deduction-section">
+                                        <h6>Overall Deductions:</h6>
+                                        <?php 
+                                        $totalDeductions = 0;
+                                        foreach ($data['deductions'] as $deduction): 
+                                            $totalDeductions += $deduction['amount'];
+                                        ?>
+                                            <p><strong>-<?= number_format($deduction['amount'], 1) ?> points:</strong> <?= htmlspecialchars($deduction['comment']) ?></p>
+                                        <?php endforeach; ?>
+                                        <p><strong>Total Deductions: -<?= number_format($totalDeductions, 1) ?> points</strong></p>
+                                    </div>
+                                <?php endif; ?>
                                 
                                 <?php if (!empty($data['comments'])): ?>
                                     <div class="comment-section">

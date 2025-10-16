@@ -119,6 +119,17 @@ class ContestController {
 						$stmt->execute([$archivedCertId, $archivedSubcategoryId, $cert['judge_id'], $cert['signature_name'], $cert['certified_at']]);
 					}
 					
+					// Archive overall deductions
+					$stmt = $pdo->prepare('SELECT * FROM overall_deductions WHERE subcategory_id = ?');
+					$stmt->execute([$subcategory['id']]);
+					$deductions = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+					
+					foreach ($deductions as $deduction) {
+						$archivedDeductionId = uuid();
+						$stmt = $pdo->prepare('INSERT INTO archived_overall_deductions (id, archived_subcategory_id, archived_contestant_id, amount, comment, created_by, created_at, signature_name, signed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
+						$stmt->execute([$archivedDeductionId, $archivedSubcategoryId, $deduction['contestant_id'], $deduction['amount'], $deduction['comment'], $deduction['created_by'], $deduction['created_at'], $deduction['signature_name'], $deduction['signed_at']]);
+					}
+					
 					// Archive subcategory assignments
 					$stmt = $pdo->prepare('SELECT * FROM subcategory_contestants WHERE subcategory_id = ?');
 					$stmt->execute([$subcategory['id']]);
@@ -307,7 +318,9 @@ class ContestController {
 				aj.name as judge_name,
 				cr.name as criterion_name,
 				s.score,
-				jc.comment
+				jc.comment,
+				od.amount as deduction_amount,
+				od.comment as deduction_comment
 			FROM archived_categories c
 			JOIN archived_subcategories sc ON c.id = sc.archived_category_id
 			JOIN archived_contestants ac ON 1=1
@@ -315,6 +328,7 @@ class ContestController {
 			LEFT JOIN archived_judges aj ON s.archived_judge_id = aj.id
 			LEFT JOIN archived_criteria cr ON s.archived_criterion_id = cr.id
 			LEFT JOIN archived_judge_comments jc ON jc.archived_subcategory_id = sc.id AND jc.archived_contestant_id = ac.id AND jc.archived_judge_id = aj.id
+			LEFT JOIN archived_overall_deductions od ON od.archived_subcategory_id = sc.id AND od.archived_contestant_id = ac.id
 			WHERE c.archived_contest_id = ?
 			ORDER BY c.name, sc.name, ac.contestant_number, ac.name, aj.name, cr.name
 		');
@@ -339,7 +353,8 @@ class ContestController {
 				$organizedData[$categoryName][$subcategoryName][$contestantName] = [
 					'contestant_number' => $contestantNumber,
 					'scores' => [],
-					'comments' => []
+					'comments' => [],
+					'deductions' => []
 				];
 			}
 			
@@ -357,6 +372,13 @@ class ContestController {
 					'comment' => $row['comment']
 				];
 			}
+			
+			if ($row['deduction_amount'] !== null) {
+				$organizedData[$categoryName][$subcategoryName][$contestantName]['deductions'][] = [
+					'amount' => $row['deduction_amount'],
+					'comment' => $row['deduction_comment']
+				];
+			}
 		}
 		
 		// Calculate totals and rankings
@@ -368,6 +390,11 @@ class ContestController {
 					$totalScore = 0;
 					foreach ($data['scores'] as $score) {
 						$totalScore += $score['score'];
+					}
+					
+					// Subtract deductions
+					foreach ($data['deductions'] as $deduction) {
+						$totalScore -= $deduction['amount'];
 					}
 					
 					if (!isset($categoryTotals[$categoryName][$contestantName])) {
@@ -387,6 +414,159 @@ class ContestController {
 		}
 		
 		view('contests/archived_print', compact('contest', 'organizedData', 'categoryTotals'));
+	}
+	
+	public function reactivateContest(array $params): void {
+		require_organizer();
+		$archivedContestId = param('id', $params);
+		
+		// Get archived contest details
+		$stmt = DB::pdo()->prepare('SELECT * FROM archived_contests WHERE id = ?');
+		$stmt->execute([$archivedContestId]);
+		$archivedContest = $stmt->fetch(\PDO::FETCH_ASSOC);
+		
+		if (!$archivedContest) {
+			redirect('/admin/archived-contests?error=contest_not_found');
+			return;
+		}
+		
+		$pdo = DB::pdo();
+		$pdo->beginTransaction();
+		
+		try {
+			$reactivatedBy = $_SESSION['user']['name'] ?? 'Unknown';
+			$newContestId = uuid();
+			
+			// Create new contest
+			$stmt = $pdo->prepare('INSERT INTO contests (id, name, description, start_date, end_date) VALUES (?, ?, ?, ?, ?)');
+			$stmt->execute([$newContestId, $archivedContest['name'], $archivedContest['description'], $archivedContest['start_date'], $archivedContest['end_date']]);
+			
+			// Get all archived categories for this contest
+			$stmt = $pdo->prepare('SELECT * FROM archived_categories WHERE archived_contest_id = ?');
+			$stmt->execute([$archivedContestId]);
+			$archivedCategories = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+			
+			foreach ($archivedCategories as $archivedCategory) {
+				$newCategoryId = uuid();
+				
+				// Create new category
+				$stmt = $pdo->prepare('INSERT INTO categories (id, contest_id, name, description) VALUES (?, ?, ?, ?)');
+				$stmt->execute([$newCategoryId, $newContestId, $archivedCategory['name'], $archivedCategory['description']]);
+				
+				// Get all archived subcategories for this category
+				$stmt = $pdo->prepare('SELECT * FROM archived_subcategories WHERE archived_category_id = ?');
+				$stmt->execute([$archivedCategory['id']]);
+				$archivedSubcategories = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+				
+				foreach ($archivedSubcategories as $archivedSubcategory) {
+					$newSubcategoryId = uuid();
+					
+					// Create new subcategory
+					$stmt = $pdo->prepare('INSERT INTO subcategories (id, category_id, name, description, score_cap) VALUES (?, ?, ?, ?, ?)');
+					$stmt->execute([$newSubcategoryId, $newCategoryId, $archivedSubcategory['name'], $archivedSubcategory['description'], $archivedSubcategory['score_cap']]);
+					
+					// Restore criteria
+					$stmt = $pdo->prepare('SELECT * FROM archived_criteria WHERE archived_subcategory_id = ?');
+					$stmt->execute([$archivedSubcategory['id']]);
+					$archivedCriteria = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+					
+					foreach ($archivedCriteria as $archivedCriterion) {
+						$newCriterionId = uuid();
+						$stmt = $pdo->prepare('INSERT INTO criteria (id, subcategory_id, name, max_score) VALUES (?, ?, ?, ?)');
+						$stmt->execute([$newCriterionId, $newSubcategoryId, $archivedCriterion['name'], $archivedCriterion['max_score']]);
+					}
+					
+					// Restore scores
+					$stmt = $pdo->prepare('SELECT * FROM archived_scores WHERE archived_subcategory_id = ?');
+					$stmt->execute([$archivedSubcategory['id']]);
+					$archivedScores = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+					
+					foreach ($archivedScores as $archivedScore) {
+						$newScoreId = uuid();
+						$stmt = $pdo->prepare('INSERT INTO scores (id, subcategory_id, contestant_id, judge_id, criterion_id, score) VALUES (?, ?, ?, ?, ?, ?)');
+						$stmt->execute([$newScoreId, $newSubcategoryId, $archivedScore['archived_contestant_id'], $archivedScore['archived_judge_id'], $archivedScore['archived_criterion_id'], $archivedScore['score']]);
+					}
+					
+					// Restore judge comments
+					$stmt = $pdo->prepare('SELECT * FROM archived_judge_comments WHERE archived_subcategory_id = ?');
+					$stmt->execute([$archivedSubcategory['id']]);
+					$archivedComments = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+					
+					foreach ($archivedComments as $archivedComment) {
+						$newCommentId = uuid();
+						$stmt = $pdo->prepare('INSERT INTO judge_comments (id, subcategory_id, contestant_id, judge_id, comment) VALUES (?, ?, ?, ?, ?)');
+						$stmt->execute([$newCommentId, $newSubcategoryId, $archivedComment['archived_contestant_id'], $archivedComment['archived_judge_id'], $archivedComment['comment']]);
+					}
+					
+					// Restore judge certifications
+					$stmt = $pdo->prepare('SELECT * FROM archived_judge_certifications WHERE archived_subcategory_id = ?');
+					$stmt->execute([$archivedSubcategory['id']]);
+					$archivedCertifications = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+					
+					foreach ($archivedCertifications as $archivedCert) {
+						$newCertId = uuid();
+						$stmt = $pdo->prepare('INSERT INTO judge_certifications (id, subcategory_id, judge_id, signature_name, certified_at) VALUES (?, ?, ?, ?, ?)');
+						$stmt->execute([$newCertId, $newSubcategoryId, $archivedCert['archived_judge_id'], $archivedCert['signature_name'], $archivedCert['certified_at']]);
+					}
+					
+					// Restore overall deductions
+					$stmt = $pdo->prepare('SELECT * FROM archived_overall_deductions WHERE archived_subcategory_id = ?');
+					$stmt->execute([$archivedSubcategory['id']]);
+					$archivedDeductions = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+					
+					foreach ($archivedDeductions as $archivedDeduction) {
+						$newDeductionId = uuid();
+						$stmt = $pdo->prepare('INSERT INTO overall_deductions (id, subcategory_id, contestant_id, amount, comment, created_by, created_at, signature_name, signed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
+						$stmt->execute([$newDeductionId, $newSubcategoryId, $archivedDeduction['archived_contestant_id'], $archivedDeduction['amount'], $archivedDeduction['comment'], $archivedDeduction['created_by'], $archivedDeduction['created_at'], $archivedDeduction['signature_name'], $archivedDeduction['signed_at']]);
+					}
+					
+					// Restore subcategory assignments
+					$stmt = $pdo->prepare('SELECT * FROM archived_subcategory_contestants WHERE archived_subcategory_id = ?');
+					$stmt->execute([$archivedSubcategory['id']]);
+					$archivedSubcategoryContestants = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+					
+					foreach ($archivedSubcategoryContestants as $assignment) {
+						$stmt = $pdo->prepare('INSERT INTO subcategory_contestants (subcategory_id, contestant_id) VALUES (?, ?)');
+						$stmt->execute([$newSubcategoryId, $assignment['archived_contestant_id']]);
+					}
+					
+					$stmt = $pdo->prepare('SELECT * FROM archived_subcategory_judges WHERE archived_subcategory_id = ?');
+					$stmt->execute([$archivedSubcategory['id']]);
+					$archivedSubcategoryJudges = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+					
+					foreach ($archivedSubcategoryJudges as $assignment) {
+						$stmt = $pdo->prepare('INSERT INTO subcategory_judges (subcategory_id, judge_id) VALUES (?, ?)');
+						$stmt->execute([$newSubcategoryId, $assignment['archived_judge_id']]);
+					}
+				}
+				
+				// Restore category assignments
+				$stmt = $pdo->prepare('SELECT * FROM archived_category_contestants WHERE archived_category_id = ?');
+				$stmt->execute([$archivedCategory['id']]);
+				$archivedCategoryContestants = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+				
+				foreach ($archivedCategoryContestants as $assignment) {
+					$stmt = $pdo->prepare('INSERT INTO category_contestants (category_id, contestant_id) VALUES (?, ?)');
+					$stmt->execute([$newCategoryId, $assignment['archived_contestant_id']]);
+				}
+				
+				$stmt = $pdo->prepare('SELECT * FROM archived_category_judges WHERE archived_category_id = ?');
+				$stmt->execute([$archivedCategory['id']]);
+				$archivedCategoryJudges = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+				
+				foreach ($archivedCategoryJudges as $assignment) {
+					$stmt = $pdo->prepare('INSERT INTO category_judges (category_id, judge_id) VALUES (?, ?)');
+					$stmt->execute([$newCategoryId, $assignment['archived_judge_id']]);
+				}
+			}
+			
+			$pdo->commit();
+			\App\Logger::logAdminAction('contest_reactivated', 'contest', $newContestId, "Contest '{$archivedContest['name']}' reactivated from archive by {$reactivatedBy}");
+			redirect('/contests?success=contest_reactivated');
+		} catch (\Exception $e) {
+			$pdo->rollBack();
+			redirect('/admin/archived-contests?error=reactivation_failed');
+		}
 	}
 }
 

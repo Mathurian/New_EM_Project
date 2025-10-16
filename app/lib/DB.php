@@ -278,6 +278,19 @@ CREATE TABLE IF NOT EXISTS archived_category_judges (
 	FOREIGN KEY (archived_category_id) REFERENCES archived_categories(id) ON DELETE CASCADE,
 	FOREIGN KEY (archived_judge_id) REFERENCES archived_judges(id) ON DELETE CASCADE
 );
+CREATE TABLE IF NOT EXISTS archived_overall_deductions (
+	id TEXT PRIMARY KEY,
+	archived_subcategory_id TEXT NOT NULL,
+	archived_contestant_id TEXT NOT NULL,
+	amount REAL NOT NULL,
+	comment TEXT NOT NULL,
+	created_by TEXT NOT NULL,
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	signature_name TEXT NOT NULL,
+	signed_at TEXT NOT NULL,
+	FOREIGN KEY (archived_subcategory_id) REFERENCES archived_subcategories(id) ON DELETE CASCADE,
+	FOREIGN KEY (archived_contestant_id) REFERENCES archived_contestants(id) ON DELETE CASCADE
+);
 -- Activity logging system
 CREATE TABLE IF NOT EXISTS activity_logs (
 	id TEXT PRIMARY KEY,

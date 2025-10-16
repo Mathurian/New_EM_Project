@@ -3,6 +3,9 @@
 <div class="navigation-buttons">
 	<a href="<?= url('admin/archived-contests') ?>" class="btn btn-secondary">← Back to Archived Contests</a>
 	<a href="<?= url('admin/archived-contest/' . urlencode($contest['id']) . '/print') ?>" class="btn btn-primary">🖨️ Print All Scores</a>
+	<form method="post" action="<?= url('admin/archived-contest/' . urlencode($contest['id']) . '/reactivate') ?>" style="display: inline-block;" onsubmit="return confirm('Are you sure you want to reactivate this contest? This will create a new active contest with all the archived data.');">
+		<button type="submit" class="btn btn-success">🔄 Re-activate Contest</button>
+	</form>
 	<a href="<?= home_url() ?>" class="btn btn-outline">🏠 Home</a>
 </div>
 

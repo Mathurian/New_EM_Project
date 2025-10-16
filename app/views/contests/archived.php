@@ -2,6 +2,17 @@
 <h2>Archived Contests</h2>
 <p><a href="<?= url('contests') ?>">Back to Active Contests</a></p>
 
+<?php if (!empty($_GET['error'])): ?>
+	<?php 
+	$errorMessages = [
+		'contest_not_found' => 'Archived contest not found',
+		'reactivation_failed' => 'Failed to reactivate contest. Please try again.'
+	];
+	$errorMessage = $errorMessages[$_GET['error']] ?? 'An error occurred';
+	?>
+	<p style="color: red; font-weight: bold;"><?= htmlspecialchars($errorMessage) ?></p>
+<?php endif; ?>
+
 <?php if (empty($rows)): ?>
 	<p>No archived contests found.</p>
 <?php else: ?>
