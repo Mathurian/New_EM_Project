@@ -745,6 +745,9 @@ class BackupController {
 	public function updateSettings(): void {
 		require_organizer();
 		
+		// Debug: Log the POST data
+		\App\Logger::debug('Backup settings update POST data: ' . json_encode($_POST));
+		
 		$schemaEnabled = isset($_POST['schema_enabled']) ? 1 : 0;
 		$schemaFrequency = $_POST['schema_frequency'] ?? 'daily';
 		$schemaFrequencyValue = (int)($_POST['schema_frequency_value'] ?? 1);
@@ -754,6 +757,10 @@ class BackupController {
 		$fullFrequency = $_POST['full_frequency'] ?? 'weekly';
 		$fullFrequencyValue = (int)($_POST['full_frequency_value'] ?? 1);
 		$fullRetention = (int)($_POST['full_retention'] ?? 30);
+		
+		// Debug: Log the parsed values
+		\App\Logger::debug("Parsed values - Schema: enabled={$schemaEnabled}, frequency={$schemaFrequency}, value={$schemaFrequencyValue}, retention={$schemaRetention}");
+		\App\Logger::debug("Parsed values - Full: enabled={$fullEnabled}, frequency={$fullFrequency}, value={$fullFrequencyValue}, retention={$fullRetention}");
 		
 		try {
 			$pdo = DB::pdo();
@@ -774,6 +781,7 @@ class BackupController {
 			redirect('/admin/backups?success=settings_updated');
 		} catch (\Exception $e) {
 			$pdo->rollBack();
+			\App\Logger::error('Backup settings update failed: ' . $e->getMessage());
 			redirect('/admin/backups?error=settings_update_failed');
 		}
 	}
@@ -1005,11 +1013,17 @@ class BackupController {
 		// Try multiple possible database locations
 		$possiblePaths = [
 			__DIR__ . '/../db/database.db',
+			__DIR__ . '/../db/contest.sqlite',
 			'/var/www/html/app/db/database.db',
+			'/var/www/html/app/db/contest.sqlite',
 			__DIR__ . '/../../app/db/database.db',
+			__DIR__ . '/../../app/db/contest.sqlite',
 			'/var/www/html/db/database.db',
+			'/var/www/html/db/contest.sqlite',
 			__DIR__ . '/../database.db',
-			'/var/www/html/database.db'
+			__DIR__ . '/../contest.sqlite',
+			'/var/www/html/database.db',
+			'/var/www/html/contest.sqlite'
 		];
 		
 		foreach ($possiblePaths as $path) {
@@ -1042,11 +1056,17 @@ class BackupController {
 			'db_class_path' => DB::getDatabasePath(),
 			'possible_paths' => [
 				__DIR__ . '/../db/database.db',
+				__DIR__ . '/../db/contest.sqlite',
 				'/var/www/html/app/db/database.db',
+				'/var/www/html/app/db/contest.sqlite',
 				__DIR__ . '/../../app/db/database.db',
+				__DIR__ . '/../../app/db/contest.sqlite',
 				'/var/www/html/db/database.db',
+				'/var/www/html/db/contest.sqlite',
 				__DIR__ . '/../database.db',
-				'/var/www/html/database.db'
+				__DIR__ . '/../contest.sqlite',
+				'/var/www/html/database.db',
+				'/var/www/html/contest.sqlite'
 			]
 		];
 		

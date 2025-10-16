@@ -8,7 +8,7 @@ class DB {
 
 	public static function getDatabasePath(): string {
 		$dbDir = dirname(__DIR__) . '/db';
-		$dbPath = $dbDir . '/database.db';
+		$dbPath = $dbDir . '/contest.sqlite';
 		
 		// Ensure the db directory exists
 		if (!is_dir($dbDir)) {
