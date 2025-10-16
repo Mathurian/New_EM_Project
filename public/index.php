@@ -79,6 +79,7 @@ $router->get('/admin/backups/run-cli-constraint-fix', 'BackupController@runCliCo
 $router->get('/admin/backups/run-sqlite3-constraint-fix', 'BackupController@runSqlite3ConstraintFix');
 $router->get('/admin/backups/run-shell-constraint-fix', 'BackupController@runShellConstraintFix');
 $router->get('/admin/backups/fix-timestamps', 'BackupController@fixBackupTimestamps');
+$router->get('/admin/backups/restore-settings', 'BackupController@restoreBackupSettings');
 $router->post('/admin/users/force-logout-all', 'AdminController@forceLogoutAll');
 $router->post('/admin/users/{id}/force-logout', 'AdminController@forceLogoutUser');
 $router->get('/admin/print-reports', 'AdminController@printReports');

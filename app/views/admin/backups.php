@@ -182,6 +182,7 @@
 		<p><a href="<?= url('admin/backups/run-sqlite3-constraint-fix') ?>" class="btn btn-sm btn-danger" onclick="return confirm('This will run the sqlite3 command-line constraint fix (bypasses PHP issues). Continue?')">🔧 Run SQLite3 Constraint Fix</a></p>
 		<p><a href="<?= url('admin/backups/run-shell-constraint-fix') ?>" class="btn btn-sm btn-danger" onclick="return confirm('This will run the shell script constraint fix (stops web server). Continue?')">🔧 Run Shell Constraint Fix</a></p>
 		<p><a href="<?= url('admin/backups/fix-timestamps') ?>" class="btn btn-sm btn-warning" onclick="return confirm('This will fix backup timestamp inconsistencies. Continue?')">🕒 Fix Backup Timestamps</a></p>
+		<p><a href="<?= url('admin/backups/restore-settings') ?>" class="btn btn-sm btn-info" onclick="return confirm('This will restore default backup settings if they are missing. Continue?')">🔄 Restore Backup Settings</a></p>
 		<p><strong>Debug Form Submission:</strong></p>
 		<form method="post" action="<?= url('admin/backups/debug-form') ?>" style="border: 1px solid #ccc; padding: 10px; margin: 10px 0;">
 			<div class="form-group">

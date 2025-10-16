@@ -592,9 +592,9 @@ class BackupController {
 		// If no backup settings exist, create defaults
 		if (empty($backupSettings)) {
 			$pdo = DB::pdo();
-			$stmt = $pdo->prepare('INSERT INTO backup_settings (id, backup_type, enabled, frequency, retention_days) VALUES (?, ?, ?, ?, ?)');
-			$stmt->execute([uuid(), 'schema', 0, 'daily', 30]);
-			$stmt->execute([uuid(), 'full', 0, 'weekly', 30]);
+			$stmt = $pdo->prepare('INSERT INTO backup_settings (id, backup_type, enabled, frequency, frequency_value, retention_days) VALUES (?, ?, ?, ?, ?, ?)');
+			$stmt->execute([uuid(), 'schema', 0, 'daily', 1, 30]);
+			$stmt->execute([uuid(), 'full', 0, 'weekly', 1, 30]);
 			
 			// Re-fetch the settings
 			$stmt = $pdo->query('SELECT * FROM backup_settings ORDER BY backup_type');
@@ -1478,6 +1478,50 @@ class BackupController {
 			
 			echo '<pre>Fixed ' . $fixed . ' backup settings.</pre>';
 			echo '<pre>Timestamp fix completed successfully!</pre>';
+			exit;
+			
+		} catch (\Exception $e) {
+			echo '<pre>Error: ' . $e->getMessage() . '</pre>';
+			exit;
+		}
+	}
+	
+	public function restoreBackupSettings(): void {
+		require_organizer();
+		
+		try {
+			$pdo = DB::pdo();
+			
+			echo '<pre>Restoring default backup settings...</pre>';
+			
+			// Check if backup settings exist
+			$stmt = $pdo->query('SELECT COUNT(*) FROM backup_settings');
+			$count = $stmt->fetchColumn();
+			
+			if ($count > 0) {
+				echo '<pre>Backup settings already exist (' . $count . ' records).</pre>';
+				echo '<pre>Current settings:</pre>';
+				
+				$stmt = $pdo->query('SELECT * FROM backup_settings ORDER BY backup_type');
+				$settings = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+				
+				foreach ($settings as $setting) {
+					echo '<pre>  ' . $setting['backup_type'] . ': ' . ($setting['enabled'] ? 'enabled' : 'disabled') . ', ' . $setting['frequency'] . ' (' . $setting['frequency_value'] . '), ' . $setting['retention_days'] . ' days retention</pre>';
+				}
+				
+				echo '<pre>No action needed.</pre>';
+				exit;
+			}
+			
+			// Create default backup settings
+			$stmt = $pdo->prepare('INSERT INTO backup_settings (id, backup_type, enabled, frequency, frequency_value, retention_days) VALUES (?, ?, ?, ?, ?, ?)');
+			$stmt->execute([uuid(), 'schema', 0, 'daily', 1, 30]);
+			$stmt->execute([uuid(), 'full', 0, 'weekly', 1, 30]);
+			
+			echo '<pre>Successfully restored default backup settings:</pre>';
+			echo '<pre>  Schema backup: disabled, daily frequency, 30-day retention</pre>';
+			echo '<pre>  Full backup: disabled, weekly frequency, 30-day retention</pre>';
+			echo '<pre>Backup settings restored successfully!</pre>';
 			exit;
 			
 		} catch (\Exception $e) {
