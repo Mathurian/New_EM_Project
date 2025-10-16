@@ -64,6 +64,13 @@
 					<p><a href="<?= url('admin/backups') ?>" class="btn btn-sm btn-primary">Refresh Page</a></p>
 				</div>
 			<?php else: ?>
+				<!-- Debug: Show backup settings count -->
+				<div class="alert alert-info" style="font-size: 12px;">
+					<strong>Debug:</strong> Found <?= count($backupSettings) ?> backup settings:
+					<?php foreach ($backupSettings as $setting): ?>
+						<br>• <?= $setting['backup_type'] ?>: <?= $setting['enabled'] ? 'enabled' : 'disabled' ?> (<?= $setting['frequency'] ?>, <?= $setting['frequency_value'] ?? 1 ?>)
+					<?php endforeach; ?>
+				</div>
 				<form method="post" action="<?= url('admin/backups/settings') ?>">
 					<?php foreach ($backupSettings as $setting): ?>
 						<div class="form-group">
@@ -95,10 +102,10 @@
 							</div>
 							</div>
 							<?php if ($setting['last_run']): ?>
-								<p><small>Last run: <?= htmlspecialchars($setting['last_run']) ?></small></p>
+								<p><small>Last run: <span class="timestamp" data-timestamp="<?= htmlspecialchars($setting['last_run']) ?>"><?= htmlspecialchars($setting['last_run']) ?></span></small></p>
 							<?php endif; ?>
 							<?php if ($setting['next_run']): ?>
-								<p><small>Next run: <?= htmlspecialchars($setting['next_run']) ?></small></p>
+								<p><small>Next run: <span class="timestamp" data-timestamp="<?= htmlspecialchars($setting['next_run']) ?>"><?= htmlspecialchars($setting['next_run']) ?></span></small></p>
 							<?php endif; ?>
 						</div>
 					<?php endforeach; ?>
@@ -146,7 +153,7 @@
 								<?php endif; ?>
 							</td>
 							<td><?= htmlspecialchars($backup['created_by_name'] ?? 'System') ?></td>
-							<td><?= htmlspecialchars($backup['created_at']) ?></td>
+							<td><span class="timestamp" data-timestamp="<?= htmlspecialchars($backup['created_at']) ?>"><?= htmlspecialchars($backup['created_at']) ?></span></td>
 							<td>
 								<?php if ($backup['status'] === 'success'): ?>
 									<a href="<?= url('admin/backups/' . urlencode($backup['id']) . '/download') ?>" class="btn btn-sm btn-primary">Download</a>
@@ -254,5 +261,30 @@ function toggleFrequencyValue(selectElement) {
 document.addEventListener('DOMContentLoaded', function() {
 	const frequencySelects = document.querySelectorAll('select[name$="_frequency"]');
 	frequencySelects.forEach(toggleFrequencyValue);
+	
+	// Convert timestamps to browser timezone
+	convertTimestampsToBrowserTimezone();
 });
+
+function convertTimestampsToBrowserTimezone() {
+	const timestampElements = document.querySelectorAll('.timestamp[data-timestamp]');
+	
+	timestampElements.forEach(function(element) {
+		const timestamp = element.getAttribute('data-timestamp');
+		if (timestamp) {
+			try {
+				// Parse the timestamp and convert to local timezone
+				const date = new Date(timestamp);
+				if (!isNaN(date.getTime())) {
+					// Format as local date/time
+					const localTime = date.toLocaleString();
+					element.textContent = localTime;
+					element.title = 'UTC: ' + timestamp + ' | Local: ' + localTime;
+				}
+			} catch (e) {
+				console.warn('Could not parse timestamp:', timestamp);
+			}
+		}
+	});
+}
 </script>

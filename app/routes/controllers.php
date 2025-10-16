@@ -585,13 +585,34 @@ class BackupController {
 		$stmt->execute();
 		$backupLogs = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 		
+		// Convert timestamps to browser timezone for display
+		foreach ($backupLogs as &$backup) {
+			if ($backup['created_at']) {
+				$backup['created_at'] = $this->convertToBrowserTimezone($backup['created_at']);
+			}
+		}
+		
 		// Get backup settings
 		$stmt = DB::pdo()->query('SELECT * FROM backup_settings ORDER BY backup_type');
 		$backupSettings = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 		
+		// Convert timestamps to browser timezone for display
+		foreach ($backupSettings as &$setting) {
+			if ($setting['last_run']) {
+				$setting['last_run'] = $this->convertToBrowserTimezone($setting['last_run']);
+			}
+			if ($setting['next_run']) {
+				$setting['next_run'] = $this->convertToBrowserTimezone($setting['next_run']);
+			}
+		}
+		
 		// If no backup settings exist, create defaults
 		if (empty($backupSettings)) {
 			$pdo = DB::pdo();
+			
+			// Ensure the table exists and has the correct structure
+			$this->ensureBackupSettingsTable();
+			
 			$stmt = $pdo->prepare('INSERT INTO backup_settings (id, backup_type, enabled, frequency, frequency_value, retention_days) VALUES (?, ?, ?, ?, ?, ?)');
 			$stmt->execute([uuid(), 'schema', 0, 'daily', 1, 30]);
 			$stmt->execute([uuid(), 'full', 0, 'weekly', 1, 30]);
@@ -1570,6 +1591,53 @@ class BackupController {
 		} catch (\Exception $e) {
 			echo '<pre>Error: ' . $e->getMessage() . '</pre>';
 			exit;
+		}
+	}
+	
+	private function convertToBrowserTimezone(string $timestamp): string {
+		// For now, we'll use JavaScript to convert timestamps on the client side
+		// This method just returns the timestamp with a data attribute for JS processing
+		return $timestamp;
+	}
+	
+	private function ensureBackupSettingsTable(): void {
+		$pdo = DB::pdo();
+		
+		// Check if table exists
+		$stmt = $pdo->query("SELECT name FROM sqlite_master WHERE type='table' AND name='backup_settings'");
+		if (!$stmt->fetch()) {
+			// Table doesn't exist, create it
+			$pdo->exec('CREATE TABLE backup_settings (
+				id TEXT PRIMARY KEY,
+				backup_type TEXT NOT NULL CHECK (backup_type IN (\'schema\', \'full\')),
+				enabled BOOLEAN NOT NULL DEFAULT 0,
+				frequency TEXT NOT NULL CHECK (frequency IN (\'minutes\', \'hours\', \'daily\', \'weekly\', \'monthly\')),
+				frequency_value INTEGER NOT NULL DEFAULT 1,
+				retention_days INTEGER NOT NULL DEFAULT 30,
+				last_run TEXT,
+				next_run TEXT,
+				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+			)');
+			
+			\App\Logger::info('Created backup_settings table');
+		}
+		
+		// Ensure frequency_value column exists
+		$stmt = $pdo->query("PRAGMA table_info(backup_settings)");
+		$columns = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+		$hasFrequencyValue = false;
+		
+		foreach ($columns as $column) {
+			if ($column['name'] === 'frequency_value') {
+				$hasFrequencyValue = true;
+				break;
+			}
+		}
+		
+		if (!$hasFrequencyValue) {
+			$pdo->exec('ALTER TABLE backup_settings ADD COLUMN frequency_value INTEGER NOT NULL DEFAULT 1');
+			\App\Logger::info('Added frequency_value column to backup_settings table');
 		}
 	}
 }
