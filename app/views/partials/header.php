@@ -143,12 +143,11 @@ document.addEventListener('DOMContentLoaded', function() {
     var btn = document.getElementById('mobile-menu-toggle');
     var sections = document.getElementById('nav-sections');
     if (btn && sections) {
+        // default collapsed on mobile; CSS handles initial state
+        btn.setAttribute('aria-expanded', 'false');
         btn.addEventListener('click', function() {
-            if (sections.style.display === 'none' || sections.style.display === '') {
-                sections.style.display = 'flex';
-            } else {
-                sections.style.display = 'none';
-            }
+            var isActive = sections.classList.toggle('active');
+            btn.setAttribute('aria-expanded', isActive ? 'true' : 'false');
         });
     }
 });
