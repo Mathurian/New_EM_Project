@@ -589,9 +589,6 @@ class BackupController {
 		$stmt = DB::pdo()->query('SELECT * FROM backup_settings ORDER BY backup_type');
 		$backupSettings = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 		
-		// Debug: Log backup settings retrieval
-		\App\Logger::debug('Retrieved backup settings: ' . json_encode($backupSettings));
-		
 		// If no backup settings exist, create defaults
 		if (empty($backupSettings)) {
 			$pdo = DB::pdo();
@@ -772,9 +769,6 @@ class BackupController {
 	public function updateSettings(): void {
 		require_organizer();
 		
-		// Debug: Log the POST data
-		\App\Logger::debug('Backup settings update POST data: ' . json_encode($_POST));
-		
 		$schemaEnabled = isset($_POST['schema_enabled']) ? 1 : 0;
 		$schemaFrequency = $_POST['schema_frequency'] ?? 'daily';
 		$schemaFrequencyValue = (int)($_POST['schema_frequency_value'] ?? 1);
@@ -785,50 +779,37 @@ class BackupController {
 		$fullFrequencyValue = (int)($_POST['full_frequency_value'] ?? 1);
 		$fullRetention = (int)($_POST['full_retention'] ?? 30);
 		
-		// Debug: Log the parsed values
-		\App\Logger::debug("Parsed values - Schema: enabled={$schemaEnabled}, frequency={$schemaFrequency}, value={$schemaFrequencyValue}, retention={$schemaRetention}");
-		\App\Logger::debug("Parsed values - Full: enabled={$fullEnabled}, frequency={$fullFrequency}, value={$fullFrequencyValue}, retention={$fullRetention}");
-		
 		try {
 			$pdo = DB::pdo();
 			$pdo->beginTransaction();
 			
 			// Update schema backup settings
 			$schemaNextRun = $schemaEnabled ? $this->calculateNextRun($schemaFrequency, $schemaFrequencyValue) : null;
-			\App\Logger::debug("Schema next run calculated: " . ($schemaNextRun ?: 'null'));
 			
 			$stmt = $pdo->prepare('UPDATE backup_settings SET enabled = ?, frequency = ?, frequency_value = ?, retention_days = ?, next_run = ?, updated_at = CURRENT_TIMESTAMP WHERE backup_type = ?');
 			$result = $stmt->execute([$schemaEnabled, $schemaFrequency, $schemaFrequencyValue, $schemaRetention, $schemaNextRun, 'schema']);
 			$rowsAffected = $stmt->rowCount();
-			\App\Logger::debug("Schema update result: " . ($result ? 'success' : 'failed') . ", rows affected: " . $rowsAffected);
 			
 			// If no rows were affected, the schema backup setting doesn't exist - create it
 			if ($rowsAffected === 0) {
-				\App\Logger::debug("Schema backup setting not found, creating new record");
 				$stmt = $pdo->prepare('INSERT INTO backup_settings (id, backup_type, enabled, frequency, frequency_value, retention_days, next_run) VALUES (?, ?, ?, ?, ?, ?, ?)');
 				$stmt->execute([uuid(), 'schema', $schemaEnabled, $schemaFrequency, $schemaFrequencyValue, $schemaRetention, $schemaNextRun]);
-				\App\Logger::debug("Schema backup setting created successfully");
 			}
 			
 			// Update full backup settings
 			$fullNextRun = $fullEnabled ? $this->calculateNextRun($fullFrequency, $fullFrequencyValue) : null;
-			\App\Logger::debug("Full next run calculated: " . ($fullNextRun ?: 'null'));
 			
 			$stmt = $pdo->prepare('UPDATE backup_settings SET enabled = ?, frequency = ?, frequency_value = ?, retention_days = ?, next_run = ?, updated_at = CURRENT_TIMESTAMP WHERE backup_type = ?');
 			$result = $stmt->execute([$fullEnabled, $fullFrequency, $fullFrequencyValue, $fullRetention, $fullNextRun, 'full']);
 			$rowsAffected = $stmt->rowCount();
-			\App\Logger::debug("Full update result: " . ($result ? 'success' : 'failed') . ", rows affected: " . $rowsAffected);
 			
 			// If no rows were affected, the full backup setting doesn't exist - create it
 			if ($rowsAffected === 0) {
-				\App\Logger::debug("Full backup setting not found, creating new record");
 				$stmt = $pdo->prepare('INSERT INTO backup_settings (id, backup_type, enabled, frequency, frequency_value, retention_days, next_run) VALUES (?, ?, ?, ?, ?, ?, ?)');
 				$stmt->execute([uuid(), 'full', $fullEnabled, $fullFrequency, $fullFrequencyValue, $fullRetention, $fullNextRun]);
-				\App\Logger::debug("Full backup setting created successfully");
 			}
 			
 			$pdo->commit();
-			\App\Logger::debug("Transaction committed successfully");
 			
 			\App\Logger::logAdminAction('backup_settings_updated', 'settings', null, 'Backup settings updated');
 			
@@ -836,7 +817,6 @@ class BackupController {
 		} catch (\Exception $e) {
 			$pdo->rollBack();
 			\App\Logger::error('Backup settings update failed: ' . $e->getMessage());
-			\App\Logger::debug('Exception details: ' . $e->getTraceAsString());
 			redirect('/admin/backups?error=settings_update_failed');
 		}
 	}
@@ -3769,8 +3749,11 @@ class AdminController {
 	public function logs(): void {
 		require_organizer();
 		
+		// Get current log level from Logger (site-wide setting)
+		$currentLogLevel = \App\Logger::getLevel();
+		
 		// Get filter parameters
-		$logLevel = $_GET['log_level'] ?? '';
+		$logLevel = $_GET['log_level'] ?? $currentLogLevel; // Default to current Logger level
 		$userRole = $_GET['user_role'] ?? '';
 		$action = $_GET['action'] ?? '';
 		$dateFrom = $_GET['date_from'] ?? '';
@@ -3819,11 +3802,6 @@ class AdminController {
 		$stmt = DB::pdo()->prepare($sql);
 		$stmt->execute($params);
 		$logs = $stmt->fetchAll(\PDO::FETCH_ASSOC);
-		
-		// Get current log level setting
-		$stmt = DB::pdo()->prepare('SELECT setting_value FROM system_settings WHERE setting_key = ?');
-		$stmt->execute(['log_level']);
-		$currentLogLevel = $stmt->fetchColumn() ?: 'INFO';
 		
 		// Calculate total pages
 		$totalPages = ceil($totalLogs / $perPage);
