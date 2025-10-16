@@ -2,7 +2,16 @@
 	<div style="width: 100%; max-width: 380px; padding: 24px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-primary); box-shadow: 0 2px 6px rgba(0,0,0,0.06);">
 		<h2 style="text-align:center; margin-top:0;">Login</h2>
 		<?php if (!empty($error)): ?>
-			<p style="color:red; text-align:center; margin: 8px 0 16px;"><?= htmlspecialchars($error) ?></p>
+			<?php 
+			$errorMessages = [
+				'missing_fields' => 'Please fill in all fields.',
+				'invalid_credentials' => 'Invalid email/username or password.',
+				'session_invalidated' => 'Your session has been invalidated. Please log in again.',
+				'database_error' => 'Database error occurred. Please try again or contact administrator.'
+			];
+			$errorMessage = $errorMessages[$error] ?? 'An error occurred. Please try again.';
+			?>
+			<p style="color:red; text-align:center; margin: 8px 0 16px;"><?= htmlspecialchars($errorMessage) ?></p>
 		<?php endif; ?>
 		<form method="post" action="/login" style="display:block;">
 			<label style="display:block; margin-bottom:12px;">Email or Preferred Name

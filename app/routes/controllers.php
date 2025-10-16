@@ -2774,38 +2774,45 @@ class AuthController {
 			return;
 		}
 		
-		// Try to find user by email or preferred name
-		$stmt = DB::pdo()->prepare('SELECT * FROM users WHERE email = ? OR preferred_name = ?');
-		$stmt->execute([$email, $email]);
-		$user = $stmt->fetch(\PDO::FETCH_ASSOC);
-		
-		if (!$user || !password_verify($password, $user['password_hash'])) {
-			\App\Logger::logLogin($email, false);
-			redirect('/login?error=invalid_credentials');
-			return;
-		}
-		
-		// Check if user's session has been invalidated
-		if ($user['session_version'] !== ($_SESSION['session_version'] ?? '')) {
-			\App\Logger::logLogin($user['email'] ?? $user['preferred_name'], false, 'session_invalidated');
-			redirect('/login?error=session_invalidated');
-			return;
-		}
-		
-		$_SESSION['user'] = $user;
-		$_SESSION['session_version'] = $user['session_version'];
-		
-		\App\Logger::logLogin($user['email'] ?? $user['preferred_name'], true);
-		
-		// Redirect based on role
-		if ($user['role'] === 'organizer') {
-			redirect('/admin');
-		} elseif ($user['role'] === 'judge') {
-			redirect('/judge');
-		} elseif ($user['role'] === 'emcee') {
-			redirect('/emcee');
-		} else {
-			redirect('/');
+		try {
+			// Try to find user by email or preferred name
+			$stmt = DB::pdo()->prepare('SELECT * FROM users WHERE email = ? OR preferred_name = ?');
+			$stmt->execute([$email, $email]);
+			$user = $stmt->fetch(\PDO::FETCH_ASSOC);
+			
+			if (!$user || !password_verify($password, $user['password_hash'])) {
+				\App\Logger::logLogin($email, false);
+				redirect('/login?error=invalid_credentials');
+				return;
+			}
+			
+			// Check if user's session has been invalidated
+			if ($user['session_version'] !== ($_SESSION['session_version'] ?? '')) {
+				\App\Logger::logLogin($user['email'] ?? $user['preferred_name'], false, 'session_invalidated');
+				redirect('/login?error=session_invalidated');
+				return;
+			}
+			
+			$_SESSION['user'] = $user;
+			$_SESSION['session_version'] = $user['session_version'];
+			
+			\App\Logger::logLogin($user['email'] ?? $user['preferred_name'], true);
+			
+			// Redirect based on role
+			if ($user['role'] === 'organizer') {
+				redirect('/admin');
+			} elseif ($user['role'] === 'judge') {
+				redirect('/judge');
+			} elseif ($user['role'] === 'emcee') {
+				redirect('/emcee');
+			} else {
+				redirect('/');
+			}
+		} catch (\Exception $e) {
+			// Log the error and redirect to login with error
+			error_log('Login error: ' . $e->getMessage());
+			\App\Logger::logLogin($email, false, 'database_error');
+			redirect('/login?error=database_error');
 		}
 	}
 	
