@@ -11,6 +11,7 @@ class Logger {
 	const LEVEL_ERROR = 'error';
 	
 	private static $currentLevel = self::LEVEL_INFO;
+	private static $logDirectory = null;
 	
 	public static function setLevel(string $level): void {
 		if (in_array($level, [self::LEVEL_DEBUG, self::LEVEL_INFO, self::LEVEL_WARN, self::LEVEL_ERROR])) {
@@ -27,6 +28,58 @@ class Logger {
 		return $levels[$level] >= $levels[self::$currentLevel];
 	}
 	
+	private static function getLogDirectory(): string {
+		if (self::$logDirectory === null) {
+			// Try multiple possible log directories
+			$possiblePaths = [
+				__DIR__ . '/../logs',
+				__DIR__ . '/../../logs',
+				'/var/www/html/app/logs',
+				'/var/www/html/logs',
+				'/var/log/event-manager',
+				'/tmp/event-manager-logs'
+			];
+			
+			foreach ($possiblePaths as $path) {
+				if (is_dir($path) && is_writable($path)) {
+					self::$logDirectory = $path;
+					break;
+				} elseif (is_writable(dirname($path))) {
+					// Try to create the directory
+					if (mkdir($path, 0755, true)) {
+						self::$logDirectory = $path;
+						break;
+					}
+				}
+			}
+			
+			// Fallback to a temporary directory
+			if (self::$logDirectory === null) {
+				self::$logDirectory = sys_get_temp_dir() . '/event-manager-logs';
+				if (!is_dir(self::$logDirectory)) {
+					mkdir(self::$logDirectory, 0755, true);
+				}
+			}
+		}
+		
+		return self::$logDirectory;
+	}
+	
+	private static function writeToFile(string $level, string $message): void {
+		try {
+			$logDir = self::getLogDirectory();
+			$logFile = $logDir . '/event-manager-' . date('Y-m-d') . '.log';
+			
+			$timestamp = date('Y-m-d H:i:s');
+			$logEntry = "[{$timestamp}] [{$level}] {$message}" . PHP_EOL;
+			
+			file_put_contents($logFile, $logEntry, FILE_APPEND | LOCK_EX);
+		} catch (\Exception $e) {
+			// Silently fail if we can't write to file
+			// Don't let logging failures break the application
+		}
+	}
+	
 	public static function log(string $action, string $resourceType = null, string $resourceId = null, string $details = null, string $level = self::LEVEL_INFO): void {
 		if (!self::shouldLog($level)) {
 			return;
@@ -39,24 +92,44 @@ class Logger {
 		$ipAddress = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
 		$userAgent = $_SERVER['HTTP_USER_AGENT'] ?? 'unknown';
 
-		$stmt = DB::pdo()->prepare('
-			INSERT INTO activity_logs (id, user_id, user_name, user_role, action, resource_type, resource_id, details, ip_address, user_agent, log_level, created_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		');
-		$stmt->execute([
-			uuid(),
-			$userId,
+		// Write to database
+		try {
+			$stmt = DB::pdo()->prepare('
+				INSERT INTO activity_logs (id, user_id, user_name, user_role, action, resource_type, resource_id, details, ip_address, user_agent, log_level, created_at)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			');
+			$stmt->execute([
+				uuid(),
+				$userId,
+				$userName,
+				$userRole,
+				$action,
+				$resourceType,
+				$resourceId,
+				$details,
+				$ipAddress,
+				$userAgent,
+				$level,
+				date('c')
+			]);
+		} catch (\Exception $e) {
+			// If database logging fails, still try to log to file
+			error_log('Database logging failed: ' . $e->getMessage());
+		}
+
+		// Write to file
+		$logMessage = sprintf(
+			'User: %s (%s) | Action: %s | Resource: %s%s | Details: %s | IP: %s',
 			$userName,
 			$userRole,
 			$action,
-			$resourceType,
-			$resourceId,
-			$details,
-			$ipAddress,
-			$userAgent,
-			$level,
-			date('c')
-		]);
+			$resourceType ?: 'none',
+			$resourceId ? " ({$resourceId})" : '',
+			$details ?: 'none',
+			$ipAddress
+		);
+		
+		self::writeToFile($level, $logMessage);
 	}
 
 	public static function debug(string $action, string $resourceType = null, string $resourceId = null, string $details = null): void {
@@ -173,5 +246,71 @@ class Logger {
 
 	public static function logDataAccess(string $resourceType, string $resourceId, string $action): void {
 		self::log('data_access', $resourceType, $resourceId, "Accessed {$resourceType} {$resourceId} for {$action}", self::LEVEL_DEBUG);
+	}
+	
+	public static function getLogDirectoryPublic(): string {
+		return self::getLogDirectory();
+	}
+	
+	public static function getLogFiles(): array {
+		$logDir = self::getLogDirectory();
+		$files = [];
+		
+		if (is_dir($logDir)) {
+			$files = glob($logDir . '/event-manager-*.log');
+			// Sort by modification time, newest first
+			usort($files, function($a, $b) {
+				return filemtime($b) - filemtime($a);
+			});
+		}
+		
+		return $files;
+	}
+	
+	public static function getLogFileContent(string $filename, int $lines = 100): string {
+		$logDir = self::getLogDirectory();
+		$filePath = $logDir . '/' . basename($filename);
+		
+		if (!file_exists($filePath) || !is_readable($filePath)) {
+			return '';
+		}
+		
+		// Get the last N lines
+		$content = '';
+		$handle = fopen($filePath, 'r');
+		if ($handle) {
+			$lineCount = 0;
+			$linesArray = [];
+			
+			// Read all lines
+			while (($line = fgets($handle)) !== false) {
+				$linesArray[] = $line;
+				$lineCount++;
+			}
+			fclose($handle);
+			
+			// Get the last N lines
+			$startIndex = max(0, $lineCount - $lines);
+			$content = implode('', array_slice($linesArray, $startIndex));
+		}
+		
+		return $content;
+	}
+	
+	public static function cleanupOldLogFiles(int $daysToKeep = 30): int {
+		$logDir = self::getLogDirectory();
+		$files = glob($logDir . '/event-manager-*.log');
+		$deletedCount = 0;
+		$cutoffTime = time() - ($daysToKeep * 24 * 60 * 60);
+		
+		foreach ($files as $file) {
+			if (filemtime($file) < $cutoffTime) {
+				if (unlink($file)) {
+					$deletedCount++;
+				}
+			}
+		}
+		
+		return $deletedCount;
 	}
 }

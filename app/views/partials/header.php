@@ -50,6 +50,7 @@
 								<a href="/admin">Dashboard</a>
 								<a href="/admin/settings">Settings</a>
 								<a href="/admin/logs">Activity Logs</a>
+								<a href="/admin/log-files">Log Files</a>
                                 <a href="/admin/judges">Judges</a>
 								<a href="/admin/print-reports">Print Reports</a>
 								<a href="/admin/templates">Templates</a>

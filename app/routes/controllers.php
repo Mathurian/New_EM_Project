@@ -3572,6 +3572,94 @@ class AdminController {
 		view('admin/logs', compact('logs', 'totalLogs', 'totalPages', 'page', 'perPage', 'currentLogLevel', 'logLevel', 'userRole', 'action', 'dateFrom', 'dateTo', 'availableRoles', 'availableActions'));
 	}
 	
+	public function logFiles(): void {
+		require_organizer();
+		
+		$logFiles = \App\Logger::getLogFiles();
+		$logDirectory = \App\Logger::getLogDirectoryPublic();
+		
+		// Get file info for each log file
+		$fileInfo = [];
+		foreach ($logFiles as $file) {
+			$fileInfo[] = [
+				'filename' => basename($file),
+				'path' => $file,
+				'size' => filesize($file),
+				'modified' => filemtime($file),
+				'readable' => is_readable($file)
+			];
+		}
+		
+		view('admin/log_files', compact('fileInfo', 'logDirectory'));
+	}
+	
+	public function viewLogFile(array $params): void {
+		require_organizer();
+		
+		$filename = param('filename', $params);
+		$lines = (int)(param('lines', $params) ?: 100);
+		
+		if (empty($filename)) {
+			redirect('/admin/log-files?error=no_filename');
+			return;
+		}
+		
+		// Security: only allow viewing log files
+		if (!preg_match('/^event-manager-\d{4}-\d{2}-\d{2}\.log$/', $filename)) {
+			redirect('/admin/log-files?error=invalid_filename');
+			return;
+		}
+		
+		$content = \App\Logger::getLogFileContent($filename, $lines);
+		$logDirectory = \App\Logger::getLogDirectoryPublic();
+		
+		view('admin/view_log_file', compact('filename', 'content', 'lines', 'logDirectory'));
+	}
+	
+	public function downloadLogFile(array $params): void {
+		require_organizer();
+		
+		$filename = param('filename', $params);
+		
+		if (empty($filename)) {
+			redirect('/admin/log-files?error=no_filename');
+			return;
+		}
+		
+		// Security: only allow downloading log files
+		if (!preg_match('/^event-manager-\d{4}-\d{2}-\d{2}\.log$/', $filename)) {
+			redirect('/admin/log-files?error=invalid_filename');
+			return;
+		}
+		
+		$logDir = \App\Logger::getLogDirectoryPublic();
+		$filePath = $logDir . '/' . $filename;
+		
+		if (!file_exists($filePath) || !is_readable($filePath)) {
+			redirect('/admin/log-files?error=file_not_found');
+			return;
+		}
+		
+		header('Content-Type: application/octet-stream');
+		header('Content-Disposition: attachment; filename="' . $filename . '"');
+		header('Content-Length: ' . filesize($filePath));
+		header('Cache-Control: no-cache, must-revalidate');
+		
+		readfile($filePath);
+		exit;
+	}
+	
+	public function cleanupLogFiles(): void {
+		require_organizer();
+		
+		$daysToKeep = (int)(post('days_to_keep') ?: 30);
+		$deletedCount = \App\Logger::cleanupOldLogFiles($daysToKeep);
+		
+		\App\Logger::logAdminAction('log_cleanup', 'system', null, "Cleaned up {$deletedCount} log files older than {$daysToKeep} days");
+		
+		redirect('/admin/log-files?success=cleanup_complete&deleted=' . $deletedCount);
+	}
+	
 	public function forceLogoutAll(): void {
 		require_organizer();
 		
