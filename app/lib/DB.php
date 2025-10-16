@@ -6,6 +6,18 @@ use PDO;
 class DB {
 	private static ?PDO $pdo = null;
 
+	public static function getDatabasePath(): string {
+		$dbDir = dirname(__DIR__) . '/db';
+		$dbPath = $dbDir . '/database.db';
+		
+		// Ensure the db directory exists
+		if (!is_dir($dbDir)) {
+			mkdir($dbDir, 0755, true);
+		}
+		
+		return $dbPath;
+	}
+	
 	public static function pdo(): PDO {
 		if (!self::$pdo) {
 			// Build absolute path to DB directory and file

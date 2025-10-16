@@ -170,6 +170,7 @@
 		<p><strong>Full Backups:</strong> Create complete copies of the database file. Includes all data and can be used to restore the entire database.</p>
 		<p><strong>Scheduled Backups:</strong> Automatically create backups based on your configured schedule. Use cron jobs or scheduled tasks to run <code>/admin/backups/run-scheduled</code> regularly.</p>
 		<p><strong>Retention:</strong> Old backups are automatically deleted based on your retention settings to save disk space.</p>
+		<p><a href="<?= url('admin/backups/debug-path') ?>" class="btn btn-sm btn-info">🔍 Debug Database Path</a></p>
 	</div>
 	<h6>Setting up Scheduled Backups:</h6>
 	<p>Add this to your crontab to run scheduled backups every hour:</p>

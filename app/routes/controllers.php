@@ -663,7 +663,7 @@ class BackupController {
 			// Copy database file
 			$dbPath = $this->getDatabasePath();
 			if (!copy($dbPath, $filePath)) {
-				throw new \Exception('Failed to copy database file');
+				throw new \Exception('Failed to copy database file from ' . $dbPath . ' to ' . $filePath);
 			}
 			
 			$fileSize = filesize($filePath);
@@ -854,7 +854,7 @@ class BackupController {
 				// Copy database file
 				$dbPath = $this->getDatabasePath();
 				if (!copy($dbPath, $filePath)) {
-					throw new \Exception('Failed to copy database file');
+					throw new \Exception('Failed to copy database file from ' . $dbPath . ' to ' . $filePath);
 				}
 				
 				$fileSize = filesize($filePath);
@@ -982,7 +982,10 @@ class BackupController {
 		$possiblePaths = [
 			__DIR__ . '/../db/database.db',
 			'/var/www/html/app/db/database.db',
-			__DIR__ . '/../../app/db/database.db'
+			__DIR__ . '/../../app/db/database.db',
+			'/var/www/html/db/database.db',
+			__DIR__ . '/../database.db',
+			'/var/www/html/database.db'
 		];
 		
 		foreach ($possiblePaths as $path) {
@@ -991,7 +994,48 @@ class BackupController {
 			}
 		}
 		
-		throw new \Exception('Database file not found or not readable');
+		// If no database found, try to get the path from the DB class
+		try {
+			$pdo = DB::pdo();
+			$dsn = $pdo->getAttribute(\PDO::ATTR_CONNECTION_STATUS);
+			// Extract path from DSN if possible
+			$dbPath = DB::getDatabasePath();
+			if ($dbPath && file_exists($dbPath)) {
+				return $dbPath;
+			}
+		} catch (\Exception $e) {
+			// Continue to throw the original error
+		}
+		
+		throw new \Exception('Database file not found or not readable. Checked paths: ' . implode(', ', $possiblePaths));
+	}
+	
+	public function debugDatabasePath(): void {
+		require_organizer();
+		
+		$debugInfo = [
+			'current_dir' => __DIR__,
+			'db_class_path' => DB::getDatabasePath(),
+			'possible_paths' => [
+				__DIR__ . '/../db/database.db',
+				'/var/www/html/app/db/database.db',
+				__DIR__ . '/../../app/db/database.db',
+				'/var/www/html/db/database.db',
+				__DIR__ . '/../database.db',
+				'/var/www/html/database.db'
+			]
+		];
+		
+		foreach ($debugInfo['possible_paths'] as $path) {
+			$debugInfo['path_checks'][$path] = [
+				'exists' => file_exists($path),
+				'readable' => is_readable($path),
+				'size' => file_exists($path) ? filesize($path) : 'N/A'
+			];
+		}
+		
+		echo '<pre>' . print_r($debugInfo, true) . '</pre>';
+		exit;
 	}
 }
 
