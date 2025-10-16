@@ -818,7 +818,7 @@ class BackupController {
 						$this->performScheduledBackup($setting);
 						$backupsRun++;
 						
-						// Update next run time
+						// Update last_run to current time and calculate next_run from current time
 						$nextRun = $this->calculateNextRun($setting['frequency'], $setting['frequency_value'] ?? 1);
 						$stmt = $pdo->prepare('UPDATE backup_settings SET last_run = ?, next_run = ? WHERE id = ?');
 						$stmt->execute([$now, $nextRun, $setting['id']]);
@@ -1416,6 +1416,74 @@ class BackupController {
 		}
 		
 		exit;
+	}
+	
+	public function fixBackupTimestamps(): void {
+		require_organizer();
+		
+		try {
+			$pdo = DB::pdo();
+			$now = date('Y-m-d H:i:s');
+			
+			echo '<pre>Fixing backup timestamp inconsistencies...</pre>';
+			echo '<pre>Current time: ' . $now . '</pre>';
+			
+			// Get all backup settings
+			$stmt = $pdo->query('SELECT * FROM backup_settings');
+			$settings = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+			
+			$fixed = 0;
+			
+			foreach ($settings as $setting) {
+				$needsFix = false;
+				$lastRun = $setting['last_run'];
+				$nextRun = $setting['next_run'];
+				
+				// Check for inconsistencies
+				if (!empty($lastRun) && !empty($nextRun)) {
+					$lastRunTimestamp = strtotime($lastRun);
+					$nextRunTimestamp = strtotime($nextRun);
+					
+					// If last_run is in the future or next_run is in the past, fix it
+					if ($lastRunTimestamp > strtotime($now) || $nextRunTimestamp < strtotime($now)) {
+						$needsFix = true;
+					}
+				} elseif (empty($nextRun) && !empty($lastRun)) {
+					// If we have last_run but no next_run, calculate next_run
+					$needsFix = true;
+				} elseif (empty($lastRun) && !empty($nextRun)) {
+					// If we have next_run but no last_run, and next_run is in the past, fix it
+					if (strtotime($nextRun) < strtotime($now)) {
+						$needsFix = true;
+					}
+				}
+				
+				if ($needsFix) {
+					// Calculate proper next_run from current time
+					$newNextRun = $this->calculateNextRun($setting['frequency'], $setting['frequency_value'] ?? 1);
+					
+					// Update the setting
+					$stmt = $pdo->prepare('UPDATE backup_settings SET last_run = ?, next_run = ? WHERE id = ?');
+					$stmt->execute([$now, $newNextRun, $setting['id']]);
+					
+					echo '<pre>Fixed ' . $setting['backup_type'] . ' backup:</pre>';
+					echo '<pre>  Old last_run: ' . ($lastRun ?: 'NULL') . '</pre>';
+					echo '<pre>  Old next_run: ' . ($nextRun ?: 'NULL') . '</pre>';
+					echo '<pre>  New last_run: ' . $now . '</pre>';
+					echo '<pre>  New next_run: ' . $newNextRun . '</pre>';
+					
+					$fixed++;
+				}
+			}
+			
+			echo '<pre>Fixed ' . $fixed . ' backup settings.</pre>';
+			echo '<pre>Timestamp fix completed successfully!</pre>';
+			exit;
+			
+		} catch (\Exception $e) {
+			echo '<pre>Error: ' . $e->getMessage() . '</pre>';
+			exit;
+		}
 	}
 }
 
