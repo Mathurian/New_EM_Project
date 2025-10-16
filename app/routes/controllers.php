@@ -1775,6 +1775,28 @@ class BackupController {
 		exit;
 	}
 	
+	public function testLogLevel(): void {
+		require_organizer();
+		
+		echo '<pre>=== Log Level Test ===</pre>';
+		
+		// Test all log levels
+		$levels = ['debug', 'info', 'warn', 'error'];
+		foreach ($levels as $level) {
+			echo '<pre>Testing ' . $level . ' level:</pre>';
+			\App\Logger::setLevel($level);
+			echo '<pre>  Current level: ' . \App\Logger::getLevel() . '</pre>';
+			echo '<pre>  Should log debug: ' . (\App\Logger::shouldLog('debug') ? 'YES' : 'NO') . '</pre>';
+			echo '<pre>  Should log info: ' . (\App\Logger::shouldLog('info') ? 'YES' : 'NO') . '</pre>';
+			echo '<pre>  Should log warn: ' . (\App\Logger::shouldLog('warn') ? 'YES' : 'NO') . '</pre>';
+			echo '<pre>  Should log error: ' . (\App\Logger::shouldLog('error') ? 'YES' : 'NO') . '</pre>';
+			echo '<pre></pre>';
+		}
+		
+		echo '<pre>=== Test Complete ===</pre>';
+		exit;
+	}
+	
 	private function ensureBackupSettingsTable(): void {
 		$pdo = DB::pdo();
 		

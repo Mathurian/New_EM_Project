@@ -17,6 +17,9 @@ class Logger {
 	public static function setLevel(string $level): void {
 		if (in_array($level, [self::LEVEL_DEBUG, self::LEVEL_INFO, self::LEVEL_WARN, self::LEVEL_ERROR])) {
 			self::$currentLevel = $level;
+			error_log("Logger setLevel: Set level to = " . self::$currentLevel);
+		} else {
+			error_log("Logger setLevel: Invalid level = " . $level);
 		}
 	}
 	
@@ -31,8 +34,14 @@ class Logger {
 			$stmt->execute(['log_level']);
 			$logLevel = $stmt->fetchColumn();
 			
+			// Debug: Log what we found in database
+			error_log("Logger initialize: Database log_level = " . ($logLevel ?: 'NULL'));
+			
 			if ($logLevel && in_array($logLevel, [self::LEVEL_DEBUG, self::LEVEL_INFO, self::LEVEL_WARN, self::LEVEL_ERROR])) {
 				self::$currentLevel = $logLevel;
+				error_log("Logger initialize: Set level to = " . self::$currentLevel);
+			} else {
+				error_log("Logger initialize: Invalid level or NULL, keeping default = " . self::$currentLevel);
 			}
 		} catch (\Exception $e) {
 			// If we can't load the setting, stick with the default
@@ -45,6 +54,9 @@ class Logger {
 	public static function refreshLevel(): void {
 		self::$initialized = false;
 		self::initialize();
+		
+		// Debug: Log what level was loaded
+		error_log("Logger refreshLevel: Loaded level = " . self::$currentLevel);
 	}
 	
 	public static function getLevel(): string {
