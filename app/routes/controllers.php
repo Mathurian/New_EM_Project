@@ -1126,8 +1126,9 @@ class BackupController {
 			echo '<pre>' . print_r($debugInfo, true) . '</pre>';
 			exit;
 		} catch (\Exception $e) {
-		echo '<pre>Error: ' . $e->getMessage() . '</pre>';
-		exit;
+			echo '<pre>Error: ' . $e->getMessage() . '</pre>';
+			exit;
+		}
 	}
 	
 	public function testDatabaseConstraint(): void {
