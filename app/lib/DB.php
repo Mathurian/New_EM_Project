@@ -417,22 +417,26 @@ SQL;
 	private static function seedDefaultSettings(): void {
 		$pdo = self::pdo();
 		
-		// Check if settings already exist
+		// Check if system settings already exist
 		$stmt = $pdo->query('SELECT COUNT(*) FROM system_settings');
-		if ($stmt->fetchColumn() > 0) return;
+		if ($stmt->fetchColumn() == 0) {
+			// Insert default session timeout (30 minutes)
+			$stmt = $pdo->prepare('INSERT INTO system_settings (id, setting_key, setting_value, description) VALUES (?, ?, ?, ?)');
+			$stmt->execute([uuid(), 'session_timeout', '1800', 'Session timeout in seconds (default: 30 minutes)']);
+			
+			// Insert default log level
+			$stmt = $pdo->prepare('INSERT INTO system_settings (id, setting_key, setting_value, description) VALUES (?, ?, ?, ?)');
+			$stmt->execute([uuid(), 'log_level', 'info', 'Logging level: debug, info, warn, error (default: info)']);
+		}
 		
-		// Insert default session timeout (30 minutes)
-		$stmt = $pdo->prepare('INSERT INTO system_settings (id, setting_key, setting_value, description) VALUES (?, ?, ?, ?)');
-		$stmt->execute([uuid(), 'session_timeout', '1800', 'Session timeout in seconds (default: 30 minutes)']);
-		
-		// Insert default log level
-		$stmt = $pdo->prepare('INSERT INTO system_settings (id, setting_key, setting_value, description) VALUES (?, ?, ?, ?)');
-		$stmt->execute([uuid(), 'log_level', 'info', 'Logging level: debug, info, warn, error (default: info)']);
-		
-		// Seed default backup settings
-		$stmt = $pdo->prepare('INSERT INTO backup_settings (id, backup_type, enabled, frequency, retention_days) VALUES (?, ?, ?, ?, ?)');
-		$stmt->execute([uuid(), 'schema', 0, 'daily', 30]);
-		$stmt->execute([uuid(), 'full', 0, 'weekly', 30]);
+		// Check if backup settings already exist
+		$stmt = $pdo->query('SELECT COUNT(*) FROM backup_settings');
+		if ($stmt->fetchColumn() == 0) {
+			// Seed default backup settings
+			$stmt = $pdo->prepare('INSERT INTO backup_settings (id, backup_type, enabled, frequency, retention_days) VALUES (?, ?, ?, ?, ?)');
+			$stmt->execute([uuid(), 'schema', 0, 'daily', 30]);
+			$stmt->execute([uuid(), 'full', 0, 'weekly', 30]);
+		}
 	}
 
 	private static function updateRoleConstraint(): void {

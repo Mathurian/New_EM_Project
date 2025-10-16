@@ -589,6 +589,18 @@ class BackupController {
 		$stmt = DB::pdo()->query('SELECT * FROM backup_settings ORDER BY backup_type');
 		$backupSettings = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 		
+		// If no backup settings exist, create defaults
+		if (empty($backupSettings)) {
+			$pdo = DB::pdo();
+			$stmt = $pdo->prepare('INSERT INTO backup_settings (id, backup_type, enabled, frequency, retention_days) VALUES (?, ?, ?, ?, ?)');
+			$stmt->execute([uuid(), 'schema', 0, 'daily', 30]);
+			$stmt->execute([uuid(), 'full', 0, 'weekly', 30]);
+			
+			// Re-fetch the settings
+			$stmt = $pdo->query('SELECT * FROM backup_settings ORDER BY backup_type');
+			$backupSettings = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+		}
+		
 		view('admin/backups', compact('backupLogs', 'backupSettings'));
 	}
 	

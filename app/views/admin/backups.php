@@ -55,40 +55,47 @@
 	<div class="col-6">
 		<div class="card">
 			<h4>Scheduled Backup Settings</h4>
-			<form method="post" action="<?= url('admin/backups/settings') ?>">
-				<?php foreach ($backupSettings as $setting): ?>
-					<div class="form-group">
-						<h5><?= ucfirst($setting['backup_type']) ?> Backup</h5>
-						<div class="form-row">
-							<div class="col-4">
-								<label>
-									<input type="checkbox" name="<?= $setting['backup_type'] ?>_enabled" value="1" <?= $setting['enabled'] ? 'checked' : '' ?>>
-									Enable
-								</label>
+			<?php if (empty($backupSettings)): ?>
+				<div class="alert alert-warning">
+					<p>No backup settings found. Default settings will be created automatically.</p>
+					<p><a href="<?= url('admin/backups') ?>" class="btn btn-sm btn-primary">Refresh Page</a></p>
+				</div>
+			<?php else: ?>
+				<form method="post" action="<?= url('admin/backups/settings') ?>">
+					<?php foreach ($backupSettings as $setting): ?>
+						<div class="form-group">
+							<h5><?= ucfirst($setting['backup_type']) ?> Backup</h5>
+							<div class="form-row">
+								<div class="col-4">
+									<label>
+										<input type="checkbox" name="<?= $setting['backup_type'] ?>_enabled" value="1" <?= $setting['enabled'] ? 'checked' : '' ?>>
+										Enable
+									</label>
+								</div>
+								<div class="col-4">
+									<label>Frequency:</label>
+									<select name="<?= $setting['backup_type'] ?>_frequency" class="form-control">
+										<option value="daily" <?= $setting['frequency'] === 'daily' ? 'selected' : '' ?>>Daily</option>
+										<option value="weekly" <?= $setting['frequency'] === 'weekly' ? 'selected' : '' ?>>Weekly</option>
+										<option value="monthly" <?= $setting['frequency'] === 'monthly' ? 'selected' : '' ?>>Monthly</option>
+									</select>
+								</div>
+								<div class="col-4">
+									<label>Retention (days):</label>
+									<input type="number" name="<?= $setting['backup_type'] ?>_retention" value="<?= $setting['retention_days'] ?>" min="1" max="365" class="form-control">
+								</div>
 							</div>
-							<div class="col-4">
-								<label>Frequency:</label>
-								<select name="<?= $setting['backup_type'] ?>_frequency" class="form-control">
-									<option value="daily" <?= $setting['frequency'] === 'daily' ? 'selected' : '' ?>>Daily</option>
-									<option value="weekly" <?= $setting['frequency'] === 'weekly' ? 'selected' : '' ?>>Weekly</option>
-									<option value="monthly" <?= $setting['frequency'] === 'monthly' ? 'selected' : '' ?>>Monthly</option>
-								</select>
-							</div>
-							<div class="col-4">
-								<label>Retention (days):</label>
-								<input type="number" name="<?= $setting['backup_type'] ?>_retention" value="<?= $setting['retention_days'] ?>" min="1" max="365" class="form-control">
-							</div>
+							<?php if ($setting['last_run']): ?>
+								<p><small>Last run: <?= htmlspecialchars($setting['last_run']) ?></small></p>
+							<?php endif; ?>
+							<?php if ($setting['next_run']): ?>
+								<p><small>Next run: <?= htmlspecialchars($setting['next_run']) ?></small></p>
+							<?php endif; ?>
 						</div>
-						<?php if ($setting['last_run']): ?>
-							<p><small>Last run: <?= htmlspecialchars($setting['last_run']) ?></small></p>
-						<?php endif; ?>
-						<?php if ($setting['next_run']): ?>
-							<p><small>Next run: <?= htmlspecialchars($setting['next_run']) ?></small></p>
-						<?php endif; ?>
-					</div>
-				<?php endforeach; ?>
-				<button type="submit" class="btn btn-primary">Update Settings</button>
-			</form>
+					<?php endforeach; ?>
+					<button type="submit" class="btn btn-primary">Update Settings</button>
+				</form>
+			<?php endif; ?>
 		</div>
 	</div>
 </div>
