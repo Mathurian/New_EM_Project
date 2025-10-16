@@ -28,6 +28,69 @@
 		</div>
 	</div>
 
+	<!-- Currently Logged In -->
+	<div class="logged-in-section">
+		<h3>👥 Currently Logged In</h3>
+		<div class="logged-in-list">
+			<?php
+			// Get users who have been active recently (within last 30 minutes)
+			$activeUsers = DB::pdo()->query('
+				SELECT DISTINCT u.name, u.email, u.role, u.preferred_name, 
+				       MAX(al.created_at) as last_activity
+				FROM users u 
+				LEFT JOIN activity_logs al ON u.name = al.user_name 
+				WHERE u.password_hash IS NOT NULL
+				GROUP BY u.id, u.name, u.email, u.role, u.preferred_name
+				HAVING last_activity IS NULL OR last_activity > datetime("now", "-30 minutes")
+				ORDER BY last_activity DESC, u.name
+			')->fetchAll(\PDO::FETCH_ASSOC);
+			?>
+			<?php if (empty($activeUsers)): ?>
+				<p class="no-active-users">No users currently logged in</p>
+			<?php else: ?>
+				<?php foreach ($activeUsers as $user): ?>
+					<div class="logged-in-item">
+						<div class="user-avatar">
+							<?php
+							$roleIcons = [
+								'organizer' => '👑',
+								'judge' => '⚖️',
+								'contestant' => '🏆',
+								'emcee' => '🎤'
+							];
+							echo $roleIcons[$user['role']] ?? '👤';
+							?>
+						</div>
+						<div class="user-info">
+							<div class="user-name"><?= htmlspecialchars($user['preferred_name'] ?: $user['name']) ?></div>
+							<div class="user-role"><?= htmlspecialchars(ucfirst($user['role'])) ?></div>
+							<?php if ($user['email']): ?>
+								<div class="user-email"><?= htmlspecialchars($user['email']) ?></div>
+							<?php endif; ?>
+						</div>
+						<div class="user-status">
+							<?php if ($user['last_activity']): ?>
+								<div class="last-activity">
+									<span class="status-indicator active"></span>
+									<span class="activity-text">Active</span>
+								</div>
+								<div class="activity-time"><?= date('M j, g:i A', strtotime($user['last_activity'])) ?></div>
+							<?php else: ?>
+								<div class="last-activity">
+									<span class="status-indicator inactive"></span>
+									<span class="activity-text">No recent activity</span>
+								</div>
+							<?php endif; ?>
+						</div>
+					</div>
+				<?php endforeach; ?>
+			<?php endif; ?>
+		</div>
+		<div class="logged-in-footer">
+			<a href="<?= url('admin/users') ?>" class="manage-users">Manage All Users →</a>
+		</div>
+	</div>
+
 	<!-- Quick Actions -->
 	<div class="actions-section">
 		<h3>⚡ Quick Actions</h3>
@@ -146,6 +209,10 @@
 
 .system-section {
 	grid-column: 2;
+}
+
+.logged-in-section {
+	grid-column: 1 / -1;
 }
 
 .activity-section {
@@ -316,6 +383,118 @@
 }
 
 .no-activity {
+	padding: 40px 20px;
+	text-align: center;
+	color: #666;
+	font-style: italic;
+}
+
+.logged-in-list {
+	background: white;
+	border: 1px solid #dee2e6;
+	border-radius: 8px;
+	margin-top: 15px;
+	max-height: 300px;
+	overflow-y: auto;
+}
+
+.logged-in-item {
+	display: flex;
+	align-items: center;
+	padding: 15px 20px;
+	border-bottom: 1px solid #f8f9fa;
+}
+
+.logged-in-item:last-child {
+	border-bottom: none;
+}
+
+.user-avatar {
+	font-size: 2em;
+	margin-right: 15px;
+	width: 50px;
+	text-align: center;
+}
+
+.user-info {
+	flex: 1;
+}
+
+.user-name {
+	font-weight: bold;
+	color: #333;
+	margin-bottom: 2px;
+}
+
+.user-role {
+	font-size: 0.9em;
+	color: #007bff;
+	margin-bottom: 2px;
+	font-weight: 500;
+}
+
+.user-email {
+	font-size: 0.8em;
+	color: #666;
+}
+
+.user-status {
+	margin-left: 15px;
+	text-align: right;
+}
+
+.last-activity {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	margin-bottom: 2px;
+}
+
+.status-indicator {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	margin-right: 6px;
+}
+
+.status-indicator.active {
+	background-color: #28a745;
+}
+
+.status-indicator.inactive {
+	background-color: #6c757d;
+}
+
+.activity-text {
+	font-size: 0.9em;
+	color: #666;
+	font-weight: 500;
+}
+
+.activity-time {
+	font-size: 0.8em;
+	color: #999;
+}
+
+.logged-in-footer {
+	padding: 15px 20px;
+	background: #f8f9fa;
+	border-top: 1px solid #dee2e6;
+	border-radius: 0 0 8px 8px;
+	text-align: center;
+}
+
+.manage-users {
+	color: #007bff;
+	text-decoration: none;
+	font-weight: bold;
+}
+
+.manage-users:hover {
+	text-decoration: underline;
+}
+
+.no-active-users {
 	padding: 40px 20px;
 	text-align: center;
 	color: #666;

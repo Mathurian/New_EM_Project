@@ -2163,8 +2163,30 @@ class SubcategoryController {
 class PeopleController {
 	public function index(): void {
 		require_organizer();
-		$contestants = DB::pdo()->query('SELECT * FROM contestants ORDER BY contestant_number IS NULL, contestant_number, name')->fetchAll(\PDO::FETCH_ASSOC);
-		$judges = DB::pdo()->query('SELECT * FROM judges ORDER BY name')->fetchAll(\PDO::FETCH_ASSOC);
+		
+		// Debug log data retrieval
+		\App\Logger::debug('people_index_data_retrieval', 'people', null, 
+			"Retrieving contestants and judges with user entries");
+		
+		// Get contestants that have corresponding user entries
+		$contestants = DB::pdo()->query('
+			SELECT c.*, u.preferred_name 
+			FROM contestants c 
+			INNER JOIN users u ON c.id = u.contestant_id 
+			ORDER BY c.contestant_number IS NULL, c.contestant_number, c.name
+		')->fetchAll(\PDO::FETCH_ASSOC);
+		
+		// Get judges that have corresponding user entries
+		$judges = DB::pdo()->query('
+			SELECT j.*, u.preferred_name 
+			FROM judges j 
+			INNER JOIN users u ON j.id = u.judge_id 
+			ORDER BY j.name
+		')->fetchAll(\PDO::FETCH_ASSOC);
+		
+		\App\Logger::debug('people_index_data_retrieved', 'people', null, 
+			"Retrieved " . count($contestants) . " contestants and " . count($judges) . " judges with user entries");
+		
 		view('people/index', compact('contestants','judges'));
 	}
 	public function new(): void { require_organizer(); view('people/new'); }
@@ -3549,6 +3571,11 @@ class UserController {
 	
 	public function index(): void {
 		require_organizer();
+		
+		// Debug log data retrieval
+		\App\Logger::debug('users_index_data_retrieval', 'users', null, 
+			"Retrieving users with their associated contestant/judge data");
+		
 		$users = DB::pdo()->query('
 			SELECT u.*, 
 			       c.contestant_number,
@@ -3564,6 +3591,13 @@ class UserController {
 		foreach ($users as $user) {
 			$usersByRole[$user['role']][] = $user;
 		}
+		
+		\App\Logger::debug('users_index_data_retrieved', 'users', null, 
+			"Retrieved " . count($users) . " total users: " . 
+			(count($usersByRole['organizer'] ?? []) . " organizers, " .
+			count($usersByRole['judge'] ?? []) . " judges, " .
+			count($usersByRole['contestant'] ?? []) . " contestants, " .
+			count($usersByRole['emcee'] ?? []) . " emcees"));
 		
 		view('users/index', compact('usersByRole'));
 	}
@@ -4475,8 +4509,15 @@ class AdminController {
 	public function logFiles(): void {
 		require_organizer();
 		
+		// Debug log file retrieval
+		\App\Logger::debug('log_files_retrieval', 'log_files', null, 
+			"Retrieving log files for admin view");
+		
 		$logFiles = \App\Logger::getLogFiles();
 		$logDirectory = \App\Logger::getLogDirectoryPublic();
+		
+		\App\Logger::debug('log_files_found', 'log_files', null, 
+			"Found " . count($logFiles) . " log files in directory: " . $logDirectory);
 		
 		// Get file info for each log file
 		$fileInfo = [];
@@ -4488,6 +4529,10 @@ class AdminController {
 				'modified' => filemtime($file),
 				'readable' => is_readable($file)
 			];
+			
+			// Debug log each file's status
+			\App\Logger::debug('log_file_info', 'log_files', basename($file), 
+				"File: " . basename($file) . ", Size: " . filesize($file) . " bytes, Readable: " . (is_readable($file) ? 'Yes' : 'No'));
 		}
 		
 		view('admin/log_files', compact('fileInfo', 'logDirectory'));
