@@ -10,7 +10,7 @@
 
 ## Local Run (PHP built-in server)
 ```bash
-cd /Users/Mat/New_EM_Project
+cd /path/to/New_EM_Project
 php -S localhost:8000 -t public
 ```
 Open http://localhost:8000
