@@ -31,7 +31,7 @@
 </head>
 <body>
     <div class="container">
-        <a href="<?= url('people') ?>" class="print-button" style="background-color: #6c757d;">Back to People</a>
+        <a href="<?= url('admin/print-reports') ?>" class="print-button" style="background-color: #6c757d;">Back to Print Reports</a>
         <a href="#" onclick="window.print()" class="print-button">Print Report</a>
 
         <h1>Contestant Score Report</h1>
@@ -103,6 +103,20 @@
                                     <?php endforeach; ?>
                                 </div>
                             <?php endif; ?>
+
+                            <?php
+                            // Deductions for this subcategory
+                            $subcatId = null;
+                            foreach ($subcategoryScores as $s) { $subcatId = $s['subcategory_id']; break; }
+                            $ded = $deductions[$subcatId] ?? null;
+                            $subTotal = 0; foreach ($subcategoryScores as $s) { $subTotal += (float)$s['score']; }
+                            $net = $subTotal - (float)($ded['total'] ?? 0);
+                            ?>
+                            <div class="comment-section">
+                                <p><strong>Subcategory Total:</strong> <?= number_format($subTotal, 2) ?></p>
+                                <p><strong>Deductions:</strong> -<?= number_format((float)($ded['total'] ?? 0), 2) ?> <?= !empty($ded['comments']) ? '(' . htmlspecialchars($ded['comments']) . ')' : '' ?></p>
+                                <p><strong>Net Total:</strong> <?= number_format($net, 2) ?></p>
+                            </div>
                         </div>
                     <?php endforeach; ?>
                 <?php endforeach; ?>

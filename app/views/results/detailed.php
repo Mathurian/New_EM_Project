@@ -90,7 +90,8 @@
                 <td colspan="<?= 1 + (count($criteria)*count($judges)) ?>" style="text-align:right;">
                     <form method="post" action="<?= url('results/' . urlencode($subcategory['id']) . '/contestant/' . urlencode($contestant['id']) . '/deduction') ?>" style="display:inline-block;">
                         <input type="number" name="amount" step="0.01" placeholder="Deduction amount" required>
-                        <input type="text" name="comment" placeholder="Comment (optional)" style="width: 240px;">
+                        <input type="text" name="comment" placeholder="Comment (required)" style="width: 240px;" required>
+                        <input type="text" name="signature" placeholder="Type your preferred name to sign" required>
                         <button type="submit" class="btn btn-secondary">Add Deduction</button>
                     </form>
                     <?php if (!empty($deductionsByContestant[$contestant['id']]['rows'])): ?>

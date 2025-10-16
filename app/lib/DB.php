@@ -302,6 +302,8 @@ CREATE TABLE IF NOT EXISTS overall_deductions (
     contestant_id TEXT NOT NULL,
     amount REAL NOT NULL,
     comment TEXT,
+    signature_name TEXT,
+    signed_at TEXT,
     created_by TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (subcategory_id) REFERENCES subcategories(id) ON DELETE CASCADE,

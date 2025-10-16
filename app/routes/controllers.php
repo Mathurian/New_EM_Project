@@ -1237,8 +1237,9 @@ class ResultsController {
 		require_login();
 		$subcategoryId = param('subcategoryId', $params);
 		$contestantId = param('contestantId', $params);
-		$amount = (float)($_POST['amount'] ?? 0);
-		$comment = trim((string)($_POST['comment'] ?? '')) ?: null;
+        $amount = (float)($_POST['amount'] ?? 0);
+        $comment = trim((string)($_POST['comment'] ?? '')) ?: null;
+        $signature = trim((string)($_POST['signature'] ?? '')) ?: null;
 
 		$allowed = is_organizer();
 		if (!$allowed && is_judge()) {
@@ -1252,10 +1253,20 @@ class ResultsController {
 		}
 		if (!$allowed) { http_response_code(403); echo 'Forbidden'; return; }
 
-		if ($amount <= 0) { $_SESSION['success_message'] = 'Deduction must be greater than 0.'; redirect('/results/' . $subcategoryId . '/detailed'); return; }
+        if ($amount <= 0) { $_SESSION['success_message'] = 'Deduction must be greater than 0.'; redirect('/results/' . $subcategoryId . '/detailed'); return; }
+        if (!$comment) { $_SESSION['success_message'] = 'Deduction comment is required.'; redirect('/results/' . $subcategoryId . '/detailed'); return; }
+        // Signature required, and if judge, must match preferred_name
+        if (!$signature) { $_SESSION['success_message'] = 'Signature required for deductions.'; redirect('/results/' . $subcategoryId . '/detailed'); return; }
+        if (is_judge()) {
+            $user = $_SESSION['user'] ?? [];
+            $pref = $user['preferred_name'] ?? $user['name'] ?? '';
+            if (strcasecmp($pref, $signature) !== 0) {
+                $_SESSION['success_message'] = 'Signature must match your preferred name.'; redirect('/results/' . $subcategoryId . '/detailed'); return;
+            }
+        }
 		$uid = $_SESSION['user']['id'] ?? null;
-		DB::pdo()->prepare('INSERT INTO overall_deductions (id, subcategory_id, contestant_id, amount, comment, created_by) VALUES (?,?,?,?,?,?)')
-			->execute([uuid(), $subcategoryId, $contestantId, $amount, $comment, $uid]);
+        DB::pdo()->prepare('INSERT INTO overall_deductions (id, subcategory_id, contestant_id, amount, comment, signature_name, signed_at, created_by) VALUES (?,?,?,?,?,?,?,?)')
+            ->execute([uuid(), $subcategoryId, $contestantId, $amount, $comment, $signature, date('c'), $uid]);
 		\App\Logger::logAdminAction('add_overall_deduction', 'subcategory', $subcategoryId, 'Contestant ' . $contestantId . ' amount ' . $amount);
 		$_SESSION['success_message'] = 'Deduction added.';
 		redirect('/results/' . $subcategoryId . '/detailed');
@@ -2471,6 +2482,12 @@ class PrintController {
 		');
 		$stmt->execute([$contestantId]);
 		$scores = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+
+		// Get overall deductions grouped by subcategory for this contestant
+		$ded = DB::pdo()->prepare('SELECT subcategory_id, SUM(amount) as total, GROUP_CONCAT(comment, "; ") as comments FROM overall_deductions WHERE contestant_id = ? GROUP BY subcategory_id');
+		$ded->execute([$contestantId]);
+		$deductions = [];
+		foreach ($ded->fetchAll(\PDO::FETCH_ASSOC) as $row) { $deductions[$row['subcategory_id']] = $row; }
 		
 		// Get all comments for this contestant
 		$stmt = DB::pdo()->prepare('
@@ -2486,7 +2503,7 @@ class PrintController {
 		$stmt->execute([$contestantId]);
 		$comments = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 		
-		view('print/contestant', compact('contestant', 'scores', 'comments'));
+		view('print/contestant', compact('contestant', 'scores', 'comments', 'deductions'));
 	}
 	
 	public function judge(array $params): void {
