@@ -1189,14 +1189,12 @@ class BackupController {
 		require_organizer();
 		
 		try {
-			$pdo = DB::pdo();
+			// Create a completely new database connection to avoid any existing transactions
+			$dbPath = DB::getDatabasePath();
+			$pdo = new \PDO('sqlite:' . $dbPath);
+			$pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
 			
-			// Ensure we're not in a transaction
-			if ($pdo->inTransaction()) {
-				$pdo->rollBack();
-			}
-			
-			// Set WAL mode
+			// Set WAL mode on the new connection
 			$pdo->exec('PRAGMA journal_mode=WAL');
 			$pdo->exec('PRAGMA busy_timeout=30000');
 			
@@ -1230,7 +1228,58 @@ class BackupController {
 			exit;
 			
 		} catch (\Exception $e) {
-			if ($pdo->inTransaction()) {
+			if (isset($pdo) && $pdo->inTransaction()) {
+				$pdo->rollBack();
+			}
+			echo '<pre>Error: ' . $e->getMessage() . '</pre>';
+			exit;
+		}
+	}
+	
+	public function forceConstraintUpdateSimple(): void {
+		require_organizer();
+		
+		try {
+			// Create a completely new database connection to avoid any existing transactions
+			$dbPath = DB::getDatabasePath();
+			$pdo = new \PDO('sqlite:' . $dbPath);
+			$pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+			
+			// Don't use WAL mode - just use normal journal mode
+			$pdo->exec('PRAGMA journal_mode=DELETE');
+			$pdo->exec('PRAGMA busy_timeout=30000');
+			
+			// Force the constraint update
+			$pdo->beginTransaction();
+			
+			// Create new table with updated constraint
+			$pdo->exec('CREATE TABLE backup_settings_new (
+				id TEXT PRIMARY KEY,
+				backup_type TEXT NOT NULL CHECK (backup_type IN (\'schema\', \'full\')),
+				enabled BOOLEAN NOT NULL DEFAULT 0,
+				frequency TEXT NOT NULL CHECK (frequency IN (\'minutes\', \'hours\', \'daily\', \'weekly\', \'monthly\')),
+				frequency_value INTEGER NOT NULL DEFAULT 1,
+				retention_days INTEGER NOT NULL DEFAULT 30,
+				last_run TEXT,
+				next_run TEXT,
+				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+			)');
+			
+			// Copy data from old table
+			$pdo->exec('INSERT INTO backup_settings_new SELECT * FROM backup_settings');
+			
+			// Drop old table and rename new one
+			$pdo->exec('DROP TABLE backup_settings');
+			$pdo->exec('ALTER TABLE backup_settings_new RENAME TO backup_settings');
+			
+			$pdo->commit();
+			
+			echo '<pre>Constraint update completed successfully!</pre>';
+			exit;
+			
+		} catch (\Exception $e) {
+			if (isset($pdo) && $pdo->inTransaction()) {
 				$pdo->rollBack();
 			}
 			echo '<pre>Error: ' . $e->getMessage() . '</pre>';
