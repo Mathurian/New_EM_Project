@@ -1126,9 +1126,62 @@ class BackupController {
 			echo '<pre>' . print_r($debugInfo, true) . '</pre>';
 			exit;
 		} catch (\Exception $e) {
+		echo '<pre>Error: ' . $e->getMessage() . '</pre>';
+		exit;
+	}
+	
+	public function testDatabaseConstraint(): void {
+		require_organizer();
+		
+		try {
+			$pdo = DB::pdo();
+			
+			// Test inserting different frequency values
+			$testFrequencies = ['minutes', 'hours', 'daily', 'weekly', 'monthly'];
+			$results = [];
+			
+			foreach ($testFrequencies as $frequency) {
+				try {
+					$testId = uuid();
+					$stmt = $pdo->prepare('INSERT INTO backup_settings (id, backup_type, enabled, frequency, frequency_value, retention_days) VALUES (?, ?, ?, ?, ?, ?)');
+					$stmt->execute([$testId, 'test', 0, $frequency, 1, 30]);
+					
+					// Clean up test record
+					$pdo->prepare('DELETE FROM backup_settings WHERE id = ?')->execute([$testId]);
+					
+					$results[$frequency] = 'SUCCESS';
+				} catch (\PDOException $e) {
+					$results[$frequency] = 'FAILED: ' . $e->getMessage();
+				}
+			}
+			
+			echo '<pre>Database Constraint Test Results:' . "\n";
+			echo '=====================================' . "\n";
+			foreach ($results as $frequency => $result) {
+				echo sprintf('%-10s: %s' . "\n", $frequency, $result);
+			}
+			echo '</pre>';
+			exit;
+			
+		} catch (\Exception $e) {
 			echo '<pre>Error: ' . $e->getMessage() . '</pre>';
 			exit;
 		}
+	}
+	
+	public function debugFormSubmission(): void {
+		require_organizer();
+		
+		echo '<pre>Form Debug Information:' . "\n";
+		echo '========================' . "\n";
+		echo 'Request Method: ' . $_SERVER['REQUEST_METHOD'] . "\n";
+		echo 'Content Type: ' . ($_SERVER['CONTENT_TYPE'] ?? 'Not set') . "\n";
+		echo 'POST Data:' . "\n";
+		print_r($_POST);
+		echo 'GET Data:' . "\n";
+		print_r($_GET);
+		echo '</pre>';
+		exit;
 	}
 }
 

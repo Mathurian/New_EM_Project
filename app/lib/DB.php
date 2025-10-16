@@ -452,9 +452,58 @@ SQL;
 		} else {
 			// Migrate existing backup settings to include frequency_value
 			self::addColumnIfMissing('backup_settings', 'frequency_value', 'INTEGER NOT NULL DEFAULT 1');
+			
+			// Update frequency constraint to allow minutes and hours
+			self::updateBackupSettingsConstraint();
 		}
 	}
 
+	private static function updateBackupSettingsConstraint(): void {
+		$pdo = self::pdo();
+		
+		try {
+			// Check if the constraint needs updating by trying to insert a test value
+			$testStmt = $pdo->prepare('INSERT INTO backup_settings (id, backup_type, enabled, frequency, frequency_value, retention_days) VALUES (?, ?, ?, ?, ?, ?)');
+			$testStmt->execute([uuid(), 'test', 0, 'minutes', 1, 30]);
+			
+			// If successful, delete the test record
+			$pdo->prepare('DELETE FROM backup_settings WHERE backup_type = ?')->execute(['test']);
+			
+		} catch (\PDOException $e) {
+			// Constraint needs updating - recreate the table
+			$pdo->beginTransaction();
+			
+			try {
+				// Create new table with updated constraint
+				$pdo->exec('CREATE TABLE backup_settings_new (
+					id TEXT PRIMARY KEY,
+					backup_type TEXT NOT NULL CHECK (backup_type IN (\'schema\', \'full\')),
+					enabled BOOLEAN NOT NULL DEFAULT 0,
+					frequency TEXT NOT NULL CHECK (frequency IN (\'minutes\', \'hours\', \'daily\', \'weekly\', \'monthly\')),
+					frequency_value INTEGER NOT NULL DEFAULT 1,
+					retention_days INTEGER NOT NULL DEFAULT 30,
+					last_run TEXT,
+					next_run TEXT,
+					created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+					updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+				)');
+				
+				// Copy data from old table
+				$pdo->exec('INSERT INTO backup_settings_new SELECT * FROM backup_settings');
+				
+				// Drop old table and rename new one
+				$pdo->exec('DROP TABLE backup_settings');
+				$pdo->exec('ALTER TABLE backup_settings_new RENAME TO backup_settings');
+				
+				$pdo->commit();
+				
+			} catch (\Exception $e2) {
+				$pdo->rollBack();
+				throw $e2;
+			}
+		}
+	}
+	
 	private static function updateRoleConstraint(): void {
 		$pdo = self::pdo();
 		

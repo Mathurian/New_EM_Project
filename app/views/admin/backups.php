@@ -175,6 +175,23 @@
 		<p><strong>Retention:</strong> Old backups are automatically deleted based on your retention settings to save disk space.</p>
 		<p><a href="<?= url('admin/backups/debug-path') ?>" class="btn btn-sm btn-info">🔍 Debug Database Path</a></p>
 		<p><a href="<?= url('admin/backups/debug-scheduled') ?>" class="btn btn-sm btn-info">⏰ Debug Scheduled Backups</a></p>
+		<p><a href="<?= url('admin/backups/test-constraint') ?>" class="btn btn-sm btn-warning">🧪 Test Database Constraint</a></p>
+		<p><strong>Debug Form Submission:</strong></p>
+		<form method="post" action="<?= url('admin/backups/debug-form') ?>" style="border: 1px solid #ccc; padding: 10px; margin: 10px 0;">
+			<div class="form-group">
+				<label>Test Frequency:</label>
+				<select name="test_frequency" class="form-control">
+					<option value="minutes">Minutes</option>
+					<option value="hours">Hours</option>
+					<option value="daily">Daily</option>
+				</select>
+			</div>
+			<div class="form-group">
+				<label>Test Value:</label>
+				<input type="number" name="test_value" value="5" class="form-control">
+			</div>
+			<button type="submit" class="btn btn-sm btn-primary">Test Form Submission</button>
+		</form>
 	</div>
 	<h6>Setting up Scheduled Backups:</h6>
 	<p>Add this to your crontab to run scheduled backups every hour:</p>
