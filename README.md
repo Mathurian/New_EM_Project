@@ -59,3 +59,4 @@ admintester2 / Admintester123! - admin user
 judgetester2 / Judgetester123! - judge user
 
 emceetester2 / Emceetester123! - emcee user 
+adj

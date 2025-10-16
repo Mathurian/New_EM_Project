@@ -294,6 +294,20 @@ CREATE TABLE IF NOT EXISTS activity_logs (
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
 );
+
+-- Overall deductions per contestant per subcategory (admin/head judge only)
+CREATE TABLE IF NOT EXISTS overall_deductions (
+    id TEXT PRIMARY KEY,
+    subcategory_id TEXT NOT NULL,
+    contestant_id TEXT NOT NULL,
+    amount REAL NOT NULL,
+    comment TEXT,
+    created_by TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (subcategory_id) REFERENCES subcategories(id) ON DELETE CASCADE,
+    FOREIGN KEY (contestant_id) REFERENCES contestants(id) ON DELETE CASCADE,
+    FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+);
 -- System settings
 CREATE TABLE IF NOT EXISTS system_settings (
 	id TEXT PRIMARY KEY,

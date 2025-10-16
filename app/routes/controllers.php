@@ -1218,13 +1218,19 @@ class ResultsController {
 		$scores = DB::pdo()->prepare('SELECT * FROM scores WHERE subcategory_id = ?');
 		$scores->execute([$subcategoryId]);
 		$scores = $scores->fetchAll(\PDO::FETCH_ASSOC);
+
+		// Get overall deductions for this subcategory keyed by contestant
+		$dedStmt = DB::pdo()->prepare('SELECT contestant_id, SUM(amount) as total_deduction FROM overall_deductions WHERE subcategory_id = ? GROUP BY contestant_id');
+		$dedStmt->execute([$subcategoryId]);
+		$deductions = [];
+		foreach ($dedStmt->fetchAll(\PDO::FETCH_ASSOC) as $row) { $deductions[$row['contestant_id']] = (float)$row['total_deduction']; }
 		
 		// Get comments
 		$comments = DB::pdo()->prepare('SELECT * FROM judge_comments WHERE subcategory_id = ?');
 		$comments->execute([$subcategoryId]);
 		$comments = $comments->fetchAll(\PDO::FETCH_ASSOC);
 		
-		view('results/detailed', compact('subcategory','contestants','criteria','judges','scores','comments'));
+		view('results/detailed', compact('subcategory','contestants','criteria','judges','scores','comments','deductions'));
 	}
 	public function contestantDetailed(array $params): void {
 		require_organizer(); // Only organizers can view detailed contestant scores
