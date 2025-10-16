@@ -454,10 +454,46 @@ SQL;
 			self::addColumnIfMissing('backup_settings', 'frequency_value', 'INTEGER NOT NULL DEFAULT 1');
 			
 			// Update frequency constraint to allow minutes and hours
-			self::updateBackupSettingsConstraint();
+			// This may fail due to database locking, but the app will still work
+			try {
+				self::updateBackupSettingsConstraint();
+			} catch (\Exception $e) {
+				// Log the error but don't fail the entire migration
+				error_log('Warning: Could not update backup_settings constraint during migration: ' . $e->getMessage());
+			}
 		}
 	}
 
+	private static function executeWithRetry(callable $operation, int $maxRetries = 3): mixed {
+		$attempt = 0;
+		$lastException = null;
+		
+		while ($attempt < $maxRetries) {
+			try {
+				return $operation();
+			} catch (\PDOException $e) {
+				$lastException = $e;
+				
+				// Check if it's a locking error
+				if (strpos($e->getMessage(), 'database is locked') !== false || 
+					strpos($e->getMessage(), 'database table is locked') !== false) {
+					
+					$attempt++;
+					if ($attempt < $maxRetries) {
+						// Wait before retrying (exponential backoff)
+						usleep(pow(2, $attempt) * 100000); // 0.1s, 0.2s, 0.4s
+						continue;
+					}
+				}
+				
+				// If it's not a locking error or we've exhausted retries, throw the exception
+				throw $e;
+			}
+		}
+		
+		throw $lastException;
+	}
+	
 	private static function updateBackupSettingsConstraint(): void {
 		$pdo = self::pdo();
 		
@@ -470,36 +506,53 @@ SQL;
 			$pdo->prepare('DELETE FROM backup_settings WHERE backup_type = ?')->execute(['test']);
 			
 		} catch (\PDOException $e) {
-			// Constraint needs updating - recreate the table
-			$pdo->beginTransaction();
-			
+			// Constraint needs updating - use retry mechanism
 			try {
-				// Create new table with updated constraint
-				$pdo->exec('CREATE TABLE backup_settings_new (
-					id TEXT PRIMARY KEY,
-					backup_type TEXT NOT NULL CHECK (backup_type IN (\'schema\', \'full\')),
-					enabled BOOLEAN NOT NULL DEFAULT 0,
-					frequency TEXT NOT NULL CHECK (frequency IN (\'minutes\', \'hours\', \'daily\', \'weekly\', \'monthly\')),
-					frequency_value INTEGER NOT NULL DEFAULT 1,
-					retention_days INTEGER NOT NULL DEFAULT 30,
-					last_run TEXT,
-					next_run TEXT,
-					created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-					updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-				)');
-				
-				// Copy data from old table
-				$pdo->exec('INSERT INTO backup_settings_new SELECT * FROM backup_settings');
-				
-				// Drop old table and rename new one
-				$pdo->exec('DROP TABLE backup_settings');
-				$pdo->exec('ALTER TABLE backup_settings_new RENAME TO backup_settings');
-				
-				$pdo->commit();
+				self::executeWithRetry(function() use ($pdo) {
+					// Set WAL mode to reduce locking issues
+					$pdo->exec('PRAGMA journal_mode=WAL');
+					$pdo->exec('PRAGMA busy_timeout=30000');
+					
+					// Check if we can get an exclusive lock
+					$pdo->beginTransaction();
+					
+					// Create new table with updated constraint
+					$pdo->exec('CREATE TABLE backup_settings_new (
+						id TEXT PRIMARY KEY,
+						backup_type TEXT NOT NULL CHECK (backup_type IN (\'schema\', \'full\')),
+						enabled BOOLEAN NOT NULL DEFAULT 0,
+						frequency TEXT NOT NULL CHECK (frequency IN (\'minutes\', \'hours\', \'daily\', \'weekly\', \'monthly\')),
+						frequency_value INTEGER NOT NULL DEFAULT 1,
+						retention_days INTEGER NOT NULL DEFAULT 30,
+						last_run TEXT,
+						next_run TEXT,
+						created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+						updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+					)');
+					
+					// Copy data from old table
+					$pdo->exec('INSERT INTO backup_settings_new SELECT * FROM backup_settings');
+					
+					// Drop old table and rename new one
+					$pdo->exec('DROP TABLE backup_settings');
+					$pdo->exec('ALTER TABLE backup_settings_new RENAME TO backup_settings');
+					
+					$pdo->commit();
+					
+					return true;
+				});
 				
 			} catch (\Exception $e2) {
-				$pdo->rollBack();
-				throw $e2;
+				// If we still can't update the constraint, log it and continue
+				// The application will still work, just with limited frequency options
+				error_log('Warning: Could not update backup_settings constraint: ' . $e2->getMessage());
+				
+				// Try a simpler approach - just add the column if it doesn't exist
+				try {
+					self::addColumnIfMissing('backup_settings', 'frequency_value', 'INTEGER NOT NULL DEFAULT 1');
+				} catch (\Exception $e3) {
+					error_log('Warning: Could not add frequency_value column: ' . $e3->getMessage());
+				}
 			}
 		}
 	}
