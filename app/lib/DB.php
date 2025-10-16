@@ -500,19 +500,19 @@ SQL;
 		try {
 			// Check if the constraint needs updating by trying to insert a test value
 			$testStmt = $pdo->prepare('INSERT INTO backup_settings (id, backup_type, enabled, frequency, frequency_value, retention_days) VALUES (?, ?, ?, ?, ?, ?)');
-			$testStmt->execute([uuid(), 'test', 0, 'minutes', 1, 30]);
+			$testStmt->execute([uuid(), 'schema', 0, 'minutes', 1, 30]);
 			
 			// If successful, delete the test record
-			$pdo->prepare('DELETE FROM backup_settings WHERE backup_type = ?')->execute(['test']);
+			$pdo->prepare('DELETE FROM backup_settings WHERE backup_type = ? AND frequency = ?')->execute(['schema', 'minutes']);
 			
 		} catch (\PDOException $e) {
 			// Constraint needs updating - use retry mechanism
 			try {
+				// Set WAL mode to reduce locking issues (outside transaction)
+				$pdo->exec('PRAGMA journal_mode=WAL');
+				$pdo->exec('PRAGMA busy_timeout=30000');
+				
 				self::executeWithRetry(function() use ($pdo) {
-					// Set WAL mode to reduce locking issues
-					$pdo->exec('PRAGMA journal_mode=WAL');
-					$pdo->exec('PRAGMA busy_timeout=30000');
-					
 					// Check if we can get an exclusive lock
 					$pdo->beginTransaction();
 					

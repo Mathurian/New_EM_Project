@@ -1145,7 +1145,7 @@ class BackupController {
 				try {
 					$testId = uuid();
 					$stmt = $pdo->prepare('INSERT INTO backup_settings (id, backup_type, enabled, frequency, frequency_value, retention_days) VALUES (?, ?, ?, ?, ?, ?)');
-					$stmt->execute([$testId, 'test', 0, $frequency, 1, 30]);
+					$stmt->execute([$testId, 'schema', 0, $frequency, 1, 30]);
 					
 					// Clean up test record
 					$pdo->prepare('DELETE FROM backup_settings WHERE id = ?')->execute([$testId]);
