@@ -574,6 +574,9 @@ class BackupController {
 	public function index(): void {
 		require_organizer();
 		
+		// Refresh Logger to ensure we have the latest log level
+		\App\Logger::refreshLevel();
+		
 		// Get backup logs
 		$stmt = DB::pdo()->prepare('
 			SELECT bl.*, u.preferred_name as created_by_name
@@ -3706,6 +3709,9 @@ class AdminController {
 	public function settings(): void {
 		require_organizer();
 		
+		// Refresh Logger to load current log level from database
+		\App\Logger::refreshLevel();
+		
 		// Get current settings
 		$settings = [];
 		$stmt = DB::pdo()->query('SELECT setting_key, setting_value FROM system_settings');
@@ -3748,6 +3754,9 @@ class AdminController {
 	
 	public function logs(): void {
 		require_organizer();
+		
+		// Refresh Logger to ensure we have the latest log level
+		\App\Logger::refreshLevel();
 		
 		// Get current log level from Logger (site-wide setting)
 		$currentLogLevel = \App\Logger::getLevel();
