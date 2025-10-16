@@ -2581,17 +2581,37 @@ class ScoringController {
 		$subcategoryId = param('id', $params);
 		$contestantId = post('contestant_id');
 		$judgeId = is_judge() ? (current_user()['judge_id'] ?? '') : post('judge_id');
+		
+		// Debug log score submission attempt
+		\App\Logger::debug('score_submission_attempt', 'score', null, 
+			"Attempting to submit scores: subcategory_id={$subcategoryId}, contestant_id={$contestantId}, judge_id={$judgeId}");
+		
 		if (is_judge()) {
 			$allowed = DB::pdo()->prepare('SELECT 1 FROM subcategory_judges WHERE subcategory_id = ? AND judge_id = ?');
 			$allowed->execute([$subcategoryId, $judgeId]);
-			if (!$allowed->fetchColumn()) { http_response_code(403); echo 'Forbidden'; return; }
+			if (!$allowed->fetchColumn()) { 
+				\App\Logger::debug('score_submission_failed', 'score', null, 
+					"Score submission failed: judge not assigned to subcategory");
+				http_response_code(403); 
+				echo 'Forbidden'; 
+				return; 
+			}
 			// Prevent edits after certification for this specific contestant
 			$chk = DB::pdo()->prepare('SELECT 1 FROM judge_certifications WHERE subcategory_id=? AND contestant_id=? AND judge_id=?');
 			$chk->execute([$subcategoryId, $contestantId, $judgeId]);
-			if ($chk->fetchColumn()) { http_response_code(423); echo 'Locked'; return; }
+			if ($chk->fetchColumn()) { 
+				\App\Logger::debug('score_submission_failed', 'score', null, 
+					"Score submission failed: scores are locked/certified");
+				http_response_code(423); 
+				echo 'Locked'; 
+				return; 
+			}
 		}
 		$scores = $_POST['scores'] ?? [];
 		$comments = $_POST['comments'] ?? [];
+		
+		\App\Logger::debug('score_submission_data', 'score', null, 
+			"Score submission data: " . json_encode(['scores' => $scores, 'comments' => $comments]));
 		
 		$pdo = DB::pdo();
 		$now = date('c');
@@ -2600,8 +2620,11 @@ class ScoringController {
 		// Handle scores - they come as scores[criterion_id] = value
 		foreach ($scores as $criterionId => $value) {
 			if ($value !== '' && $value !== null) {
+				$scoreId = uuid();
 				$stmt = $pdo->prepare('INSERT OR REPLACE INTO scores (id, subcategory_id, contestant_id, judge_id, criterion_id, score, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)');
-				$stmt->execute([uuid(), $subcategoryId, $contestantId, $judgeId, $criterionId, (float)$value, $now]);
+				$stmt->execute([$scoreId, $subcategoryId, $contestantId, $judgeId, $criterionId, (float)$value, $now]);
+				\App\Logger::debug('score_submitted', 'score', $scoreId, 
+					"Score submitted: criterion_id={$criterionId}, score={$value}, contestant_id={$contestantId}, judge_id={$judgeId}");
 			}
 		}
 		
@@ -3020,7 +3043,13 @@ class AuthController {
 		$email = post('email');
 		$password = post('password');
 		
+		// Debug log login attempt
+		\App\Logger::debug('login_attempt', 'auth', null, 
+			"Login attempt: email={$email}");
+		
 		if (empty($email) || empty($password)) {
+			\App\Logger::debug('login_failed', 'auth', null, 
+				"Login failed: missing email or password");
 			redirect('/login?error=missing_fields');
 			return;
 		}
@@ -3032,6 +3061,8 @@ class AuthController {
 			$user = $stmt->fetch(\PDO::FETCH_ASSOC);
 			
 			if (!$user || !password_verify($password, $user['password_hash'])) {
+				\App\Logger::debug('login_failed', 'auth', null, 
+					"Login failed: invalid credentials for email={$email}");
 				\App\Logger::logLogin($email, false);
 				redirect('/login?error=invalid_credentials');
 				return;
@@ -3044,6 +3075,8 @@ class AuthController {
 				$dbSessionVersion = $user['session_version'] ?? '1';
 				$sessionVersion = $_SESSION['session_version'] ?? '1';
 				if ($dbSessionVersion !== $sessionVersion) {
+					\App\Logger::debug('login_failed', 'auth', $user['id'] ?? null, 
+						"Login failed: session invalidated for user={$user['email']}");
 					\App\Logger::logLogin($user['email'] ?? $user['preferred_name'], false, 'session_invalidated');
 					redirect('/login?error=session_invalidated');
 					return;
@@ -3053,6 +3086,8 @@ class AuthController {
 			$_SESSION['user'] = $user;
 			$_SESSION['session_version'] = $user['session_version'];
 			
+			\App\Logger::debug('login_successful', 'auth', $user['id'], 
+				"Login successful: user_id={$user['id']}, email={$user['email']}, role={$user['role']}");
 			\App\Logger::logLogin($user['email'] ?? $user['preferred_name'], true);
 			
 			// Redirect based on role
@@ -3075,7 +3110,10 @@ class AuthController {
 	
 	public function logout(): void {
 		if (isset($_SESSION['user'])) {
-			\App\Logger::logLogout($_SESSION['user']['email'] ?? $_SESSION['user']['preferred_name']);
+			$user = $_SESSION['user'];
+			\App\Logger::debug('logout_attempt', 'auth', $user['id'], 
+				"Logout attempt: user_id={$user['id']}, email={$user['email']}, role={$user['role']}");
+			\App\Logger::logLogout($user['email'] ?? $user['preferred_name']);
 		}
 		session_destroy();
 		redirect('/');
@@ -3170,8 +3208,14 @@ class UserController {
 		$categoryId = post('category_id') ?: null;
 		$isHeadJudge = post('is_head_judge') ? 1 : 0;
 		
+		// Debug log user creation attempt
+		\App\Logger::debug('user_creation_attempt', 'user', null, 
+			"Attempting to create user: name={$name}, email={$email}, role={$role}, category_id={$categoryId}, is_head_judge={$isHeadJudge}");
+		
 		// Validate required fields
 		if (empty($name) || empty($role)) {
+			\App\Logger::debug('user_creation_validation_failed', 'user', null, 
+				"User creation failed validation: missing name or role");
 			redirect('/users/new?error=missing_fields');
 			return;
 		}
@@ -3179,22 +3223,32 @@ class UserController {
 		// Validate password complexity if provided
 		if (!empty($password)) {
 			if (strlen($password) < 8) {
+				\App\Logger::debug('user_creation_password_failed', 'user', null, 
+					"User creation failed: password too short");
 				redirect('/users/new?error=password_too_short');
 				return;
 			}
 			if (!preg_match('/[A-Z]/', $password)) {
+				\App\Logger::debug('user_creation_password_failed', 'user', null, 
+					"User creation failed: password missing uppercase");
 				redirect('/users/new?error=password_no_uppercase');
 				return;
 			}
 			if (!preg_match('/[a-z]/', $password)) {
+				\App\Logger::debug('user_creation_password_failed', 'user', null, 
+					"User creation failed: password missing lowercase");
 				redirect('/users/new?error=password_no_lowercase');
 				return;
 			}
 			if (!preg_match('/[0-9]/', $password)) {
+				\App\Logger::debug('user_creation_password_failed', 'user', null, 
+					"User creation failed: password missing number");
 				redirect('/users/new?error=password_no_number');
 				return;
 			}
 			if (!preg_match('/[^A-Za-z0-9]/', $password)) {
+				\App\Logger::debug('user_creation_password_failed', 'user', null, 
+					"User creation failed: password missing symbol");
 				redirect('/users/new?error=password_no_symbol');
 				return;
 			}
@@ -3210,35 +3264,49 @@ class UserController {
 			// Create user
 			$stmt = $pdo->prepare('INSERT INTO users (id, name, email, password_hash, role, preferred_name, gender) VALUES (?, ?, ?, ?, ?, ?, ?)');
 			$stmt->execute([$userId, $name, $email, $passwordHash, $role, $preferredName, $gender]);
+			\App\Logger::debug('user_created', 'user', $userId, 
+				"User created successfully: name={$name}, email={$email}, role={$role}");
 			
 			// Handle role-specific creation
 			if ($role === 'judge') {
 				$judgeId = uuid();
 				$stmt = $pdo->prepare('INSERT INTO judges (id, name, email, gender, is_head_judge) VALUES (?, ?, ?, ?, ?)');
 				$stmt->execute([$judgeId, $name, $email, $gender, $isHeadJudge]);
+				\App\Logger::debug('judge_created', 'judge', $judgeId, 
+					"Judge created: name={$name}, email={$email}, is_head_judge={$isHeadJudge}");
 				
 				// Link user to judge
 				$stmt = $pdo->prepare('UPDATE users SET judge_id = ? WHERE id = ?');
 				$stmt->execute([$judgeId, $userId]);
+				\App\Logger::debug('user_judge_linked', 'user', $userId, 
+					"User linked to judge: user_id={$userId}, judge_id={$judgeId}");
 				
 				// Assign to category if provided
 				if ($categoryId) {
 					$stmt = $pdo->prepare('INSERT INTO category_judges (category_id, judge_id) VALUES (?, ?)');
 					$stmt->execute([$categoryId, $judgeId]);
+					\App\Logger::debug('judge_category_assigned', 'judge', $judgeId, 
+						"Judge assigned to category: judge_id={$judgeId}, category_id={$categoryId}");
 				}
 			} elseif ($role === 'contestant') {
 				$contestantId = uuid();
 				$stmt = $pdo->prepare('INSERT INTO contestants (id, name, email, gender) VALUES (?, ?, ?, ?)');
 				$stmt->execute([$contestantId, $name, $email, $gender]);
+				\App\Logger::debug('contestant_created', 'contestant', $contestantId, 
+					"Contestant created: name={$name}, email={$email}");
 				
 				// Link user to contestant
 				$stmt = $pdo->prepare('UPDATE users SET contestant_id = ? WHERE id = ?');
 				$stmt->execute([$contestantId, $userId]);
+				\App\Logger::debug('user_contestant_linked', 'user', $userId, 
+					"User linked to contestant: user_id={$userId}, contestant_id={$contestantId}");
 				
 				// Assign to category if provided
 				if ($categoryId) {
 					$stmt = $pdo->prepare('INSERT INTO category_contestants (category_id, contestant_id) VALUES (?, ?)');
 					$stmt->execute([$categoryId, $contestantId]);
+					\App\Logger::debug('contestant_category_assigned', 'contestant', $contestantId, 
+						"Contestant assigned to category: contestant_id={$contestantId}, category_id={$categoryId}");
 				}
 			}
 			
@@ -3764,6 +3832,10 @@ class AdminController {
 		$sessionTimeout = (int)post('session_timeout');
 		$logLevel = post('log_level');
 		
+		// Debug log the settings change attempt
+		\App\Logger::debug('settings_update_attempt', 'system_settings', null, 
+			"Attempting to update settings: session_timeout={$sessionTimeout}, log_level={$logLevel}");
+		
 		$pdo = DB::pdo();
 		$pdo->beginTransaction();
 		
@@ -3771,19 +3843,30 @@ class AdminController {
 			// Update session timeout
 			$stmt = $pdo->prepare('INSERT OR REPLACE INTO system_settings (setting_key, setting_value) VALUES (?, ?)');
 			$stmt->execute(['session_timeout', $sessionTimeout]);
+			\App\Logger::debug('settings_session_timeout_updated', 'system_settings', 'session_timeout', 
+				"Session timeout updated to {$sessionTimeout} seconds");
 			
 			// Update log level
 			$stmt = $pdo->prepare('INSERT OR REPLACE INTO system_settings (setting_key, setting_value) VALUES (?, ?)');
 			$stmt->execute(['log_level', $logLevel]);
+			\App\Logger::debug('settings_log_level_updated', 'system_settings', 'log_level', 
+				"Log level updated to {$logLevel}");
 			
 			$pdo->commit();
 			
 			// Apply the new log level immediately
 			\App\Logger::setLevel($logLevel);
+			\App\Logger::debug('settings_log_level_applied', 'system_settings', 'log_level', 
+				"Log level {$logLevel} applied to Logger instance");
+			
+			\App\Logger::logAdminAction('settings_updated', 'system_settings', null, 
+				"System settings updated: timeout={$sessionTimeout}s, log_level={$logLevel}");
 			
 			redirect('/admin/settings?success=settings_updated');
 		} catch (\Exception $e) {
 			$pdo->rollBack();
+			\App\Logger::error('settings_update_failed', 'system_settings', null, 
+				"Failed to update settings: " . $e->getMessage());
 			redirect('/admin/settings?error=update_failed');
 		}
 	}

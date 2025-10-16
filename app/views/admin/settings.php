@@ -90,8 +90,8 @@
 		<div style="margin-bottom: 20px; padding: 15px; background: #e8f5e8; border: 1px solid #c3e6c3; border-radius: 5px;">
 			<h4>Logging Test Tools</h4>
 			<p>Use these tools to test and verify logging functionality:</p>
-			<p><a href="<?= url('admin/settings/test-log-level') ?>" class="btn btn-sm btn-secondary">🧪 Test Log Level</a> - Test all log levels and filtering</p>
-			<p><a href="<?= url('admin/settings/test-logging') ?>" class="btn btn-sm btn-secondary">📝 Test Logging</a> - Send test log messages</p>
+			<p><a href="<?= url('admin/settings/test-log-level') ?>" class="btn btn-sm btn-secondary" target="_blank">🧪 Test Log Level</a> - Test all log levels and filtering</p>
+			<p><a href="<?= url('admin/settings/test-logging') ?>" class="btn btn-sm btn-secondary" target="_blank">📝 Test Logging</a> - Send test log messages</p>
 		</div>
 		
 		<button type="submit" style="background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer;">
