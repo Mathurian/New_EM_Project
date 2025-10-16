@@ -9,7 +9,7 @@
 <?php else: ?>
 	<h2>Results: <?= htmlspecialchars($subcategory['category_name']) ?> - <?= htmlspecialchars($subcategory['name']) ?></h2>
 	<div class="navigation-buttons">
-		<a href="<?= hierarchical_back_url() ?>" class="btn btn-secondary">← Back</a>
+		<a href="<?= url('results') ?>" class="btn btn-secondary">← Back</a>
 		<a href="<?= home_url() ?>" class="btn btn-outline">🏠 Home</a>
 	</div>
 

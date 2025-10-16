@@ -324,16 +324,11 @@ CREATE TABLE IF NOT EXISTS system_settings (
 -- Emcee scripts
 CREATE TABLE IF NOT EXISTS emcee_scripts (
 	id TEXT PRIMARY KEY,
-	title TEXT NOT NULL,
-	description TEXT,
-	file_path TEXT NOT NULL,
-	file_name TEXT NOT NULL,
-	file_size INTEGER,
-	file_type TEXT,
-	uploaded_by TEXT NOT NULL,
-	uploaded_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	filename TEXT NOT NULL,
+	filepath TEXT NOT NULL,
 	is_active BOOLEAN DEFAULT 1,
-	FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE CASCADE
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY (id) REFERENCES users(id) ON DELETE CASCADE
 );
 SQL;
 		self::pdo()->exec($sql);

@@ -1567,7 +1567,7 @@ class AuthController {
 class UserController {
 	public function new(): void {
 		require_organizer();
-		$categories = DB::pdo()->query('SELECT * FROM categories ORDER BY name')->fetchAll(\PDO::FETCH_ASSOC);
+		$categories = DB::pdo()->query('SELECT c.*, co.name as contest_name FROM categories c JOIN contests co ON c.contest_id = co.id ORDER BY co.name, c.name')->fetchAll(\PDO::FETCH_ASSOC);
 		view('users/new', compact('categories'));
 	}
 	
@@ -1667,7 +1667,14 @@ class UserController {
 	public function index(): void {
 		require_organizer();
 		$users = DB::pdo()->query('SELECT * FROM users ORDER BY role, name')->fetchAll(\PDO::FETCH_ASSOC);
-		view('users/index', compact('users'));
+		
+		// Group users by role
+		$usersByRole = [];
+		foreach ($users as $user) {
+			$usersByRole[$user['role']][] = $user;
+		}
+		
+		view('users/index', compact('usersByRole'));
 	}
 	
 	public function edit(array $params): void {
@@ -1923,8 +1930,8 @@ class AdminController {
 	
 	public function judges(): void {
 		require_organizer();
-		$judges = DB::pdo()->query('SELECT j.*, u.preferred_name FROM judges j LEFT JOIN users u ON j.id = u.judge_id ORDER BY j.name')->fetchAll(\PDO::FETCH_ASSOC);
-		view('admin/judges', compact('judges'));
+		$rows = DB::pdo()->query('SELECT j.*, u.preferred_name FROM judges j LEFT JOIN users u ON j.id = u.judge_id ORDER BY j.name')->fetchAll(\PDO::FETCH_ASSOC);
+		view('admin/judges', compact('rows'));
 	}
 	
 	public function createJudge(): void {
@@ -2201,9 +2208,9 @@ class AdminController {
 		// Get all contestants, judges, and categories for print options
 		$contestants = DB::pdo()->query('SELECT * FROM contestants ORDER BY contestant_number IS NULL, contestant_number, name')->fetchAll(\PDO::FETCH_ASSOC);
 		$judges = DB::pdo()->query('SELECT * FROM judges ORDER BY name')->fetchAll(\PDO::FETCH_ASSOC);
-		$categories = DB::pdo()->query('SELECT c.*, co.name as contest_name FROM categories c JOIN contests co ON c.contest_id = co.id ORDER BY co.name, c.name')->fetchAll(\PDO::FETCH_ASSOC);
+		$structure = DB::pdo()->query('SELECT c.*, co.name as contest_name FROM categories c JOIN contests co ON c.contest_id = co.id ORDER BY co.name, c.name')->fetchAll(\PDO::FETCH_ASSOC);
 		
-		view('admin/print_reports', compact('contestants', 'judges', 'categories'));
+		view('admin/print_reports', compact('contestants', 'judges', 'structure'));
 	}
 	
 	public function emceeScripts(): void {
@@ -2407,18 +2414,35 @@ class PrintController {
 		$subcategories->execute([$contestantId]);
 		$subcategories = $subcategories->fetchAll(\PDO::FETCH_ASSOC);
 		
-		// Get all scores for this contestant
+		// Get all scores for this contestant with contest and category info
 		$scores = DB::pdo()->prepare('
-			SELECT s.*, sc.name as subcategory_name, cr.name as criterion_name, j.name as judge_name
+			SELECT s.*, sc.name as subcategory_name, cr.name as criterion_name, cr.max_score, j.name as judge_name,
+			       c.name as category_name, co.name as contest_name
 			FROM scores s 
 			JOIN subcategories sc ON s.subcategory_id = sc.id 
+			JOIN categories c ON sc.category_id = c.id
+			JOIN contests co ON c.contest_id = co.id
 			JOIN criteria cr ON s.criterion_id = cr.id 
 			JOIN judges j ON s.judge_id = j.id 
 			WHERE s.contestant_id = ? 
-			ORDER BY sc.name, cr.name, j.name
+			ORDER BY co.name, c.name, sc.name, cr.name, j.name
 		');
 		$scores->execute([$contestantId]);
 		$scores = $scores->fetchAll(\PDO::FETCH_ASSOC);
+		
+		// Get comments for this contestant
+		$comments = DB::pdo()->prepare('
+			SELECT jc.*, sc.name as subcategory_name, c.name as category_name, co.name as contest_name, j.name as judge_name
+			FROM judge_comments jc 
+			JOIN subcategories sc ON jc.subcategory_id = sc.id 
+			JOIN categories c ON sc.category_id = c.id
+			JOIN contests co ON c.contest_id = co.id
+			JOIN judges j ON jc.judge_id = j.id 
+			WHERE jc.contestant_id = ? 
+			ORDER BY co.name, c.name, sc.name, j.name
+		');
+		$comments->execute([$contestantId]);
+		$comments = $comments->fetchAll(\PDO::FETCH_ASSOC);
 		
 		// Get overall deductions for this contestant
 		$deductions = DB::pdo()->prepare('
@@ -2431,7 +2455,7 @@ class PrintController {
 		$deductions->execute([$contestantId]);
 		$deductions = $deductions->fetchAll(\PDO::FETCH_ASSOC);
 		
-		view('print/contestant', compact('contestant', 'subcategories', 'scores', 'deductions'));
+		view('print/contestant', compact('contestant', 'subcategories', 'scores', 'comments', 'deductions'));
 	}
 	
 	public function judge(array $params): void {
