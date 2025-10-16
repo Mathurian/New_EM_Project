@@ -599,6 +599,9 @@ class BackupController {
 			// Re-fetch the settings
 			$stmt = $pdo->query('SELECT * FROM backup_settings ORDER BY backup_type');
 			$backupSettings = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+			
+			// Log that we created default settings
+			\App\Logger::info('Created default backup settings: schema and full');
 		}
 		
 		$backupDirectory = $this->getBackupDirectory();

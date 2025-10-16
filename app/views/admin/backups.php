@@ -173,32 +173,7 @@
 		<p><strong>Full Backups:</strong> Create complete copies of the database file. Includes all data and can be used to restore the entire database.</p>
 		<p><strong>Scheduled Backups:</strong> Automatically create backups based on your configured schedule. Use cron jobs or scheduled tasks to run <code>/admin/backups/run-scheduled</code> regularly.</p>
 		<p><strong>Retention:</strong> Old backups are automatically deleted based on your retention settings to save disk space.</p>
-		<p><a href="<?= url('admin/backups/debug-path') ?>" class="btn btn-sm btn-info">🔍 Debug Database Path</a></p>
-		<p><a href="<?= url('admin/backups/debug-scheduled') ?>" class="btn btn-sm btn-info">⏰ Debug Scheduled Backups</a></p>
-		<p><a href="<?= url('admin/backups/test-constraint') ?>" class="btn btn-sm btn-warning">🧪 Test Database Constraint</a></p>
-		<p><a href="<?= url('admin/backups/force-constraint-update') ?>" class="btn btn-sm btn-danger" onclick="return confirm('This will force update the database constraint. Continue?')">🔧 Force Constraint Update</a></p>
-		<p><a href="<?= url('admin/backups/force-constraint-update-simple') ?>" class="btn btn-sm btn-danger" onclick="return confirm('This will force update the database constraint (simple method). Continue?')">🔧 Force Constraint Update (Simple)</a></p>
-		<p><a href="<?= url('admin/backups/run-cli-constraint-fix') ?>" class="btn btn-sm btn-danger" onclick="return confirm('This will run the command-line constraint fix (most reliable). Continue?')">🔧 Run CLI Constraint Fix</a></p>
-		<p><a href="<?= url('admin/backups/run-sqlite3-constraint-fix') ?>" class="btn btn-sm btn-danger" onclick="return confirm('This will run the sqlite3 command-line constraint fix (bypasses PHP issues). Continue?')">🔧 Run SQLite3 Constraint Fix</a></p>
-		<p><a href="<?= url('admin/backups/run-shell-constraint-fix') ?>" class="btn btn-sm btn-danger" onclick="return confirm('This will run the shell script constraint fix (stops web server). Continue?')">🔧 Run Shell Constraint Fix</a></p>
-		<p><a href="<?= url('admin/backups/fix-timestamps') ?>" class="btn btn-sm btn-warning" onclick="return confirm('This will fix backup timestamp inconsistencies. Continue?')">🕒 Fix Backup Timestamps</a></p>
 		<p><a href="<?= url('admin/backups/restore-settings') ?>" class="btn btn-sm btn-info" onclick="return confirm('This will restore default backup settings if they are missing. Continue?')">🔄 Restore Backup Settings</a></p>
-		<p><strong>Debug Form Submission:</strong></p>
-		<form method="post" action="<?= url('admin/backups/debug-form') ?>" style="border: 1px solid #ccc; padding: 10px; margin: 10px 0;">
-			<div class="form-group">
-				<label>Test Frequency:</label>
-				<select name="test_frequency" class="form-control">
-					<option value="minutes">Minutes</option>
-					<option value="hours">Hours</option>
-					<option value="daily">Daily</option>
-				</select>
-			</div>
-			<div class="form-group">
-				<label>Test Value:</label>
-				<input type="number" name="test_value" value="5" class="form-control">
-			</div>
-			<button type="submit" class="btn btn-sm btn-primary">Test Form Submission</button>
-		</form>
 	</div>
 	<h6>Setting up Scheduled Backups:</h6>
 	<p>Add this to your crontab to run scheduled backups every hour:</p>
