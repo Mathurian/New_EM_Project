@@ -167,7 +167,7 @@
 	display: flex;
     justify-content: space-between;
     align-items: flex-start;
-	padding: 10px;
+	padding: 15px;
 	margin: 8px 0;
 	background: var(--bg-secondary);
 	border: 1px solid var(--border-color);
@@ -212,7 +212,12 @@
 }
 
 /* Stacked variation (dropdown under button) */
-.email-form.stacked { flex-direction: column; align-items: stretch; margin-left: 10px; }
+.email-form.stacked { 
+    flex-direction: column; 
+    align-items: stretch; 
+    margin-left: 10px; 
+    gap: 8px;
+}
 .email-form.stacked .unified-recipient { width: 260px; }
 .email-form.stacked .unified-email { width: 260px; }
 
