@@ -12,6 +12,18 @@ function render(string $template, array $data = []): void {
 	include __DIR__ . '/../views/' . $template . '.php';
 }
 
+function render_to_string(string $template, array $data = []): string {
+	// Render a view file (without layout) to an HTML string
+	ob_start();
+	try {
+		render($template, $data);
+		return (string)ob_get_clean();
+	} catch (\Throwable $e) {
+		ob_end_clean();
+		throw $e;
+	}
+}
+
 function url(string $path = ''): string {
 	$baseUrl = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'];
 	$basePath = dirname($_SERVER['SCRIPT_NAME']);

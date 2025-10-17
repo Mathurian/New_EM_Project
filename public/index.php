@@ -84,6 +84,7 @@ $router->get('/admin/backups/debug-settings', 'BackupController@debugBackupSetti
 $router->post('/admin/users/force-logout-all', 'AdminController@forceLogoutAll');
 $router->post('/admin/users/{id}/force-logout', 'AdminController@forceLogoutUser');
 $router->get('/admin/print-reports', 'AdminController@printReports');
+$router->post('/admin/print-reports/email', 'AdminController@emailReport');
 $router->get('/admin/emcee-scripts', 'AdminController@emceeScripts');
 $router->post('/admin/emcee-scripts', 'AdminController@uploadEmceeScript');
 $router->post('/admin/emcee-scripts/{id}/delete', 'AdminController@deleteEmceeScript');

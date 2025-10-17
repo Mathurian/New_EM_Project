@@ -4853,8 +4853,100 @@ class AdminController {
 		$contestants = DB::pdo()->query('SELECT * FROM contestants ORDER BY contestant_number IS NULL, contestant_number, name')->fetchAll(\PDO::FETCH_ASSOC);
 		$judges = DB::pdo()->query('SELECT * FROM judges ORDER BY name')->fetchAll(\PDO::FETCH_ASSOC);
 		$structure = DB::pdo()->query('SELECT c.*, co.name as contest_name FROM categories c JOIN contests co ON c.contest_id = co.id ORDER BY co.name, c.name')->fetchAll(\PDO::FETCH_ASSOC);
+		$usersWithEmail = DB::pdo()->query('SELECT id, preferred_name, name, email FROM users WHERE email IS NOT NULL AND email != "" ORDER BY preferred_name IS NULL, preferred_name, name')->fetchAll(\PDO::FETCH_ASSOC);
 		
-		view('admin/print_reports', compact('contestants', 'judges', 'structure'));
+		view('admin/print_reports', compact('contestants', 'judges', 'structure', 'usersWithEmail'));
+	}
+
+	public function emailReport(): void {
+		require_organizer();
+		$reportType = post('report_type'); // contestant|judge|category
+		$entityId = post('entity_id');
+		$toEmail = trim((string)post('to_email'));
+		$userId = trim((string)post('user_id'));
+		
+		// Resolve recipient
+		if ($userId && !$toEmail) {
+			$stmt = DB::pdo()->prepare('SELECT email FROM users WHERE id = ?');
+			$stmt->execute([$userId]);
+			$toEmail = (string)$stmt->fetchColumn();
+		}
+		
+		if (!$toEmail) {
+			redirect('/admin/print-reports?error=missing_email');
+			return;
+		}
+		
+		// Build report HTML by rendering the same templates used for print
+		try {
+			$html = '';
+			$subject = '';
+			if ($reportType === 'contestant') {
+				// Reuse PrintController logic
+				$pc = new PrintController();
+				// Manually duplicate fetch to avoid side-effects of printing headers
+				$contestantStmt = DB::pdo()->prepare('SELECT * FROM contestants WHERE id = ?');
+				$contestantStmt->execute([$entityId]);
+				$contestant = $contestantStmt->fetch(\PDO::FETCH_ASSOC);
+				if (!$contestant) { redirect('/admin/print-reports?error=contestant_not_found'); return; }
+				$subStmt = DB::pdo()->prepare('SELECT s.*, c.name as category_name FROM subcategories s JOIN categories c ON s.category_id = c.id JOIN subcategory_contestants sc ON s.id = sc.subcategory_id WHERE sc.contestant_id = ? ORDER BY c.name, s.name');
+				$subStmt->execute([$entityId]);
+				$subcategories = $subStmt->fetchAll(\PDO::FETCH_ASSOC);
+				$scoresStmt = DB::pdo()->prepare('SELECT s.*, sc.name as subcategory_name, cr.name as criterion_name, cr.max_score, j.name as judge_name, c.name as category_name, co.name as contest_name FROM scores s JOIN subcategories sc ON s.subcategory_id = sc.id JOIN categories c ON sc.category_id = c.id JOIN contests co ON c.contest_id = co.id JOIN criteria cr ON s.criterion_id = cr.id JOIN judges j ON s.judge_id = j.id WHERE s.contestant_id = ? ORDER BY co.name, c.name, sc.name, cr.name, j.name');
+				$scoresStmt->execute([$entityId]);
+				$scores = $scoresStmt->fetchAll(\PDO::FETCH_ASSOC);
+				$commentsStmt = DB::pdo()->prepare('SELECT jc.*, sc.name as subcategory_name, c.name as category_name, co.name as contest_name, j.name as judge_name FROM judge_comments jc JOIN subcategories sc ON jc.subcategory_id = sc.id JOIN categories c ON sc.category_id = c.id JOIN contests co ON c.contest_id = co.id JOIN judges j ON jc.judge_id = j.id WHERE jc.contestant_id = ? ORDER BY co.name, c.name, sc.name, j.name');
+				$commentsStmt->execute([$entityId]);
+				$comments = $commentsStmt->fetchAll(\PDO::FETCH_ASSOC);
+				$dedStmt = DB::pdo()->prepare('SELECT od.*, sc.name as subcategory_name FROM overall_deductions od JOIN subcategories sc ON od.subcategory_id = sc.id WHERE od.contestant_id = ? ORDER BY sc.name');
+				$dedStmt->execute([$entityId]);
+				$deductions = $dedStmt->fetchAll(\PDO::FETCH_ASSOC);
+				
+				$html = \App\render_to_string('print/contestant', compact('contestant','subcategories','scores','comments','deductions'));
+				$subject = 'Contestant Report: ' . ($contestant['name'] ?? '');
+			} elseif ($reportType === 'judge') {
+				$judgeStmt = DB::pdo()->prepare('SELECT * FROM judges WHERE id = ?');
+				$judgeStmt->execute([$entityId]);
+				$judge = $judgeStmt->fetch(\PDO::FETCH_ASSOC);
+				if (!$judge) { redirect('/admin/print-reports?error=judge_not_found'); return; }
+				$subStmt = DB::pdo()->prepare('SELECT s.*, c.name as category_name FROM subcategories s JOIN categories c ON s.category_id = c.id JOIN subcategory_judges sj ON s.id = sj.subcategory_id WHERE sj.judge_id = ? ORDER BY c.name, s.name');
+				$subStmt->execute([$entityId]);
+				$subcategories = $subStmt->fetchAll(\PDO::FETCH_ASSOC);
+				$scoresStmt = DB::pdo()->prepare('SELECT s.*, sc.name as subcategory_name, cr.name as criterion_name, con.name as contestant_name FROM scores s JOIN subcategories sc ON s.subcategory_id = sc.id JOIN criteria cr ON s.criterion_id = cr.id JOIN contestants con ON s.contestant_id = con.id WHERE s.judge_id = ? ORDER BY sc.name, con.name, cr.name');
+				$scoresStmt->execute([$entityId]);
+				$scores = $scoresStmt->fetchAll(\PDO::FETCH_ASSOC);
+				$html = \App\render_to_string('print/judge', compact('judge','subcategories','scores'));
+				$subject = 'Judge Report: ' . ($judge['name'] ?? '');
+			} elseif ($reportType === 'category') {
+				$catStmt = DB::pdo()->prepare('SELECT c.*, co.name as contest_name FROM categories c JOIN contests co ON c.contest_id = co.id WHERE c.id = ?');
+				$catStmt->execute([$entityId]);
+				$category = $catStmt->fetch(\PDO::FETCH_ASSOC);
+				if (!$category) { redirect('/admin/print-reports?error=category_not_found'); return; }
+				$subStmt = DB::pdo()->prepare('SELECT * FROM subcategories WHERE category_id = ? ORDER BY name');
+				$subStmt->execute([$entityId]);
+				$subcategories = $subStmt->fetchAll(\PDO::FETCH_ASSOC);
+				$scoresStmt = DB::pdo()->prepare('SELECT s.*, sc.name as subcategory_name, cr.name as criterion_name, con.name as contestant_name, j.name as judge_name FROM scores s JOIN subcategories sc ON s.subcategory_id = sc.id JOIN criteria cr ON s.criterion_id = cr.id JOIN contestants con ON s.contestant_id = con.id JOIN judges j ON s.judge_id = j.id WHERE sc.category_id = ? ORDER BY sc.name, con.name, cr.name, j.name');
+				$scoresStmt->execute([$entityId]);
+				$scores = $scoresStmt->fetchAll(\PDO::FETCH_ASSOC);
+				$html = \App\render_to_string('print/category', compact('category','subcategories','scores'));
+				$subject = 'Category Report: ' . ($category['name'] ?? '');
+			} else {
+				redirect('/admin/print-reports?error=invalid_report_type');
+				return;
+			}
+
+			$sent = \App\Mailer::sendHtml($toEmail, $subject, $html);
+			if ($sent) {
+				\App\Logger::logAdminAction('email_report_sent', 'report', $entityId, "type={$reportType}; to={$toEmail}");
+				redirect('/admin/print-reports?success=report_emailed');
+			} else {
+				\App\Logger::logAdminAction('email_report_failed', 'report', $entityId, "type={$reportType}; to={$toEmail}");
+				redirect('/admin/print-reports?error=email_failed');
+			}
+		} catch (\Throwable $e) {
+			\App\Logger::error('email_report_exception', 'report', $entityId, $e->getMessage());
+			redirect('/admin/print-reports?error=email_exception');
+		}
 	}
 	
 	public function emceeScripts(): void {
