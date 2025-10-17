@@ -57,17 +57,17 @@
 				</div>
 				<div class="logged-in-list" id="active-users-list">
 					<?php
-					// Get users who have been active recently (within last 30 minutes)
+					// Get users who are currently logged in (have last_login within last 30 minutes)
 					$activeUsers = DB::pdo()->query('
 						SELECT DISTINCT u.name, u.email, u.role, u.preferred_name, 
-						       MAX(al.created_at) as last_activity,
+						       u.last_login,
 						       al.ip_address
 						FROM users u 
 						LEFT JOIN activity_logs al ON u.name = al.user_name 
-						WHERE u.password_hash IS NOT NULL
-						GROUP BY u.id, u.name, u.email, u.role, u.preferred_name
-						HAVING last_activity IS NULL OR last_activity > datetime("now", "-30 minutes")
-						ORDER BY last_activity DESC, u.name
+						WHERE u.password_hash IS NOT NULL 
+						AND u.last_login IS NOT NULL 
+						AND u.last_login > datetime("now", "-30 minutes")
+						ORDER BY u.last_login DESC, u.name
 					')->fetchAll(\PDO::FETCH_ASSOC);
 					?>
 					<?php if (empty($activeUsers)): ?>
@@ -110,7 +110,7 @@
 									<?php endif; ?>
 								</div>
 								<div class="col-status">
-									<?php if ($user['last_activity']): ?>
+									<?php if ($user['last_login']): ?>
 										<div class="status-active">
 											<span class="status-indicator active"></span>
 											<span class="status-text">Active</span>
@@ -123,9 +123,9 @@
 									<?php endif; ?>
 								</div>
 								<div class="col-time">
-									<?php if ($user['last_activity']): ?>
-										<span class="activity-time" data-timestamp="<?= date('c', strtotime($user['last_activity'])) ?>">
-											<?= date('M j, g:i A', strtotime($user['last_activity'])) ?>
+									<?php if ($user['last_login']): ?>
+										<span class="activity-time" data-timestamp="<?= date('c', strtotime($user['last_login'])) ?>">
+											<?= date('M j, g:i A', strtotime($user['last_login'])) ?>
 										</span>
 									<?php else: ?>
 										<span class="no-activity">Never</span>
@@ -983,8 +983,8 @@ document.addEventListener('DOMContentLoaded', function() {
 			'emcee': '🎤'
 		};
 		
-		const lastActivity = user.last_activity ? 
-			new Date(user.last_activity).toLocaleString('en-US', { 
+		const lastActivity = user.last_login ? 
+			new Date(user.last_login).toLocaleString('en-US', { 
 				month: 'short', 
 				day: 'numeric', 
 				hour: 'numeric', 
@@ -1007,13 +1007,13 @@ document.addEventListener('DOMContentLoaded', function() {
 				${user.ip_address ? `<span class="ip-address">${escapeHtml(user.ip_address)}</span>` : '<span class="ip-unknown">Unknown</span>'}
 			</div>
 			<div class="col-status">
-				<div class="${user.last_activity ? 'status-active' : 'status-inactive'}">
-					<span class="status-indicator ${user.last_activity ? 'active' : 'inactive'}"></span>
-					<span class="status-text">${user.last_activity ? 'Active' : 'Inactive'}</span>
+				<div class="${user.last_login ? 'status-active' : 'status-inactive'}">
+					<span class="status-indicator ${user.last_login ? 'active' : 'inactive'}"></span>
+					<span class="status-text">${user.last_login ? 'Active' : 'Inactive'}</span>
 				</div>
 			</div>
 			<div class="col-time">
-				${user.last_activity ? `<span class="activity-time">${lastActivity}</span>` : '<span class="no-activity">Never</span>'}
+				${user.last_login ? `<span class="activity-time">${lastActivity}</span>` : '<span class="no-activity">Never</span>'}
 			</div>
 		`;
 		
@@ -1026,7 +1026,7 @@ document.addEventListener('DOMContentLoaded', function() {
 		const timeDiv = item.querySelector('.col-time');
 		
 		// Update status
-		if (user.last_activity) {
+		if (user.last_login) {
 			statusDiv.innerHTML = `
 				<div class="status-active">
 					<span class="status-indicator active"></span>
@@ -1043,8 +1043,8 @@ document.addEventListener('DOMContentLoaded', function() {
 		}
 		
 		// Update time
-		if (user.last_activity) {
-			const lastActivity = new Date(user.last_activity).toLocaleString('en-US', { 
+		if (user.last_login) {
+			const lastActivity = new Date(user.last_login).toLocaleString('en-US', { 
 				month: 'short', 
 				day: 'numeric', 
 				hour: 'numeric', 

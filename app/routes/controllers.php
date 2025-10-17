@@ -496,8 +496,8 @@ class ContestController {
 				"Creating new contest: new_contest_id={$newContestId}, name={$archivedContest['name']}");
 			
 			// Create new contest
-			$stmt = $pdo->prepare('INSERT INTO contests (id, name, description, start_date, end_date) VALUES (?, ?, ?, ?, ?)');
-			$stmt->execute([$newContestId, $archivedContest['name'], $archivedContest['description'], $archivedContest['start_date'], $archivedContest['end_date']]);
+			$stmt = $pdo->prepare('INSERT INTO contests (id, name, start_date, end_date) VALUES (?, ?, ?, ?)');
+			$stmt->execute([$newContestId, $archivedContest['name'], $archivedContest['start_date'], $archivedContest['end_date']]);
 			
 			// Get all archived categories for this contest
 			$stmt = $pdo->prepare('SELECT * FROM archived_categories WHERE archived_contest_id = ?');
@@ -514,8 +514,8 @@ class ContestController {
 					"Restoring category: archived_id={$archivedCategory['id']}, new_id={$newCategoryId}, name={$archivedCategory['name']}");
 				
 				// Create new category
-				$stmt = $pdo->prepare('INSERT INTO categories (id, contest_id, name, description) VALUES (?, ?, ?, ?)');
-				$stmt->execute([$newCategoryId, $newContestId, $archivedCategory['name'], $archivedCategory['description']]);
+				$stmt = $pdo->prepare('INSERT INTO categories (id, contest_id, name) VALUES (?, ?, ?)');
+				$stmt->execute([$newCategoryId, $newContestId, $archivedCategory['name']]);
 				
 				// Get all archived subcategories for this category
 				$stmt = $pdo->prepare('SELECT * FROM archived_subcategories WHERE archived_category_id = ?');
@@ -3355,6 +3355,11 @@ class AuthController {
 			$_SESSION['user'] = $user;
 			$_SESSION['session_version'] = $user['session_version'];
 			
+			// Update last_login timestamp
+			$now = date('c');
+			$stmt = DB::pdo()->prepare('UPDATE users SET last_login = ? WHERE id = ?');
+			$stmt->execute([$now, $user['id']]);
+			
 			\App\Logger::debug('login_successful', 'auth', $user['id'], 
 				"Login successful: user_id={$user['id']}, email={$user['email']}, role={$user['role']}");
 			\App\Logger::logLogin($user['email'] ?? $user['preferred_name'], true);
@@ -4108,17 +4113,17 @@ class AdminController {
 	public function activeUsersApi(): void {
 		require_organizer();
 		
-		// Get users who have been active recently (within last 30 minutes)
+		// Get users who are currently logged in (have last_login within last 30 minutes)
 		$activeUsers = DB::pdo()->query('
 			SELECT DISTINCT u.name, u.email, u.role, u.preferred_name, 
-			       MAX(al.created_at) as last_activity,
+			       u.last_login,
 			       al.ip_address
 			FROM users u 
 			LEFT JOIN activity_logs al ON u.name = al.user_name 
-			WHERE u.password_hash IS NOT NULL
-			GROUP BY u.id, u.name, u.email, u.role, u.preferred_name
-			HAVING last_activity IS NULL OR last_activity > datetime("now", "-30 minutes")
-			ORDER BY last_activity DESC, u.name
+			WHERE u.password_hash IS NOT NULL 
+			AND u.last_login IS NOT NULL 
+			AND u.last_login > datetime("now", "-30 minutes")
+			ORDER BY u.last_login DESC, u.name
 		')->fetchAll(\PDO::FETCH_ASSOC);
 		
 		// Set JSON response headers
@@ -4776,8 +4781,8 @@ class AdminController {
 			"Attempting to force logout all users");
 		
 		try {
-			// Increment session version for all users
-			DB::pdo()->prepare('UPDATE users SET session_version = ?')->execute([uuid()]);
+			// Increment session version and clear last_login for all users
+			DB::pdo()->prepare('UPDATE users SET session_version = ?, last_login = NULL')->execute([uuid()]);
 			
 			// Log successful outcome
 			\App\Logger::debug('force_logout_all_success', 'system', null, 
@@ -4822,7 +4827,7 @@ class AdminController {
 			
 			// Generate new session version for this user
 			$newSessionVersion = uuid();
-			DB::pdo()->prepare('UPDATE users SET session_version = ? WHERE id = ?')->execute([$newSessionVersion, $userId]);
+			DB::pdo()->prepare('UPDATE users SET session_version = ?, last_login = NULL WHERE id = ?')->execute([$newSessionVersion, $userId]);
 			
 			// Log successful outcome
 			\App\Logger::debug('force_logout_user_success', 'user', $userId, 
