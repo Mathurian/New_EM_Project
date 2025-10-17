@@ -1935,61 +1935,27 @@ class SubcategoryController {
 	public function index(array $params): void {
 		require_organizer();
 		
-		// Debug: Log the raw params array
-		\App\Logger::debug('subcategory_debug', 'subcategory', null, 
-			"Raw params array: " . json_encode($params));
-		
 		$categoryId = param('id', $params);
 		
-		// Debug: Log the URL parameter and what we're querying
-		\App\Logger::debug('subcategory_debug', 'subcategory', null, 
-			"Extracted category ID: '{$categoryId}', Request URI: " . ($_SERVER['REQUEST_URI'] ?? 'unknown'));
-		
-		// If categoryId is empty, something is wrong with parameter extraction
 		if (empty($categoryId)) {
-			\App\Logger::error('subcategory_debug', 'subcategory', null, 
-				"Category ID is empty! Params: " . json_encode($params));
 			http_response_code(400);
 			echo "Error: Category ID not found in URL parameters.";
 			return;
 		}
 		
-		// Debug: Log the exact query we're about to run
-		\App\Logger::debug('subcategory_debug', 'subcategory', null, 
-			"About to query: SELECT * FROM categories WHERE id = '{$categoryId}'");
-		
 		$category = DB::pdo()->prepare('SELECT * FROM categories WHERE id = ?');
 		$category->execute([$categoryId]);
 		$category = $category->fetch(\PDO::FETCH_ASSOC);
 		
-		// Debug: Log the exact result
-		\App\Logger::debug('subcategory_debug', 'subcategory', null, 
-			"Query result: " . json_encode($category));
-		
-		// Debug: Also check what categories exist with similar IDs
-		$allCategories = DB::pdo()->query("SELECT id, name FROM categories WHERE id LIKE '%{$categoryId}%' OR name LIKE '%bear%' OR name LIKE '%pet%'")->fetchAll(\PDO::FETCH_ASSOC);
-		\App\Logger::debug('subcategory_debug', 'subcategory', null, 
-			"Related categories: " . json_encode($allCategories));
-		
-		// Debug: Log what we actually found in the database
-		if ($category) {
-			\App\Logger::debug('subcategory_debug', 'subcategory', null, 
-				"Found category: ID={$category['id']}, Name={$category['name']}, Contest={$category['contest_id']}");
-		} else {
-			\App\Logger::error('subcategory_debug', 'subcategory', null, 
-				"No category found for ID: {$categoryId}");
+		if (!$category) {
+			http_response_code(404);
+			echo "Error: Category not found.";
+			return;
 		}
 		
 		$subcategories = DB::pdo()->prepare('SELECT * FROM subcategories WHERE category_id = ?');
 		$subcategories->execute([$categoryId]);
 		$subcategories = $subcategories->fetchAll(\PDO::FETCH_ASSOC);
-		
-		\App\Logger::debug('subcategory_debug', 'subcategory', null, 
-			"Found " . count($subcategories) . " subcategories for category ID: {$categoryId}");
-		
-		// Debug: Log what we're passing to the view
-		\App\Logger::debug('subcategory_debug', 'subcategory', null, 
-			"Passing to view - category: " . json_encode($category) . ", subcategories count: " . count($subcategories));
 		
 		view('subcategories/index', compact('category','subcategories','params'));
 	}

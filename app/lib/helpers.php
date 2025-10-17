@@ -3,20 +3,7 @@ declare(strict_types=1);
 namespace App;
 
 function view(string $template, array $data = []): void {
-	// Debug: Log what we're extracting
-	if (isset($data['category'])) {
-		\App\Logger::debug('view_debug', 'view', null, 
-			"view() function - about to extract category: " . json_encode($data['category']));
-	}
-	
 	extract($data);
-	
-	// Debug: Log what we have after extract
-	if (isset($category)) {
-		\App\Logger::debug('view_debug', 'view', null, 
-			"view() function - after extract, category: " . json_encode($category));
-	}
-	
 	include __DIR__ . '/../views/partials/layout.php';
 }
 

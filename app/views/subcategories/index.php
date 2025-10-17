@@ -1,25 +1,9 @@
 <?php use function App\{is_organizer, url}; ?>
 
-<!-- Debug: Log what we receive in the view -->
-<?php 
-\App\Logger::debug('subcategory_view_debug', 'subcategory', null, 
-	"Template START - category: " . json_encode($category));
-?>
 
 <h2>Subcategories for <?= htmlspecialchars($category['name']) ?></h2>
 <p><a href="<?= url('contests/' . urlencode($category['contest_id'] ?? '') . '/categories') ?>">Back</a></p>
 
-<!-- Temporary debug info to help identify the issue -->
-<div style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 10px; margin: 10px 0; border-radius: 4px; font-size: 0.9em;">
-	<strong>Debug Information:</strong><br>
-	URL Category ID: <code><?= htmlspecialchars($_GET['id'] ?? 'NOT_IN_GET') ?></code><br>
-	Database Category ID: <code><?= htmlspecialchars($category['id']) ?></code><br>
-	Category Name: <strong><?= htmlspecialchars($category['name']) ?></strong><br>
-	Contest ID: <code><?= htmlspecialchars($category['contest_id'] ?? 'N/A') ?></code><br>
-	Subcategories Count: <?= count($subcategories) ?><br>
-	Request URI: <code><?= htmlspecialchars($_SERVER['REQUEST_URI'] ?? 'unknown') ?></code><br>
-	Raw Params: <code><?= htmlspecialchars(json_encode($params ?? [])) ?></code>
-</div>
 
 <?php if (!empty($_SESSION['success_message'])): ?>
 	<p style="color: green; font-weight: bold;"><?= htmlspecialchars($_SESSION['success_message']) ?></p>

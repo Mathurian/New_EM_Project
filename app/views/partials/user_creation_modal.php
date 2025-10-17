@@ -1,11 +1,4 @@
 <?php use function App\{url, hierarchical_back_url, home_url}; use App\DB; ?>
-<!-- Debug: Log what we have in user_creation_modal -->
-<?php 
-if (isset($category)) {
-	\App\Logger::debug('modal_debug', 'user_creation_modal', null, 
-		"user_creation_modal.php - category: " . json_encode($category));
-}
-?>
 <!-- User Creation Modal/Drawer -->
 <div id="user-creation-modal" class="modal-overlay" style="display: none;" role="dialog" aria-labelledby="modal-title" aria-hidden="true">
 	<div class="modal-content">
@@ -139,8 +132,8 @@ if (isset($category)) {
 									<option value="">No category assignment</option>
 									<?php 
 									$categories = DB::pdo()->query('SELECT c.*, co.name as contest_name FROM categories c JOIN contests co ON c.contest_id = co.id ORDER BY co.name, c.name')->fetchAll(\PDO::FETCH_ASSOC);
-									foreach ($categories as $category): ?>
-										<option value="<?= htmlspecialchars($category['id']) ?>"><?= htmlspecialchars($category['contest_name']) ?> - <?= htmlspecialchars($category['name']) ?></option>
+									foreach ($categories as $cat): ?>
+										<option value="<?= htmlspecialchars($cat['id']) ?>"><?= htmlspecialchars($cat['contest_name']) ?> - <?= htmlspecialchars($cat['name']) ?></option>
 									<?php endforeach; ?>
 								</select>
 								<small>Assign this contestant to a specific category</small>
@@ -173,8 +166,8 @@ if (isset($category)) {
 							<div class="form-input">
 								<select name="category_id">
 									<option value="">No category assignment</option>
-									<?php foreach ($categories as $category): ?>
-										<option value="<?= htmlspecialchars($category['id']) ?>"><?= htmlspecialchars($category['contest_name']) ?> - <?= htmlspecialchars($category['name']) ?></option>
+									<?php foreach ($categories as $cat): ?>
+										<option value="<?= htmlspecialchars($cat['id']) ?>"><?= htmlspecialchars($cat['contest_name']) ?> - <?= htmlspecialchars($cat['name']) ?></option>
 									<?php endforeach; ?>
 								</select>
 								<small>Assign this judge to a specific category</small>
