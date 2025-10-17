@@ -105,6 +105,9 @@
 			<p style="margin-top: 8px; font-size: 0.9em; color: #666;">
 				Leave email blank to use the configured "From Email" address.
 			</p>
+			<p style="margin-top: 8px; font-size: 0.8em; color: #999;">
+				<strong>Debug:</strong> Check server error logs for "EMAIL TEST:" messages to see if the function is being called.
+			</p>
 		</div>
 		
 		<div style="margin-bottom: 20px; padding: 15px; background: #e8f5e8; border: 1px solid #c3e6c3; border-radius: 5px;">
