@@ -254,10 +254,25 @@ input:focus, select:focus, textarea:focus {
 /* Mobile nav hamburger behavior */
 #mobile-menu-toggle { display: none; }
 #nav-sections { display: flex; }
+
+/* Hide mobile-only elements on desktop */
+.home-link-mobile,
+.login-link-mobile,
+.user-menu-mobile { display: none; }
+
 @media (max-width: 768px) {
     #mobile-menu-toggle { display: inline-block !important; }
     #nav-sections { display: none !important; flex-direction: column; gap: 8px; width: 100%; }
     .nav-dropdown .dropdown-content { position: static; }
+    
+    /* Hide desktop elements on mobile */
+    .home-link-desktop,
+    .nav-right .nav-dropdown { display: none !important; }
+    
+    /* Show mobile-only elements on mobile */
+    .home-link-mobile,
+    .login-link-mobile,
+    .user-menu-mobile { display: block !important; }
     
     /* Mobile submenu styles */
     .submenu-content { 

@@ -4,10 +4,13 @@
 		<div class="nav-container">
             <div class="nav-left" style="display:flex; align-items:center;">
                 <button id="mobile-menu-toggle" class="btn btn-secondary btn-sm" aria-label="Toggle navigation">☰</button>
-                <a href="/" style="color: white; text-decoration: none; font-weight: bold; margin-left: 10px; margin-right: 20px;">Home</a>
+                <a href="/" class="home-link-desktop" style="color: white; text-decoration: none; font-weight: bold; margin-left: 10px; margin-right: 20px;">Home</a>
 				
 				<?php if (!empty($_SESSION['user'])): ?>
                     <div id="nav-sections" style="display:flex; gap:14px;">
+                    <!-- Home Link (Mobile Only) -->
+                    <a href="/" class="home-link-mobile" style="color: white; text-decoration: none; font-weight: bold; padding: 8px 12px; border-bottom: 1px solid #555;">🏠 Home</a>
+                    
                     <!-- Contests Accordion -->
 					<?php if (can_view_nav('Contests')): ?>
 						<div class="nav-dropdown">
@@ -119,6 +122,33 @@
 					<?php if (($_SESSION['user']['role'] ?? '') === 'emcee' && can_view_nav('Contestant Bios')): ?>
 						<a href="/emcee" style="color: white; text-decoration: none; margin-right: 20px;">Contestant Bios</a>
                     <?php endif; ?>
+                    
+                    <!-- User Menu (Mobile Only) -->
+                    <div class="nav-dropdown user-menu-mobile">
+                        <a href="#" onclick="toggleDropdown('user-menu-mobile')" style="color: white; text-decoration: none; cursor: pointer; padding: 8px 12px; border-bottom: 1px solid #555;">
+                            👤 <strong><?= htmlspecialchars($_SESSION['user']['preferred_name'] ?? $_SESSION['user']['name']) ?></strong>
+                            <span style="background: #495057; padding: 2px 6px; border-radius: 3px; font-size: 12px; margin-left: 5px;">
+                                <?= htmlspecialchars(ucfirst($_SESSION['user']['role'])) ?>
+                            </span>
+                        </a>
+                        <div id="user-menu-mobile-dropdown" class="dropdown-content" style="display: none;">
+                            <a href="/profile">My Profile</a>
+                            <form method="post" action="/logout" style="padding: 0 12px 8px;">
+                                <button type="submit" class="btn btn-danger btn-sm" style="width:100%;">Logout</button>
+                            </form>
+                        </div>
+                    </div>
+                    </div>
+				<?php else: ?>
+                    <!-- Mobile navigation for logged-out users -->
+                    <div id="nav-sections" style="display:flex; gap:14px;">
+                        <!-- Home Link (Mobile Only) -->
+                        <a href="/" class="home-link-mobile" style="color: white; text-decoration: none; font-weight: bold; padding: 8px 12px; border-bottom: 1px solid #555;">🏠 Home</a>
+                        
+                        <!-- Login Link (Mobile Only) -->
+                        <?php if (can_view_nav('Login')): ?>
+                            <a href="/login" class="login-link-mobile" style="color: white; text-decoration: none; padding: 8px 12px; border-bottom: 1px solid #555;">🔑 Login</a>
+                        <?php endif; ?>
                     </div>
 				<?php endif; ?>
 			</div>
