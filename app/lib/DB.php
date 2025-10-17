@@ -380,8 +380,7 @@ CREATE TABLE IF NOT EXISTS emcee_scripts (
 	filename TEXT NOT NULL,
 	filepath TEXT NOT NULL,
 	is_active BOOLEAN DEFAULT 1,
-	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	FOREIGN KEY (id) REFERENCES users(id) ON DELETE CASCADE
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 SQL;
 		self::pdo()->exec($sql);
@@ -417,7 +416,10 @@ SQL;
 		// users table new fields
 		self::addColumnIfMissing('users', 'contestant_id', 'TEXT');
 		
-		// emcee_scripts new fields
+		// emcee_scripts new fields - ensure all required columns exist
+		self::addColumnIfMissing('emcee_scripts', 'filename', 'TEXT');
+		self::addColumnIfMissing('emcee_scripts', 'filepath', 'TEXT');
+		self::addColumnIfMissing('emcee_scripts', 'is_active', 'INTEGER DEFAULT 1');
 		self::addColumnIfMissing('emcee_scripts', 'created_at', 'TEXT');
 		self::addColumnIfMissing('emcee_scripts', 'uploaded_by', 'TEXT');
 		self::addColumnIfMissing('emcee_scripts', 'title', 'TEXT');
@@ -426,8 +428,29 @@ SQL;
 		self::addColumnIfMissing('emcee_scripts', 'file_size', 'INTEGER');
 		self::addColumnIfMissing('emcee_scripts', 'uploaded_at', 'TEXT');
 		
-		// Ensure filename column exists (it should be in the original schema but might be missing)
-		self::addColumnIfMissing('emcee_scripts', 'filename', 'TEXT');
+		// Add foreign key constraint for uploaded_by if it doesn't exist
+		try {
+			DB::pdo()->exec("PRAGMA foreign_keys=ON");
+			// Check if foreign key constraint already exists
+			$fkInfo = DB::pdo()->query("PRAGMA foreign_key_list(emcee_scripts)")->fetchAll(\PDO::FETCH_ASSOC);
+			$hasUploadedByFK = false;
+			foreach ($fkInfo as $fk) {
+				if ($fk['table'] === 'users' && $fk['from'] === 'uploaded_by') {
+					$hasUploadedByFK = true;
+					break;
+				}
+			}
+			if (!$hasUploadedByFK) {
+				// SQLite doesn't support adding foreign key constraints to existing tables easily
+				// We'll rely on application-level integrity for now
+				\App\Logger::info('database_migration', 'system', null, 'emcee_scripts table: uploaded_by field added (FK constraint handled at application level)');
+			}
+		} catch (\Exception $e) {
+			\App\Logger::warn('database_migration', 'system', null, 'Could not add foreign key constraint for emcee_scripts.uploaded_by: ' . $e->getMessage());
+		}
+		
+		// Ensure emcee_scripts table has all required columns
+		self::ensureEmceeScriptsTable();
 		
 		// Migrate judge_certifications to include contestant_id
 		self::migrateJudgeCertifications();
@@ -438,6 +461,74 @@ SQL;
 		// Seed a default organizer if none exist
 		self::seedDefaultAdmin();
 		self::seedDefaultSettings();
+	}
+	
+	private static function ensureEmceeScriptsTable(): void {
+		try {
+			// Check if table exists and has required columns
+			$tableInfo = self::pdo()->query("PRAGMA table_info(emcee_scripts)")->fetchAll(\PDO::FETCH_ASSOC);
+			$requiredColumns = ['id', 'filename', 'filepath', 'is_active', 'created_at', 'uploaded_by', 'title', 'description', 'file_name', 'file_size', 'uploaded_at'];
+			$existingColumns = array_column($tableInfo, 'name');
+			
+			$missingColumns = array_diff($requiredColumns, $existingColumns);
+			if (!empty($missingColumns)) {
+				\App\Logger::warn('database_migration', 'system', null, 
+					"emcee_scripts table missing columns: " . implode(', ', $missingColumns) . ". Attempting to recreate table.");
+				
+				// Backup existing data
+				$existingData = [];
+				try {
+					$existingData = self::pdo()->query("SELECT * FROM emcee_scripts")->fetchAll(\PDO::FETCH_ASSOC);
+				} catch (\Exception $e) {
+					// Table might be corrupted, ignore
+				}
+				
+				// Drop and recreate table
+				self::pdo()->exec("DROP TABLE IF EXISTS emcee_scripts");
+				self::pdo()->exec("
+					CREATE TABLE emcee_scripts (
+						id TEXT PRIMARY KEY,
+						filename TEXT NOT NULL,
+						filepath TEXT NOT NULL,
+						is_active INTEGER DEFAULT 1,
+						created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+						uploaded_by TEXT,
+						title TEXT,
+						description TEXT,
+						file_name TEXT,
+						file_size INTEGER,
+						uploaded_at TEXT
+					)
+				");
+				
+				// Restore data if possible
+				if (!empty($existingData)) {
+					$stmt = self::pdo()->prepare("
+						INSERT INTO emcee_scripts (id, filename, filepath, is_active, created_at, uploaded_by, title, description, file_name, file_size, uploaded_at) 
+						VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+					");
+					foreach ($existingData as $row) {
+						$stmt->execute([
+							$row['id'] ?? uuid(),
+							$row['filename'] ?? '',
+							$row['filepath'] ?? '',
+							$row['is_active'] ?? 1,
+							$row['created_at'] ?? date('Y-m-d H:i:s'),
+							$row['uploaded_by'] ?? null,
+							$row['title'] ?? null,
+							$row['description'] ?? null,
+							$row['file_name'] ?? null,
+							$row['file_size'] ?? null,
+							$row['uploaded_at'] ?? null
+						]);
+					}
+				}
+				
+				\App\Logger::info('database_migration', 'system', null, 'emcee_scripts table recreated successfully');
+			}
+		} catch (\Exception $e) {
+			\App\Logger::error('database_migration', 'system', null, 'Failed to ensure emcee_scripts table: ' . $e->getMessage());
+		}
 	}
 	
 	private static function seedDefaultSettings(): void {

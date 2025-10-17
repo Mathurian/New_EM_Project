@@ -5122,6 +5122,11 @@ class AdminController {
 			$uploadedAt = date('Y-m-d H:i:s');
 			
 			try {
+				// Debug: Check if table exists and what columns it has
+				$tableInfo = DB::pdo()->query("PRAGMA table_info(emcee_scripts)")->fetchAll(\PDO::FETCH_ASSOC);
+				\App\Logger::debug('emcee_script_upload', 'admin', $_SESSION['user']['id'] ?? null, 
+					"emcee_scripts table info: " . json_encode($tableInfo));
+				
 				$stmt = DB::pdo()->prepare('INSERT INTO emcee_scripts (id, filename, filepath, is_active, created_at, uploaded_by, title, description, file_name, file_size, uploaded_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
 				$stmt->execute([uuid(), $filename, '/uploads/emcee-scripts/' . $filename, 1, date('Y-m-d H:i:s'), $_SESSION['user']['id'], $title, $description, $originalFilename, $fileSize, $uploadedAt]);
 				
