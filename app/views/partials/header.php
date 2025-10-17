@@ -51,10 +51,10 @@
 								
 								<!-- Settings Submenu -->
 								<div class="submenu-item">
-									<a href="#" onclick="toggleSubmenu('settings')" style="color: #007bff; font-weight: bold;">
-										⚙️ Settings ▼
+									<a href="#" onclick="toggleSubmenu('settings')">
+										Settings
 									</a>
-									<div id="settings-submenu" class="submenu-content" style="display: none; margin-left: 15px;">
+									<div id="settings-submenu" class="submenu-content" style="display: none;">
 										<a href="/admin/settings">System Settings</a>
 										<a href="/admin/templates">Templates</a>
 										<a href="/admin/emcee-scripts">Emcee Scripts</a>
@@ -64,10 +64,10 @@
 								
 								<!-- Logs Submenu -->
 								<div class="submenu-item">
-									<a href="#" onclick="toggleSubmenu('logs')" style="color: #007bff; font-weight: bold;">
-										📝 Logs ▼
+									<a href="#" onclick="toggleSubmenu('logs')">
+										Logs
 									</a>
-									<div id="logs-submenu" class="submenu-content" style="display: none; margin-left: 15px;">
+									<div id="logs-submenu" class="submenu-content" style="display: none;">
 										<a href="/admin/logs">Activity Logs</a>
 										<a href="/admin/log-files">Log Files</a>
 									</div>
@@ -75,10 +75,10 @@
 								
 								<!-- Database Submenu -->
 								<div class="submenu-item">
-									<a href="#" onclick="toggleSubmenu('database')" style="color: #007bff; font-weight: bold;">
-										🗄️ Database ▼
+									<a href="#" onclick="toggleSubmenu('database')">
+										Database
 									</a>
-									<div id="database-submenu" class="submenu-content" style="display: none; margin-left: 15px;">
+									<div id="database-submenu" class="submenu-content" style="display: none;">
 										<a href="/admin/backups">Database Backups</a>
 										<a href="/admin/database">Database Browser</a>
 									</div>
