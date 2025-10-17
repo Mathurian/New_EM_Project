@@ -4563,6 +4563,18 @@ class AdminController {
 		
 		$sessionTimeout = (int)post('session_timeout');
 		$logLevel = post('log_level');
+		// PHPMailer / SMTP
+		$smtpSettings = [
+			'smtp_enabled' => (string)post('smtp_enabled'),
+			'smtp_from_email' => (string)post('smtp_from_email'),
+			'smtp_from_name' => (string)post('smtp_from_name'),
+			'smtp_host' => (string)post('smtp_host'),
+			'smtp_port' => (string)post('smtp_port'),
+			'smtp_secure' => (string)post('smtp_secure'),
+			'smtp_auth' => (string)post('smtp_auth'),
+			'smtp_username' => (string)post('smtp_username'),
+			'smtp_password' => (string)post('smtp_password'),
+		];
 		
 		// Debug log the settings change attempt
 		\App\Logger::debug('settings_update_attempt', 'system_settings', null, 
@@ -4584,6 +4596,12 @@ class AdminController {
 			\App\Logger::debug('settings_log_level_updated', 'system_settings', 'log_level', 
 				"Log level updated to {$logLevel}");
 			
+			// Update SMTP settings
+			foreach ($smtpSettings as $k => $v) {
+				$stmt = $pdo->prepare('INSERT OR REPLACE INTO system_settings (setting_key, setting_value) VALUES (?, ?)');
+				$stmt->execute([$k, $v]);
+			}
+
 			$pdo->commit();
 			
 			// Apply the new log level immediately
@@ -4592,7 +4610,7 @@ class AdminController {
 				"Log level {$logLevel} applied to Logger instance");
 			
 			\App\Logger::logAdminAction('settings_updated', 'system_settings', null, 
-				"System settings updated: timeout={$sessionTimeout}s, log_level={$logLevel}");
+				"System settings updated: timeout={$sessionTimeout}s, log_level={$logLevel}, smtp_updated=1");
 			
 			redirect('/admin/settings?success=settings_updated');
 		} catch (\Exception $e) {

@@ -93,6 +93,59 @@
 			<p><a href="<?= url('admin/settings/test-log-level') ?>" class="btn btn-sm btn-secondary" target="_blank">🧪 Test Log Level</a> - Test all log levels and filtering</p>
 			<p><a href="<?= url('admin/settings/test-logging') ?>" class="btn btn-sm btn-secondary" target="_blank">📝 Test Logging</a> - Send test log messages</p>
 		</div>
+
+		<div style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 5px;">
+			<h3>Email (PHPMailer / SMTP)</h3>
+			<div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:12px;">
+				<label>
+					<strong>Enabled</strong><br>
+					<select name="smtp_enabled" style="width: 100%; padding: 6px; margin-top: 5px;">
+						<option value="1" <?= (($settings['smtp_enabled'] ?? '1') === '1') ? 'selected' : '' ?>>Yes</option>
+						<option value="0" <?= (($settings['smtp_enabled'] ?? '1') === '0') ? 'selected' : '' ?>>No</option>
+					</select>
+				</label>
+				<label>
+					<strong>From Email</strong><br>
+					<input type="email" name="smtp_from_email" value="<?= htmlspecialchars($settings['smtp_from_email'] ?? '') ?>" style="width: 100%; padding: 6px; margin-top: 5px;" />
+				</label>
+				<label>
+					<strong>From Name</strong><br>
+					<input type="text" name="smtp_from_name" value="<?= htmlspecialchars($settings['smtp_from_name'] ?? '') ?>" style="width: 100%; padding: 6px; margin-top: 5px;" />
+				</label>
+				<label>
+					<strong>Host</strong><br>
+					<input type="text" name="smtp_host" value="<?= htmlspecialchars($settings['smtp_host'] ?? '') ?>" style="width: 100%; padding: 6px; margin-top: 5px;" />
+				</label>
+				<label>
+					<strong>Port</strong><br>
+					<input type="number" name="smtp_port" value="<?= htmlspecialchars($settings['smtp_port'] ?? '587') ?>" style="width: 100%; padding: 6px; margin-top: 5px;" />
+				</label>
+				<label>
+					<strong>Security</strong><br>
+					<select name="smtp_secure" style="width: 100%; padding: 6px; margin-top: 5px;">
+						<option value="" <?= (($settings['smtp_secure'] ?? '') === '') ? 'selected' : '' ?>>None</option>
+						<option value="tls" <?= (($settings['smtp_secure'] ?? '') === 'tls') ? 'selected' : '' ?>>TLS</option>
+						<option value="ssl" <?= (($settings['smtp_secure'] ?? '') === 'ssl') ? 'selected' : '' ?>>SSL</option>
+					</select>
+				</label>
+				<label>
+					<strong>Auth</strong><br>
+					<select name="smtp_auth" style="width: 100%; padding: 6px; margin-top: 5px;">
+						<option value="0" <?= (($settings['smtp_auth'] ?? '0') === '0') ? 'selected' : '' ?>>Disabled</option>
+						<option value="1" <?= (($settings['smtp_auth'] ?? '0') === '1') ? 'selected' : '' ?>>Enabled</option>
+					</select>
+				</label>
+				<label>
+					<strong>Username</strong><br>
+					<input type="text" name="smtp_username" value="<?= htmlspecialchars($settings['smtp_username'] ?? '') ?>" style="width: 100%; padding: 6px; margin-top: 5px;" />
+				</label>
+				<label>
+					<strong>Password</strong><br>
+					<input type="password" name="smtp_password" value="<?= htmlspecialchars($settings['smtp_password'] ?? '') ?>" style="width: 100%; padding: 6px; margin-top: 5px;" />
+				</label>
+			</div>
+			<p style="margin-top:10px; color:#666; font-size:0.9em;">If a field is left blank, environment variables will be used as fallback.</p>
+		</div>
 		
 		<button type="submit" style="background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer;">
 			Update Settings

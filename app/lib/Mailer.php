@@ -13,24 +13,33 @@ class Mailer {
             return false;
         }
 
-        $fromEmail = $fromEmail ?: (getenv('SMTP_FROM_EMAIL') ?: 'no-reply@example.com');
-        $fromName = $fromName ?: (getenv('SMTP_FROM_NAME') ?: 'Event Manager');
+        // Load settings from DB (system_settings), fallback to env
+        $settings = [];
+        try {
+            $stmt = DB::pdo()->query('SELECT setting_key, setting_value FROM system_settings');
+            while ($row = $stmt->fetch(\PDO::FETCH_ASSOC)) { $settings[$row['setting_key']] = $row['setting_value']; }
+        } catch (\Throwable $e) {
+            // ignore, fallback to env
+        }
+
+        $fromEmail = $fromEmail ?: ($settings['smtp_from_email'] ?? (getenv('SMTP_FROM_EMAIL') ?: 'no-reply@example.com'));
+        $fromName = $fromName ?: ($settings['smtp_from_name'] ?? (getenv('SMTP_FROM_NAME') ?: 'Event Manager'));
 
         $mail = new \PHPMailer\PHPMailer\PHPMailer(true);
         try {
             // SMTP config
-            $useSmtp = (bool)(getenv('SMTP_ENABLED') ?: true);
+            $useSmtp = (bool)(($settings['smtp_enabled'] ?? '') !== '' ? (int)$settings['smtp_enabled'] : (getenv('SMTP_ENABLED') ?: 1));
             if ($useSmtp) {
                 $mail->isSMTP();
-                $mail->Host = getenv('SMTP_HOST') ?: 'localhost';
-                $mail->Port = (int)(getenv('SMTP_PORT') ?: 25);
-                $smtpSecure = getenv('SMTP_SECURE') ?: '';
+                $mail->Host = $settings['smtp_host'] ?? (getenv('SMTP_HOST') ?: 'localhost');
+                $mail->Port = (int)($settings['smtp_port'] ?? (getenv('SMTP_PORT') ?: 25));
+                $smtpSecure = $settings['smtp_secure'] ?? (getenv('SMTP_SECURE') ?: '');
                 if ($smtpSecure) { $mail->SMTPSecure = $smtpSecure; }
-                $smtpAuth = (bool)(getenv('SMTP_AUTH') ?: false);
+                $smtpAuth = (bool)(($settings['smtp_auth'] ?? '') !== '' ? (int)$settings['smtp_auth'] : (getenv('SMTP_AUTH') ?: 0));
                 $mail->SMTPAuth = $smtpAuth;
                 if ($smtpAuth) {
-                    $mail->Username = getenv('SMTP_USERNAME') ?: '';
-                    $mail->Password = getenv('SMTP_PASSWORD') ?: '';
+                    $mail->Username = $settings['smtp_username'] ?? (getenv('SMTP_USERNAME') ?: '');
+                    $mail->Password = $settings['smtp_password'] ?? (getenv('SMTP_PASSWORD') ?: '');
                 }
             }
 
