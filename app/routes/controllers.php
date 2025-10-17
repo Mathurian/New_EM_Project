@@ -2873,6 +2873,11 @@ class ScoringController {
 				$stmt->execute([uuid(), $subcategoryId, $commentContestantId, $judgeId, (string)$text, $now]);
 			}
 		}
+		
+		// Commit scores and comments first - these should always be saved
+		$pdo->commit();
+		
+		// Handle certification separately - this can fail without affecting scores
 		if (is_judge()) {
 			$signature = trim((string)post('signature_name'));
 			if ($signature === '') { 
@@ -2883,15 +2888,17 @@ class ScoringController {
 			// Validate signature matches judge's preferred name
 			$judgePreferredName = current_user()['preferred_name'] ?? current_user()['name'];
 			if (strtolower(trim($signature)) !== strtolower(trim($judgePreferredName))) {
-				$pdo->rollback();
-				redirect('/score/' . $subcategoryId . '/contestant/' . $contestantId . '?error=signature_mismatch');
+				// Scores are already saved, just redirect with error about certification
+				redirect('/score/' . $subcategoryId . '/contestant/' . $contestantId . '?error=signature_mismatch&scores_saved=1');
 				return;
 			}
 			
+			// Add certification in a separate transaction
+			$pdo->beginTransaction();
 			$pdo->prepare('INSERT OR REPLACE INTO judge_certifications (id, subcategory_id, contestant_id, judge_id, signature_name, certified_at) VALUES (?,?,?,?,?,?)')
 				->execute([uuid(), $subcategoryId, $contestantId, $judgeId, $signature, $now]);
+			$pdo->commit();
 		}
-		$pdo->commit();
 		
 		// Log the scoring action
 		$scoreCount = count($scores);
@@ -5194,7 +5201,13 @@ class EmceeController {
 			ORDER BY c.name, j.name
 		')->fetchAll(\PDO::FETCH_ASSOC);
 		
-		view('emcee/judges', compact('judges'));
+		// Group judges by category
+		$groupedJudges = [];
+		foreach ($judges as $judge) {
+			$groupedJudges[$judge['category_name']][] = $judge;
+		}
+		
+		view('emcee/judges', compact('groupedJudges'));
 	}
 }
 

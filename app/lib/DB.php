@@ -578,29 +578,42 @@ SQL;
 		}
 		
 		try {
-			// Clean up any existing users_new table from previous failed attempts
-			$pdo->exec('DROP TABLE IF EXISTS users_new');
+			// Ensure we're not in a transaction before setting WAL mode
+			if ($pdo->inTransaction()) {
+				$pdo->rollBack();
+			}
 			
-			// Create new users table with updated constraint
-			$pdo->exec('CREATE TABLE users_new (
-				id TEXT PRIMARY KEY,
-				name TEXT NOT NULL,
-				preferred_name TEXT,
-				email TEXT UNIQUE,
-				password_hash TEXT,
-				role TEXT NOT NULL CHECK (role IN (\'organizer\',\'judge\',\'emcee\',\'contestant\')),
-				judge_id TEXT,
-				gender TEXT,
-				FOREIGN KEY (judge_id) REFERENCES judges(id) ON DELETE SET NULL
-			)');
+			// Set WAL mode to reduce locking issues (outside transaction)
+			$pdo->exec('PRAGMA journal_mode=WAL');
+			$pdo->exec('PRAGMA busy_timeout=30000');
 			
-			// Copy data from old table with explicit column mapping
-			$pdo->exec('INSERT INTO users_new (id, name, preferred_name, email, password_hash, role, judge_id, gender) 
-						SELECT id, name, preferred_name, email, password_hash, role, judge_id, gender FROM users');
-			
-			// Drop old table and rename new one
-			$pdo->exec('DROP TABLE users');
-			$pdo->exec('ALTER TABLE users_new RENAME TO users');
+			self::executeWithRetry(function() use ($pdo) {
+				// Clean up any existing users_new table from previous failed attempts
+				$pdo->exec('DROP TABLE IF EXISTS users_new');
+				
+				// Create new users table with updated constraint
+				$pdo->exec('CREATE TABLE users_new (
+					id TEXT PRIMARY KEY,
+					name TEXT NOT NULL,
+					preferred_name TEXT,
+					email TEXT UNIQUE,
+					password_hash TEXT,
+					role TEXT NOT NULL CHECK (role IN (\'organizer\',\'judge\',\'emcee\',\'contestant\')),
+					judge_id TEXT,
+					gender TEXT,
+					FOREIGN KEY (judge_id) REFERENCES judges(id) ON DELETE SET NULL
+				)');
+				
+				// Copy data from old table with explicit column mapping
+				$pdo->exec('INSERT INTO users_new (id, name, preferred_name, email, password_hash, role, judge_id, gender) 
+							SELECT id, name, preferred_name, email, password_hash, role, judge_id, gender FROM users');
+				
+				// Drop old table and rename new one
+				$pdo->exec('DROP TABLE users');
+				$pdo->exec('ALTER TABLE users_new RENAME TO users');
+				
+				return true;
+			});
 			
 			error_log('Role constraint updated successfully');
 		} catch (\PDOException $e) {
