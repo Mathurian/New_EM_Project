@@ -753,24 +753,24 @@ table {
 }
 
 th, td {
-    border: 1px solid #dee2e6;
+    border: 1px solid var(--border-color);
     padding: 12px;
     text-align: left;
 }
 
 th {
-    background: #e9ecef;
+    background: var(--bg-tertiary);
     font-weight: 600;
-    color: #212529;
+    color: var(--text-primary);
 }
 
 tbody tr:hover {
-    background: #f8f9fa;
+    background: var(--bg-secondary);
 }
 
 /* Cards */
 .card {
-    background: white;
+    background: var(--bg-primary);
     border-radius: 8px;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     padding: 20px;
@@ -778,7 +778,7 @@ tbody tr:hover {
 }
 
 .card-header {
-    border-bottom: 1px solid #dee2e6;
+    border-bottom: 1px solid var(--border-color);
     padding-bottom: 15px;
     margin-bottom: 15px;
 }
@@ -804,15 +804,15 @@ tbody tr:hover {
 }
 
 .alert-warning {
-    background: #fff3cd;
-    border-color: #ffeaa7;
-    color: #856404;
+    background: var(--warning-color) !important;
+    border-color: var(--warning-hover) !important;
+    color: var(--text-primary) !important;
 }
 
 .alert-info {
-    background: #d1ecf1;
-    border-color: #bee5eb;
-    color: #0c5460;
+    background: var(--bg-tertiary) !important;
+    border-color: var(--border-color) !important;
+    color: var(--text-primary) !important;
 }
 
 /* Grid System */
@@ -1166,6 +1166,22 @@ input:focus, select:focus, textarea:focus {
 	align-items: center;
 }
 
+.admin-buttons .btn {
+	margin: 0 !important;
+}
+
+.admin-buttons .btn-danger {
+	background: var(--danger-color) !important;
+	color: white !important;
+	border: 1px solid var(--danger-color) !important;
+}
+
+.admin-buttons .btn-primary {
+	background: var(--accent-color) !important;
+	color: white !important;
+	border: 1px solid var(--accent-color) !important;
+}
+
 .settings-container {
 	max-width: 600px;
 	margin: 20px 0;
@@ -1212,18 +1228,24 @@ input:focus, select:focus, textarea:focus {
     background: var(--warning-color) !important;
     border: 1px solid var(--warning-hover) !important;
     color: var(--text-primary) !important;
-    padding: 15px;
-    margin: 20px 0;
-    border-radius: 5px;
+    padding: 15px !important;
+    margin: 20px 0 !important;
+    border-radius: 5px !important;
+    display: block !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
 }
 
 .info-box {
     background: var(--bg-tertiary) !important;
     border: 1px solid var(--border-color) !important;
     color: var(--text-primary) !important;
-    padding: 15px;
-    margin: 20px 0;
-    border-radius: 5px;
+    padding: 15px !important;
+    margin: 20px 0 !important;
+    border-radius: 5px !important;
+    display: block !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
 }
 
 /* Dark mode for warning/info boxes */

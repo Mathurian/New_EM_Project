@@ -36,7 +36,7 @@
 				</button>
 			</form>
 			<form method="post" action="<?= url('admin/users/force-logout-all') ?>" style="display: inline-block; margin-right: 10px; vertical-align: middle;">
-				<button type="submit" class="btn btn-warning" onclick="return confirm('Force logout all users? Current sessions will be invalidated.')">Force Logout All Users</button>
+				<button type="submit" class="btn btn-primary" onclick="return confirm('Force logout all users? Current sessions will be invalidated.')">Force Logout All Users</button>
 			</form>
 			<a href="<?= url('users/new') ?>" class="btn btn-primary" style="display:inline-block; margin-left: 10px; vertical-align: middle;">Create User</a>
 		</div>
