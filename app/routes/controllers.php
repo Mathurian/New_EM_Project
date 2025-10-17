@@ -2168,17 +2168,17 @@ class PeopleController {
 		\App\Logger::debug('people_index_data_retrieval', 'people', null, 
 			"Retrieving contestants and judges with user entries");
 		
-		// Get contestants that have corresponding user entries
+		// Get contestants that have corresponding user entries (regardless of login capability)
 		$contestants = DB::pdo()->query('
-			SELECT c.*, u.preferred_name 
+			SELECT c.*, u.preferred_name, u.password_hash
 			FROM contestants c 
 			INNER JOIN users u ON c.id = u.contestant_id 
 			ORDER BY c.contestant_number IS NULL, c.contestant_number, c.name
 		')->fetchAll(\PDO::FETCH_ASSOC);
 		
-		// Get judges that have corresponding user entries
+		// Get judges that have corresponding user entries (regardless of login capability)
 		$judges = DB::pdo()->query('
-			SELECT j.*, u.preferred_name 
+			SELECT j.*, u.preferred_name, u.password_hash
 			FROM judges j 
 			INNER JOIN users u ON j.id = u.judge_id 
 			ORDER BY j.name

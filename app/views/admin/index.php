@@ -36,7 +36,8 @@
 			// Get users who have been active recently (within last 30 minutes)
 			$activeUsers = DB::pdo()->query('
 				SELECT DISTINCT u.name, u.email, u.role, u.preferred_name, 
-				       MAX(al.created_at) as last_activity
+				       MAX(al.created_at) as last_activity,
+				       al.ip_address
 				FROM users u 
 				LEFT JOIN activity_logs al ON u.name = al.user_name 
 				WHERE u.password_hash IS NOT NULL
@@ -66,6 +67,9 @@
 							<div class="user-role"><?= htmlspecialchars(ucfirst($user['role'])) ?></div>
 							<?php if ($user['email']): ?>
 								<div class="user-email"><?= htmlspecialchars($user['email']) ?></div>
+							<?php endif; ?>
+							<?php if ($user['ip_address']): ?>
+								<div class="user-ip">IP: <?= htmlspecialchars($user['ip_address']) ?></div>
 							<?php endif; ?>
 						</div>
 						<div class="user-status">
@@ -436,6 +440,12 @@
 .user-email {
 	font-size: 0.8em;
 	color: #666;
+}
+
+.user-ip {
+	font-size: 0.8em;
+	color: #007bff;
+	font-weight: 500;
 }
 
 .user-status {
