@@ -26,12 +26,13 @@ body {
 
 /* Header and Navigation */
 header {
-    background: #343a40;
-    color: #fff;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
     position: sticky;
     top: 0;
     z-index: 100;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    border-bottom: 1px solid var(--border-color);
 }
 
 .nav-container {
@@ -262,24 +263,28 @@ input:focus, select:focus, textarea:focus {
 @media (max-width: 768px) {
     #mobile-menu-toggle { 
         display: inline-block !important; 
-        background: #007bff !important;
+        background: var(--accent-color) !important;
         color: white !important;
-        border: 1px solid #0056b3 !important;
+        border: 1px solid var(--accent-color) !important;
+        padding: 8px 12px !important;
+        border-radius: 4px !important;
     }
     
     #mobile-menu-toggle:hover {
-        background: #0056b3 !important;
+        background: var(--text-primary) !important;
+        border-color: var(--text-primary) !important;
     }
     
     #nav-sections { 
         display: none !important; 
         flex-direction: column; 
-        gap: 8px; 
+        gap: 12px; 
         width: 100%; 
         background: var(--bg-secondary);
-        padding: 15px;
+        padding: 20px;
         border-radius: 0 0 8px 8px;
         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        border-top: 1px solid var(--border-color);
     }
     .nav-dropdown .dropdown-content { position: static; }
     
@@ -294,15 +299,18 @@ input:focus, select:focus, textarea:focus {
     /* Mobile menu link styling */
     .home-link-mobile {
         color: var(--text-primary) !important;
-        background: var(--bg-tertiary);
+        background: transparent !important;
         border-radius: 6px;
-        border: 1px solid var(--border-color);
+        border: 1px solid transparent !important;
         margin-bottom: 8px;
+        padding: 12px 16px !important;
+        transition: all 0.2s ease;
     }
     
     .home-link-mobile:hover {
-        background: var(--accent-color);
+        background: var(--accent-color) !important;
         color: white !important;
+        border-color: var(--accent-color) !important;
     }
     
     /* Mobile user menu styling */
@@ -312,14 +320,17 @@ input:focus, select:focus, textarea:focus {
     
     .user-menu-mobile > a {
         color: var(--text-primary) !important;
-        background: var(--bg-tertiary);
+        background: transparent !important;
         border-radius: 6px;
-        border: 1px solid var(--border-color);
+        border: 1px solid transparent !important;
+        padding: 12px 16px !important;
+        transition: all 0.2s ease;
     }
     
     .user-menu-mobile > a:hover {
-        background: var(--accent-color);
+        background: var(--accent-color) !important;
         color: white !important;
+        border-color: var(--accent-color) !important;
     }
     
     /* Mobile dropdown content styling */
@@ -328,15 +339,34 @@ input:focus, select:focus, textarea:focus {
         border: 1px solid var(--border-color) !important;
         border-radius: 6px !important;
         margin-top: 8px !important;
+        padding: 8px 0 !important;
     }
     
     .user-menu-mobile .dropdown-content a {
         color: var(--text-primary) !important;
+        padding: 10px 16px !important;
+        display: block;
+        transition: all 0.2s ease;
     }
     
-    .user-menu-mobile .dropdown-content a:hover {
-        background: var(--accent-color) !important;
+    /* Mobile logout button styling */
+    .user-menu-mobile .dropdown-content button {
+        background: #dc3545 !important;
         color: white !important;
+        border: 1px solid #dc3545 !important;
+        border-radius: 6px !important;
+        padding: 12px 16px !important;
+        width: 100% !important;
+        margin: 8px 0 0 0 !important;
+        transition: all 0.2s ease;
+        font-size: 14px !important;
+        font-weight: 500 !important;
+    }
+    
+    .user-menu-mobile .dropdown-content button:hover {
+        background: #c82333 !important;
+        border-color: #c82333 !important;
+        transform: translateY(-1px);
     }
     
     /* Mobile submenu styles */
@@ -348,6 +378,23 @@ input:focus, select:focus, textarea:focus {
         background: var(--bg-tertiary) !important;
         border-radius: 6px !important;
         border: 1px solid var(--border-color) !important;
+        padding: 8px 0 !important;
+    }
+    
+    .submenu-item > a {
+        color: var(--text-primary) !important;
+        background: transparent !important;
+        border-radius: 6px;
+        border: 1px solid transparent !important;
+        padding: 10px 16px !important;
+        transition: all 0.2s ease;
+        display: block;
+    }
+    
+    .submenu-item > a:hover {
+        background: var(--accent-color) !important;
+        color: white !important;
+        border-color: var(--accent-color) !important;
     }
     
     .submenu-item > a::after {
@@ -359,15 +406,36 @@ input:focus, select:focus, textarea:focus {
         background: var(--bg-tertiary) !important;
         border: 1px solid var(--border-color) !important;
         border-radius: 6px !important;
+        padding: 8px 0 !important;
     }
     
     .nav-dropdown .dropdown-content a {
         color: var(--text-primary) !important;
+        padding: 10px 16px !important;
+        display: block;
+        transition: all 0.2s ease;
     }
     
     .nav-dropdown .dropdown-content a:hover {
         background: var(--accent-color) !important;
         color: white !important;
+    }
+    
+    /* Mobile navigation links styling */
+    .nav-dropdown > a {
+        color: var(--text-primary) !important;
+        background: transparent !important;
+        border-radius: 6px;
+        border: 1px solid transparent !important;
+        padding: 12px 16px !important;
+        transition: all 0.2s ease;
+        display: block;
+    }
+    
+    .nav-dropdown > a:hover {
+        background: var(--accent-color) !important;
+        color: white !important;
+        border-color: var(--accent-color) !important;
     }
 }
 #nav-sections.active { display: flex !important; }
