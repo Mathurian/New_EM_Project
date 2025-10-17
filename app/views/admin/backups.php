@@ -119,29 +119,29 @@
                 <strong>Recent Backups</strong>
                 <button type="button" class="btn btn-secondary btn-sm" id="toggle-backups" aria-expanded="false" aria-controls="backups-table">Show All</button>
             </div>
-            <table class="table" id="backups-table" data-collapsed="true">
+            <table style="width: 100%; border-collapse: collapse; font-size: 0.9em;" id="backups-table" data-collapsed="true">
 				<thead>
-					<tr>
-						<th>Type</th>
-						<th>File Name</th>
-						<th>Size</th>
-						<th>Status</th>
-						<th>Created By</th>
-						<th>Created At</th>
-						<th>Actions</th>
+					<tr style="background: #f8f9fa;">
+						<th style="border: 1px solid #dee2e6; padding: 8px; text-align: left;">Type</th>
+						<th style="border: 1px solid #dee2e6; padding: 8px; text-align: left;">File Name</th>
+						<th style="border: 1px solid #dee2e6; padding: 8px; text-align: left;">Size</th>
+						<th style="border: 1px solid #dee2e6; padding: 8px; text-align: left;">Status</th>
+						<th style="border: 1px solid #dee2e6; padding: 8px; text-align: left;">Created By</th>
+						<th style="border: 1px solid #dee2e6; padding: 8px; text-align: left;">Created At</th>
+						<th style="border: 1px solid #dee2e6; padding: 8px; text-align: left;">Actions</th>
 					</tr>
 				</thead>
 				<tbody>
                     <?php $rowIndex = 0; foreach ($backupLogs as $backup): $rowIndex++; ?>
                         <tr class="backup-row" data-index="<?= $rowIndex ?>">
-							<td>
+							<td style="border: 1px solid #dee2e6; padding: 8px;">
 								<span class="badge badge-<?= $backup['backup_type'] === 'schema' ? 'primary' : ($backup['backup_type'] === 'full' ? 'success' : 'info') ?>">
 									<?= ucfirst($backup['backup_type']) ?>
 								</span>
 							</td>
-							<td><?= htmlspecialchars(basename($backup['file_path'])) ?></td>
-							<td><?= $backup['file_size'] > 0 ? number_format($backup['file_size'] / 1024, 1) . ' KB' : 'N/A' ?></td>
-							<td>
+							<td style="border: 1px solid #dee2e6; padding: 8px;"><?= htmlspecialchars(basename($backup['file_path'])) ?></td>
+							<td style="border: 1px solid #dee2e6; padding: 8px;"><?= $backup['file_size'] > 0 ? number_format($backup['file_size'] / 1024, 1) . ' KB' : 'N/A' ?></td>
+							<td style="border: 1px solid #dee2e6; padding: 8px;">
 								<span class="badge badge-<?= $backup['status'] === 'success' ? 'success' : ($backup['status'] === 'failed' ? 'danger' : 'warning') ?>">
 									<?= ucfirst($backup['status']) ?>
 								</span>
@@ -149,16 +149,16 @@
 									<br><small class="text-danger"><?= htmlspecialchars($backup['error_message']) ?></small>
 								<?php endif; ?>
 							</td>
-							<td><?= htmlspecialchars($backup['created_by_name'] ?? 'System') ?></td>
-							<td><span class="log-time" data-iso="<?= htmlspecialchars($backup['created_at']) ?>"><?= htmlspecialchars($backup['created_at']) ?></span></td>
-							<td>
+							<td style="border: 1px solid #dee2e6; padding: 8px;"><?= htmlspecialchars($backup['created_by_name'] ?? 'System') ?></td>
+							<td style="border: 1px solid #dee2e6; padding: 8px;"><span class="log-time" data-iso="<?= htmlspecialchars($backup['created_at']) ?>"><?= htmlspecialchars($backup['created_at']) ?></span></td>
+							<td style="border: 1px solid #dee2e6; padding: 8px;">
 								<?php if ($backup['status'] === 'success'): ?>
-									<a href="<?= url('admin/backups/' . urlencode($backup['id']) . '/download') ?>" class="btn btn-sm btn-primary">Download</a>
+									<a href="<?= url('admin/backups/' . urlencode($backup['id']) . '/download') ?>" class="btn btn-xs btn-primary" style="padding: 2px 6px; font-size: 0.75em; margin-right: 4px;">Download</a>
 									<form method="post" action="<?= url('admin/backups/' . urlencode($backup['id']) . '/delete') ?>" style="display: inline-block;" onsubmit="return confirm('Are you sure you want to delete this backup?');">
-										<button type="submit" class="btn btn-sm btn-danger">Delete</button>
+										<button type="submit" class="btn btn-xs btn-danger" style="padding: 2px 6px; font-size: 0.75em;">Delete</button>
 									</form>
 								<?php else: ?>
-									<span class="text-muted">No actions available</span>
+									<span class="text-muted" style="font-size: 0.8em;">No actions available</span>
 								<?php endif; ?>
 							</td>
 						</tr>
