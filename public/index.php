@@ -62,6 +62,7 @@ $router->get('/print/judge/{id}', 'PrintController@judge');
 $router->get('/print/category/{id}', 'PrintController@category');
 $router->get('/admin/settings', 'AdminController@settings');
 $router->post('/admin/settings', 'AdminController@updateSettings');
+$router->post('/admin/settings/test-email', 'AdminController@testEmailConnection');
 $router->get('/admin/settings/test-log-level', 'AdminController@testLogLevel');
 $router->get('/admin/settings/test-logging', 'AdminController@testLogging');
 $router->get('/admin/logs', 'AdminController@logs');

@@ -4558,6 +4558,39 @@ class AdminController {
 		exit;
 	}
 	
+	public function testEmailConnection(): void {
+		require_organizer();
+		
+		// Get current SMTP settings from database
+		$settings = [];
+		$stmt = DB::pdo()->query('SELECT setting_key, setting_value FROM system_settings');
+		while ($row = $stmt->fetch(\PDO::FETCH_ASSOC)) {
+			$settings[$row['setting_key']] = $row['setting_value'];
+		}
+		
+		// Test email connection
+		$testEmail = post('test_email') ?: ($settings['smtp_from_email'] ?? 'test@example.com');
+		$testSubject = 'Event Manager - SMTP Connection Test';
+		$testMessage = '<h2>SMTP Connection Test</h2><p>This is a test email to verify your SMTP configuration.</p><p><strong>Test Details:</strong></p><ul><li>Time: ' . date('Y-m-d H:i:s') . '</li><li>From: ' . ($settings['smtp_from_email'] ?? 'not configured') . '</li><li>SMTP Host: ' . ($settings['smtp_host'] ?? 'not configured') . '</li><li>Port: ' . ($settings['smtp_port'] ?? 'not configured') . '</li><li>Security: ' . ($settings['smtp_secure'] ?? 'not configured') . '</li></ul><p>If you received this email, your SMTP configuration is working correctly!</p>';
+		
+		\App\Logger::debug('email_test_attempt', 'email', null, "Testing SMTP connection to: {$testEmail}");
+		
+		try {
+			$result = \App\Mailer::sendHtml($testEmail, $testSubject, $testMessage);
+			
+			if ($result) {
+				\App\Logger::info('email_test_success', 'email', null, "SMTP test email sent successfully to: {$testEmail}");
+				redirect('/admin/settings?success=email_test_success&test_email=' . urlencode($testEmail));
+			} else {
+				\App\Logger::error('email_test_failed', 'email', null, "SMTP test email failed to send to: {$testEmail}");
+				redirect('/admin/settings?error=email_test_failed');
+			}
+		} catch (\Throwable $e) {
+			\App\Logger::error('email_test_exception', 'email', null, "SMTP test exception: " . $e->getMessage());
+			redirect('/admin/settings?error=email_test_exception&details=' . urlencode($e->getMessage()));
+		}
+	}
+	
 	public function updateSettings(): void {
 		require_organizer();
 		

@@ -8,17 +8,25 @@
 <?php if (!empty($_GET['success'])): ?>
 	<?php 
 	$successMessages = [
-		'settings_updated' => 'Settings updated successfully!'
+		'settings_updated' => 'Settings updated successfully!',
+		'email_test_success' => 'Test email sent successfully! Check your inbox.'
 	];
 	$successMessage = $successMessages[$_GET['success']] ?? 'Operation completed successfully!';
 	?>
-	<div class="alert alert-success"><?= htmlspecialchars($successMessage) ?></div>
+	<div class="alert alert-success">
+		<?= htmlspecialchars($successMessage) ?>
+		<?php if ($_GET['success'] === 'email_test_success' && !empty($_GET['test_email'])): ?>
+			<br><small>Test email sent to: <?= htmlspecialchars($_GET['test_email']) ?></small>
+		<?php endif; ?>
+	</div>
 <?php endif; ?>
 
 <?php if (!empty($_GET['error'])): ?>
 	<?php 
 	$errorMessages = [
-		'invalid_timeout' => 'Invalid session timeout value. Please enter a positive number.'
+		'invalid_timeout' => 'Invalid session timeout value. Please enter a positive number.',
+		'email_test_failed' => 'Test email failed to send. Check your SMTP settings and try again.',
+		'email_test_exception' => 'Email test failed with error: ' . htmlspecialchars($_GET['details'] ?? 'Unknown error')
 	];
 	$errorMessage = $errorMessages[$_GET['error']] ?? 'An error occurred';
 	?>
@@ -85,6 +93,18 @@
 				<li><strong>Warning:</strong> Records potential issues like failed logins, user deletions</li>
 				<li><strong>Error:</strong> Records only system errors and critical issues</li>
 			</ul>
+		</div>
+		
+		<div style="margin-bottom: 20px; padding: 15px; background: #e8f5e8; border: 1px solid #c3e6c3; border-radius: 5px;">
+			<h4>Email Test Tool</h4>
+			<p>Test your SMTP configuration by sending a test email:</p>
+			<form method="post" action="<?= url('admin/settings/test-email') ?>" style="display: inline-block;">
+				<input type="email" name="test_email" placeholder="test@example.com" value="<?= htmlspecialchars($settings['smtp_from_email'] ?? '') ?>" style="padding: 6px; margin-right: 8px; width: 200px;" />
+				<button type="submit" class="btn btn-sm btn-secondary">📧 Test Email</button>
+			</form>
+			<p style="margin-top: 8px; font-size: 0.9em; color: #666;">
+				Leave email blank to use the configured "From Email" address.
+			</p>
 		</div>
 		
 		<div style="margin-bottom: 20px; padding: 15px; background: #e8f5e8; border: 1px solid #c3e6c3; border-radius: 5px;">
