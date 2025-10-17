@@ -1223,11 +1223,14 @@ input:focus, select:focus, textarea:focus {
     color: #fff3cd;
 }
 
-/* Additional warning/info box styles for inline usage */
-.warning-box {
-    background: var(--warning-color) !important;
-    border: 1px solid var(--warning-hover) !important;
-    color: var(--text-primary) !important;
+/* Force warning box styling with maximum specificity */
+div.warning-box,
+.warning-box,
+body .warning-box,
+html body .warning-box {
+    background: #ffc107 !important; /* Force yellow background */
+    border: 2px solid #d39e00 !important; /* Force darker yellow border */
+    color: #333333 !important; /* Force dark text */
     padding: 15px !important;
     margin: 20px 0 !important;
     border-radius: 5px !important;
@@ -1236,16 +1239,23 @@ input:focus, select:focus, textarea:focus {
     box-sizing: border-box !important;
 }
 
-.info-box {
-    background: var(--bg-tertiary) !important;
-    border: 1px solid var(--border-color) !important;
-    color: var(--text-primary) !important;
-    padding: 15px !important;
-    margin: 20px 0 !important;
-    border-radius: 5px !important;
-    display: block !important;
-    width: 100% !important;
-    box-sizing: border-box !important;
+/* Force admin buttons styling with maximum specificity */
+div.admin-buttons .btn-danger,
+.admin-buttons .btn-danger,
+body .admin-buttons .btn-danger,
+html body .admin-buttons .btn-danger {
+    background: #dc3545 !important; /* Force red background */
+    color: white !important;
+    border: 1px solid #dc3545 !important;
+}
+
+div.admin-buttons .btn-primary,
+.admin-buttons .btn-primary,
+body .admin-buttons .btn-primary,
+html body .admin-buttons .btn-primary {
+    background: #007bff !important; /* Force blue background */
+    color: white !important;
+    border: 1px solid #007bff !important;
 }
 
 /* Dark mode for warning/info boxes */
