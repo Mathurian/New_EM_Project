@@ -17,7 +17,7 @@ body {
 
 /* Main content padding to account for fixed header */
 main {
-    padding-top: 80px; /* Adjust based on header height */
+    padding-top: 100px; /* Increased from 80px to prevent title overlap */
 }
 
 /* Mobile main content - no extra padding needed */
@@ -89,11 +89,14 @@ header {
 .dropdown-content {
     background: var(--bg-tertiary) !important;
     color: var(--text-primary) !important;
+    backdrop-filter: blur(8px) !important;
+    -webkit-backdrop-filter: blur(8px) !important;
+    box-shadow: 0 8px 16px rgba(0,0,0,0.15) !important;
 }
 
 .dropdown-content a {
     color: var(--text-primary) !important;
-    background: transparent !important;
+    background: rgba(255, 255, 255, 0.05) !important;
 }
 
 .dropdown-content a:hover,
@@ -105,11 +108,14 @@ header {
 .submenu-content {
     background: var(--bg-tertiary) !important;
     color: var(--text-primary) !important;
+    backdrop-filter: blur(8px) !important;
+    -webkit-backdrop-filter: blur(8px) !important;
+    box-shadow: 0 8px 16px rgba(0,0,0,0.15) !important;
 }
 
 .submenu-content a {
     color: var(--text-primary) !important;
-    background: transparent !important;
+    background: rgba(255, 255, 255, 0.05) !important;
 }
 
 .submenu-content a:hover,
@@ -120,7 +126,7 @@ header {
 header .nav-dropdown .dropdown-content {
     background: var(--bg-tertiary) !important;
     border: 1px solid var(--border-color) !important;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1) !important;
+    box-shadow: 0 8px 16px rgba(0,0,0,0.15) !important;
     z-index: 1001 !important;
     min-width: 200px !important;
     border-radius: 6px !important;
@@ -130,6 +136,8 @@ header .nav-dropdown .dropdown-content {
     left: 0 !important;
     padding: 8px 0 !important;
     margin-top: 4px !important;
+    backdrop-filter: blur(8px) !important;
+    -webkit-backdrop-filter: blur(8px) !important;
 }
 
 header .nav-dropdown .dropdown-content a {
@@ -141,6 +149,7 @@ header .nav-dropdown .dropdown-content a {
     transition: all 0.2s ease !important;
     margin: 0 8px !important;
     border-radius: 4px !important;
+    background: rgba(255, 255, 255, 0.05) !important;
 }
 
 header .nav-dropdown .dropdown-content a:hover,
@@ -158,13 +167,15 @@ header .nav-dropdown .dropdown-content a:last-child {
 header .submenu-content {
     background: var(--bg-tertiary) !important;
     border: 1px solid var(--border-color) !important;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1) !important;
+    box-shadow: 0 8px 16px rgba(0,0,0,0.15) !important;
     z-index: 1002 !important;
     min-width: 180px !important;
     border-radius: 6px !important;
     overflow: visible !important;
     margin-left: 5px !important;
     padding: 8px 0 !important;
+    backdrop-filter: blur(8px) !important;
+    -webkit-backdrop-filter: blur(8px) !important;
 }
 
 header .submenu-content a {
@@ -177,6 +188,7 @@ header .submenu-content a {
     display: block !important;
     margin: 0 8px !important;
     border-radius: 4px !important;
+    background: rgba(255, 255, 255, 0.05) !important;
 }
 
 header .submenu-content a:hover,
