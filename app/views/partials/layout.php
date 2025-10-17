@@ -1,4 +1,12 @@
-<?php use function App\{render, can_view_nav}; ?><!doctype html>
+<?php use function App\{render, can_view_nav}; ?>
+<!-- Debug: Log what we have in layout -->
+<?php 
+if (isset($category)) {
+	\App\Logger::debug('layout_debug', 'layout', null, 
+		"layout.php - category variable: " . json_encode($category));
+}
+?>
+<!doctype html>
 <html>
 	<head>
 		<meta charset="utf-8" />
