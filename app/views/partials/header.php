@@ -4,7 +4,7 @@
 		<div class="nav-container">
             <div class="nav-left" style="display:flex; align-items:center;">
                 <button id="mobile-menu-toggle" class="btn btn-secondary btn-sm" aria-label="Toggle navigation">☰</button>
-                <a href="/" class="home-link-desktop" style="color: white; text-decoration: none; font-weight: bold; margin-left: 10px; margin-right: 20px;">Home</a>
+                <a href="/" class="home-link-desktop">Home</a>
 				
 				<?php if (!empty($_SESSION['user'])): ?>
                     <div id="nav-sections" style="display:flex; gap:14px;">
@@ -14,7 +14,7 @@
                     <!-- Contests Accordion -->
 					<?php if (can_view_nav('Contests')): ?>
 						<div class="nav-dropdown">
-							<a href="#" onclick="toggleDropdown('contests')" style="color: white; text-decoration: none; cursor: pointer;">
+							<a href="#" onclick="toggleDropdown('contests')" class="nav-dropdown-trigger">
 								Contests ▼
 							</a>
 							<div id="contests-dropdown" class="dropdown-content" style="display: none;">
@@ -30,7 +30,7 @@
 					<!-- Users/People Accordion -->
 					<?php if (can_view_nav('People')): ?>
 						<div class="nav-dropdown">
-							<a href="#" onclick="toggleDropdown('users')" style="color: white; text-decoration: none; cursor: pointer;">
+							<a href="#" onclick="toggleDropdown('users')" class="nav-dropdown-trigger">
 								People ▼
 							</a>
 							<div id="users-dropdown" class="dropdown-content" style="display: none;">
@@ -46,7 +46,7 @@
 					<!-- Admin Accordion -->
 					<?php if (($_SESSION['user']['role'] ?? '') === 'organizer'): ?>
 						<div class="nav-dropdown">
-							<a href="#" onclick="toggleDropdown('admin')" style="color: white; text-decoration: none; cursor: pointer;">
+							<a href="#" onclick="toggleDropdown('admin')" class="nav-dropdown-trigger">
 								Admin ▼
 							</a>
 							<div id="admin-dropdown" class="dropdown-content" style="display: none;">
@@ -95,18 +95,18 @@
 					<!-- Results Accordion -->
 					<?php if (can_view_nav('Results')): ?>
 						<div class="nav-dropdown">
-							<a href="#" onclick="toggleDropdown('results')" style="color: white; text-decoration: none; cursor: pointer;">
+							<a href="#" onclick="toggleDropdown('results')" class="nav-dropdown-trigger">
 								Results ▼
 							</a>
                             <div id="results-dropdown" class="dropdown-content" style="display: none;">
 								<?php if (is_organizer()): ?>
-									<div style="border-top: 1px solid #ccc; margin: 5px 0;"></div>
+									<div class="dropdown-divider"></div>
 									<a href="/results">📋 Complete Results Overview</a>
 								<a href="/results/contestants">👤 Contestants</a>
 									<a href="/admin/print-reports">🖨️ Print Reports</a>
 								<?php endif; ?>
 								<?php if (($_SESSION['user']['role'] ?? '') === 'judge'): ?>
-									<div style="border-top: 1px solid #ccc; margin: 5px 0;"></div>
+									<div class="dropdown-divider"></div>
 									<a href="/results">👀 View My Assigned Results</a>
 								<?php endif; ?>
                             </div>
@@ -152,16 +152,16 @@
 			<div class="nav-right">
                 <?php if (!empty($_SESSION['user'])): ?>
                     <div class="nav-dropdown">
-                        <a href="#" onclick="toggleDropdown('user-menu')" style="color: white; text-decoration: none; cursor: pointer;">
+                        <a href="#" onclick="toggleDropdown('user-menu')" class="nav-dropdown-trigger">
                             <strong><?= htmlspecialchars($_SESSION['user']['preferred_name'] ?? $_SESSION['user']['name']) ?></strong>
-                            <span style="background: #495057; padding: 2px 6px; border-radius: 3px; font-size: 12px; margin-left: 5px;">
+                            <span class="user-role-badge-desktop">
                                 <?= htmlspecialchars(ucfirst($_SESSION['user']['role'])) ?>
                             </span>
                         </a>
                         <div id="user-menu-dropdown" class="dropdown-content" style="display: none;">
                             <a href="/profile">My Profile</a>
-                            <form method="post" action="/logout" style="padding: 0 12px 8px;">
-                                <button type="submit" class="btn btn-danger btn-sm" style="width:100%;">Logout</button>
+                            <form method="post" action="/logout" class="logout-form-desktop">
+                                <button type="submit" class="btn btn-danger btn-sm logout-btn-desktop">Logout</button>
                             </form>
                         </div>
                     </div>
