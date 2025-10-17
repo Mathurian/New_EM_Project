@@ -1987,6 +1987,10 @@ class SubcategoryController {
 		\App\Logger::debug('subcategory_debug', 'subcategory', null, 
 			"Found " . count($subcategories) . " subcategories for category ID: {$categoryId}");
 		
+		// Debug: Log what we're passing to the view
+		\App\Logger::debug('subcategory_debug', 'subcategory', null, 
+			"Passing to view - category: " . json_encode($category) . ", subcategories count: " . count($subcategories));
+		
 		view('subcategories/index', compact('category','subcategories','params'));
 	}
 	public function new(array $params): void {

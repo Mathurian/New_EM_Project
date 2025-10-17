@@ -1,4 +1,11 @@
 <?php use function App\{is_organizer, url}; ?>
+
+<!-- Debug: Log what we receive in the view -->
+<?php 
+\App\Logger::debug('subcategory_view_debug', 'subcategory', null, 
+	"View received category: " . json_encode($category));
+?>
+
 <h2>Subcategories for <?= htmlspecialchars($category['name']) ?></h2>
 <p><a href="<?= url('contests/' . urlencode($category['contest_id'] ?? '') . '/categories') ?>">Back</a></p>
 
