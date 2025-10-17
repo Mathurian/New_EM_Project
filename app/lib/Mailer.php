@@ -4,11 +4,15 @@ namespace App;
 
 class Mailer {
     public static function sendHtml(string $toEmail, string $subject, string $html, ?string $fromEmail = null, ?string $fromName = null): bool {
+        // Log email attempt
+        \App\Logger::debug('email_send_attempt', 'email', null, "Attempting to send email to: {$toEmail}, subject: {$subject}");
+        
         // Lazy include PHPMailer if installed in vendor
         $autoload = __DIR__ . '/../../vendor/autoload.php';
         if (file_exists($autoload)) {
             require_once $autoload;
         } else {
+            \App\Logger::error('email_phpmailer_missing', 'email', null, 'PHPMailer not installed (vendor/autoload.php missing)');
             error_log('PHPMailer not installed (vendor/autoload.php missing).');
             return false;
         }
@@ -50,8 +54,15 @@ class Mailer {
             $mail->Body = $html;
             $mail->AltBody = strip_tags($html);
 
-            return $mail->send();
+            $result = $mail->send();
+            if ($result) {
+                \App\Logger::info('email_sent_success', 'email', null, "Email sent successfully to: {$toEmail}, subject: {$subject}");
+            } else {
+                \App\Logger::error('email_send_failed', 'email', null, "Failed to send email to: {$toEmail}, subject: {$subject}");
+            }
+            return $result;
         } catch (\Throwable $e) {
+            \App\Logger::error('email_send_exception', 'email', null, "Email send exception to {$toEmail}: " . $e->getMessage());
             error_log('Mailer send failed: ' . $e->getMessage());
             return false;
         }

@@ -4878,6 +4878,11 @@ class AdminController {
 
 	public function emailReport(): void {
 		require_organizer();
+		
+		// Debug log the incoming request
+		\App\Logger::debug('email_report_request', 'report', null, 
+			"POST data: " . json_encode($_POST));
+		
 		$reportType = post('report_type'); // contestant|judge|category
 		$entityId = post('entity_id');
 		$toEmail = trim((string)post('to_email'));

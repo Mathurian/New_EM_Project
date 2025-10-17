@@ -23,7 +23,7 @@
 						</div>
                         <div class="report-actions">
                             <a href="<?= url('print/contestant/' . $contestant['id']) ?>" class="btn btn-primary" target="_blank">🖨️ Print</a>
-                            <form method="post" action="<?= url('admin/print-reports/email') ?>" class="email-form stacked">
+                            <form method="post" action="<?= url('admin/print-reports/email') ?>" class="email-form stacked" onsubmit="return validateEmailForm(this)">
                                 <input type="hidden" name="report_type" value="contestant" />
                                 <input type="hidden" name="entity_id" value="<?= htmlspecialchars($contestant['id']) ?>" />
                                 <input type="hidden" name="user_id" value="" />
@@ -59,7 +59,7 @@
 						</div>
                         <div class="report-actions">
                             <a href="<?= url('print/judge/' . $judge['id']) ?>" class="btn btn-primary" target="_blank">🖨️ Print</a>
-                            <form method="post" action="<?= url('admin/print-reports/email') ?>" class="email-form stacked">
+                            <form method="post" action="<?= url('admin/print-reports/email') ?>" class="email-form stacked" onsubmit="return validateEmailForm(this)">
                                 <input type="hidden" name="report_type" value="judge" />
                                 <input type="hidden" name="entity_id" value="<?= htmlspecialchars($judge['id']) ?>" />
                                 <input type="hidden" name="user_id" value="" />
@@ -109,7 +109,7 @@
 								</div>
                                 <div class="report-actions">
                                     <a href="<?= url('print/category/' . $categoryId) ?>" class="btn btn-primary" target="_blank">🖨️ Print</a>
-                                    <form method="post" action="<?= url('admin/print-reports/email') ?>" class="email-form stacked">
+                                    <form method="post" action="<?= url('admin/print-reports/email') ?>" class="email-form stacked" onsubmit="return validateEmailForm(this)">
                                         <input type="hidden" name="report_type" value="category" />
                                         <input type="hidden" name="entity_id" value="<?= htmlspecialchars($categoryId) ?>" />
                                         <input type="hidden" name="user_id" value="" />
@@ -293,11 +293,42 @@ function handleRecipientChange(selectEl) {
         if (emailInput) { emailInput.style.display = 'none'; emailInput.value = ''; }
     } else if (val === 'custom') {
         hiddenUserId.value = '';
-        if (emailInput) { emailInput.style.display = 'block'; emailInput.focus(); }
+        if (emailInput) { 
+            emailInput.style.display = 'block'; 
+            emailInput.focus();
+            // Copy value from visible input to hidden field when typing
+            emailInput.addEventListener('input', function() {
+                hiddenToEmail.value = this.value;
+            });
+        }
     } else {
         hiddenUserId.value = '';
         hiddenToEmail.value = '';
         if (emailInput) { emailInput.style.display = 'none'; emailInput.value = ''; }
     }
+}
+
+function validateEmailForm(form) {
+    const hiddenUserId = form.querySelector('input[name="user_id"]');
+    const hiddenToEmail = form.querySelector('input[name="to_email"]');
+    const emailInput = form.querySelector('.unified-email');
+    
+    // If custom email is selected, ensure the email input has a value
+    if (emailInput && emailInput.style.display !== 'none') {
+        if (!emailInput.value.trim()) {
+            alert('Please enter an email address');
+            emailInput.focus();
+            return false;
+        }
+        hiddenToEmail.value = emailInput.value.trim();
+    }
+    
+    // Ensure we have either a user_id or to_email
+    if (!hiddenUserId.value && !hiddenToEmail.value) {
+        alert('Please select a recipient');
+        return false;
+    }
+    
+    return true;
 }
 </script>
