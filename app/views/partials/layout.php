@@ -58,7 +58,19 @@ if (isset($category)) {
 				$templateName = is_string($template) ? $template : 'home';
 				$templateFile = __DIR__ . '/../' . $templateName . '.php';
 				if (file_exists($templateFile)) {
+					// Debug: Log right before include
+					if (isset($category)) {
+						\App\Logger::debug('layout_debug', 'layout', null, 
+							"Right before include - category: " . json_encode($category));
+					}
+					
 					include $templateFile;
+					
+					// Debug: Log right after include
+					if (isset($category)) {
+						\App\Logger::debug('layout_debug', 'layout', null, 
+							"Right after include - category: " . json_encode($category));
+					}
 				} else {
 					echo '<p>Template not found: ' . htmlspecialchars($templateName) . '</p>';
 				}

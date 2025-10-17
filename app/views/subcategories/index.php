@@ -3,7 +3,7 @@
 <!-- Debug: Log what we receive in the view -->
 <?php 
 \App\Logger::debug('subcategory_view_debug', 'subcategory', null, 
-	"View received category: " . json_encode($category));
+	"Template START - category: " . json_encode($category));
 ?>
 
 <h2>Subcategories for <?= htmlspecialchars($category['name']) ?></h2>
