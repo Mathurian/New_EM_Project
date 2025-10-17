@@ -298,6 +298,20 @@ header {
 }
 
 /* ==========================================================================
+   DESKTOP NAVIGATION - HIDE MOBILE ELEMENTS
+   ========================================================================== */
+
+@media (min-width: 769px) {
+    .home-link-mobile {
+        display: none !important;
+    }
+    
+    .user-menu-mobile {
+        display: none !important;
+    }
+}
+
+/* ==========================================================================
    MOBILE NAVIGATION - MOBILE-FIRST APPROACH
    ========================================================================== */
 

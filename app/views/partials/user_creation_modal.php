@@ -28,105 +28,159 @@
 			<form method="post" action="<?= url('users') ?>" enctype="multipart/form-data" id="modalUserForm">
 				<div class="form-section">
 					<h4>Basic Information</h4>
-					<label>Full Name
-						<input type="text" name="name" required />
-					</label>
-					
-					<label>Preferred Name (optional)
-						<input type="text" name="preferred_name" placeholder="Leave blank to use full name" />
-						<small>This can be used for login and signatures</small>
-					</label>
-					
-					<label>Email Address (optional)
-						<input type="email" name="email" placeholder="Leave blank if no email needed" />
-						<small>Required for organizers, optional for others</small>
-					</label>
-					
-					<label>Password (optional)
-						<input type="password" name="password" placeholder="Leave blank if no login needed" />
-						<div class="alert alert-info" style="margin-top:6px;">
-							Password must be at least 8 characters and include uppercase, lowercase, number, and symbol.
+					<div class="form-table">
+						<div class="form-row">
+							<label class="form-label">Full Name</label>
+							<div class="form-input">
+								<input type="text" name="name" required />
+							</div>
 						</div>
-						<small>Required for organizers, optional for others</small>
-					</label>
+						
+						<div class="form-row">
+							<label class="form-label">Preferred Name (optional)</label>
+							<div class="form-input">
+								<input type="text" name="preferred_name" placeholder="Leave blank to use full name" />
+								<small>This can be used for login and signatures</small>
+							</div>
+						</div>
+						
+						<div class="form-row">
+							<label class="form-label">Email Address (optional)</label>
+							<div class="form-input">
+								<input type="email" name="email" placeholder="Leave blank if no email needed" />
+								<small>Required for organizers, optional for others</small>
+							</div>
+						</div>
+						
+						<div class="form-row">
+							<label class="form-label">Password (optional)</label>
+							<div class="form-input">
+								<input type="password" name="password" placeholder="Leave blank if no login needed" />
+								<div class="alert alert-info" style="margin-top:6px;">
+									Password must be at least 8 characters and include uppercase, lowercase, number, and symbol.
+								</div>
+								<small>Required for organizers, optional for others</small>
+							</div>
+						</div>
+					</div>
 				</div>
 
 				<div class="form-section">
 					<h4>Role & Details</h4>
-					<label>Role
-						<select name="role" required id="modalRoleSelect">
-							<option value="">Select a role</option>
-							<option value="organizer">Organizer</option>
-							<option value="judge">Judge</option>
-							<option value="emcee">Emcee</option>
-							<option value="contestant">Contestant</option>
-						</select>
-					</label>
-					
-					<label>Gender (optional)
-						<input type="text" name="gender" placeholder="Enter custom gender or leave blank" />
-					</label>
-					
-					<label>Pronouns (optional)
-						<input type="text" name="pronouns" placeholder="e.g., they/them, she/her, he/him, ze/zir, or custom" />
-						<small>How you would like to be referred to</small>
-					</label>
+					<div class="form-table">
+						<div class="form-row">
+							<label class="form-label">Role</label>
+							<div class="form-input">
+								<select name="role" required id="modalRoleSelect">
+									<option value="">Select a role</option>
+									<option value="organizer">Organizer</option>
+									<option value="judge">Judge</option>
+									<option value="emcee">Emcee</option>
+									<option value="contestant">Contestant</option>
+								</select>
+							</div>
+						</div>
+						
+						<div class="form-row">
+							<label class="form-label">Gender (optional)</label>
+							<div class="form-input">
+								<input type="text" name="gender" placeholder="Enter custom gender or leave blank" />
+							</div>
+						</div>
+						
+						<div class="form-row">
+							<label class="form-label">Pronouns (optional)</label>
+							<div class="form-input">
+								<input type="text" name="pronouns" placeholder="e.g., they/them, she/her, he/him, ze/zir, or custom" />
+								<small>How you would like to be referred to</small>
+							</div>
+						</div>
+					</div>
 				</div>
 
 				<!-- Contestant-specific fields -->
 				<div id="modalContestantFields" style="display: none;" class="form-section" aria-hidden="true">
 					<h4>Contestant Information</h4>
-					
-					<label>Contestant Number (optional)
-						<input type="number" name="contestant_number" min="1" placeholder="Leave blank for auto-assignment" />
-						<small>Will be automatically assigned if not provided</small>
-					</label>
-					
-					<label>Bio
-						<textarea name="bio" rows="4" cols="50" placeholder="Tell us about yourself, your background, and what makes you unique..."></textarea>
-					</label>
-					
-					<label>Profile Image
-						<input type="file" name="image" accept="image/*" />
-						<small>Upload a professional photo for your contestant profile</small>
-					</label>
-					
-					<label>Assign to Category (optional)
-						<select name="category_id">
-							<option value="">No category assignment</option>
-							<?php 
-							$categories = DB::pdo()->query('SELECT c.*, co.name as contest_name FROM categories c JOIN contests co ON c.contest_id = co.id ORDER BY co.name, c.name')->fetchAll(\PDO::FETCH_ASSOC);
-							foreach ($categories as $category): ?>
-								<option value="<?= htmlspecialchars($category['id']) ?>"><?= htmlspecialchars($category['contest_name']) ?> - <?= htmlspecialchars($category['name']) ?></option>
-							<?php endforeach; ?>
-						</select>
-						<small>Assign this contestant to a specific category</small>
-					</label>
+					<div class="form-table">
+						<div class="form-row">
+							<label class="form-label">Contestant Number (optional)</label>
+							<div class="form-input">
+								<input type="number" name="contestant_number" min="1" placeholder="Leave blank for auto-assignment" />
+								<small>Will be automatically assigned if not provided</small>
+							</div>
+						</div>
+						
+						<div class="form-row">
+							<label class="form-label">Bio</label>
+							<div class="form-input">
+								<textarea name="bio" rows="4" cols="50" placeholder="Tell us about yourself, your background, and what makes you unique..."></textarea>
+							</div>
+						</div>
+						
+						<div class="form-row">
+							<label class="form-label">Profile Image</label>
+							<div class="form-input">
+								<input type="file" name="image" accept="image/*" />
+								<small>Upload a professional photo for your contestant profile</small>
+							</div>
+						</div>
+						
+						<div class="form-row">
+							<label class="form-label">Assign to Category (optional)</label>
+							<div class="form-input">
+								<select name="category_id">
+									<option value="">No category assignment</option>
+									<?php 
+									$categories = DB::pdo()->query('SELECT c.*, co.name as contest_name FROM categories c JOIN contests co ON c.contest_id = co.id ORDER BY co.name, c.name')->fetchAll(\PDO::FETCH_ASSOC);
+									foreach ($categories as $category): ?>
+										<option value="<?= htmlspecialchars($category['id']) ?>"><?= htmlspecialchars($category['contest_name']) ?> - <?= htmlspecialchars($category['name']) ?></option>
+									<?php endforeach; ?>
+								</select>
+								<small>Assign this contestant to a specific category</small>
+							</div>
+						</div>
+					</div>
 				</div>
 				
 				<!-- Judge-specific fields -->
 				<div id="modalJudgeFields" style="display: none;" class="form-section" aria-hidden="true">
 					<h4>Judge Information</h4>
-					
-					<label>Bio
-						<textarea name="bio" rows="4" cols="50" placeholder="Tell us about your experience, qualifications, and what makes you a great judge..."></textarea>
-					</label>
-					
-					<label>Profile Image
-						<input type="file" name="image" accept="image/*" />
-						<small>Upload a professional photo for your judge profile</small>
-					</label>
-					
-					<label>Assign to Category (optional)
-						<select name="category_id">
-							<option value="">No category assignment</option>
-							<?php foreach ($categories as $category): ?>
-								<option value="<?= htmlspecialchars($category['id']) ?>"><?= htmlspecialchars($category['contest_name']) ?> - <?= htmlspecialchars($category['name']) ?></option>
-							<?php endforeach; ?>
-						</select>
-						<small>Assign this judge to a specific category</small>
-					</label>
-					<label><input type="checkbox" name="is_head_judge" value="1" /> Head Judge</label>
+					<div class="form-table">
+						<div class="form-row">
+							<label class="form-label">Bio</label>
+							<div class="form-input">
+								<textarea name="bio" rows="4" cols="50" placeholder="Tell us about your experience, qualifications, and what makes you a great judge..."></textarea>
+							</div>
+						</div>
+						
+						<div class="form-row">
+							<label class="form-label">Profile Image</label>
+							<div class="form-input">
+								<input type="file" name="image" accept="image/*" />
+								<small>Upload a professional photo for your judge profile</small>
+							</div>
+						</div>
+						
+						<div class="form-row">
+							<label class="form-label">Assign to Category (optional)</label>
+							<div class="form-input">
+								<select name="category_id">
+									<option value="">No category assignment</option>
+									<?php foreach ($categories as $category): ?>
+										<option value="<?= htmlspecialchars($category['id']) ?>"><?= htmlspecialchars($category['contest_name']) ?> - <?= htmlspecialchars($category['name']) ?></option>
+									<?php endforeach; ?>
+								</select>
+								<small>Assign this judge to a specific category</small>
+							</div>
+						</div>
+						
+						<div class="form-row">
+							<label class="form-label">Head Judge</label>
+							<div class="form-input">
+								<label><input type="checkbox" name="is_head_judge" value="1" /> Head Judge</label>
+							</div>
+						</div>
+					</div>
 				</div>
 			</form>
 		</div>
@@ -221,6 +275,117 @@
 	padding-bottom: 8px;
 }
 
+/* Table-like form layout */
+.form-table {
+	display: table;
+	width: 100%;
+	border-collapse: separate;
+	border-spacing: 0;
+}
+
+.form-row {
+	display: table-row;
+}
+
+.form-label {
+	display: table-cell;
+	width: 35%;
+	padding: 12px 16px 12px 0;
+	vertical-align: top;
+	font-weight: 500;
+	color: var(--text-primary);
+	text-align: right;
+}
+
+.form-input {
+	display: table-cell;
+	width: 65%;
+	padding: 12px 0;
+	vertical-align: top;
+}
+
+.form-input input,
+.form-input select,
+.form-input textarea {
+	width: 100%;
+	padding: 8px 12px;
+	border: 1px solid var(--border-color);
+	border-radius: 4px;
+	font-size: 14px;
+	background: var(--bg-primary);
+	color: var(--text-primary);
+}
+
+.form-input input:focus,
+.form-input select:focus,
+.form-input textarea:focus {
+	outline: none;
+	border-color: var(--accent-color);
+	box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+.form-input small {
+	display: block;
+	margin-top: 4px;
+	color: var(--text-secondary);
+	font-size: 12px;
+}
+
+.form-input label {
+	font-weight: normal;
+	margin: 0;
+}
+
+.form-input input[type="checkbox"] {
+	width: auto;
+	margin-right: 8px;
+}
+
+.form-input input[type="file"] {
+	padding: 4px 8px;
+}
+
+/* Modal footer button spacing */
+.modal-footer {
+	padding: 20px;
+	border-top: 1px solid var(--border-color);
+	display: flex;
+	gap: 12px;
+	justify-content: flex-end;
+	align-items: center;
+}
+
+.modal-footer button {
+	min-width: 100px;
+	padding: 10px 16px;
+	border-radius: 4px;
+	font-weight: 500;
+	cursor: pointer;
+	transition: all 0.2s;
+}
+
+.modal-footer .btn-primary {
+	background: var(--accent-color);
+	color: white;
+	border: 1px solid var(--accent-color);
+}
+
+.modal-footer .btn-primary:hover {
+	background: var(--accent-color);
+	opacity: 0.9;
+}
+
+.modal-footer .btn-secondary {
+	background: var(--bg-secondary);
+	color: var(--text-primary);
+	border: 1px solid var(--border-color);
+}
+
+.modal-footer .btn-secondary:hover {
+	background: var(--bg-tertiary);
+	color: var(--text-primary);
+}
+
 @media (max-width: 768px) {
 	.modal-overlay {
 		padding: 10px;
@@ -239,10 +404,35 @@
 	
 	.modal-footer {
 		flex-direction: column;
+		gap: 8px;
 	}
 	
 	.modal-footer button {
 		width: 100%;
+	}
+	
+	/* Mobile table layout - stack vertically */
+	.form-table {
+		display: block;
+	}
+	
+	.form-row {
+		display: block;
+		margin-bottom: 16px;
+	}
+	
+	.form-label {
+		display: block;
+		width: 100%;
+		padding: 0 0 6px 0;
+		text-align: left;
+		font-weight: 500;
+	}
+	
+	.form-input {
+		display: block;
+		width: 100%;
+		padding: 0;
 	}
 }
 </style>
