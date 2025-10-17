@@ -13,7 +13,7 @@
         .header-info p { margin: 5px 0; }
         .print-button { background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; margin-right: 10px; display: inline-block; }
         .category-section { margin: 30px 0; page-break-inside: avoid; }
-        .subcategory-section { margin: 20px 0; padding-left: 20px; }
+        .category-section { margin: 20px 0; padding-left: 20px; }
         .contestant-section { margin: 15px 0; padding-left: 40px; }
         .scores-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
         .scores-table th, .scores-table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
@@ -86,7 +86,7 @@
                 <h3><?= htmlspecialchars($categoryName) ?></h3>
                 
                 <?php foreach ($subcategories as $subcategoryName => $contestants): ?>
-                    <div class="subcategory-section">
+                    <div class="category-section">
                         <h4><?= htmlspecialchars($subcategoryName) ?></h4>
                         
                         <?php foreach ($contestants as $contestantName => $data): ?>
@@ -120,7 +120,7 @@
                                                 </tr>
                                             <?php endforeach; ?>
                                             <tr class="total-score">
-                                                <td colspan="2"><strong>Subcategory Subtotal:</strong></td>
+                                                <td colspan="2"><strong>Category Subtotal:</strong></td>
                                                 <td><strong><?= number_format($subtotal, 1) ?></strong></td>
                                             </tr>
                                         </tbody>

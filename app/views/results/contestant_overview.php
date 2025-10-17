@@ -15,12 +15,12 @@
 </div>
 
 <?php if (empty($subcategories)): ?>
-	<p>No subcategories for this contestant.</p>
+	<p>No categories for this contestant.</p>
 <?php else: ?>
 	<table style="width:100%; border-collapse: collapse;">
 		<tr style="background:#f8f9fa;">
+			<th style="text-align:left; padding:8px; border-bottom:1px solid #ddd;">Contest</th>
 			<th style="text-align:left; padding:8px; border-bottom:1px solid #ddd;">Category</th>
-			<th style="text-align:left; padding:8px; border-bottom:1px solid #ddd;">Subcategory</th>
 			<th style="text-align:right; padding:8px; border-bottom:1px solid #ddd;">Total</th>
 			<th style="text-align:right; padding:8px; border-bottom:1px solid #ddd;">Deductions</th>
 			<th style="text-align:right; padding:8px; border-bottom:1px solid #ddd;">Net</th>

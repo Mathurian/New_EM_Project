@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Category Results: <?= htmlspecialchars($category['name']) ?></title>
+    <title>Contest Results: <?= htmlspecialchars($category['name']) ?></title>
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; color: #333; }
         .container { max-width: 800px; margin: 0 auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
@@ -36,17 +36,17 @@
             <a href="#" onclick="window.print()" class="print-button">Print Report</a>
         <?php endif; ?>
 
-        <h1>Category Results Report</h1>
+        <h1>Contest Results Report</h1>
         <div class="header-info">
             <p><strong>Contest:</strong> <?= htmlspecialchars($category['contest_name']) ?></p>
-            <p><strong>Category:</strong> <?= htmlspecialchars($category['name']) ?></p>
+            <p><strong>Contest:</strong> <?= htmlspecialchars($category['name']) ?></p>
             <p><strong>Description:</strong> <?= htmlspecialchars($category['description'] ?? 'N/A') ?></p>
             <p><strong>Report Generated:</strong> <?= date('Y-m-d H:i:s') ?></p>
         </div>
 
         <?php if (!empty($subcategories)): ?>
             <div class="subcategory-list">
-                <h3>Subcategories</h3>
+                <h3>Categories</h3>
                 <ul>
                     <?php foreach ($subcategories as $subcategory): ?>
                         <li><?= htmlspecialchars($subcategory['name']) ?>
@@ -63,7 +63,7 @@
         <?php endif; ?>
 
         <?php if (empty($contestants)): ?>
-            <p>No contestants found in this category.</p>
+            <p>No contestants found in this contest.</p>
         <?php else: ?>
             <h3>Contestant Rankings</h3>
             <table class="results-table">

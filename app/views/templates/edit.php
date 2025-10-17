@@ -19,7 +19,7 @@
 			</div>
 			
 			<div class="form-row">
-				<label class="form-label">Subcategory Names (one per line)</label>
+				<label class="form-label">Category Names (one per line)</label>
 				<div class="form-input">
 					<?php 
 					$subcategoryNames = [];
@@ -27,12 +27,12 @@
 						$subcategoryNames = json_decode($template['subcategory_names'], true) ?: [];
 					}
 					?>
-					<textarea name="subcategory_names" rows="5" cols="60" placeholder="Enter subcategory names, one per line&#10;Example:&#10;Technical Skills&#10;Presentation&#10;Creativity"><?= htmlspecialchars(implode("\n", $subcategoryNames)) ?></textarea>
+					<textarea name="subcategory_names" rows="5" cols="60" placeholder="Enter category names, one per line&#10;Example:&#10;Technical Skills&#10;Presentation&#10;Creativity"><?= htmlspecialchars(implode("\n", $subcategoryNames)) ?></textarea>
 				</div>
 			</div>
 			
 			<div class="form-row">
-				<label class="form-label">Max Score per Subcategory</label>
+				<label class="form-label">Max Score per Category</label>
 				<div class="form-input">
 					<input type="number" name="max_score" min="1" step="1" value="<?= htmlspecialchars($template['max_score'] ?? '60') ?>" required />
 					<small>Default maximum score for criteria created from this template</small>

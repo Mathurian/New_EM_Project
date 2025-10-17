@@ -1,8 +1,8 @@
-<h2>New Subcategory</h2>
+<h2>New Category</h2>
 <p><a href="/categories/<?= urlencode($category['id']) ?>/subcategories">Back</a></p>
 <form method="post" action="/categories/<?= urlencode($category['id']) ?>/subcategories">
 	<div class="form-section">
-		<h4>Subcategory Information</h4>
+		<h4>Category Information</h4>
 		<div class="form-table">
 			<div class="form-row">
 				<label class="form-label">Name</label>

@@ -11,8 +11,8 @@
         h1, h2, h3 { color: #0056b3; }
         .header-info { margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid #eee; }
         .header-info p { margin: 5px 0; }
-        .subcategory-section { margin-bottom: 30px; border: 1px solid #ddd; padding: 15px; border-radius: 5px; }
-        .subcategory-section h3 { margin-top: 0; color: #007bff; }
+        .category-section { margin-bottom: 30px; border: 1px solid #ddd; padding: 15px; border-radius: 5px; }
+        .category-section h3 { margin-top: 0; color: #007bff; }
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
         th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
         th { background-color: #f2f2f2; }
@@ -25,7 +25,7 @@
             .print-button { display: none; }
             .container { box-shadow: none; border: none; }
             body { margin: 0; }
-            .subcategory-section { page-break-inside: avoid; }
+            .category-section { page-break-inside: avoid; }
         }
     </style>
 </head>
@@ -62,7 +62,7 @@
                     <h3><?= htmlspecialchars($categoryName) ?></h3>
                     
                     <?php foreach ($subcategories as $subcategoryName => $subcategoryScores): ?>
-                        <div class="subcategory-section">
+                        <div class="category-section">
                             <h4><?= htmlspecialchars($subcategoryName) ?></h4>
                             
                             <table>
@@ -89,7 +89,7 @@
                             </table>
                             
                             <?php
-                            // Get comments for this subcategory
+                            // Get comments for this category
                             $subcategoryComments = array_filter($comments, function($c) use ($subcategoryName, $categoryName, $contestName) {
                                 return $c['subcategory_name'] === $subcategoryName && 
                                        $c['category_name'] === $categoryName && 
@@ -107,7 +107,7 @@
                             <?php endif; ?>
 
                             <?php
-                            // Deductions for this subcategory
+                            // Deductions for this category
                             $subcatId = null;
                             foreach ($subcategoryScores as $s) { $subcatId = $s['subcategory_id']; break; }
                             $ded = $deductions[$subcatId] ?? null;
@@ -115,7 +115,7 @@
                             $net = $subTotal - (float)($ded['total'] ?? 0);
                             ?>
                             <div class="comment-section">
-                                <p><strong>Subcategory Total:</strong> <?= number_format($subTotal, 2) ?></p>
+                                <p><strong>Category Total:</strong> <?= number_format($subTotal, 2) ?></p>
                                 <p><strong>Deductions:</strong> -<?= number_format((float)($ded['total'] ?? 0), 2) ?> <?= !empty($ded['comments']) ? '(' . htmlspecialchars($ded['comments']) . ')' : '' ?></p>
                                 <p><strong>Net Total:</strong> <?= number_format($net, 2) ?></p>
                             </div>

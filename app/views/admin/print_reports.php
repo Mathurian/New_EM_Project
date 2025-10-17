@@ -82,8 +82,8 @@
 	</div>
 
 	<div class="card">
-		<h3>📈 Category Reports</h3>
-		<p>Generate comprehensive reports for entire categories.</p>
+		<h3>📈 Contest Reports</h3>
+		<p>Generate comprehensive reports for entire contests.</p>
 		<div class="category-list">
 			<?php 
 			$groupedStructure = [];

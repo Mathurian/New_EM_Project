@@ -1,7 +1,7 @@
 <?php use function App\{url, is_organizer, hierarchical_back_url, home_url}; ?>
 <?php if (!$subcategory): ?>
-	<h2>Subcategory Not Found</h2>
-	<p>The requested subcategory could not be found.</p>
+	<h2>Category Not Found</h2>
+	<p>The requested category could not be found.</p>
 	<div class="navigation-buttons">
 		<a href="<?= hierarchical_back_url() ?>" class="btn btn-secondary">← Back</a>
 		<a href="<?= home_url() ?>" class="btn btn-outline">🏠 Home</a>
@@ -22,15 +22,15 @@
 		<div class="warning-box">
 			<h3>Admin Actions</h3>
 			<form method="post" action="<?= url('results/' . urlencode($subcategory['id']) . '/unsign-all') ?>" style="display: inline-block;">
-				<button type="submit" onclick="return confirm('Are you sure you want to unsign ALL scores for this subcategory? This will unlock all certified scores for editing.')" style="background: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 3px;">
-					Unsign All Scores for This Subcategory
+				<button type="submit" onclick="return confirm('Are you sure you want to unsign ALL scores for this category? This will unlock all certified scores for editing.')" style="background: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 3px;">
+					Unsign All Scores for This Category
 				</button>
 			</form>
 		</div>
 	<?php endif; ?>
 
 	<?php if (empty($results)): ?>
-		<p>No scores recorded for this subcategory yet.</p>
+		<p>No scores recorded for this category yet.</p>
 	<?php else: ?>
 		<table>
 			<tr><th>Rank</th><th>Contestant</th><th>Total</th></tr>

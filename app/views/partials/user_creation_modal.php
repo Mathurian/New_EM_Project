@@ -126,17 +126,17 @@
 						</div>
 						
 						<div class="form-row">
-							<label class="form-label">Assign to Category (optional)</label>
+							<label class="form-label">Assign to Contest (optional)</label>
 							<div class="form-input">
 								<select name="category_id">
-									<option value="">No category assignment</option>
+									<option value="">No contest assignment</option>
 									<?php 
 									$categories = DB::pdo()->query('SELECT c.*, co.name as contest_name FROM categories c JOIN contests co ON c.contest_id = co.id ORDER BY co.name, c.name')->fetchAll(\PDO::FETCH_ASSOC);
 									foreach ($categories as $cat): ?>
 										<option value="<?= htmlspecialchars($cat['id']) ?>"><?= htmlspecialchars($cat['contest_name']) ?> - <?= htmlspecialchars($cat['name']) ?></option>
 									<?php endforeach; ?>
 								</select>
-								<small>Assign this contestant to a specific category</small>
+								<small>Assign this contestant to a specific contest</small>
 							</div>
 						</div>
 					</div>
@@ -162,15 +162,15 @@
 						</div>
 						
 						<div class="form-row">
-							<label class="form-label">Assign to Category (optional)</label>
+							<label class="form-label">Assign to Contest (optional)</label>
 							<div class="form-input">
 								<select name="category_id">
-									<option value="">No category assignment</option>
+									<option value="">No contest assignment</option>
 									<?php foreach ($categories as $cat): ?>
 										<option value="<?= htmlspecialchars($cat['id']) ?>"><?= htmlspecialchars($cat['contest_name']) ?> - <?= htmlspecialchars($cat['name']) ?></option>
 									<?php endforeach; ?>
 								</select>
-								<small>Assign this judge to a specific category</small>
+								<small>Assign this judge to a specific contest</small>
 							</div>
 						</div>
 						

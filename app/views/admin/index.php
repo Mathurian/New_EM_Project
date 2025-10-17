@@ -186,7 +186,7 @@
 			<a href="<?= url('admin/templates') ?>" class="action-card">
 				<div class="action-icon">📋</div>
 				<div class="action-title">Templates</div>
-				<div class="action-desc">Create subcategory templates</div>
+				<div class="action-desc">Create category templates</div>
 			</a>
 			
 			<a href="<?= url('admin/emcee-scripts') ?>" class="action-card">

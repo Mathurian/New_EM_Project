@@ -1,4 +1,4 @@
-<h2>Create Subcategory Template</h2>
+<h2>Create Category Template</h2>
 <p><a href="/admin/templates">Back</a></p>
 <form method="post" action="/admin/templates">
 	<div class="form-section">
@@ -19,14 +19,14 @@
 			</div>
 			
 			<div class="form-row">
-				<label class="form-label">Subcategory Names (one per line)</label>
+				<label class="form-label">Category Names (one per line)</label>
 				<div class="form-input">
-					<textarea name="subcategory_names" rows="5" cols="60" placeholder="Enter subcategory names, one per line&#10;Example:&#10;Technical Skills&#10;Presentation&#10;Creativity"></textarea>
+					<textarea name="subcategory_names" rows="5" cols="60" placeholder="Enter category names, one per line&#10;Example:&#10;Technical Skills&#10;Presentation&#10;Creativity"></textarea>
 				</div>
 			</div>
 			
 			<div class="form-row">
-				<label class="form-label">Max Score per Subcategory</label>
+				<label class="form-label">Max Score per Category</label>
 				<div class="form-input">
 					<input type="number" name="max_score" min="1" step="1" value="60" required />
 					<small>Default maximum score for criteria created from this template</small>

@@ -1,7 +1,7 @@
 <?php use function App\{is_organizer, url}; ?>
 
 
-<h2>Subcategories for <?= htmlspecialchars($category['name']) ?></h2>
+<h2>Categories for <?= htmlspecialchars($category['name']) ?></h2>
 <p><a href="<?= url('contests/' . urlencode($category['contest_id'] ?? '') . '/categories') ?>">Back</a></p>
 
 
@@ -36,9 +36,9 @@
 
 <?php if (is_organizer()): ?>
 	<div style="margin-bottom: 20px;">
-		<a href="<?= url('categories/' . urlencode($category['id']) . '/subcategories/new') ?>">+ New Subcategory</a> | 
+		<a href="<?= url('categories/' . urlencode($category['id']) . '/subcategories/new') ?>">+ New Category</a> | 
 		<a href="<?= url('categories/' . urlencode($category['id']) . '/subcategories/templates') ?>">+ From Template</a> | 
-		<a href="<?= url('categories/' . urlencode($category['id']) . '/assign') ?>">Category Assignments</a>
+		<a href="<?= url('categories/' . urlencode($category['id']) . '/assign') ?>">Contest Assignments</a>
 		
 		<form method="post" action="<?= url('categories/' . urlencode($category['id']) . '/subcategories/bulk-delete') ?>" style="display: inline-block; margin-left: 20px;" id="bulkDeleteForm">
 			<button type="submit" onclick="return confirm('Are you sure you want to delete the selected subcategories? This will also delete all associated scores, criteria, and assignments.')" disabled id="bulkDeleteBtn">

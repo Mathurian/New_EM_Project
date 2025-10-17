@@ -22,9 +22,9 @@
 <?php endif; ?>
 
 <?php if (empty($contestants)): ?>
-	<p>No contestants assigned to this subcategory.</p>
+	<p>No contestants assigned to this category.</p>
 <?php elseif (empty($criteria)): ?>
-	<p>No criteria defined for this subcategory.</p>
+	<p>No criteria defined for this category.</p>
 <?php else: ?>
 	<table border="1" cellpadding="5" cellspacing="0">
 		<tr>
