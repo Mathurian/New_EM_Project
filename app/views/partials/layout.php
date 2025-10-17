@@ -24,6 +24,7 @@
 				</div>
 			<?php endif; ?>
 			<?php include __DIR__ . '/header.php'; ?>
+			<?php include __DIR__ . '/user_creation_modal.php'; ?>
             <main class="content-main">
 				<?php 
 				$templateName = is_string($template) ? $template : 'home';

@@ -11,10 +11,13 @@
 	<p><strong>Current Log Level:</strong> <?= htmlspecialchars(ucfirst($currentLogLevel)) ?></p>
 </div>
 
-<!-- Advanced Filtering -->
-<div class="card">
-	<h4>Advanced Filters</h4>
-	<form method="get" action="<?= url('admin/logs') ?>" class="filter-form">
+<!-- Advanced Filtering (collapsible) -->
+<div class="card" id="filters-card">
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+        <h4 style="margin:0;">Advanced Filters</h4>
+        <button type="button" class="btn btn-secondary btn-sm" id="toggle-filters" aria-expanded="false" aria-controls="filters-body">Show Filters</button>
+    </div>
+    <form method="get" action="<?= url('admin/logs') ?>" class="filter-form" id="filters-body" style="display:none; margin-top:12px;">
 		<div>
 			<label for="level">Log Level:</label>
 			<select name="level" id="level" style="width: 100%; padding: 5px;">
@@ -64,7 +67,7 @@
 			<button type="submit" class="btn btn-primary">Apply Filters</button>
 			<a href="<?= url('admin/logs') ?>" class="btn btn-secondary" style="margin-left: 10px;">Clear Filters</a>
 		</div>
-	</form>
+    </form>
 </div>
 
 <?php if (empty($logs)): ?>
@@ -198,6 +201,28 @@ document.addEventListener('DOMContentLoaded', function() {
         node.textContent = date.toLocaleString(undefined, opts);
         node.title = 'Local time';
     });
+    // Toggle filter visibility
+    const toggleBtn = document.getElementById('toggle-filters');
+    const filtersBody = document.getElementById('filters-body');
+    if (toggleBtn && filtersBody) {
+        toggleBtn.addEventListener('click', function() {
+            const isOpen = filtersBody.style.display !== 'none';
+            filtersBody.style.display = isOpen ? 'none' : 'block';
+            this.textContent = isOpen ? 'Show Filters' : 'Hide Filters';
+            this.setAttribute('aria-expanded', String(!isOpen));
+        });
+        // If any filter is active, open by default
+        const hasActive = (
+            '<?= $logLevel ?>' && '<?= $logLevel ?>' !== 'all'
+        ) || (
+            '<?= $userRole ?>' && '<?= $userRole ?>' !== 'all'
+        ) || '<?= $action ?>' || '<?= $dateFrom ?>' || '<?= $dateTo ?>';
+        if (hasActive) {
+            filtersBody.style.display = 'block';
+            toggleBtn.textContent = 'Hide Filters';
+            toggleBtn.setAttribute('aria-expanded', 'true');
+        }
+    }
 });
 </script>
 

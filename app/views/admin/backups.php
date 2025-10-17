@@ -114,8 +114,12 @@
 	<?php if (empty($backupLogs)): ?>
 		<p>No backups found.</p>
 	<?php else: ?>
-		<div class="table-responsive">
-			<table class="table">
+    <div class="table-responsive">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+                <strong>Recent Backups</strong>
+                <button type="button" class="btn btn-secondary btn-sm" id="toggle-backups" aria-expanded="false" aria-controls="backups-table">Show All</button>
+            </div>
+            <table class="table" id="backups-table" data-collapsed="true">
 				<thead>
 					<tr>
 						<th>Type</th>
@@ -128,8 +132,8 @@
 					</tr>
 				</thead>
 				<tbody>
-					<?php foreach ($backupLogs as $backup): ?>
-						<tr>
+                    <?php $rowIndex = 0; foreach ($backupLogs as $backup): $rowIndex++; ?>
+                        <tr class="backup-row" data-index="<?= $rowIndex ?>">
 							<td>
 								<span class="badge badge-<?= $backup['backup_type'] === 'schema' ? 'primary' : ($backup['backup_type'] === 'full' ? 'success' : 'info') ?>">
 									<?= ucfirst($backup['backup_type']) ?>
@@ -158,7 +162,7 @@
 								<?php endif; ?>
 							</td>
 						</tr>
-					<?php endforeach; ?>
+                    <?php endforeach; ?>
 				</tbody>
 			</table>
 		</div>
@@ -359,5 +363,35 @@ document.addEventListener('DOMContentLoaded', function() {
 		node.textContent = date.toLocaleString(undefined, opts);
 		node.title = 'Local time';
 	});
+
+    // Limit table length and allow expansion
+    (function(){
+        const table = document.getElementById('backups-table');
+        if (!table) return;
+        const rows = Array.from(table.querySelectorAll('tbody tr.backup-row'));
+        const toggleBtn = document.getElementById('toggle-backups');
+        const COLLAPSED_COUNT = 10; // show first 10 by default
+
+        function applyState() {
+            const collapsed = table.getAttribute('data-collapsed') === 'true';
+            rows.forEach((row, idx) => {
+                row.style.display = collapsed && idx >= COLLAPSED_COUNT ? 'none' : '';
+            });
+            if (toggleBtn) {
+                toggleBtn.textContent = collapsed ? 'Show All' : 'Show Less';
+                toggleBtn.setAttribute('aria-expanded', String(!collapsed));
+            }
+        }
+
+        applyState();
+
+        if (toggleBtn) {
+            toggleBtn.addEventListener('click', function(){
+                const collapsed = table.getAttribute('data-collapsed') === 'true';
+                table.setAttribute('data-collapsed', String(!collapsed));
+                applyState();
+            });
+        }
+    })();
 });
 </script>
