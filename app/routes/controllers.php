@@ -467,15 +467,23 @@ class ContestController {
 		require_organizer();
 		$archivedContestId = param('id', $params);
 		
+		\App\Logger::debug('contest_reactivation_attempt', 'contest', $archivedContestId, 
+			"Attempting to reactivate contest: archived_contest_id={$archivedContestId}");
+		
 		// Get archived contest details
 		$stmt = DB::pdo()->prepare('SELECT * FROM archived_contests WHERE id = ?');
 		$stmt->execute([$archivedContestId]);
 		$archivedContest = $stmt->fetch(\PDO::FETCH_ASSOC);
 		
 		if (!$archivedContest) {
+			\App\Logger::debug('contest_reactivation_failed', 'contest', $archivedContestId, 
+				"Contest reactivation failed: archived contest not found");
 			redirect('/admin/archived-contests?error=contest_not_found');
 			return;
 		}
+		
+		\App\Logger::debug('contest_reactivation_data', 'contest', $archivedContestId, 
+			"Found archived contest: " . json_encode($archivedContest));
 		
 		$pdo = DB::pdo();
 		$pdo->beginTransaction();
@@ -483,6 +491,9 @@ class ContestController {
 		try {
 			$reactivatedBy = $_SESSION['user']['name'] ?? 'Unknown';
 			$newContestId = uuid();
+			
+			\App\Logger::debug('contest_reactivation_create', 'contest', $newContestId, 
+				"Creating new contest: new_contest_id={$newContestId}, name={$archivedContest['name']}");
 			
 			// Create new contest
 			$stmt = $pdo->prepare('INSERT INTO contests (id, name, description, start_date, end_date) VALUES (?, ?, ?, ?, ?)');
@@ -493,8 +504,14 @@ class ContestController {
 			$stmt->execute([$archivedContestId]);
 			$archivedCategories = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 			
+			\App\Logger::debug('contest_reactivation_categories', 'contest', $newContestId, 
+				"Found " . count($archivedCategories) . " archived categories to restore");
+			
 			foreach ($archivedCategories as $archivedCategory) {
 				$newCategoryId = uuid();
+				
+				\App\Logger::debug('contest_reactivation_category', 'contest', $newContestId, 
+					"Restoring category: archived_id={$archivedCategory['id']}, new_id={$newCategoryId}, name={$archivedCategory['name']}");
 				
 				// Create new category
 				$stmt = $pdo->prepare('INSERT INTO categories (id, contest_id, name, description) VALUES (?, ?, ?, ?)');
@@ -504,6 +521,9 @@ class ContestController {
 				$stmt = $pdo->prepare('SELECT * FROM archived_subcategories WHERE archived_category_id = ?');
 				$stmt->execute([$archivedCategory['id']]);
 				$archivedSubcategories = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+				
+				\App\Logger::debug('contest_reactivation_subcategories', 'contest', $newContestId, 
+					"Found " . count($archivedSubcategories) . " archived subcategories for category {$archivedCategory['name']}");
 				
 				foreach ($archivedSubcategories as $archivedSubcategory) {
 					$newSubcategoryId = uuid();
@@ -608,11 +628,15 @@ class ContestController {
 			}
 			
 			$pdo->commit();
+			\App\Logger::debug('contest_reactivation_success', 'contest', $newContestId, 
+				"Contest reactivation completed successfully: new_contest_id={$newContestId}");
 			\App\Logger::logAdminAction('contest_reactivated', 'contest', $newContestId, "Contest '{$archivedContest['name']}' reactivated from archive by {$reactivatedBy}");
 			redirect('/contests?success=contest_reactivated');
 		} catch (\Exception $e) {
 			$pdo->rollBack();
-			redirect('/admin/archived-contests?error=reactivation_failed');
+			\App\Logger::error('contest_reactivation_failed', 'contest', $archivedContestId ?? 'unknown', 
+				"Contest reactivation failed: " . $e->getMessage() . " | Stack trace: " . $e->getTraceAsString());
+			redirect('/admin/archived-contests?error=reactivation_failed&message=' . urlencode($e->getMessage()));
 		}
 	}
 }
@@ -5194,7 +5218,7 @@ class EmceeController {
 		
 		// Get judges grouped by category
 		$judges = DB::pdo()->query('
-			SELECT j.*, c.name as category_name, c.id as category_id
+			SELECT j.id, j.name as judge_name, j.image_path, j.bio, j.email, j.is_head_judge, c.name as category_name, c.id as category_id
 			FROM judges j
 			JOIN category_judges cj ON j.id = cj.judge_id
 			JOIN categories c ON cj.category_id = c.id
