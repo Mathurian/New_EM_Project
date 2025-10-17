@@ -96,21 +96,6 @@
 		</div>
 		
 		<div style="margin-bottom: 20px; padding: 15px; background: #e8f5e8; border: 1px solid #c3e6c3; border-radius: 5px;">
-			<h4>Email Test Tool</h4>
-			<p>Test your SMTP configuration by sending a test email:</p>
-			<form method="post" action="<?= url('admin/settings/test-email') ?>" style="display: inline-block;">
-				<input type="email" name="test_email" placeholder="test@example.com" value="<?= htmlspecialchars($settings['smtp_from_email'] ?? '') ?>" style="padding: 6px; margin-right: 8px; width: 200px;" />
-				<button type="submit" class="btn btn-sm btn-secondary">📧 Test Email</button>
-			</form>
-			<p style="margin-top: 8px; font-size: 0.9em; color: #666;">
-				Leave email blank to use the configured "From Email" address.
-			</p>
-			<p style="margin-top: 8px; font-size: 0.8em; color: #999;">
-				<strong>Debug:</strong> Check server error logs for "EMAIL TEST:" messages to see if the function is being called.
-			</p>
-		</div>
-		
-		<div style="margin-bottom: 20px; padding: 15px; background: #e8f5e8; border: 1px solid #c3e6c3; border-radius: 5px;">
 			<h4>Logging Test Tools</h4>
 			<p>Use these tools to test and verify logging functionality:</p>
 			<p><a href="<?= url('admin/settings/test-log-level') ?>" class="btn btn-sm btn-secondary" target="_blank">🧪 Test Log Level</a> - Test all log levels and filtering</p>
@@ -181,6 +166,21 @@
 			Update Settings
 		</button>
 	</form>
+</div>
+
+<div style="margin-top: 30px; padding: 15px; background: #e8f5e8; border: 1px solid #c3e6c3; border-radius: 5px;">
+	<h4>Email Test Tool</h4>
+	<p>Test your SMTP configuration by sending a test email:</p>
+	<form method="post" action="<?= url('admin/settings/test-email') ?>" style="display: inline-block;">
+		<input type="email" name="test_email" placeholder="test@example.com" value="<?= htmlspecialchars($settings['smtp_from_email'] ?? '') ?>" style="padding: 6px; margin-right: 8px; width: 200px;" />
+		<button type="submit" class="btn btn-sm btn-secondary">📧 Test Email</button>
+	</form>
+	<p style="margin-top: 8px; font-size: 0.9em; color: #666;">
+		Leave email blank to use the configured "From Email" address.
+	</p>
+	<p style="margin-top: 8px; font-size: 0.8em; color: #999;">
+		<strong>Debug:</strong> Check server error logs for "EMAIL TEST:" messages to see if the function is being called.
+	</p>
 </div>
 
 <div style="margin-top: 30px; padding: 15px; background: #d1ecf1; border: 1px solid #bee5eb; border-radius: 5px;">

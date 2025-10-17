@@ -4619,6 +4619,10 @@ class AdminController {
 	public function updateSettings(): void {
 		require_organizer();
 		
+		// Debug log the incoming request
+		\App\Logger::debug('settings_update_attempt', 'system_settings', null, 
+			"POST data: " . json_encode($_POST));
+		
 		$sessionTimeout = (int)post('session_timeout');
 		$logLevel = post('log_level');
 		// PHPMailer / SMTP
