@@ -4968,6 +4968,7 @@ class AdminController {
 		
 		// Build report HTML by rendering the same templates used for print
 		try {
+			$isEmail = true; // Flag to hide navigation buttons in email reports
 			$html = '';
 			$subject = '';
 			if ($reportType === 'contestant') {
@@ -4991,7 +4992,7 @@ class AdminController {
 				$dedStmt->execute([$entityId]);
 				$deductions = $dedStmt->fetchAll(\PDO::FETCH_ASSOC);
 				
-				$html = \App\render_to_string('print/contestant', compact('contestant','subcategories','scores','comments','deductions'));
+				$html = \App\render_to_string('print/contestant', compact('contestant','subcategories','scores','comments','deductions','isEmail'));
 				$subject = 'Contestant Report: ' . ($contestant['name'] ?? '');
 			} elseif ($reportType === 'judge') {
 				$judgeStmt = DB::pdo()->prepare('SELECT * FROM judges WHERE id = ?');
@@ -5004,7 +5005,7 @@ class AdminController {
 				$scoresStmt = DB::pdo()->prepare('SELECT s.*, sc.name as subcategory_name, cr.name as criterion_name, con.name as contestant_name FROM scores s JOIN subcategories sc ON s.subcategory_id = sc.id JOIN criteria cr ON s.criterion_id = cr.id JOIN contestants con ON s.contestant_id = con.id WHERE s.judge_id = ? ORDER BY sc.name, con.name, cr.name');
 				$scoresStmt->execute([$entityId]);
 				$scores = $scoresStmt->fetchAll(\PDO::FETCH_ASSOC);
-				$html = \App\render_to_string('print/judge', compact('judge','subcategories','scores'));
+				$html = \App\render_to_string('print/judge', compact('judge','subcategories','scores','isEmail'));
 				$subject = 'Judge Report: ' . ($judge['name'] ?? '');
 			} elseif ($reportType === 'category') {
 				$catStmt = DB::pdo()->prepare('SELECT c.*, co.name as contest_name FROM categories c JOIN contests co ON c.contest_id = co.id WHERE c.id = ?');
@@ -5017,7 +5018,7 @@ class AdminController {
 				$scoresStmt = DB::pdo()->prepare('SELECT s.*, sc.name as subcategory_name, cr.name as criterion_name, con.name as contestant_name, j.name as judge_name FROM scores s JOIN subcategories sc ON s.subcategory_id = sc.id JOIN criteria cr ON s.criterion_id = cr.id JOIN contestants con ON s.contestant_id = con.id JOIN judges j ON s.judge_id = j.id WHERE sc.category_id = ? ORDER BY sc.name, con.name, cr.name, j.name');
 				$scoresStmt->execute([$entityId]);
 				$scores = $scoresStmt->fetchAll(\PDO::FETCH_ASSOC);
-				$html = \App\render_to_string('print/category', compact('category','subcategories','scores'));
+				$html = \App\render_to_string('print/category', compact('category','subcategories','scores','isEmail'));
 				$subject = 'Category Report: ' . ($category['name'] ?? '');
 			} else {
 				redirect('/admin/print-reports?error=invalid_report_type');

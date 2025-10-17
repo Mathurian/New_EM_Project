@@ -20,10 +20,31 @@
 			];
 			?>
 			<?php foreach ($stats as $label => $count): ?>
-				<div class="stat-card">
-					<div class="stat-number"><?= number_format($count) ?></div>
-					<div class="stat-label"><?= htmlspecialchars($label) ?></div>
-				</div>
+				<?php
+				// Define clickable URLs for each stat
+				$clickableUrls = [
+					'Total Users' => url('admin/users'),
+					'Active Judges' => url('admin/judges'),
+					'Contestants' => url('admin/contestants'),
+					'Emcees' => url('admin/users'), // Use users page since no dedicated emcee admin page
+					'Contests' => url('contests'),
+					'Categories' => url('categories'),
+					'Subcategories' => url('subcategories'),
+					'Templates' => url('admin/templates')
+				];
+				$url = $clickableUrls[$label] ?? null;
+				?>
+				<?php if ($url): ?>
+					<a href="<?= $url ?>" class="stat-card clickable-stat">
+						<div class="stat-number"><?= number_format($count) ?></div>
+						<div class="stat-label"><?= htmlspecialchars($label) ?></div>
+					</a>
+				<?php else: ?>
+					<div class="stat-card">
+						<div class="stat-number"><?= number_format($count) ?></div>
+						<div class="stat-label"><?= htmlspecialchars($label) ?></div>
+					</div>
+				<?php endif; ?>
 			<?php endforeach; ?>
 		</div>
 	</div>
@@ -300,6 +321,20 @@
 .stat-card:hover {
 	transform: translateY(-2px);
 	box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.clickable-stat {
+	text-decoration: none;
+	color: inherit;
+	cursor: pointer;
+}
+
+.clickable-stat:hover {
+	text-decoration: none;
+	color: inherit;
+	transform: translateY(-2px);
+	box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+	border-color: #007bff;
 }
 
 .stat-number {

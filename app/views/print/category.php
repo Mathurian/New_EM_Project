@@ -31,8 +31,10 @@
 </head>
 <body>
     <div class="container">
-        <a href="<?= url('admin/print-reports') ?>" class="print-button" style="background-color: #6c757d;">Back to Print Reports</a>
-        <a href="#" onclick="window.print()" class="print-button">Print Report</a>
+        <?php if (empty($isEmail)): ?>
+            <a href="<?= url('admin/print-reports') ?>" class="print-button" style="background-color: #6c757d;">Back to Print Reports</a>
+            <a href="#" onclick="window.print()" class="print-button">Print Report</a>
+        <?php endif; ?>
 
         <h1>Category Results Report</h1>
         <div class="header-info">
