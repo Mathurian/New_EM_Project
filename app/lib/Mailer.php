@@ -36,15 +36,31 @@ class Mailer {
             if ($useSmtp) {
                 $mail->isSMTP();
                 $mail->Host = $settings['smtp_host'] ?? (getenv('SMTP_HOST') ?: 'localhost');
-                $mail->Port = (int)($settings['smtp_port'] ?? (getenv('SMTP_PORT') ?: 25));
-                $smtpSecure = $settings['smtp_secure'] ?? (getenv('SMTP_SECURE') ?: '');
-                if ($smtpSecure) { $mail->SMTPSecure = $smtpSecure; }
-                $smtpAuth = (bool)(($settings['smtp_auth'] ?? '') !== '' ? (int)$settings['smtp_auth'] : (getenv('SMTP_AUTH') ?: 0));
+                $mail->Port = (int)($settings['smtp_port'] ?? (getenv('SMTP_PORT') ?: 587));
+                
+                // Configure encryption based on settings
+                $smtpSecure = $settings['smtp_secure'] ?? (getenv('SMTP_SECURE') ?: 'tls');
+                if ($smtpSecure === 'tls') {
+                    $mail->SMTPSecure = \PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_STARTTLS;
+                } elseif ($smtpSecure === 'ssl') {
+                    $mail->SMTPSecure = \PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_SMTPS;
+                }
+                
+                $smtpAuth = (bool)(($settings['smtp_auth'] ?? '') !== '' ? (int)$settings['smtp_auth'] : (getenv('SMTP_AUTH') ?: 1));
                 $mail->SMTPAuth = $smtpAuth;
                 if ($smtpAuth) {
                     $mail->Username = $settings['smtp_username'] ?? (getenv('SMTP_USERNAME') ?: '');
                     $mail->Password = $settings['smtp_password'] ?? (getenv('SMTP_PASSWORD') ?: '');
                 }
+                
+                // Additional SMTP options for better compatibility
+                $mail->SMTPOptions = [
+                    'ssl' => [
+                        'verify_peer' => false,
+                        'verify_peer_name' => false,
+                        'allow_self_signed' => true,
+                    ],
+                ];
             }
 
             $mail->setFrom($fromEmail, $fromName);

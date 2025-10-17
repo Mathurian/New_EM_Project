@@ -118,21 +118,21 @@
 				</label>
 				<label>
 					<strong>Port</strong><br>
-					<input type="number" name="smtp_port" value="<?= htmlspecialchars($settings['smtp_port'] ?? '587') ?>" style="width: 100%; padding: 6px; margin-top: 5px;" />
+					<input type="number" name="smtp_port" value="<?= htmlspecialchars($settings['smtp_port'] ?? '587') ?>" style="width: 100%; padding: 6px; margin-top: 5px;" placeholder="587 for STARTTLS, 465 for SSL" />
 				</label>
 				<label>
 					<strong>Security</strong><br>
 					<select name="smtp_secure" style="width: 100%; padding: 6px; margin-top: 5px;">
-						<option value="" <?= (($settings['smtp_secure'] ?? '') === '') ? 'selected' : '' ?>>None</option>
-						<option value="tls" <?= (($settings['smtp_secure'] ?? '') === 'tls') ? 'selected' : '' ?>>TLS</option>
-						<option value="ssl" <?= (($settings['smtp_secure'] ?? '') === 'ssl') ? 'selected' : '' ?>>SSL</option>
+						<option value="" <?= (($settings['smtp_secure'] ?? 'tls') === '') ? 'selected' : '' ?>>None</option>
+						<option value="tls" <?= (($settings['smtp_secure'] ?? 'tls') === 'tls') ? 'selected' : '' ?>>TLS (STARTTLS)</option>
+						<option value="ssl" <?= (($settings['smtp_secure'] ?? 'tls') === 'ssl') ? 'selected' : '' ?>>SSL</option>
 					</select>
 				</label>
 				<label>
 					<strong>Auth</strong><br>
 					<select name="smtp_auth" style="width: 100%; padding: 6px; margin-top: 5px;">
-						<option value="0" <?= (($settings['smtp_auth'] ?? '0') === '0') ? 'selected' : '' ?>>Disabled</option>
-						<option value="1" <?= (($settings['smtp_auth'] ?? '0') === '1') ? 'selected' : '' ?>>Enabled</option>
+						<option value="0" <?= (($settings['smtp_auth'] ?? '1') === '0') ? 'selected' : '' ?>>Disabled</option>
+						<option value="1" <?= (($settings['smtp_auth'] ?? '1') === '1') ? 'selected' : '' ?>>Enabled</option>
 					</select>
 				</label>
 				<label>
@@ -144,7 +144,14 @@
 					<input type="password" name="smtp_password" value="<?= htmlspecialchars($settings['smtp_password'] ?? '') ?>" style="width: 100%; padding: 6px; margin-top: 5px;" />
 				</label>
 			</div>
-			<p style="margin-top:10px; color:#666; font-size:0.9em;">If a field is left blank, environment variables will be used as fallback.</p>
+			<p style="margin-top:10px; color:#666; font-size:0.9em;">
+				<strong>Common SMTP Settings:</strong><br>
+				• Gmail: smtp.gmail.com, Port 587, TLS, Auth enabled<br>
+				• Outlook: smtp-mail.outlook.com, Port 587, TLS, Auth enabled<br>
+				• Yahoo: smtp.mail.yahoo.com, Port 587, TLS, Auth enabled<br>
+				• Custom: Check with your email provider for settings<br><br>
+				If a field is left blank, environment variables will be used as fallback.
+			</p>
 		</div>
 		
 		<button type="submit" style="background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer;">
