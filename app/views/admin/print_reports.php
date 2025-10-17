@@ -21,21 +21,22 @@
 								<span class="contestant-number">#<?= htmlspecialchars($contestant['contestant_number']) ?></span>
 							<?php endif; ?>
 						</div>
-						<a href="<?= url('print/contestant/' . $contestant['id']) ?>" class="btn btn-primary" target="_blank">
-							🖨️ Print Report
-						</a>
-                        <form method="post" action="<?= url('admin/print-reports/email') ?>" style="display:flex; gap:8px; align-items:center;">
-                            <input type="hidden" name="report_type" value="contestant" />
-                            <input type="hidden" name="entity_id" value="<?= htmlspecialchars($contestant['id']) ?>" />
-                            <input type="email" name="to_email" placeholder="Enter email" style="padding:6px;" />
-                            <select name="user_id" style="padding:6px;">
-                                <option value="">Send to user…</option>
-                                <?php foreach (($usersWithEmail ?? []) as $u): ?>
-                                    <option value="<?= htmlspecialchars($u['id']) ?>"><?= htmlspecialchars(($u['preferred_name'] ?: $u['name']) . ' <' . $u['email'] . '>') ?></option>
-                                <?php endforeach; ?>
-                            </select>
-                            <button type="submit" class="btn btn-secondary">✉️ Email</button>
-                        </form>
+                        <div class="report-actions">
+                            <a href="<?= url('print/contestant/' . $contestant['id']) ?>" class="btn btn-primary" target="_blank">🖨️ Print</a>
+                            <form method="post" action="<?= url('admin/print-reports/email') ?>" class="email-form">
+                                <input type="hidden" name="report_type" value="contestant" />
+                                <input type="hidden" name="entity_id" value="<?= htmlspecialchars($contestant['id']) ?>" />
+                                <input type="email" name="to_email" class="email-input" placeholder="Email address" />
+                                <span class="email-sep">or</span>
+                                <select name="user_id" class="email-select">
+                                    <option value="">Select user…</option>
+                                    <?php foreach (($usersWithEmail ?? []) as $u): ?>
+                                        <option value="<?= htmlspecialchars($u['id']) ?>"><?= htmlspecialchars(($u['preferred_name'] ?: $u['name']) . ' <' . $u['email'] . '>') ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                                <button type="submit" class="btn btn-secondary">✉️ Send</button>
+                            </form>
+                        </div>
 					</div>
 				<?php endforeach; ?>
 			<?php endif; ?>
@@ -54,21 +55,22 @@
 						<div class="judge-info">
 							<strong><?= htmlspecialchars($judge['name']) ?></strong>
 						</div>
-						<a href="<?= url('print/judge/' . $judge['id']) ?>" class="btn btn-primary" target="_blank">
-							🖨️ Print Report
-						</a>
-                        <form method="post" action="<?= url('admin/print-reports/email') ?>" style="display:flex; gap:8px; align-items:center;">
-                            <input type="hidden" name="report_type" value="judge" />
-                            <input type="hidden" name="entity_id" value="<?= htmlspecialchars($judge['id']) ?>" />
-                            <input type="email" name="to_email" placeholder="Enter email" style="padding:6px;" />
-                            <select name="user_id" style="padding:6px;">
-                                <option value="">Send to user…</option>
-                                <?php foreach (($usersWithEmail ?? []) as $u): ?>
-                                    <option value="<?= htmlspecialchars($u['id']) ?>"><?= htmlspecialchars(($u['preferred_name'] ?: $u['name']) . ' <' . $u['email'] . '>') ?></option>
-                                <?php endforeach; ?>
-                            </select>
-                            <button type="submit" class="btn btn-secondary">✉️ Email</button>
-                        </form>
+                        <div class="report-actions">
+                            <a href="<?= url('print/judge/' . $judge['id']) ?>" class="btn btn-primary" target="_blank">🖨️ Print</a>
+                            <form method="post" action="<?= url('admin/print-reports/email') ?>" class="email-form">
+                                <input type="hidden" name="report_type" value="judge" />
+                                <input type="hidden" name="entity_id" value="<?= htmlspecialchars($judge['id']) ?>" />
+                                <input type="email" name="to_email" class="email-input" placeholder="Email address" />
+                                <span class="email-sep">or</span>
+                                <select name="user_id" class="email-select">
+                                    <option value="">Select user…</option>
+                                    <?php foreach (($usersWithEmail ?? []) as $u): ?>
+                                        <option value="<?= htmlspecialchars($u['id']) ?>"><?= htmlspecialchars(($u['preferred_name'] ?: $u['name']) . ' <' . $u['email'] . '>') ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                                <button type="submit" class="btn btn-secondary">✉️ Send</button>
+                            </form>
+                        </div>
 					</div>
 				<?php endforeach; ?>
 			<?php endif; ?>
@@ -101,21 +103,22 @@
 								<div class="category-info">
 									<strong><?= htmlspecialchars($category['category_name']) ?></strong>
 								</div>
-								<a href="<?= url('print/category/' . $categoryId) ?>" class="btn btn-primary" target="_blank">
-									🖨️ Print Report
-								</a>
-                                <form method="post" action="<?= url('admin/print-reports/email') ?>" style="display:flex; gap:8px; align-items:center;">
-                                    <input type="hidden" name="report_type" value="category" />
-                                    <input type="hidden" name="entity_id" value="<?= htmlspecialchars($categoryId) ?>" />
-                                    <input type="email" name="to_email" placeholder="Enter email" style="padding:6px;" />
-                                    <select name="user_id" style="padding:6px;">
-                                        <option value="">Send to user…</option>
-                                        <?php foreach (($usersWithEmail ?? []) as $u): ?>
-                                            <option value="<?= htmlspecialchars($u['id']) ?>"><?= htmlspecialchars(($u['preferred_name'] ?: $u['name']) . ' <' . $u['email'] . '>') ?></option>
-                                        <?php endforeach; ?>
-                                    </select>
-                                    <button type="submit" class="btn btn-secondary">✉️ Email</button>
-                                </form>
+                                <div class="report-actions">
+                                    <a href="<?= url('print/category/' . $categoryId) ?>" class="btn btn-primary" target="_blank">🖨️ Print</a>
+                                    <form method="post" action="<?= url('admin/print-reports/email') ?>" class="email-form">
+                                        <input type="hidden" name="report_type" value="category" />
+                                        <input type="hidden" name="entity_id" value="<?= htmlspecialchars($categoryId) ?>" />
+                                        <input type="email" name="to_email" class="email-input" placeholder="Email address" />
+                                        <span class="email-sep">or</span>
+                                        <select name="user_id" class="email-select">
+                                            <option value="">Select user…</option>
+                                            <?php foreach (($usersWithEmail ?? []) as $u): ?>
+                                                <option value="<?= htmlspecialchars($u['id']) ?>"><?= htmlspecialchars(($u['preferred_name'] ?: $u['name']) . ' <' . $u['email'] . '>') ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                        <button type="submit" class="btn btn-secondary">✉️ Send</button>
+                                    </form>
+                                </div>
 							</div>
 						<?php endforeach; ?>
 					</div>
@@ -156,8 +159,8 @@
 .judge-item,
 .category-item {
 	display: flex;
-	justify-content: space-between;
-	align-items: center;
+    justify-content: space-between;
+    align-items: flex-start;
 	padding: 10px;
 	margin: 8px 0;
 	background: var(--bg-secondary);
@@ -168,7 +171,38 @@
 .contestant-info,
 .judge-info,
 .category-info {
-	flex: 1;
+    flex: 1;
+}
+
+.report-actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.email-form {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.email-input, .email-select {
+    padding: 8px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+}
+
+.email-input { width: 210px; }
+.email-select { max-width: 260px; }
+
+.email-sep { color: var(--text-secondary); font-size: 0.9em; }
+
+@media (max-width: 640px) {
+    .report-actions { flex-direction: column; align-items: stretch; width: 100%; }
+    .email-form { flex-direction: column; align-items: stretch; }
+    .email-input, .email-select { width: 100%; max-width: 100%; }
 }
 
 .contestant-number {
