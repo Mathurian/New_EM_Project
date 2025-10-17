@@ -144,11 +144,6 @@
                     <div id="nav-sections" style="display:flex; gap:14px;">
                         <!-- Home Link (Mobile Only) -->
                         <a href="/" class="home-link-mobile" style="color: white; text-decoration: none; font-weight: bold; padding: 8px 12px; border-bottom: 1px solid #555;">🏠 Home</a>
-                        
-                        <!-- Login Link (Mobile Only) -->
-                        <?php if (can_view_nav('Login')): ?>
-                            <a href="/login" class="login-link-mobile" style="color: white; text-decoration: none; padding: 8px 12px; border-bottom: 1px solid #555;">🔑 Login</a>
-                        <?php endif; ?>
                     </div>
 				<?php endif; ?>
 			</div>
