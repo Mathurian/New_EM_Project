@@ -1935,12 +1935,31 @@ class SubcategoryController {
 	public function index(array $params): void {
 		require_organizer();
 		$categoryId = param('id', $params);
+		
+		// Debug: Log the URL parameter and what we're querying
+		\App\Logger::debug('subcategory_debug', 'subcategory', null, 
+			"URL category ID: {$categoryId}, Request URI: " . ($_SERVER['REQUEST_URI'] ?? 'unknown'));
+		
 		$category = DB::pdo()->prepare('SELECT * FROM categories WHERE id = ?');
 		$category->execute([$categoryId]);
 		$category = $category->fetch(\PDO::FETCH_ASSOC);
+		
+		// Debug: Log what we actually found in the database
+		if ($category) {
+			\App\Logger::debug('subcategory_debug', 'subcategory', null, 
+				"Found category: ID={$category['id']}, Name={$category['name']}, Contest={$category['contest_id']}");
+		} else {
+			\App\Logger::error('subcategory_debug', 'subcategory', null, 
+				"No category found for ID: {$categoryId}");
+		}
+		
 		$subcategories = DB::pdo()->prepare('SELECT * FROM subcategories WHERE category_id = ?');
 		$subcategories->execute([$categoryId]);
 		$subcategories = $subcategories->fetchAll(\PDO::FETCH_ASSOC);
+		
+		\App\Logger::debug('subcategory_debug', 'subcategory', null, 
+			"Found " . count($subcategories) . " subcategories for category ID: {$categoryId}");
+		
 		view('subcategories/index', compact('category','subcategories'));
 	}
 	public function new(array $params): void {
