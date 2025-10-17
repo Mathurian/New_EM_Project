@@ -179,21 +179,49 @@ function toggleDropdown(dropdownId) {
 }
 
 function toggleSubmenu(submenuId) {
-	// Close all other submenus
+	console.log('toggleSubmenu called with:', submenuId);
+	
+	// Prevent default link behavior
+	event.preventDefault();
+	event.stopPropagation();
+	
+	// Close all other submenus first
 	const allSubmenus = document.querySelectorAll('.submenu-content');
+	console.log('Found', allSubmenus.length, 'submenus total');
+	
 	allSubmenus.forEach(submenu => {
+		console.log('Checking submenu:', submenu.id);
 		if (submenu.id !== submenuId + '-submenu') {
 			submenu.style.display = 'none';
+			console.log('Closed submenu:', submenu.id);
 		}
 	});
 	
 	// Toggle the clicked submenu
 	const submenu = document.getElementById(submenuId + '-submenu');
+	console.log('Target submenu element:', submenu);
 	
-	if (submenu.style.display === 'none' || submenu.style.display === '') {
-		submenu.style.display = 'block';
+	if (submenu) {
+		const currentDisplay = submenu.style.display;
+		console.log('Current display style:', currentDisplay);
+		
+		if (currentDisplay === 'none' || currentDisplay === '' || currentDisplay === 'none !important') {
+			submenu.style.display = 'block';
+			console.log('Setting display to block');
+		} else {
+			submenu.style.display = 'none';
+			console.log('Setting display to none');
+		}
+		
+		// Force a reflow to ensure the change takes effect
+		submenu.offsetHeight;
+		console.log('Final display style:', submenu.style.display);
 	} else {
-		submenu.style.display = 'none';
+		console.error('Submenu element not found for ID:', submenuId + '-submenu');
+		console.log('Available elements with submenu in ID:');
+		document.querySelectorAll('[id*="submenu"]').forEach(el => {
+			console.log('-', el.id);
+		});
 	}
 }
 
