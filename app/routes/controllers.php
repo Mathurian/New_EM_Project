@@ -2166,26 +2166,26 @@ class PeopleController {
 		
 		// Debug log data retrieval
 		\App\Logger::debug('people_index_data_retrieval', 'people', null, 
-			"Retrieving contestants and judges with user entries");
+			"Retrieving all contestants and judges");
 		
-		// Get contestants that have corresponding user entries (regardless of login capability)
+		// Get ALL contestants (with user info if available)
 		$contestants = DB::pdo()->query('
 			SELECT c.*, u.preferred_name, u.password_hash
 			FROM contestants c 
-			INNER JOIN users u ON c.id = u.contestant_id 
+			LEFT JOIN users u ON c.id = u.contestant_id 
 			ORDER BY c.contestant_number IS NULL, c.contestant_number, c.name
 		')->fetchAll(\PDO::FETCH_ASSOC);
 		
-		// Get judges that have corresponding user entries (regardless of login capability)
+		// Get ALL judges (with user info if available)
 		$judges = DB::pdo()->query('
 			SELECT j.*, u.preferred_name, u.password_hash
 			FROM judges j 
-			INNER JOIN users u ON j.id = u.judge_id 
+			LEFT JOIN users u ON j.id = u.judge_id 
 			ORDER BY j.name
 		')->fetchAll(\PDO::FETCH_ASSOC);
 		
 		\App\Logger::debug('people_index_data_retrieved', 'people', null, 
-			"Retrieved " . count($contestants) . " contestants and " . count($judges) . " judges with user entries");
+			"Retrieved " . count($contestants) . " contestants and " . count($judges) . " judges");
 		
 		view('people/index', compact('contestants','judges'));
 	}
