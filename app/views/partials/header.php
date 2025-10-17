@@ -46,16 +46,45 @@
 							<a href="#" onclick="toggleDropdown('admin')" style="color: white; text-decoration: none; cursor: pointer;">
 								Admin ▼
 							</a>
-                                <div id="admin-dropdown" class="dropdown-content" style="display: none;">
+							<div id="admin-dropdown" class="dropdown-content" style="display: none;">
 								<a href="/admin">Dashboard</a>
-								<a href="/admin/settings">Settings</a>
-								<a href="/admin/logs">Activity Logs</a>
-								<a href="/admin/log-files">Log Files</a>
-                                <a href="/admin/judges">Judges</a>
+								
+								<!-- Settings Submenu -->
+								<div class="submenu-item">
+									<a href="#" onclick="toggleSubmenu('settings')" style="color: #007bff; font-weight: bold;">
+										⚙️ Settings ▼
+									</a>
+									<div id="settings-submenu" class="submenu-content" style="display: none; margin-left: 15px;">
+										<a href="/admin/settings">System Settings</a>
+										<a href="/admin/templates">Templates</a>
+										<a href="/admin/emcee-scripts">Emcee Scripts</a>
+										<a href="/admin/judges">Judges</a>
+									</div>
+								</div>
+								
+								<!-- Logs Submenu -->
+								<div class="submenu-item">
+									<a href="#" onclick="toggleSubmenu('logs')" style="color: #007bff; font-weight: bold;">
+										📝 Logs ▼
+									</a>
+									<div id="logs-submenu" class="submenu-content" style="display: none; margin-left: 15px;">
+										<a href="/admin/logs">Activity Logs</a>
+										<a href="/admin/log-files">Log Files</a>
+									</div>
+								</div>
+								
+								<!-- Database Submenu -->
+								<div class="submenu-item">
+									<a href="#" onclick="toggleSubmenu('database')" style="color: #007bff; font-weight: bold;">
+										🗄️ Database ▼
+									</a>
+									<div id="database-submenu" class="submenu-content" style="display: none; margin-left: 15px;">
+										<a href="/admin/backups">Database Backups</a>
+										<a href="/admin/database">Database Browser</a>
+									</div>
+								</div>
+								
 								<a href="/admin/print-reports">Print Reports</a>
-								<a href="/admin/templates">Templates</a>
-								<a href="/admin/emcee-scripts">Emcee Scripts</a>
-								<a href="/admin/backups">Database Backups</a>
 							</div>
 						</div>
 					<?php endif; ?>
@@ -131,6 +160,14 @@ function toggleDropdown(dropdownId) {
 		}
 	});
 	
+	// Close all submenus when opening main dropdown
+	if (dropdownId === 'admin') {
+		const allSubmenus = document.querySelectorAll('.submenu-content');
+		allSubmenus.forEach(submenu => {
+			submenu.style.display = 'none';
+		});
+	}
+	
 	// Toggle the clicked dropdown
 	const dropdown = document.getElementById(dropdownId + '-dropdown');
 	
@@ -138,6 +175,25 @@ function toggleDropdown(dropdownId) {
 		dropdown.style.display = 'block';
 	} else {
 		dropdown.style.display = 'none';
+	}
+}
+
+function toggleSubmenu(submenuId) {
+	// Close all other submenus
+	const allSubmenus = document.querySelectorAll('.submenu-content');
+	allSubmenus.forEach(submenu => {
+		if (submenu.id !== submenuId + '-submenu') {
+			submenu.style.display = 'none';
+		}
+	});
+	
+	// Toggle the clicked submenu
+	const submenu = document.getElementById(submenuId + '-submenu');
+	
+	if (submenu.style.display === 'none' || submenu.style.display === '') {
+		submenu.style.display = 'block';
+	} else {
+		submenu.style.display = 'none';
 	}
 }
 
@@ -164,6 +220,11 @@ document.addEventListener('click', function(event) {
 			if (content) {
 				content.style.display = 'none';
 			}
+			// Also close any submenus
+			const submenus = dropdown.querySelectorAll('.submenu-content');
+			submenus.forEach(submenu => {
+				submenu.style.display = 'none';
+			});
 		}
 	});
 });
@@ -174,6 +235,11 @@ document.addEventListener('keydown', function(event) {
 		const openDropdowns = document.querySelectorAll('.dropdown-content[style*="block"]');
 		openDropdowns.forEach(dropdown => {
 			dropdown.style.display = 'none';
+		});
+		// Also close any open submenus
+		const openSubmenus = document.querySelectorAll('.submenu-content[style*="block"]');
+		openSubmenus.forEach(submenu => {
+			submenu.style.display = 'none';
 		});
 	}
 });
