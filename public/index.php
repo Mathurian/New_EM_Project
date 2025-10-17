@@ -87,6 +87,12 @@ $router->get('/admin/emcee-scripts', 'AdminController@emceeScripts');
 $router->post('/admin/emcee-scripts', 'AdminController@uploadEmceeScript');
 $router->post('/admin/emcee-scripts/{id}/delete', 'AdminController@deleteEmceeScript');
 $router->post('/admin/emcee-scripts/{id}/toggle', 'AdminController@toggleEmceeScript');
+
+// database browser
+$router->get('/admin/database', 'DatabaseBrowserController@index');
+$router->get('/admin/database/table/{table}', 'DatabaseBrowserController@table');
+$router->post('/admin/database/query', 'DatabaseBrowserController@query');
+
 $router->get('/contests/{id}/categories', 'CategoryController@index');
 $router->get('/contests/{id}/categories/new', 'CategoryController@new');
 $router->post('/contests/{id}/categories', 'CategoryController@create');

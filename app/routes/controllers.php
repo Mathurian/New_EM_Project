@@ -3947,6 +3947,113 @@ class UserController {
 	}
 }
 
+class DatabaseBrowserController {
+	public function index(): void {
+		require_organizer();
+		
+		\App\Logger::debug('db_browser_access', 'database', null, 
+			"Admin accessed database browser");
+		
+		// Get all tables
+		$tables = DB::pdo()->query("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")->fetchAll(\PDO::FETCH_COLUMN);
+		
+		// Get table info
+		$tableInfo = [];
+		foreach ($tables as $table) {
+			$count = DB::pdo()->query("SELECT COUNT(*) FROM `{$table}`")->fetchColumn();
+			$tableInfo[$table] = [
+				'name' => $table,
+				'count' => $count,
+				'columns' => $this->getTableColumns($table)
+			];
+		}
+		
+		view('admin/database_browser', compact('tableInfo'));
+	}
+	
+	public function table(array $params): void {
+		require_organizer();
+		
+		$tableName = param('table', $params);
+		$page = (int)(param('page', $params) ?: 1);
+		$perPage = 50;
+		$offset = ($page - 1) * $perPage;
+		
+		\App\Logger::debug('db_browser_table_access', 'database', $tableName, 
+			"Admin accessed table: {$tableName}, page: {$page}");
+		
+		// Validate table name (security)
+		$validTables = DB::pdo()->query("SELECT name FROM sqlite_master WHERE type='table'")->fetchAll(\PDO::FETCH_COLUMN);
+		if (!in_array($tableName, $validTables)) {
+			redirect('/admin/database?error=invalid_table');
+			return;
+		}
+		
+		// Get table structure
+		$columns = $this->getTableColumns($tableName);
+		
+		// Get total count
+		$totalCount = DB::pdo()->query("SELECT COUNT(*) FROM `{$tableName}`")->fetchColumn();
+		$totalPages = ceil($totalCount / $perPage);
+		
+		// Get data with pagination
+		$data = DB::pdo()->query("SELECT * FROM `{$tableName}` LIMIT {$perPage} OFFSET {$offset}")->fetchAll(\PDO::FETCH_ASSOC);
+		
+		view('admin/database_table', compact('tableName', 'columns', 'data', 'page', 'totalPages', 'totalCount', 'perPage'));
+	}
+	
+	public function query(): void {
+		require_organizer();
+		
+		$sql = post('sql');
+		$action = post('action');
+		
+		\App\Logger::debug('db_browser_query_execution', 'database', null, 
+			"Admin executed SQL query: " . substr($sql, 0, 100) . "...");
+		
+		if (empty($sql)) {
+			redirect('/admin/database?error=empty_query');
+			return;
+		}
+		
+		// Security: Only allow SELECT statements
+		$sqlTrimmed = trim(strtoupper($sql));
+		if (!str_starts_with($sqlTrimmed, 'SELECT')) {
+			\App\Logger::warn('db_browser_security_block', 'database', null, 
+				"Blocked non-SELECT query: " . substr($sql, 0, 50));
+			redirect('/admin/database?error=invalid_query_type');
+			return;
+		}
+		
+		try {
+			$stmt = DB::pdo()->prepare($sql);
+			$stmt->execute();
+			
+			if ($action === 'count') {
+				$result = $stmt->fetchColumn();
+				$_SESSION['query_result'] = ['type' => 'count', 'result' => $result];
+			} else {
+				$result = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+				$_SESSION['query_result'] = ['type' => 'data', 'result' => $result];
+			}
+			
+			\App\Logger::debug('db_browser_query_success', 'database', null, 
+				"Query executed successfully, returned " . count($result) . " rows");
+			
+			redirect('/admin/database?success=query_executed');
+		} catch (\Exception $e) {
+			\App\Logger::error('db_browser_query_error', 'database', null, 
+				"Query execution failed: " . $e->getMessage());
+			redirect('/admin/database?error=query_failed&message=' . urlencode($e->getMessage()));
+		}
+	}
+	
+	private function getTableColumns(string $tableName): array {
+		$columns = DB::pdo()->query("PRAGMA table_info(`{$tableName}`)")->fetchAll(\PDO::FETCH_ASSOC);
+		return $columns;
+	}
+}
+
 class AdminController {
 	public function index(): void {
 		require_organizer();

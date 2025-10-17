@@ -146,6 +146,12 @@
 				<div class="system-title">Archived Contests</div>
 				<div class="system-desc">View historical contest data</div>
 			</a>
+			
+			<a href="<?= url('admin/database') ?>" class="system-card">
+				<div class="system-icon">🗄️</div>
+				<div class="system-title">Database Browser</div>
+				<div class="system-desc">Explore database tables and data</div>
+			</a>
 		</div>
 	</div>
 
