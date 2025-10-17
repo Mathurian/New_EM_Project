@@ -1,14 +1,14 @@
-<h2>Subcategories for <?= htmlspecialchars($contest['name']) ?></h2>
+<h2>Categories for <?= htmlspecialchars($contest['name']) ?></h2>
 <p><a href="/contests">Back to Contests</a></p>
 
 <?php if (empty($subcategories)): ?>
-	<p>No subcategories created for this contest yet.</p>
-	<p><a href="/contests/<?= urlencode($contest['id']) ?>/categories">Create categories first</a></p>
+	<p>No categories created for this contest yet.</p>
+	<p><a href="/contests/<?= urlencode($contest['id']) ?>/categories">Create contests first</a></p>
 <?php else: ?>
 	<table>
 		<tr>
+			<th>Contest</th>
 			<th>Category</th>
-			<th>Subcategory</th>
 			<th>Description</th>
 			<th>Score Cap</th>
 			<th>Actions</th>

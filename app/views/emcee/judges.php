@@ -3,7 +3,7 @@
 <p><a href="<?= url('emcee') ?>">Back to Contestant Bios</a></p>
 
 <?php if (empty($groupedJudges)): ?>
-	<p>No judges assigned to categories yet.</p>
+	<p>No judges assigned to contests yet.</p>
 <?php else: ?>
 	<?php foreach ($groupedJudges as $categoryName => $judges): ?>
 		<div class="category-section">

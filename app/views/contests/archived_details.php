@@ -55,9 +55,9 @@
 <div class="row">
 	<div class="col-6">
 		<div class="card">
-			<h4>Categories (<?= count($categories) ?>)</h4>
+			<h4>Contests (<?= count($categories) ?>)</h4>
 			<?php if (empty($categories)): ?>
-				<p>No categories found.</p>
+				<p>No contests found.</p>
 			<?php else: ?>
 				<ul>
 					<?php foreach ($categories as $category): ?>
@@ -70,9 +70,9 @@
 	
 	<div class="col-6">
 		<div class="card">
-			<h4>Subcategories (<?= count($subcategories) ?>)</h4>
+			<h4>Categories (<?= count($subcategories) ?>)</h4>
 			<?php if (empty($subcategories)): ?>
-				<p>No subcategories found.</p>
+				<p>No categories found.</p>
 			<?php else: ?>
 				<ul>
 					<?php foreach ($subcategories as $subcategory): ?>

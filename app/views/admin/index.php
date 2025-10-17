@@ -14,8 +14,8 @@
 				'Contestants' => DB::pdo()->query('SELECT COUNT(*) FROM users WHERE role = "contestant"')->fetchColumn(),
 				'Emcees' => DB::pdo()->query('SELECT COUNT(*) FROM users WHERE role = "emcee"')->fetchColumn(),
 				'Contests' => DB::pdo()->query('SELECT COUNT(*) FROM contests')->fetchColumn(),
-				'Categories' => DB::pdo()->query('SELECT COUNT(*) FROM categories')->fetchColumn(),
-				'Subcategories' => DB::pdo()->query('SELECT COUNT(*) FROM subcategories')->fetchColumn(),
+				'Contests' => DB::pdo()->query('SELECT COUNT(*) FROM categories')->fetchColumn(),
+				'Categories' => DB::pdo()->query('SELECT COUNT(*) FROM subcategories')->fetchColumn(),
 				'Templates' => DB::pdo()->query('SELECT COUNT(*) FROM subcategory_templates')->fetchColumn()
 			];
 			?>
@@ -28,8 +28,8 @@
 					'Contestants' => url('admin/contestants'),
 					'Emcees' => url('admin/users'), // Use users page since no dedicated emcee admin page
 					'Contests' => url('contests'),
-					'Categories' => url('categories'),
-					'Subcategories' => url('subcategories'),
+					'Contests' => url('categories'),
+					'Categories' => url('subcategories'),
 					'Templates' => url('admin/templates')
 				];
 				$url = $clickableUrls[$label] ?? null;

@@ -4,7 +4,7 @@
 	<tr>
 		<th>Name</th>
 		<th>Description</th>
-		<th>Subcategories</th>
+		<th>Categories</th>
 		<th>Actions</th>
 	</tr>
 	<?php foreach ($rows as $row): ?>
@@ -18,7 +18,7 @@
 					$subcategoryNames = json_decode($row['subcategory_names'], true) ?: [];
 				}
 				if (!empty($subcategoryNames)) {
-					echo count($subcategoryNames) . ' subcategories';
+					echo count($subcategoryNames) . ' categories';
 				} else {
 					echo 'None';
 				}

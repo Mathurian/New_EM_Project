@@ -1,4 +1,4 @@
-<h2>Create Subcategories from Template: <?= htmlspecialchars($category['name']) ?></h2>
+<h2>Create Categories from Template: <?= htmlspecialchars($category['name']) ?></h2>
 <p><a href="/categories/<?= urlencode($category['id']) ?>/subcategories">Back</a></p>
 
 <?php if (empty($templates)): ?>
@@ -19,7 +19,7 @@
 			?>
 			
 			<?php if (!empty($subcategoryNames)): ?>
-				<p><strong>Subcategories:</strong></p>
+				<p><strong>Categories:</strong></p>
 				<ul>
 					<?php foreach ($subcategoryNames as $name): ?>
 						<li><?= htmlspecialchars($name) ?></li>
@@ -31,10 +31,10 @@
 					<label>Score Cap (optional)
 						<input type="number" name="score_cap" min="0" step="0.1" />
 					</label>
-					<button type="submit">Create All Subcategories from This Template</button>
+					<button type="submit">Create All Categories from This Template</button>
 				</form>
 			<?php else: ?>
-				<p><em>No subcategories defined in this template.</em></p>
+				<p><em>No categories defined in this template.</em></p>
 			<?php endif; ?>
 		</div>
 	<?php endforeach; ?>

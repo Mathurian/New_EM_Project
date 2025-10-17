@@ -33,7 +33,7 @@ foreach ($categories as $cat) {
 
 <?php if (empty($byContest)): ?>
 	<div style="background: #d1ecf1; border: 1px solid #bee5eb; padding: 15px; margin: 20px 0; border-radius: 5px;">
-		<p><strong>No categories found.</strong> Please create contests and categories first.</p>
+		<p><strong>No contests found.</strong> Please create contests and categories first.</p>
 	</div>
 <?php else: ?>
 	<?php foreach ($byContest as $contestName => $contestCategories): ?>
@@ -65,14 +65,14 @@ foreach ($categories as $cat) {
 			</div>
 		<?php endif; ?>
 		
-		<!-- Subcategories for this category -->
+		<!-- Categories for this contest -->
 		<?php 
 		$categorySubcategories = array_filter($subcategories, function($sc) use ($category) {
 			return $sc['category_id'] === $category['id'];
 		});
 		?>
 		<?php if (!empty($categorySubcategories)): ?>
-			<p><strong>Subcategories:</strong>
+			<p><strong>Categories:</strong>
 			<?php foreach ($categorySubcategories as $sc): ?>
 				<a href="<?= url('results/' . urlencode($sc['id']) . '/detailed') ?>" style="margin-right: 10px;"><?= htmlspecialchars($sc['name']) ?></a>
 			<?php endforeach; ?>

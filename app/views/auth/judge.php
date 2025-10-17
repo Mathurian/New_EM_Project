@@ -4,17 +4,17 @@
 
 <?php if (empty($subcategories)): ?>
 	<div class="alert alert-info">
-		<p>You haven't been assigned to any subcategories yet. Please contact an organizer.</p>
+		<p>You haven't been assigned to any categories yet. Please contact an organizer.</p>
 	</div>
 <?php else: ?>
-	<div class="subcategories-grid">
+	<div class="categories-grid">
 		<?php foreach ($subcategories as $subcategory): ?>
-			<div class="subcategory-card">
-				<div class="subcategory-header">
+			<div class="category-card">
+				<div class="category-header">
 					<h3><?= htmlspecialchars($subcategory['category_name']) ?></h3>
 					<h4><?= htmlspecialchars($subcategory['name']) ?></h4>
 				</div>
-				<div class="subcategory-actions">
+				<div class="category-actions">
 					<a href="<?= url('judge/subcategory/' . $subcategory['id']) ?>" class="btn btn-primary">
 						🎯 Score Contestants
 					</a>
@@ -28,7 +28,7 @@
 <?php endif; ?>
 
 <style>
-.subcategories-grid {
+.categories-grid {
 	display: grid;
 	grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
 	gap: 20px;
@@ -115,7 +115,7 @@
 }
 
 @media (max-width: 768px) {
-	.subcategories-grid {
+	.categories-grid {
 		grid-template-columns: 1fr;
 	}
 	

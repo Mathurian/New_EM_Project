@@ -13,8 +13,8 @@
 <?php if (!empty($_GET['success'])): ?>
 	<?php 
 	$successMessages = [
-		'subcategories_deleted' => 'Selected subcategories deleted successfully!',
-		'subcategories_updated' => 'Subcategories updated successfully!'
+		'categories_deleted' => 'Selected categories deleted successfully!',
+		'categories_updated' => 'Categories updated successfully!'
 	];
 	$successMessage = $successMessages[$_GET['success']] ?? 'Operation completed successfully!';
 	?>
@@ -24,9 +24,9 @@
 <?php if (!empty($_GET['error'])): ?>
 	<?php 
 	$errorMessages = [
-		'no_subcategories_selected' => 'No subcategories selected for operation',
-		'delete_failed' => 'Failed to delete subcategories',
-		'update_failed' => 'Failed to update subcategories',
+		'no_categories_selected' => 'No categories selected for operation',
+		'delete_failed' => 'Failed to delete categories',
+		'update_failed' => 'Failed to update categories',
 		'no_updates' => 'No updates provided'
 	];
 	$errorMessage = $errorMessages[$_GET['error']] ?? 'An error occurred';
@@ -41,13 +41,13 @@
 		<a href="<?= url('categories/' . urlencode($category['id']) . '/assign') ?>">Contest Assignments</a>
 		
 		<form method="post" action="<?= url('categories/' . urlencode($category['id']) . '/subcategories/bulk-delete') ?>" style="display: inline-block; margin-left: 20px;" id="bulkDeleteForm">
-			<button type="submit" onclick="return confirm('Are you sure you want to delete the selected subcategories? This will also delete all associated scores, criteria, and assignments.')" disabled id="bulkDeleteBtn">
+			<button type="submit" onclick="return confirm('Are you sure you want to delete the selected categories? This will also delete all associated scores, criteria, and assignments.')" disabled id="bulkDeleteBtn">
 				Delete Selected
 			</button>
 		</form>
 		
 		<form method="post" action="<?= url('categories/' . urlencode($category['id']) . '/subcategories/bulk-update') ?>" style="display: inline-block; margin-left: 10px;" id="bulkUpdateForm">
-			<button type="submit" onclick="return confirm('Are you sure you want to update the selected subcategories?')" disabled id="bulkUpdateBtn">
+			<button type="submit" onclick="return confirm('Are you sure you want to update the selected categories?')" disabled id="bulkUpdateBtn">
 				Update Selected
 			</button>
 		</form>
@@ -104,7 +104,7 @@
 					| <a href="<?= url('subcategories/' . urlencode($sc['id']) . '/admin') ?>">Admin</a>
 					| <form method="post" action="<?= url('categories/' . urlencode($category['id']) . '/subcategories/bulk-delete') ?>" style="display: inline-block;">
 						<input type="hidden" name="subcategory_ids[]" value="<?= htmlspecialchars($sc['id']) ?>" />
-						<button type="submit" onclick="return confirm('Are you sure you want to delete this subcategory?')" style="background: #dc3545; color: white; border: none; padding: 2px 6px; border-radius: 3px; font-size: 11px;">
+						<button type="submit" onclick="return confirm('Are you sure you want to delete this category?')" style="background: #dc3545; color: white; border: none; padding: 2px 6px; border-radius: 3px; font-size: 11px;">
 							Delete
 						</button>
 					</form>
@@ -158,7 +158,7 @@ document.addEventListener('DOMContentLoaded', function() {
 		const selectedCheckboxes = document.querySelectorAll('.subcategory-checkbox:checked');
 		if (selectedCheckboxes.length === 0) {
 			e.preventDefault();
-			alert('Please select at least one subcategory to delete.');
+			alert('Please select at least one category to delete.');
 			return;
 		}
 		
@@ -177,11 +177,11 @@ document.addEventListener('DOMContentLoaded', function() {
 		const selectedCheckboxes = document.querySelectorAll('.subcategory-checkbox:checked');
 		if (selectedCheckboxes.length === 0) {
 			e.preventDefault();
-			alert('Please select at least one subcategory to update.');
+			alert('Please select at least one category to update.');
 			return;
 		}
 		
-		// Add updates for selected subcategories
+		// Add updates for selected categories
 		selectedCheckboxes.forEach(checkbox => {
 			const subcategoryId = checkbox.value;
 			const nameInput = document.querySelector(`input[data-subcategory-id="${subcategoryId}"].subcategory-name-input`);

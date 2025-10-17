@@ -97,7 +97,7 @@
 			}
 			?>
 			<?php if (empty($groupedStructure)): ?>
-				<p class="no-data">No categories found.</p>
+				<p class="no-data">No contests found.</p>
 			<?php else: ?>
 				<?php foreach ($groupedStructure as $contestId => $categories): ?>
 					<div class="contest-group">
