@@ -10,7 +10,8 @@
 	Category Name: <strong><?= htmlspecialchars($category['name']) ?></strong><br>
 	Contest ID: <code><?= htmlspecialchars($category['contest_id'] ?? 'N/A') ?></code><br>
 	Subcategories Count: <?= count($subcategories) ?><br>
-	Request URI: <code><?= htmlspecialchars($_SERVER['REQUEST_URI'] ?? 'unknown') ?></code>
+	Request URI: <code><?= htmlspecialchars($_SERVER['REQUEST_URI'] ?? 'unknown') ?></code><br>
+	Raw Params: <code><?= htmlspecialchars(json_encode($params ?? [])) ?></code>
 </div>
 
 <?php if (!empty($_SESSION['success_message'])): ?>

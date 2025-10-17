@@ -1934,11 +1934,25 @@ class ContestSubcategoryController {
 class SubcategoryController {
 	public function index(array $params): void {
 		require_organizer();
+		
+		// Debug: Log the raw params array
+		\App\Logger::debug('subcategory_debug', 'subcategory', null, 
+			"Raw params array: " . json_encode($params));
+		
 		$categoryId = param('id', $params);
 		
 		// Debug: Log the URL parameter and what we're querying
 		\App\Logger::debug('subcategory_debug', 'subcategory', null, 
-			"URL category ID: {$categoryId}, Request URI: " . ($_SERVER['REQUEST_URI'] ?? 'unknown'));
+			"Extracted category ID: '{$categoryId}', Request URI: " . ($_SERVER['REQUEST_URI'] ?? 'unknown'));
+		
+		// If categoryId is empty, something is wrong with parameter extraction
+		if (empty($categoryId)) {
+			\App\Logger::error('subcategory_debug', 'subcategory', null, 
+				"Category ID is empty! Params: " . json_encode($params));
+			http_response_code(400);
+			echo "Error: Category ID not found in URL parameters.";
+			return;
+		}
 		
 		$category = DB::pdo()->prepare('SELECT * FROM categories WHERE id = ?');
 		$category->execute([$categoryId]);
@@ -1960,7 +1974,7 @@ class SubcategoryController {
 		\App\Logger::debug('subcategory_debug', 'subcategory', null, 
 			"Found " . count($subcategories) . " subcategories for category ID: {$categoryId}");
 		
-		view('subcategories/index', compact('category','subcategories'));
+		view('subcategories/index', compact('category','subcategories','params'));
 	}
 	public function new(array $params): void {
 		require_organizer();
