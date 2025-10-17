@@ -9,6 +9,7 @@ require __DIR__ . '/lib/helpers.php';
 require __DIR__ . '/lib/Router.php';
 require __DIR__ . '/lib/DB.php';
 require __DIR__ . '/lib/Logger.php';
+require __DIR__ . '/lib/Mailer.php';
 require __DIR__ . '/routes/controllers.php';
 
 // Session timeout check (configurable)
