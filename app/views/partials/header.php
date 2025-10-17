@@ -116,34 +116,34 @@
                     <!-- User-specific links (My Profile removed; now under username menu) -->
 					
 					<?php if (($_SESSION['user']['role'] ?? '') === 'judge' && can_view_nav('My Assignments')): ?>
-						<a href="/judge" style="color: white; text-decoration: none; margin-right: 20px;">Judgy Time!</a>
+						<a href="/judge" class="role-specific-link">Judgy Time!</a>
 					<?php endif; ?>
 					
 					<?php if (($_SESSION['user']['role'] ?? '') === 'emcee' && can_view_nav('Contestant Bios')): ?>
-						<a href="/emcee" style="color: white; text-decoration: none; margin-right: 20px;">Contestant Bios</a>
+						<a href="/emcee" class="role-specific-link">Contestant Bios</a>
                     <?php endif; ?>
                     
                     <!-- User Menu (Mobile Only) -->
                     <div class="nav-dropdown user-menu-mobile">
-                        <a href="#" onclick="toggleDropdown('user-menu-mobile')" style="color: white; text-decoration: none; cursor: pointer; padding: 8px 12px; border-bottom: 1px solid #555;">
+                        <a href="#" onclick="toggleDropdown('user-menu-mobile')" class="user-menu-mobile-trigger">
                             👤 <strong><?= htmlspecialchars($_SESSION['user']['preferred_name'] ?? $_SESSION['user']['name']) ?></strong>
-                            <span style="background: #495057; padding: 2px 6px; border-radius: 3px; font-size: 12px; margin-left: 5px;">
+                            <span class="user-role-badge">
                                 <?= htmlspecialchars(ucfirst($_SESSION['user']['role'])) ?>
                             </span>
                         </a>
-                        <div id="user-menu-mobile-dropdown" class="dropdown-content" style="display: none;">
+                        <div id="user-menu-mobile-dropdown" class="dropdown-content">
                             <a href="/profile">My Profile</a>
-                            <form method="post" action="/logout" style="padding: 0 12px 8px;">
-                                <button type="submit" class="btn btn-danger btn-sm" style="width:100%;">Logout</button>
+                            <form method="post" action="/logout" class="logout-form">
+                                <button type="submit" class="btn btn-danger btn-sm logout-btn">Logout</button>
                             </form>
                         </div>
                     </div>
                     </div>
 				<?php else: ?>
                     <!-- Mobile navigation for logged-out users -->
-                    <div id="nav-sections" style="display:flex; gap:14px;">
+                    <div id="nav-sections" class="nav-sections-logged-out">
                         <!-- Home Link (Mobile Only) -->
-                        <a href="/" class="home-link-mobile" style="color: white; text-decoration: none; font-weight: bold; padding: 8px 12px; border-bottom: 1px solid #555;">🏠 Home</a>
+                        <a href="/" class="home-link-mobile">🏠 Home</a>
                     </div>
 				<?php endif; ?>
 			</div>

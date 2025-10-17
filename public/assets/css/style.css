@@ -440,6 +440,89 @@ input:focus, select:focus, textarea:focus {
 }
 #nav-sections.active { display: flex !important; }
 
+/* Role-specific navigation links styling */
+.role-specific-link {
+    color: var(--text-primary) !important;
+    background: transparent !important;
+    border-radius: 6px;
+    border: 1px solid transparent !important;
+    padding: 12px 16px !important;
+    margin-right: 20px !important;
+    transition: all 0.2s ease;
+    display: inline-block;
+    text-decoration: none !important;
+}
+
+.role-specific-link:hover {
+    background: var(--accent-color) !important;
+    color: white !important;
+    border-color: var(--accent-color) !important;
+}
+
+/* User menu mobile trigger styling */
+.user-menu-mobile-trigger {
+    color: var(--text-primary) !important;
+    background: transparent !important;
+    border-radius: 6px;
+    border: 1px solid transparent !important;
+    padding: 12px 16px !important;
+    transition: all 0.2s ease;
+    display: block;
+    text-decoration: none !important;
+    cursor: pointer;
+}
+
+.user-menu-mobile-trigger:hover {
+    background: var(--accent-color) !important;
+    color: white !important;
+    border-color: var(--accent-color) !important;
+}
+
+/* User role badge styling */
+.user-role-badge {
+    background: var(--bg-tertiary) !important;
+    color: var(--text-primary) !important;
+    padding: 2px 6px !important;
+    border-radius: 3px !important;
+    font-size: 12px !important;
+    margin-left: 5px !important;
+    border: 1px solid var(--border-color) !important;
+}
+
+/* Logout form styling */
+.logout-form {
+    padding: 0 12px 8px !important;
+}
+
+/* Logged-out navigation sections styling */
+.nav-sections-logged-out {
+    display: flex;
+    gap: 14px;
+}
+
+/* Mobile logged-out navigation styling */
+@media (max-width: 768px) {
+    .nav-sections-logged-out {
+        display: none !important;
+        flex-direction: column;
+        gap: 12px;
+        width: 100%;
+        background: var(--bg-secondary);
+        padding: 20px;
+        border-radius: 0 0 8px 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        border-top: 1px solid var(--border-color);
+    }
+/* Mobile role-specific links styling */
+@media (max-width: 768px) {
+    .role-specific-link {
+        margin-right: 0 !important;
+        margin-bottom: 8px !important;
+        display: block !important;
+        width: 100% !important;
+    }
+}
+
 button {
     background: #007bff;
     color: white;
