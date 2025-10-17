@@ -1954,9 +1954,22 @@ class SubcategoryController {
 			return;
 		}
 		
+		// Debug: Log the exact query we're about to run
+		\App\Logger::debug('subcategory_debug', 'subcategory', null, 
+			"About to query: SELECT * FROM categories WHERE id = '{$categoryId}'");
+		
 		$category = DB::pdo()->prepare('SELECT * FROM categories WHERE id = ?');
 		$category->execute([$categoryId]);
 		$category = $category->fetch(\PDO::FETCH_ASSOC);
+		
+		// Debug: Log the exact result
+		\App\Logger::debug('subcategory_debug', 'subcategory', null, 
+			"Query result: " . json_encode($category));
+		
+		// Debug: Also check what categories exist with similar IDs
+		$allCategories = DB::pdo()->query("SELECT id, name FROM categories WHERE id LIKE '%{$categoryId}%' OR name LIKE '%bear%' OR name LIKE '%pet%'")->fetchAll(\PDO::FETCH_ASSOC);
+		\App\Logger::debug('subcategory_debug', 'subcategory', null, 
+			"Related categories: " . json_encode($allCategories));
 		
 		// Debug: Log what we actually found in the database
 		if ($category) {
