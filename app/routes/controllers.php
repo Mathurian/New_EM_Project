@@ -5127,8 +5127,13 @@ class AdminController {
 				\App\Logger::debug('emcee_script_upload', 'admin', $_SESSION['user']['id'] ?? null, 
 					"emcee_scripts table info: " . json_encode($tableInfo));
 				
-				$stmt = DB::pdo()->prepare('INSERT INTO emcee_scripts (id, filename, filepath, is_active, created_at, uploaded_by, title, description, file_name, file_size, uploaded_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-				$stmt->execute([uuid(), $filename, '/uploads/emcee-scripts/' . $filename, 1, date('Y-m-d H:i:s'), $_SESSION['user']['id'], $title, $description, $originalFilename, $fileSize, $uploadedAt]);
+				// Debug: Log the values we're trying to insert
+				$insertValues = [uuid(), $filename, '/uploads/emcee-scripts/' . $filename, 1, date('Y-m-d H:i:s'), $_SESSION['user']['id'], $title, $description, $originalFilename, $fileSize, $uploadedAt];
+				\App\Logger::debug('emcee_script_upload', 'admin', $_SESSION['user']['id'] ?? null, 
+					"Insert values: " . json_encode($insertValues));
+				
+				$stmt = DB::pdo()->prepare('INSERT INTO emcee_scripts (id, filename, file_path, is_active, created_at, uploaded_by, title, description, file_name, file_size, uploaded_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+				$stmt->execute($insertValues);
 				
 				\App\Logger::info('emcee_script_upload', 'admin', $_SESSION['user']['id'] ?? null, 
 					"Successfully uploaded emcee script: {$title} ({$originalFilename})");
@@ -5153,7 +5158,7 @@ class AdminController {
 		require_organizer();
 		$id = param('id', $params);
 		
-		$stmt = DB::pdo()->prepare('SELECT filepath FROM emcee_scripts WHERE id = ?');
+		$stmt = DB::pdo()->prepare('SELECT file_path FROM emcee_scripts WHERE id = ?');
 		$stmt->execute([$id]);
 		$filepath = $stmt->fetchColumn();
 		
@@ -5471,7 +5476,7 @@ class EmceeController {
 			return;
 		}
 		
-		$filepath = __DIR__ . '/../../public' . $script['filepath'];
+		$filepath = __DIR__ . '/../../public' . $script['file_path'];
 		if (!file_exists($filepath)) {
 			http_response_code(404);
 			echo 'File not found';

@@ -378,7 +378,7 @@ CREATE TABLE IF NOT EXISTS backup_settings (
 CREATE TABLE IF NOT EXISTS emcee_scripts (
 	id TEXT PRIMARY KEY,
 	filename TEXT NOT NULL,
-	filepath TEXT NOT NULL,
+	file_path TEXT NOT NULL,
 	is_active BOOLEAN DEFAULT 1,
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -418,7 +418,7 @@ SQL;
 		
 		// emcee_scripts new fields - ensure all required columns exist
 		self::addColumnIfMissing('emcee_scripts', 'filename', 'TEXT');
-		self::addColumnIfMissing('emcee_scripts', 'filepath', 'TEXT');
+		self::addColumnIfMissing('emcee_scripts', 'file_path', 'TEXT');
 		self::addColumnIfMissing('emcee_scripts', 'is_active', 'INTEGER DEFAULT 1');
 		self::addColumnIfMissing('emcee_scripts', 'created_at', 'TEXT');
 		self::addColumnIfMissing('emcee_scripts', 'uploaded_by', 'TEXT');
@@ -467,7 +467,7 @@ SQL;
 		try {
 			// Check if table exists and has required columns
 			$tableInfo = self::pdo()->query("PRAGMA table_info(emcee_scripts)")->fetchAll(\PDO::FETCH_ASSOC);
-			$requiredColumns = ['id', 'filename', 'filepath', 'is_active', 'created_at', 'uploaded_by', 'title', 'description', 'file_name', 'file_size', 'uploaded_at'];
+			$requiredColumns = ['id', 'filename', 'file_path', 'is_active', 'created_at', 'uploaded_by', 'title', 'description', 'file_name', 'file_size', 'uploaded_at'];
 			$existingColumns = array_column($tableInfo, 'name');
 			
 			$missingColumns = array_diff($requiredColumns, $existingColumns);
@@ -489,7 +489,7 @@ SQL;
 					CREATE TABLE emcee_scripts (
 						id TEXT PRIMARY KEY,
 						filename TEXT NOT NULL,
-						filepath TEXT NOT NULL,
+						file_path TEXT NOT NULL,
 						is_active INTEGER DEFAULT 1,
 						created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 						uploaded_by TEXT,
@@ -504,14 +504,14 @@ SQL;
 				// Restore data if possible
 				if (!empty($existingData)) {
 					$stmt = self::pdo()->prepare("
-						INSERT INTO emcee_scripts (id, filename, filepath, is_active, created_at, uploaded_by, title, description, file_name, file_size, uploaded_at) 
+						INSERT INTO emcee_scripts (id, filename, file_path, is_active, created_at, uploaded_by, title, description, file_name, file_size, uploaded_at) 
 						VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 					");
 					foreach ($existingData as $row) {
 						$stmt->execute([
 							$row['id'] ?? uuid(),
 							$row['filename'] ?? '',
-							$row['filepath'] ?? '',
+							$row['file_path'] ?? $row['filepath'] ?? '',
 							$row['is_active'] ?? 1,
 							$row['created_at'] ?? date('Y-m-d H:i:s'),
 							$row['uploaded_by'] ?? null,
