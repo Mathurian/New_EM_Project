@@ -56,56 +56,7 @@
 	</div>
 	
 	<div class="col-6">
-		<div class="card">
-			<h4>Scheduled Backup Settings</h4>
-			<?php if (empty($backupSettings)): ?>
-				<div class="alert alert-warning">
-					<p>No backup settings found. Default settings will be created automatically.</p>
-					<p><a href="<?= url('admin/backups') ?>" class="btn btn-sm btn-primary">Refresh Page</a></p>
-				</div>
-			<?php else: ?>
-				<form method="post" action="<?= url('admin/backups/settings') ?>">
-					<?php foreach ($backupSettings as $setting): ?>
-						<div class="form-group">
-							<h5><?= ucfirst($setting['backup_type']) ?> Backup</h5>
-							<div class="form-row">
-								<div class="col-4">
-									<label>
-										<input type="checkbox" name="<?= $setting['backup_type'] ?>_enabled" value="1" <?= $setting['enabled'] ? 'checked' : '' ?>>
-										Enable
-									</label>
-								</div>
-							<div class="col-4">
-								<label>Frequency:</label>
-								<select name="<?= $setting['backup_type'] ?>_frequency" class="form-control" onchange="toggleFrequencyValue(this)">
-									<option value="minutes" <?= $setting['frequency'] === 'minutes' ? 'selected' : '' ?>>Minutes</option>
-									<option value="hours" <?= $setting['frequency'] === 'hours' ? 'selected' : '' ?>>Hours</option>
-									<option value="daily" <?= $setting['frequency'] === 'daily' ? 'selected' : '' ?>>Daily</option>
-									<option value="weekly" <?= $setting['frequency'] === 'weekly' ? 'selected' : '' ?>>Weekly</option>
-									<option value="monthly" <?= $setting['frequency'] === 'monthly' ? 'selected' : '' ?>>Monthly</option>
-								</select>
-							</div>
-							<div class="col-2">
-								<label>Every:</label>
-								<input type="number" name="<?= $setting['backup_type'] ?>_frequency_value" value="<?= $setting['frequency_value'] ?? 1 ?>" min="1" max="999" class="form-control" id="<?= $setting['backup_type'] ?>_frequency_value">
-							</div>
-							<div class="col-3">
-								<label>Retention (days):</label>
-								<input type="number" name="<?= $setting['backup_type'] ?>_retention" value="<?= $setting['retention_days'] ?>" min="1" max="365" class="form-control">
-							</div>
-							</div>
-							<?php if ($setting['last_run']): ?>
-								<p><small>Last run: <span class="log-time" data-iso="<?= htmlspecialchars($setting['last_run']) ?>"><?= htmlspecialchars($setting['last_run']) ?></span></small></p>
-							<?php endif; ?>
-							<?php if ($setting['next_run']): ?>
-								<p><small>Next run: <span class="log-time" data-iso="<?= htmlspecialchars($setting['next_run']) ?>"><?= htmlspecialchars($setting['next_run']) ?></span></small></p>
-							<?php endif; ?>
-						</div>
-					<?php endforeach; ?>
-					<button type="submit" class="btn btn-primary">Update Settings</button>
-				</form>
-			<?php endif; ?>
-		</div>
+		<!-- Scheduled Backup Settings moved below history -->
 	</div>
 </div>
 
@@ -166,6 +117,57 @@
 				</tbody>
 			</table>
 		</div>
+	<?php endif; ?>
+</div>
+
+<div class="card">
+	<h4>Scheduled Backup Settings</h4>
+	<?php if (empty($backupSettings)): ?>
+		<div class="alert alert-warning">
+			<p>No backup settings found. Default settings will be created automatically.</p>
+			<p><a href="<?= url('admin/backups') ?>" class="btn btn-sm btn-primary">Refresh Page</a></p>
+		</div>
+	<?php else: ?>
+		<form method="post" action="<?= url('admin/backups/settings') ?>">
+			<?php foreach ($backupSettings as $setting): ?>
+				<div class="form-group">
+					<h5><?= ucfirst($setting['backup_type']) ?> Backup</h5>
+					<div class="form-row">
+						<div class="col-4">
+							<label>
+								<input type="checkbox" name="<?= $setting['backup_type'] ?>_enabled" value="1" <?= $setting['enabled'] ? 'checked' : '' ?>>
+								Enable
+							</label>
+						</div>
+						<div class="col-4">
+							<label>Frequency:</label>
+							<select name="<?= $setting['backup_type'] ?>_frequency" class="form-control" onchange="toggleFrequencyValue(this)">
+								<option value="minutes" <?= $setting['frequency'] === 'minutes' ? 'selected' : '' ?>>Minutes</option>
+								<option value="hours" <?= $setting['frequency'] === 'hours' ? 'selected' : '' ?>>Hours</option>
+								<option value="daily" <?= $setting['frequency'] === 'daily' ? 'selected' : '' ?>>Daily</option>
+								<option value="weekly" <?= $setting['frequency'] === 'weekly' ? 'selected' : '' ?>>Weekly</option>
+								<option value="monthly" <?= $setting['frequency'] === 'monthly' ? 'selected' : '' ?>>Monthly</option>
+							</select>
+						</div>
+						<div class="col-2">
+							<label>Every:</label>
+							<input type="number" name="<?= $setting['backup_type'] ?>_frequency_value" value="<?= $setting['frequency_value'] ?? 1 ?>" min="1" max="999" class="form-control" id="<?= $setting['backup_type'] ?>_frequency_value">
+						</div>
+						<div class="col-3">
+							<label>Retention (days):</label>
+							<input type="number" name="<?= $setting['backup_type'] ?>_retention" value="<?= $setting['retention_days'] ?>" min="1" max="365" class="form-control">
+						</div>
+					</div>
+					<?php if ($setting['last_run']): ?>
+						<p><small>Last run: <span class="log-time" data-iso="<?= htmlspecialchars($setting['last_run']) ?>"><?= htmlspecialchars($setting['last_run']) ?></span></small></p>
+					<?php endif; ?>
+					<?php if ($setting['next_run']): ?>
+						<p><small>Next run: <span class="log-time" data-iso="<?= htmlspecialchars($setting['next_run']) ?>"><?= htmlspecialchars($setting['next_run']) ?></span></small></p>
+					<?php endif; ?>
+				</div>
+			<?php endforeach; ?>
+			<button type="submit" class="btn btn-primary">Update Settings</button>
+		</form>
 	<?php endif; ?>
 </div>
 
@@ -254,12 +256,12 @@
 		<?php else: ?>
 			<div class="alert alert-warning">
 				<p><strong>No scheduled backups enabled.</strong></p>
-				<p>Enable scheduled backups above, then return here for cron instructions.</p>
+				<p>Enable scheduled backups below, then return here for cron instructions.</p>
 			</div>
 		<?php endif; ?>
 	<?php else: ?>
 		<div class="alert alert-warning">
-			<p>Configure scheduled backup settings above to see cron instructions.</p>
+			<p>Configure scheduled backup settings below to see cron instructions.</p>
 		</div>
 	<?php endif; ?>
 </div>
