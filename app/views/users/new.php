@@ -62,6 +62,11 @@
 		<input type="text" name="gender" placeholder="Enter custom gender or leave blank" />
 	</label>
 	
+	<label>Pronouns (optional)
+		<input type="text" name="pronouns" placeholder="e.g., they/them, she/her, he/him, ze/zir, or custom" />
+		<small>How you would like to be referred to</small>
+	</label>
+	
 	<!-- Contestant-specific fields -->
 	<div id="contestantFields" style="display: none;">
 		<fieldset>

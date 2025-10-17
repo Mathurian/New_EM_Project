@@ -105,6 +105,7 @@ $roleLabels = [
 				<th>Preferred Name</th>
 				<th>Email</th>
 				<th>Gender</th>
+				<th>Pronouns</th>
 				<?php if ($role === 'judge'): ?><th>Head Judge</th><?php endif; ?>
 				<th>Can Login</th>
 				<th>Actions</th>
@@ -118,6 +119,7 @@ $roleLabels = [
 					<td><?= htmlspecialchars($user['preferred_name'] ?? '-') ?></td>
 					<td><?= htmlspecialchars($user['email'] ?? '-') ?></td>
 					<td><?= htmlspecialchars($user['gender'] ?? '-') ?></td>
+					<td><?= htmlspecialchars($user['pronouns'] ?? '-') ?></td>
 					<?php if ($role === 'judge'): ?><td><?= !empty($user['is_head_judge']) ? 'Yes' : 'No' ?></td><?php endif; ?>
 					<td><?= !empty($user['password_hash']) ? 'Yes' : 'No' ?></td>
 					<td>

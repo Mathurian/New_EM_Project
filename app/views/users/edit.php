@@ -48,6 +48,11 @@
 		<input type="text" name="gender" value="<?= htmlspecialchars($user['gender'] ?? '') ?>" placeholder="Enter custom gender or leave blank" />
 	</label>
 	
+	<label>Pronouns (optional)
+		<input type="text" name="pronouns" value="<?= htmlspecialchars($user['pronouns'] ?? '') ?>" placeholder="e.g., they/them, she/her, he/him, ze/zir, or custom" />
+		<small>How you would like to be referred to</small>
+	</label>
+	
 	<div style="margin-top: 20px;">
 		<button type="submit">Update User</button>
 		<a href="<?= url('admin/users') ?>" style="margin-left: 10px;">Cancel</a>

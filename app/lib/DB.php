@@ -65,6 +65,8 @@ CREATE TABLE IF NOT EXISTS contestants (
 	id TEXT PRIMARY KEY,
 	name TEXT NOT NULL,
 	email TEXT,
+	gender TEXT,
+	pronouns TEXT,
 	contestant_number INTEGER,
 	bio TEXT,
 	image_path TEXT
@@ -73,6 +75,8 @@ CREATE TABLE IF NOT EXISTS judges (
 	id TEXT PRIMARY KEY,
 	name TEXT NOT NULL,
 	email TEXT,
+	gender TEXT,
+	pronouns TEXT,
 	bio TEXT,
 	image_path TEXT,
 	is_head_judge INTEGER NOT NULL DEFAULT 0
@@ -122,6 +126,7 @@ CREATE TABLE IF NOT EXISTS users (
 	role TEXT NOT NULL CHECK (role IN ('organizer','judge','emcee','contestant')),
 	judge_id TEXT,
 	gender TEXT,
+	pronouns TEXT,
 	session_version INTEGER NOT NULL DEFAULT 1,
 	FOREIGN KEY (judge_id) REFERENCES judges(id) ON DELETE SET NULL
 );
@@ -383,8 +388,11 @@ SQL;
 
 		// Post-creation migrations: add gender columns if missing
 		self::addColumnIfMissing('contestants', 'gender', 'TEXT');
+		self::addColumnIfMissing('contestants', 'pronouns', 'TEXT');
 		self::addColumnIfMissing('judges', 'gender', 'TEXT');
+		self::addColumnIfMissing('judges', 'pronouns', 'TEXT');
 		self::addColumnIfMissing('users', 'gender', 'TEXT');
+		self::addColumnIfMissing('users', 'pronouns', 'TEXT');
 		
 		// Add description and score_cap columns to subcategories
 		self::addColumnIfMissing('subcategories', 'description', 'TEXT');
@@ -398,6 +406,7 @@ SQL;
 		self::addColumnIfMissing('judges', 'image_path', 'TEXT');
 		self::addColumnIfMissing('judges', 'is_head_judge', 'INTEGER NOT NULL DEFAULT 0');
 		self::addColumnIfMissing('users', 'preferred_name', 'TEXT');
+		self::addColumnIfMissing('users', 'pronouns', 'TEXT');
 		self::addColumnIfMissing('users', 'session_version', 'INTEGER NOT NULL DEFAULT 1');
 		self::addColumnIfMissing('users', 'last_login', 'TEXT');
 		self::addColumnIfMissing('activity_logs', 'log_level', 'TEXT DEFAULT "info"');

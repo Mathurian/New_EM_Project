@@ -40,6 +40,11 @@
 		<input type="text" name="gender" value="<?= htmlspecialchars($user['gender'] ?? '') ?>" placeholder="Enter custom gender or leave blank" />
 	</label>
 	
+	<label>Pronouns (optional)
+		<input type="text" name="pronouns" value="<?= htmlspecialchars($user['pronouns'] ?? '') ?>" placeholder="e.g., they/them, she/her, he/him, ze/zir, or custom" />
+		<small>How you would like to be referred to</small>
+	</label>
+	
 	<?php if (($user['role'] ?? '') === 'judge' && !empty($judge)): ?>
 		<fieldset>
 			<legend>Judge Bio Information</legend>

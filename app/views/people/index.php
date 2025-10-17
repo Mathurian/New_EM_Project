@@ -18,7 +18,7 @@
 	<div>
 		<h3>Contestants</h3>
 		<table>
-			<tr><th>Number</th><th>Name</th><th>Preferred Name</th><th>Email</th><th>Gender</th><th>Can Login</th><th>Actions</th></tr>
+			<tr><th>Number</th><th>Name</th><th>Preferred Name</th><th>Email</th><th>Gender</th><th>Pronouns</th><th>Can Login</th><th>Actions</th></tr>
 			<?php foreach ($contestants as $p): ?>
 				<tr>
 					<td><?= $p['contestant_number'] ? htmlspecialchars($p['contestant_number']) : '-' ?></td>
@@ -26,6 +26,7 @@
 					<td><?= htmlspecialchars($p['preferred_name'] ?? '-') ?></td>
 					<td><?= htmlspecialchars($p['email'] ?? '-') ?></td>
 					<td><?= htmlspecialchars($p['gender'] ?? '-') ?></td>
+					<td><?= htmlspecialchars($p['pronouns'] ?? '-') ?></td>
 					<td><?= !empty($p['password_hash']) ? 'Yes' : 'No' ?></td>
 					<td>
 						<a href="/people/contestants/<?= urlencode($p['id']) ?>/edit">Edit</a> |
@@ -42,13 +43,14 @@
 	<div>
 		<h3>Judges</h3>
 		<table>
-			<tr><th>Name</th><th>Preferred Name</th><th>Email</th><th>Gender</th><th>Can Login</th><th>Actions</th></tr>
+			<tr><th>Name</th><th>Preferred Name</th><th>Email</th><th>Gender</th><th>Pronouns</th><th>Can Login</th><th>Actions</th></tr>
 			<?php foreach ($judges as $j): ?>
 				<tr>
 					<td><?= htmlspecialchars($j['name']) ?></td>
 					<td><?= htmlspecialchars($j['preferred_name'] ?? '-') ?></td>
 					<td><?= htmlspecialchars($j['email'] ?? '-') ?></td>
 					<td><?= htmlspecialchars($j['gender'] ?? '-') ?></td>
+					<td><?= htmlspecialchars($j['pronouns'] ?? '-') ?></td>
 					<td><?= !empty($j['password_hash']) ? 'Yes' : 'No' ?></td>
 					<td>
 						<a href="/people/judges/<?= urlencode($j['id']) ?>/edit">Edit</a> |

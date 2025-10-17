@@ -10,6 +10,9 @@
 	<label>Gender
 		<input type="text" name="gender" value="<?= htmlspecialchars($judge['gender'] ?? '') ?>" placeholder="Enter custom gender or leave blank" />
 	</label>
+	<label>Pronouns (optional)
+		<input type="text" name="pronouns" value="<?= htmlspecialchars($judge['pronouns'] ?? '') ?>" placeholder="e.g., they/them, she/her, he/him, ze/zir, or custom" />
+	</label>
 	<label>Bio
 		<textarea name="bio" rows="4" cols="50" placeholder="Tell us about yourself..."><?= htmlspecialchars($judge['bio'] ?? '') ?></textarea>
 	</label>

@@ -2194,7 +2194,7 @@ class PeopleController {
 		
 		// Get ALL contestants (with user info if available)
 		$contestants = DB::pdo()->query('
-			SELECT c.*, u.preferred_name, u.password_hash
+			SELECT c.*, u.preferred_name, u.password_hash, u.pronouns
 			FROM contestants c 
 			LEFT JOIN users u ON c.id = u.contestant_id 
 			ORDER BY c.contestant_number IS NULL, c.contestant_number, c.name
@@ -2202,7 +2202,7 @@ class PeopleController {
 		
 		// Get ALL judges (with user info if available)
 		$judges = DB::pdo()->query('
-			SELECT j.*, u.preferred_name, u.password_hash
+			SELECT j.*, u.preferred_name, u.password_hash, u.pronouns
 			FROM judges j 
 			LEFT JOIN users u ON j.id = u.judge_id 
 			ORDER BY j.name
@@ -2244,8 +2244,8 @@ class PeopleController {
 			$contestantNumber = ($result['max_num'] ?? 0) + 1;
 		}
 		
-		$stmt = DB::pdo()->prepare('INSERT INTO contestants (id, name, email, contestant_number, bio, image_path) VALUES (?, ?, ?, ?, ?, ?)');
-		$stmt->execute([uuid(), post('name'), post('email') ?: null, $contestantNumber, post('bio') ?: null, $imagePath]);
+		$stmt = DB::pdo()->prepare('INSERT INTO contestants (id, name, email, gender, pronouns, contestant_number, bio, image_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+		$stmt->execute([uuid(), post('name'), post('email') ?: null, post('gender') ?: null, post('pronouns') ?: null, $contestantNumber, post('bio') ?: null, $imagePath]);
 		redirect('/people');
 	}
 	public function createJudge(): void {
@@ -2270,8 +2270,8 @@ class PeopleController {
 			}
 		}
 		
-		$stmt = DB::pdo()->prepare('INSERT INTO judges (id, name, email, bio, image_path) VALUES (?, ?, ?, ?, ?)');
-		$stmt->execute([uuid(), post('name'), post('email') ?: null, post('bio') ?: null, $imagePath]);
+		$stmt = DB::pdo()->prepare('INSERT INTO judges (id, name, email, gender, pronouns, bio, image_path) VALUES (?, ?, ?, ?, ?, ?, ?)');
+		$stmt->execute([uuid(), post('name'), post('email') ?: null, post('gender') ?: null, post('pronouns') ?: null, post('bio') ?: null, $imagePath]);
 		redirect('/people');
 	}
 	public function editContestant(array $params): void {
@@ -2326,8 +2326,8 @@ class PeopleController {
 			$imagePath = $current['image_path'] ?? null;
 		}
 		
-		$stmt = DB::pdo()->prepare('UPDATE contestants SET name = ?, email = ?, gender = ?, contestant_number = ?, bio = ?, image_path = ? WHERE id = ?');
-		$stmt->execute([post('name'), post('email') ?: null, post('gender') ?: null, post('contestant_number') ?: null, post('bio') ?: null, $imagePath, $id]);
+		$stmt = DB::pdo()->prepare('UPDATE contestants SET name = ?, email = ?, gender = ?, pronouns = ?, contestant_number = ?, bio = ?, image_path = ? WHERE id = ?');
+		$stmt->execute([post('name'), post('email') ?: null, post('gender') ?: null, post('pronouns') ?: null, post('contestant_number') ?: null, post('bio') ?: null, $imagePath, $id]);
 		
 		// Log successful outcome
 		\App\Logger::debug('contestant_update_success', 'contestant', $id, 
@@ -2467,8 +2467,8 @@ class PeopleController {
 			$imagePath = $current['image_path'] ?? null;
 		}
 		
-		$stmt = DB::pdo()->prepare('UPDATE judges SET name = ?, email = ?, gender = ?, bio = ?, image_path = ? WHERE id = ?');
-		$stmt->execute([post('name'), post('email') ?: null, post('gender') ?: null, post('bio') ?: null, $imagePath, $id]);
+		$stmt = DB::pdo()->prepare('UPDATE judges SET name = ?, email = ?, gender = ?, pronouns = ?, bio = ?, image_path = ? WHERE id = ?');
+		$stmt->execute([post('name'), post('email') ?: null, post('gender') ?: null, post('pronouns') ?: null, post('bio') ?: null, $imagePath, $id]);
 		
 		// Log successful outcome
 		\App\Logger::debug('judge_update_success', 'judge', $id, 
@@ -3479,6 +3479,7 @@ class UserController {
 		$role = post('role');
 		$preferredName = post('preferred_name') ?: $name;
 		$gender = post('gender') ?: null;
+		$pronouns = post('pronouns') ?: null;
 		$categoryId = post('category_id') ?: null;
 		$isHeadJudge = post('is_head_judge') ? 1 : 0;
 		
@@ -3536,16 +3537,16 @@ class UserController {
 			$passwordHash = !empty($password) ? password_hash($password, PASSWORD_DEFAULT) : null;
 			
 			// Create user
-			$stmt = $pdo->prepare('INSERT INTO users (id, name, email, password_hash, role, preferred_name, gender) VALUES (?, ?, ?, ?, ?, ?, ?)');
-			$stmt->execute([$userId, $name, $email, $passwordHash, $role, $preferredName, $gender]);
+			$stmt = $pdo->prepare('INSERT INTO users (id, name, email, password_hash, role, preferred_name, gender, pronouns) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+			$stmt->execute([$userId, $name, $email, $passwordHash, $role, $preferredName, $gender, $pronouns]);
 			\App\Logger::debug('user_created', 'user', $userId, 
 				"User created successfully: name={$name}, email={$email}, role={$role}");
 			
 			// Handle role-specific creation
 			if ($role === 'judge') {
 				$judgeId = uuid();
-				$stmt = $pdo->prepare('INSERT INTO judges (id, name, email, gender, is_head_judge) VALUES (?, ?, ?, ?, ?)');
-				$stmt->execute([$judgeId, $name, $email, $gender, $isHeadJudge]);
+				$stmt = $pdo->prepare('INSERT INTO judges (id, name, email, gender, pronouns, is_head_judge) VALUES (?, ?, ?, ?, ?, ?)');
+				$stmt->execute([$judgeId, $name, $email, $gender, $pronouns, $isHeadJudge]);
 				\App\Logger::debug('judge_created', 'judge', $judgeId, 
 					"Judge created: name={$name}, email={$email}, is_head_judge={$isHeadJudge}");
 				
@@ -3564,8 +3565,8 @@ class UserController {
 				}
 			} elseif ($role === 'contestant') {
 				$contestantId = uuid();
-				$stmt = $pdo->prepare('INSERT INTO contestants (id, name, email, gender) VALUES (?, ?, ?, ?)');
-				$stmt->execute([$contestantId, $name, $email, $gender]);
+				$stmt = $pdo->prepare('INSERT INTO contestants (id, name, email, gender, pronouns) VALUES (?, ?, ?, ?, ?)');
+				$stmt->execute([$contestantId, $name, $email, $gender, $pronouns]);
 				\App\Logger::debug('contestant_created', 'contestant', $contestantId, 
 					"Contestant created: name={$name}, email={$email}");
 				
@@ -3660,6 +3661,7 @@ class UserController {
 		$role = post('role');
 		$preferredName = post('preferred_name') ?: $name;
 		$gender = post('gender') ?: null;
+		$pronouns = post('pronouns') ?: null;
 		
 		// Validate password complexity if provided
 		if (!empty($password)) {
@@ -3688,11 +3690,11 @@ class UserController {
 		$passwordHash = !empty($password) ? password_hash($password, PASSWORD_DEFAULT) : null;
 		
 		if ($passwordHash) {
-			$stmt = DB::pdo()->prepare('UPDATE users SET name = ?, email = ?, password_hash = ?, role = ?, preferred_name = ?, gender = ? WHERE id = ?');
-			$stmt->execute([$name, $email, $passwordHash, $role, $preferredName, $gender, $id]);
+			$stmt = DB::pdo()->prepare('UPDATE users SET name = ?, email = ?, password_hash = ?, role = ?, preferred_name = ?, gender = ?, pronouns = ? WHERE id = ?');
+			$stmt->execute([$name, $email, $passwordHash, $role, $preferredName, $gender, $pronouns, $id]);
 		} else {
-			$stmt = DB::pdo()->prepare('UPDATE users SET name = ?, email = ?, role = ?, preferred_name = ?, gender = ? WHERE id = ?');
-			$stmt->execute([$name, $email, $role, $preferredName, $gender, $id]);
+			$stmt = DB::pdo()->prepare('UPDATE users SET name = ?, email = ?, role = ?, preferred_name = ?, gender = ?, pronouns = ? WHERE id = ?');
+			$stmt->execute([$name, $email, $role, $preferredName, $gender, $pronouns, $id]);
 		}
 		
 		redirect('/admin/users?success=user_updated');
@@ -4181,6 +4183,7 @@ class AdminController {
 		$name = post('name');
 		$email = post('email') ?: null;
 		$gender = post('gender') ?: null;
+		$pronouns = post('pronouns') ?: null;
 		$isHeadJudge = post('is_head_judge') ? 1 : 0;
 		
 		// Debug log update attempt
@@ -4188,8 +4191,8 @@ class AdminController {
 			"Attempting to update judge: judge_id={$id}, name={$name}, email={$email}, is_head_judge={$isHeadJudge}");
 		
 		try {
-			$stmt = DB::pdo()->prepare('UPDATE judges SET name = ?, email = ?, gender = ?, is_head_judge = ? WHERE id = ?');
-			$stmt->execute([$name, $email, $gender, $isHeadJudge, $id]);
+			$stmt = DB::pdo()->prepare('UPDATE judges SET name = ?, email = ?, gender = ?, pronouns = ?, is_head_judge = ? WHERE id = ?');
+			$stmt->execute([$name, $email, $gender, $pronouns, $isHeadJudge, $id]);
 			
 			// Log successful outcome
 			\App\Logger::debug('judge_update_success', 'judge', $id, 
@@ -4393,6 +4396,7 @@ class AdminController {
 		$password = post('password');
 		$preferredName = post('preferred_name') ?: $name;
 		$gender = post('gender') ?: null;
+		$pronouns = post('pronouns') ?: null;
 		
 		// Debug log creation attempt
 		\App\Logger::debug('organizer_creation_attempt', 'organizer', null, 
@@ -4402,8 +4406,8 @@ class AdminController {
 			$organizerId = uuid();
 			$passwordHash = !empty($password) ? password_hash($password, PASSWORD_DEFAULT) : null;
 			
-			$stmt = DB::pdo()->prepare('INSERT INTO users (id, name, email, password_hash, role, preferred_name, gender) VALUES (?, ?, ?, ?, ?, ?, ?)');
-			$stmt->execute([$organizerId, $name, $email, $passwordHash, 'organizer', $preferredName, $gender]);
+			$stmt = DB::pdo()->prepare('INSERT INTO users (id, name, email, password_hash, role, preferred_name, gender, pronouns) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+			$stmt->execute([$organizerId, $name, $email, $passwordHash, 'organizer', $preferredName, $gender, $pronouns]);
 			
 			// Log successful outcome
 			\App\Logger::debug('organizer_creation_success', 'organizer', $organizerId, 
@@ -5166,6 +5170,7 @@ class ProfileController {
 		$password = post('password');
 		$preferredName = post('preferred_name') ?: $name;
 		$gender = post('gender') ?: null;
+		$pronouns = post('pronouns') ?: null;
 		$theme = post('theme') ?: 'light';
 		
 		// Validate password complexity if provided
@@ -5195,11 +5200,11 @@ class ProfileController {
 		$passwordHash = !empty($password) ? password_hash($password, PASSWORD_DEFAULT) : null;
 		
 		if ($passwordHash) {
-			$stmt = DB::pdo()->prepare('UPDATE users SET name = ?, email = ?, password_hash = ?, preferred_name = ?, gender = ?, theme = ? WHERE id = ?');
-			$stmt->execute([$name, $email, $passwordHash, $preferredName, $gender, $theme, $userId]);
+			$stmt = DB::pdo()->prepare('UPDATE users SET name = ?, email = ?, password_hash = ?, preferred_name = ?, gender = ?, pronouns = ?, theme = ? WHERE id = ?');
+			$stmt->execute([$name, $email, $passwordHash, $preferredName, $gender, $pronouns, $theme, $userId]);
 		} else {
-			$stmt = DB::pdo()->prepare('UPDATE users SET name = ?, email = ?, preferred_name = ?, gender = ?, theme = ? WHERE id = ?');
-			$stmt->execute([$name, $email, $preferredName, $gender, $theme, $userId]);
+			$stmt = DB::pdo()->prepare('UPDATE users SET name = ?, email = ?, preferred_name = ?, gender = ?, pronouns = ?, theme = ? WHERE id = ?');
+			$stmt->execute([$name, $email, $preferredName, $gender, $pronouns, $theme, $userId]);
 		}
 		
 		// Update session
@@ -5207,6 +5212,7 @@ class ProfileController {
 		$_SESSION['user']['email'] = $email;
 		$_SESSION['user']['preferred_name'] = $preferredName;
 		$_SESSION['user']['gender'] = $gender;
+		$_SESSION['user']['pronouns'] = $pronouns;
 		$_SESSION['user']['theme'] = $theme;
 		
 		redirect('/profile?success=profile_updated');
