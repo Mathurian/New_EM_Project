@@ -23,17 +23,19 @@
 						</div>
                         <div class="report-actions">
                             <a href="<?= url('print/contestant/' . $contestant['id']) ?>" class="btn btn-primary" target="_blank">🖨️ Print</a>
-                            <form method="post" action="<?= url('admin/print-reports/email') ?>" class="email-form">
+                            <form method="post" action="<?= url('admin/print-reports/email') ?>" class="email-form stacked">
                                 <input type="hidden" name="report_type" value="contestant" />
                                 <input type="hidden" name="entity_id" value="<?= htmlspecialchars($contestant['id']) ?>" />
-                                <input type="email" name="to_email" class="email-input" placeholder="Email address" />
-                                <span class="email-sep">or</span>
-                                <select name="user_id" class="email-select">
-                                    <option value="">Select user…</option>
+                                <input type="hidden" name="user_id" value="" />
+                                <input type="hidden" name="to_email" value="" />
+                                <select class="email-select unified-recipient" onchange="handleRecipientChange(this)">
+                                    <option value="">Select recipient…</option>
                                     <?php foreach (($usersWithEmail ?? []) as $u): ?>
-                                        <option value="<?= htmlspecialchars($u['id']) ?>"><?= htmlspecialchars(($u['preferred_name'] ?: $u['name']) . ' <' . $u['email'] . '>') ?></option>
+                                        <option value="user:<?= htmlspecialchars($u['id']) ?>"><?= htmlspecialchars(($u['preferred_name'] ?: $u['name']) . ' <' . $u['email'] . '>') ?></option>
                                     <?php endforeach; ?>
+                                    <option value="custom">Custom email…</option>
                                 </select>
+                                <input type="email" class="email-input unified-email" placeholder="Enter email address" style="display:none;" />
                                 <button type="submit" class="btn btn-secondary">✉️ Send</button>
                             </form>
                         </div>
@@ -57,17 +59,19 @@
 						</div>
                         <div class="report-actions">
                             <a href="<?= url('print/judge/' . $judge['id']) ?>" class="btn btn-primary" target="_blank">🖨️ Print</a>
-                            <form method="post" action="<?= url('admin/print-reports/email') ?>" class="email-form">
+                            <form method="post" action="<?= url('admin/print-reports/email') ?>" class="email-form stacked">
                                 <input type="hidden" name="report_type" value="judge" />
                                 <input type="hidden" name="entity_id" value="<?= htmlspecialchars($judge['id']) ?>" />
-                                <input type="email" name="to_email" class="email-input" placeholder="Email address" />
-                                <span class="email-sep">or</span>
-                                <select name="user_id" class="email-select">
-                                    <option value="">Select user…</option>
+                                <input type="hidden" name="user_id" value="" />
+                                <input type="hidden" name="to_email" value="" />
+                                <select class="email-select unified-recipient" onchange="handleRecipientChange(this)">
+                                    <option value="">Select recipient…</option>
                                     <?php foreach (($usersWithEmail ?? []) as $u): ?>
-                                        <option value="<?= htmlspecialchars($u['id']) ?>"><?= htmlspecialchars(($u['preferred_name'] ?: $u['name']) . ' <' . $u['email'] . '>') ?></option>
+                                        <option value="user:<?= htmlspecialchars($u['id']) ?>"><?= htmlspecialchars(($u['preferred_name'] ?: $u['name']) . ' <' . $u['email'] . '>') ?></option>
                                     <?php endforeach; ?>
+                                    <option value="custom">Custom email…</option>
                                 </select>
+                                <input type="email" class="email-input unified-email" placeholder="Enter email address" style="display:none;" />
                                 <button type="submit" class="btn btn-secondary">✉️ Send</button>
                             </form>
                         </div>
@@ -105,17 +109,19 @@
 								</div>
                                 <div class="report-actions">
                                     <a href="<?= url('print/category/' . $categoryId) ?>" class="btn btn-primary" target="_blank">🖨️ Print</a>
-                                    <form method="post" action="<?= url('admin/print-reports/email') ?>" class="email-form">
+                                    <form method="post" action="<?= url('admin/print-reports/email') ?>" class="email-form stacked">
                                         <input type="hidden" name="report_type" value="category" />
                                         <input type="hidden" name="entity_id" value="<?= htmlspecialchars($categoryId) ?>" />
-                                        <input type="email" name="to_email" class="email-input" placeholder="Email address" />
-                                        <span class="email-sep">or</span>
-                                        <select name="user_id" class="email-select">
-                                            <option value="">Select user…</option>
+                                        <input type="hidden" name="user_id" value="" />
+                                        <input type="hidden" name="to_email" value="" />
+                                        <select class="email-select unified-recipient" onchange="handleRecipientChange(this)">
+                                            <option value="">Select recipient…</option>
                                             <?php foreach (($usersWithEmail ?? []) as $u): ?>
-                                                <option value="<?= htmlspecialchars($u['id']) ?>"><?= htmlspecialchars(($u['preferred_name'] ?: $u['name']) . ' <' . $u['email'] . '>') ?></option>
+                                                <option value="user:<?= htmlspecialchars($u['id']) ?>"><?= htmlspecialchars(($u['preferred_name'] ?: $u['name']) . ' <' . $u['email'] . '>') ?></option>
                                             <?php endforeach; ?>
+                                            <option value="custom">Custom email…</option>
                                         </select>
+                                        <input type="email" class="email-input unified-email" placeholder="Enter email address" style="display:none;" />
                                         <button type="submit" class="btn btn-secondary">✉️ Send</button>
                                     </form>
                                 </div>
@@ -205,6 +211,11 @@
     .email-input, .email-select { width: 100%; max-width: 100%; }
 }
 
+/* Stacked variation (dropdown under button) */
+.email-form.stacked { flex-direction: column; align-items: stretch; margin-left: 10px; }
+.email-form.stacked .unified-recipient { width: 260px; }
+.email-form.stacked .unified-email { width: 260px; }
+
 .contestant-number {
 	background: var(--accent-color);
 	color: white;
@@ -267,3 +278,26 @@
 	}
 }
 </style>
+
+<script>
+function handleRecipientChange(selectEl) {
+    const form = selectEl.closest('form');
+    const hiddenUserId = form.querySelector('input[name="user_id"]');
+    const hiddenToEmail = form.querySelector('input[name="to_email"]');
+    const emailInput = form.querySelector('.unified-email');
+    const val = selectEl.value;
+
+    if (val.startsWith('user:')) {
+        hiddenUserId.value = val.substring(5);
+        hiddenToEmail.value = '';
+        if (emailInput) { emailInput.style.display = 'none'; emailInput.value = ''; }
+    } else if (val === 'custom') {
+        hiddenUserId.value = '';
+        if (emailInput) { emailInput.style.display = 'block'; emailInput.focus(); }
+    } else {
+        hiddenUserId.value = '';
+        hiddenToEmail.value = '';
+        if (emailInput) { emailInput.style.display = 'none'; emailInput.value = ''; }
+    }
+}
+</script>
