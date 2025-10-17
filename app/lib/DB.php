@@ -426,6 +426,9 @@ SQL;
 		self::addColumnIfMissing('emcee_scripts', 'file_size', 'INTEGER');
 		self::addColumnIfMissing('emcee_scripts', 'uploaded_at', 'TEXT');
 		
+		// Ensure filename column exists (it should be in the original schema but might be missing)
+		self::addColumnIfMissing('emcee_scripts', 'filename', 'TEXT');
+		
 		// Migrate judge_certifications to include contestant_id
 		self::migrateJudgeCertifications();
 		
