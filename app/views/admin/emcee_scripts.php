@@ -23,6 +23,7 @@
 		'title_required' => 'Script title is required.',
 		'file_upload_failed' => 'File upload failed. Please try again.',
 		'invalid_file_type' => 'Invalid file type. Only PDF, TXT, DOC, and DOCX files are allowed.',
+		'file_too_large' => 'File is too large. Maximum size is 10MB.',
 		'file_save_failed' => 'Failed to save file. Please try again.',
 		'script_not_found' => 'Script not found.',
 		'script_deleted' => 'Failed to delete script.'

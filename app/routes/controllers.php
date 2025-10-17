@@ -5064,30 +5064,83 @@ class AdminController {
 	public function uploadEmceeScript(): void {
 		require_organizer();
 		
-		if (!isset($_FILES['script']) || $_FILES['script']['error'] !== UPLOAD_ERR_OK) {
-			redirect('/admin/emcee-scripts?error=upload_failed');
+		// Validate required fields
+		$title = trim($_POST['title'] ?? '');
+		if (empty($title)) {
+			redirect('/admin/emcee-scripts?error=title_required');
 			return;
 		}
 		
-		$uploadDir = __DIR__ . '/../../public/uploads/emcee-scripts/';
-		if (!is_dir($uploadDir)) {
-			mkdir($uploadDir, 0755, true);
+		// Check if file was uploaded
+		if (!isset($_FILES['script_file']) || $_FILES['script_file']['error'] !== UPLOAD_ERR_OK) {
+			\App\Logger::error('emcee_script_upload', 'admin', $_SESSION['user']['id'] ?? null, 
+				"File upload failed. Error code: " . ($_FILES['script_file']['error'] ?? 'no file'));
+			redirect('/admin/emcee-scripts?error=file_upload_failed');
+			return;
 		}
 		
-		$filename = $_FILES['script']['name'];
+		// Validate file type
+		$allowedTypes = ['application/pdf', 'text/plain', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+		$fileType = $_FILES['script_file']['type'];
+		if (!in_array($fileType, $allowedTypes)) {
+			\App\Logger::warn('emcee_script_upload', 'admin', $_SESSION['user']['id'] ?? null, 
+				"Invalid file type attempted: {$fileType}");
+			redirect('/admin/emcee-scripts?error=invalid_file_type');
+			return;
+		}
+		
+		// Validate file size (10MB limit)
+		$maxSize = 10 * 1024 * 1024; // 10MB
+		if ($_FILES['script_file']['size'] > $maxSize) {
+			\App\Logger::warn('emcee_script_upload', 'admin', $_SESSION['user']['id'] ?? null, 
+				"File too large: " . $_FILES['script_file']['size'] . " bytes");
+			redirect('/admin/emcee-scripts?error=file_too_large');
+			return;
+		}
+		
+		// Create upload directory if it doesn't exist
+		$uploadDir = __DIR__ . '/../../public/uploads/emcee-scripts/';
+		if (!is_dir($uploadDir)) {
+			if (!mkdir($uploadDir, 0755, true)) {
+				\App\Logger::error('emcee_script_upload', 'admin', $_SESSION['user']['id'] ?? null, 
+					"Failed to create upload directory: {$uploadDir}");
+				redirect('/admin/emcee-scripts?error=file_save_failed');
+				return;
+			}
+		}
+		
+		// Generate unique filename to prevent conflicts
+		$originalFilename = $_FILES['script_file']['name'];
+		$fileExtension = pathinfo($originalFilename, PATHINFO_EXTENSION);
+		$filename = uniqid() . '_' . preg_replace('/[^a-zA-Z0-9._-]/', '_', $originalFilename);
 		$filepath = $uploadDir . $filename;
 		
-		if (move_uploaded_file($_FILES['script']['tmp_name'], $filepath)) {
-			$title = $_POST['title'] ?? '';
-			$description = $_POST['description'] ?? '';
-			$fileSize = $_FILES['script']['size'];
+		// Move uploaded file
+		if (move_uploaded_file($_FILES['script_file']['tmp_name'], $filepath)) {
+			$description = trim($_POST['description'] ?? '');
+			$fileSize = $_FILES['script_file']['size'];
 			$uploadedAt = date('Y-m-d H:i:s');
 			
-			$stmt = DB::pdo()->prepare('INSERT INTO emcee_scripts (id, filename, filepath, is_active, created_at, uploaded_by, title, description, file_name, file_size, uploaded_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-			$stmt->execute([uuid(), $filename, '/uploads/emcee-scripts/' . $filename, 1, date('Y-m-d H:i:s'), $_SESSION['user']['id'], $title, $description, $filename, $fileSize, $uploadedAt]);
-			redirect('/admin/emcee-scripts?success=script_uploaded');
+			try {
+				$stmt = DB::pdo()->prepare('INSERT INTO emcee_scripts (id, filename, filepath, is_active, created_at, uploaded_by, title, description, file_name, file_size, uploaded_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+				$stmt->execute([uuid(), $filename, '/uploads/emcee-scripts/' . $filename, 1, date('Y-m-d H:i:s'), $_SESSION['user']['id'], $title, $description, $originalFilename, $fileSize, $uploadedAt]);
+				
+				\App\Logger::info('emcee_script_upload', 'admin', $_SESSION['user']['id'] ?? null, 
+					"Successfully uploaded emcee script: {$title} ({$originalFilename})");
+				redirect('/admin/emcee-scripts?success=script_uploaded');
+			} catch (\Exception $e) {
+				// Clean up uploaded file if database insert fails
+				if (file_exists($filepath)) {
+					unlink($filepath);
+				}
+				\App\Logger::error('emcee_script_upload', 'admin', $_SESSION['user']['id'] ?? null, 
+					"Database insert failed: " . $e->getMessage());
+				redirect('/admin/emcee-scripts?error=file_save_failed');
+			}
 		} else {
-			redirect('/admin/emcee-scripts?error=upload_failed');
+			\App\Logger::error('emcee_script_upload', 'admin', $_SESSION['user']['id'] ?? null, 
+				"Failed to move uploaded file to: {$filepath}");
+			redirect('/admin/emcee-scripts?error=file_save_failed');
 		}
 	}
 	
