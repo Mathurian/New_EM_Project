@@ -2,6 +2,15 @@
 <h2>Subcategories for <?= htmlspecialchars($category['name']) ?></h2>
 <p><a href="<?= url('contests/' . urlencode($category['contest_id'] ?? '') . '/categories') ?>">Back</a></p>
 
+<!-- Temporary debug info to help identify the issue -->
+<div style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 10px; margin: 10px 0; border-radius: 4px; font-size: 0.9em;">
+	<strong>Debug Information:</strong><br>
+	Category ID: <code><?= htmlspecialchars($category['id']) ?></code><br>
+	Category Name: <strong><?= htmlspecialchars($category['name']) ?></strong><br>
+	Contest ID: <code><?= htmlspecialchars($category['contest_id'] ?? 'N/A') ?></code><br>
+	Subcategories Count: <?= count($subcategories) ?>
+</div>
+
 <?php if (!empty($_SESSION['success_message'])): ?>
 	<p style="color: green; font-weight: bold;"><?= htmlspecialchars($_SESSION['success_message']) ?></p>
 	<?php unset($_SESSION['success_message']); ?>
