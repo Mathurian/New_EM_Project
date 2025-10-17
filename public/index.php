@@ -32,6 +32,7 @@ $router->get('/judge/subcategory/{id}', 'AuthController@judgeSubcategoryContesta
 
 // admin
 $router->get('/admin', 'AdminController@index');
+$router->get('/admin/api/active-users', 'AdminController@activeUsersApi');
 $router->get('/admin/judges', 'AdminController@judges');
 $router->post('/admin/judges', 'AdminController@createJudge');
 $router->post('/admin/judges/{id}/update', 'AdminController@updateJudge');

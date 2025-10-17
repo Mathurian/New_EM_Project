@@ -4105,6 +4105,31 @@ class AdminController {
 		view('admin/index', compact('stats', 'recentLogs'));
 	}
 	
+	public function activeUsersApi(): void {
+		require_organizer();
+		
+		// Get users who have been active recently (within last 30 minutes)
+		$activeUsers = DB::pdo()->query('
+			SELECT DISTINCT u.name, u.email, u.role, u.preferred_name, 
+			       MAX(al.created_at) as last_activity,
+			       al.ip_address
+			FROM users u 
+			LEFT JOIN activity_logs al ON u.name = al.user_name 
+			WHERE u.password_hash IS NOT NULL
+			GROUP BY u.id, u.name, u.email, u.role, u.preferred_name
+			HAVING last_activity IS NULL OR last_activity > datetime("now", "-30 minutes")
+			ORDER BY last_activity DESC, u.name
+		')->fetchAll(\PDO::FETCH_ASSOC);
+		
+		// Set JSON response headers
+		header('Content-Type: application/json');
+		header('Cache-Control: no-cache, no-store, must-revalidate');
+		header('Pragma: no-cache');
+		header('Expires: 0');
+		
+		echo json_encode(['users' => $activeUsers]);
+	}
+	
 	public function judges(): void {
 		require_organizer();
 		$rows = DB::pdo()->query('SELECT j.*, u.preferred_name FROM judges j LEFT JOIN users u ON j.id = u.judge_id ORDER BY j.name')->fetchAll(\PDO::FETCH_ASSOC);
