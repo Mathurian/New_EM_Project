@@ -1,4 +1,4 @@
-<?php use function App\{url, hierarchical_back_url, home_url}; ?>
+<?php use function App\{url, hierarchical_back_url, home_url}; use App\DB; ?>
 <!-- User Creation Modal/Drawer -->
 <div id="user-creation-modal" class="modal-overlay" style="display: none;" role="dialog" aria-labelledby="modal-title" aria-hidden="true">
 	<div class="modal-content">
