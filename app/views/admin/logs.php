@@ -73,7 +73,11 @@
 <?php if (empty($logs)): ?>
 	<p>No activity logs found.</p>
 <?php else: ?>
-	<table style="width: 100%; border-collapse: collapse; font-size: 0.9em;">
+	<div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+		<strong>Recent Activity Logs</strong>
+		<button type="button" class="btn btn-secondary btn-sm" id="toggle-logs" aria-expanded="false" aria-controls="logs-table">Show All</button>
+	</div>
+	<table style="width: 100%; border-collapse: collapse; font-size: 0.9em;" id="logs-table" data-collapsed="true">
 		<thead>
 			<tr style="background: #f8f9fa;">
 				<th style="border: 1px solid #dee2e6; padding: 8px; text-align: left;">Timestamp</th>
@@ -87,8 +91,8 @@
 			</tr>
 		</thead>
 		<tbody>
-			<?php foreach ($logs as $log): ?>
-				<tr>
+			<?php $rowIndex = 0; foreach ($logs as $log): $rowIndex++; ?>
+				<tr class="log-row" data-index="<?= $rowIndex ?>">
 				<td style="border: 1px solid #dee2e6; padding: 8px;" class="log-time" data-iso="<?= htmlspecialchars($log['created_at']) ?>">
 					<?= htmlspecialchars($log['created_at']) ?>
 				</td>
@@ -223,6 +227,36 @@ document.addEventListener('DOMContentLoaded', function() {
             toggleBtn.setAttribute('aria-expanded', 'true');
         }
     }
+
+    // Limit table length and allow expansion
+    (function(){
+        const table = document.getElementById('logs-table');
+        if (!table) return;
+        const rows = Array.from(table.querySelectorAll('tbody tr.log-row'));
+        const toggleBtn = document.getElementById('toggle-logs');
+        const COLLAPSED_COUNT = 10; // show first 10 by default
+
+        function applyState() {
+            const collapsed = table.getAttribute('data-collapsed') === 'true';
+            rows.forEach((row, idx) => {
+                row.style.display = collapsed && idx >= COLLAPSED_COUNT ? 'none' : '';
+            });
+            if (toggleBtn) {
+                toggleBtn.textContent = collapsed ? 'Show All' : 'Show Less';
+                toggleBtn.setAttribute('aria-expanded', String(!collapsed));
+            }
+        }
+
+        applyState();
+
+        if (toggleBtn) {
+            toggleBtn.addEventListener('click', function(){
+                const collapsed = table.getAttribute('data-collapsed') === 'true';
+                table.setAttribute('data-collapsed', String(!collapsed));
+                applyState();
+            });
+        }
+    })();
 });
 </script>
 
