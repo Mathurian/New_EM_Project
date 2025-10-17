@@ -7,56 +7,12 @@
 
 <div class="card">
 	<h3>Add Judge</h3>
-	<div style="display: flex; gap: 12px; margin-bottom: 16px;">
+	<div style="margin-bottom: 16px;">
 		<button type="button" class="btn btn-primary" onclick="openUserCreationModal()">
 			👤 Create Full User Account
 		</button>
-		<button type="button" class="btn btn-secondary" onclick="toggleQuickAdd()">
-			⚖️ Quick Add Judge
-		</button>
 	</div>
-	<p class="text-muted">Use "Create Full User Account" for complete user management with login access.</p>
-</div>
-
-<!-- Quick Add Form -->
-<div id="quick-add-form" class="card" style="display: none;">
-	<h4>Quick Add Judge</h4>
-	<form method="post" action="/admin/judges">
-		<div class="form-row">
-			<label>Name
-				<input name="name" required />
-			</label>
-			<label>Email
-				<input type="email" name="email" />
-			</label>
-		</div>
-		<div class="form-row">
-			<label>Gender
-				<select name="gender">
-					<option value="">—</option>
-					<option>Female</option>
-					<option>Male</option>
-					<option>Non-binary</option>
-					<option>Prefer not to say</option>
-				</select>
-			</label>
-			<label>Head Judge
-				<input type="checkbox" name="is_head_judge" value="1" />
-			</label>
-		</div>
-		<div class="form-row">
-			<label>Create Login Account
-				<input type="checkbox" name="create_user" value="1" />
-			</label>
-			<label>Password
-				<input type="password" name="password" placeholder="Required if creating login" />
-			</label>
-		</div>
-		<div style="margin-top: 12px; display: flex; gap: 10px;">
-			<button type="submit" class="btn btn-primary">Add Judge</button>
-			<button type="button" class="btn btn-secondary" onclick="toggleQuickAdd()">Cancel</button>
-		</div>
-	</form>
+	<p class="text-muted">Create a complete user account with login access for judge management.</p>
 </div>
 
 <div class="card">
@@ -102,33 +58,3 @@
 		</div>
 	<?php endif; ?>
 </div>
-
-<style>
-.form-row {
-	display: flex;
-	gap: 12px;
-	margin-bottom: 12px;
-}
-
-.form-row label {
-	flex: 1;
-}
-
-@media (max-width: 768px) {
-	.form-row {
-		flex-direction: column;
-		gap: 8px;
-	}
-}
-</style>
-
-<script>
-function toggleQuickAdd() {
-	const form = document.getElementById('quick-add-form');
-	if (form) {
-		form.style.display = form.style.display === 'none' ? 'block' : 'none';
-	}
-}
-</script>
-
-
