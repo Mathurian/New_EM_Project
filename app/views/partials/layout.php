@@ -31,10 +31,30 @@ if (isset($category)) {
 					<?php unset($_SESSION['timeout_message']); ?>
 				</div>
 			<?php endif; ?>
-			<?php include __DIR__ . '/header.php'; ?>
-			<?php include __DIR__ . '/user_creation_modal.php'; ?>
+			<?php 
+			// Debug: Log before header
+			if (isset($category)) {
+				\App\Logger::debug('layout_debug', 'layout', null, 
+					"Before header.php - category: " . json_encode($category));
+			}
+			include __DIR__ . '/header.php'; 
+			?>
+			<?php 
+			// Debug: Log after header, before modal
+			if (isset($category)) {
+				\App\Logger::debug('layout_debug', 'layout', null, 
+					"After header.php - category: " . json_encode($category));
+			}
+			include __DIR__ . '/user_creation_modal.php'; 
+			?>
             <main class="content-main">
 				<?php 
+				// Debug: Log before template
+				if (isset($category)) {
+					\App\Logger::debug('layout_debug', 'layout', null, 
+						"Before template include - category: " . json_encode($category));
+				}
+				
 				$templateName = is_string($template) ? $template : 'home';
 				$templateFile = __DIR__ . '/../' . $templateName . '.php';
 				if (file_exists($templateFile)) {

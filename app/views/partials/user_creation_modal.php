@@ -1,4 +1,11 @@
 <?php use function App\{url, hierarchical_back_url, home_url}; use App\DB; ?>
+<!-- Debug: Log what we have in user_creation_modal -->
+<?php 
+if (isset($category)) {
+	\App\Logger::debug('modal_debug', 'user_creation_modal', null, 
+		"user_creation_modal.php - category: " . json_encode($category));
+}
+?>
 <!-- User Creation Modal/Drawer -->
 <div id="user-creation-modal" class="modal-overlay" style="display: none;" role="dialog" aria-labelledby="modal-title" aria-hidden="true">
 	<div class="modal-content">
