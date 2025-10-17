@@ -15,6 +15,18 @@ body {
     transition: background-color 0.3s ease, color 0.3s ease;
 }
 
+/* Main content padding to account for fixed header */
+main {
+    padding-top: 80px; /* Adjust based on header height */
+}
+
+/* Mobile main content - no extra padding needed */
+@media (max-width: 768px) {
+    main {
+        padding-top: 0; /* Mobile doesn't need extra padding for fixed header */
+    }
+}
+
 /* Focus styles - Simplified */
 :focus {
     outline: 2px solid #007bff;
@@ -28,9 +40,11 @@ body {
 header {
     background: var(--bg-secondary);
     color: var(--text-primary);
-    position: sticky;
+    position: fixed;
     top: 0;
-    z-index: 100;
+    left: 0;
+    right: 0;
+    z-index: 1000;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     border-bottom: 1px solid var(--border-color);
 }
@@ -107,25 +121,33 @@ header .nav-dropdown .dropdown-content {
     background: var(--bg-tertiary) !important;
     border: 1px solid var(--border-color) !important;
     box-shadow: 0 4px 6px rgba(0,0,0,0.1) !important;
-    z-index: 1000 !important;
+    z-index: 1001 !important;
     min-width: 200px !important;
     border-radius: 6px !important;
     overflow: visible !important;
+    position: absolute !important;
+    top: 100% !important;
+    left: 0 !important;
+    padding: 8px 0 !important;
+    margin-top: 4px !important;
 }
 
 header .nav-dropdown .dropdown-content a {
     display: block !important;
-    padding: 12px 16px !important;
+    padding: 10px 16px !important;
     color: var(--text-primary) !important;
     text-decoration: none !important;
     border-bottom: 1px solid var(--border-color) !important;
     transition: all 0.2s ease !important;
+    margin: 0 8px !important;
+    border-radius: 4px !important;
 }
 
 header .nav-dropdown .dropdown-content a:hover,
 header .nav-dropdown .dropdown-content a:focus {
     background-color: var(--accent-color) !important;
     color: white !important;
+    border-bottom-color: var(--accent-color) !important;
 }
 
 header .nav-dropdown .dropdown-content a:last-child {
@@ -137,11 +159,12 @@ header .submenu-content {
     background: var(--bg-tertiary) !important;
     border: 1px solid var(--border-color) !important;
     box-shadow: 0 4px 6px rgba(0,0,0,0.1) !important;
-    z-index: 1001 !important;
+    z-index: 1002 !important;
     min-width: 180px !important;
     border-radius: 6px !important;
     overflow: visible !important;
     margin-left: 5px !important;
+    padding: 8px 0 !important;
 }
 
 header .submenu-content a {
@@ -150,12 +173,17 @@ header .submenu-content a {
     border-bottom: 1px solid var(--border-color) !important;
     transition: all 0.2s ease !important;
     font-size: 14px !important;
+    padding: 10px 16px !important;
+    display: block !important;
+    margin: 0 8px !important;
+    border-radius: 4px !important;
 }
 
 header .submenu-content a:hover,
 header .submenu-content a:focus {
     background-color: var(--accent-color) !important;
     color: white !important;
+    border-bottom-color: var(--accent-color) !important;
 }
 
 header .submenu-content a:last-child {
@@ -218,7 +246,8 @@ header .submenu-content a:last-child {
 /* Desktop Dropdown Divider Styling */
 .dropdown-divider {
     border-top: 1px solid var(--border-color) !important;
-    margin: 5px 0 !important;
+    margin: 8px 16px !important;
+    background: transparent !important;
 }
 
 .submenu-item > a {
