@@ -1,4 +1,4 @@
-<?php use function App\{url, is_organizer, hierarchical_back_url, home_url}; ?>
+<?php use function App\{url, is_organizer, hierarchical_back_url, home_url, get_bulk_removal_enabled_roles, generate_role_label, is_bulk_removal_enabled, get_user_type_special_field, get_user_type_special_field_label}; ?>
 <h2>User Management</h2>
 <div class="navigation-buttons">
 	<a href="<?= hierarchical_back_url() ?>" class="btn btn-secondary">← Back</a>
@@ -12,33 +12,19 @@
 		<p><strong>Bulk User Removal:</strong> Use the buttons below to remove all users of a specific type (WARNING: This will delete all associated data, bios, and images):</p>
 		
 		<div class="admin-buttons">
-			<form method="post" action="<?= url('admin/users/remove-all-judges') ?>" style="display: inline-block; margin-right: 10px;">
-				<?= App\csrf_field() ?>
-				<button type="submit" onclick="return confirm('Are you sure you want to remove ALL judges? This will delete all scores, comments, certifications, and associated images. This action cannot be undone!')" class="btn btn-danger">
-					Remove All Judges
-				</button>
-			</form>
-			
-			<form method="post" action="<?= url('admin/users/remove-all-contestants') ?>" style="display: inline-block; margin-right: 10px;">
-				<?= App\csrf_field() ?>
-				<button type="submit" onclick="return confirm('Are you sure you want to remove ALL contestants? This will delete all scores, comments, bios, and associated images. This action cannot be undone!')" class="btn btn-danger">
-					Remove All Contestants
-				</button>
-			</form>
-			
-			<form method="post" action="<?= url('admin/users/remove-all-emcees') ?>" style="display: inline-block; margin-right: 10px;">
-				<?= App\csrf_field() ?>
-				<button type="submit" onclick="return confirm('Are you sure you want to remove ALL emcees? This action cannot be undone!')" class="btn btn-danger">
-					Remove All Emcees
-				</button>
-			</form>
-			
-			<form method="post" action="<?= url('admin/users/remove-all-tally-masters') ?>" style="display: inline-block;">
-				<?= App\csrf_field() ?>
-				<button type="submit" onclick="return confirm('Are you sure you want to remove ALL tally masters? This action cannot be undone!')" class="btn btn-danger">
-					Remove All Tally Masters
-				</button>
-			</form>
+			<?php 
+			$bulkRemovalRoles = get_bulk_removal_enabled_roles();
+			foreach ($bulkRemovalRoles as $role): 
+				$roleLabel = generate_role_label($role);
+				$rolePlural = strtolower($roleLabel);
+			?>
+				<form method="post" action="<?= url('admin/users/remove-all-' . str_replace('_', '-', $role)) ?>" style="display: inline-block; margin-right: 10px;">
+					<?= App\csrf_field() ?>
+					<button type="submit" onclick="return confirm('Are you sure you want to remove ALL <?= $rolePlural ?>? This action cannot be undone!')" class="btn btn-danger">
+						Remove All <?= $roleLabel ?>
+					</button>
+				</form>
+			<?php endforeach; ?>
 			
 			<form method="post" action="<?= url('admin/users/force-refresh') ?>" style="display: inline-block; margin-right: 10px; vertical-align: middle;">
 				<?= App\csrf_field() ?>
@@ -57,18 +43,21 @@
 
 <?php if (!empty($_GET['success'])): ?>
 	<?php 
-    $successMessages = [
+	$successMessages = [
 		'user_created' => 'User created successfully!',
 		'user_updated' => 'User updated successfully!',
 		'user_deleted' => 'User deleted successfully!',
-		'all_judges_removed' => 'All judges and associated data have been removed successfully!',
-		'all_contestants_removed' => 'All contestants and associated data have been removed successfully!',
-        'all_emcees_removed' => 'All emcees have been removed successfully!',
-        'all_tally_masters_removed' => 'All tally masters have been removed successfully!',
-        'table_refreshed' => 'User tables have been refreshed successfully!',
+		'table_refreshed' => 'User tables have been refreshed successfully!',
         'forced_logout_user' => 'User has been forced to log out.',
         'forced_logout_all' => 'All users have been forced to log out.'
 	];
+	
+	// Add dynamic success messages for bulk removal
+	$bulkRemovalRoles = get_bulk_removal_enabled_roles();
+	foreach ($bulkRemovalRoles as $role) {
+		$roleLabel = generate_role_label($role);
+		$successMessages['all_' . str_replace('_', '_', $role) . '_removed'] = "All {$roleLabel} have been removed successfully!";
+	}
 	$successMessage = $successMessages[$_GET['success']] ?? 'Operation completed successfully!';
 	?>
 	<p style="color: green; font-weight: bold;"><?= htmlspecialchars($successMessage) ?></p>
@@ -92,13 +81,14 @@
 <?php endif; ?>
 
 <?php 
-$roleLabels = [
-	'organizer' => 'Organizers',
-	'judge' => 'Judges', 
-	'emcee' => 'Emcees',
-	'contestant' => 'Contestants',
-	'tally_master' => 'Tally Masters'
-];
+// Generate role labels dynamically from user types
+$roleLabels = [];
+$bulkRemovalRoles = get_bulk_removal_enabled_roles();
+$allRoles = array_keys($usersByRole ?? []);
+
+foreach ($allRoles as $role) {
+	$roleLabels[$role] = generate_role_label($role);
+}
 ?>
 
 <?php foreach ($roleLabels as $role => $label): ?>
@@ -112,29 +102,32 @@ $roleLabels = [
             <div class="user-group-content" style="display:none;">
         <table>
 			<tr>
-				<?php if ($role === 'contestant'): ?>
-					<th>Number</th>
+				<?php 
+				$specialField = get_user_type_special_field($role);
+				$specialFieldLabel = get_user_type_special_field_label($role);
+				if ($specialField): ?>
+					<th><?= htmlspecialchars($specialFieldLabel) ?></th>
 				<?php endif; ?>
 				<th>Name</th>
 				<th>Preferred Name</th>
 				<th>Email</th>
 				<th>Gender</th>
 				<th>Pronouns</th>
-				<?php if ($role === 'judge'): ?><th>Head Judge</th><?php endif; ?>
 				<th>Can Login</th>
 				<th>Actions</th>
 			</tr>
 			<?php foreach ($usersByRole[$role] as $user): ?>
 				<tr>
-                    <?php if ($role === 'contestant'): ?>
-						<td><?= $user['contestant_number'] ? htmlspecialchars($user['contestant_number']) : '-' ?></td>
+                    <?php 
+					$specialField = get_user_type_special_field($role);
+					if ($specialField): ?>
+						<td><?= $user[$specialField] ? htmlspecialchars($user[$specialField]) : '-' ?></td>
 					<?php endif; ?>
 					<td><?= htmlspecialchars($user['name']) ?></td>
 					<td><?= htmlspecialchars($user['preferred_name'] ?? '-') ?></td>
 					<td><?= htmlspecialchars($user['email'] ?? '-') ?></td>
 					<td><?= htmlspecialchars($user['gender'] ?? '-') ?></td>
 					<td><?= htmlspecialchars($user['pronouns'] ?? '-') ?></td>
-					<?php if ($role === 'judge'): ?><td><?= !empty($user['is_head_judge']) ? 'Yes' : 'No' ?></td><?php endif; ?>
 					<td><?= !empty($user['password_hash']) ? 'Yes' : 'No' ?></td>
 					<td>
 						<?php if ($role === 'contestant'): ?>

@@ -4095,6 +4095,74 @@ class UserController {
 		}
 	}
 	
+	public function removeAllUsers(array $params = []): void {
+		require_organizer();
+		require_csrf();
+		
+		// Get the role from the route parameter
+		$role = $params['role'] ?? '';
+		
+		if (empty($role)) {
+			redirect('/admin/users?error=invalid_role');
+			return;
+		}
+		
+		// Convert URL format back to role format (e.g., 'tally-masters' -> 'tally_master')
+		$role = str_replace('-', '_', $role);
+		if (substr($role, -1) === 's') {
+			$role = substr($role, 0, -1); // Remove trailing 's'
+		}
+		
+		// Check if bulk removal is enabled for this role
+		if (!is_bulk_removal_enabled($role)) {
+			redirect('/admin/users?error=bulk_removal_disabled');
+			return;
+		}
+		
+		$roleLabel = generate_role_label($role);
+		
+		// Debug log bulk removal attempt
+		\App\Logger::debug('bulk_user_removal_attempt', $role, null, 
+			"Attempting to remove all {$roleLabel}");
+		
+		$pdo = DB::pdo();
+		$pdo->beginTransaction();
+		
+		try {
+			// Get count before deletion for logging
+			$userCount = $pdo->prepare('SELECT COUNT(*) FROM users WHERE role = ?');
+			$userCount->execute([$role]);
+			$count = $userCount->fetchColumn();
+			
+			\App\Logger::debug('bulk_user_removal_details', $role, null, 
+				"Found {$count} {$roleLabel} to remove");
+			
+			// Delete all users of this role
+			$deleteStmt = $pdo->prepare('DELETE FROM users WHERE role = ?');
+			$deleteStmt->execute([$role]);
+			
+			$pdo->commit();
+			
+			// Log successful outcome
+			\App\Logger::debug('bulk_user_removal_success', $role, null, 
+				"Bulk {$roleLabel} removal completed successfully: removed {$count} users");
+			\App\Logger::logBulkOperation($role . '_removal', $role, null, 
+				"Removed all {$count} {$roleLabel}");
+			
+			redirect('/admin/users?success=all_' . str_replace('_', '_', $role) . '_removed');
+		} catch (\Exception $e) {
+			$pdo->rollBack();
+			
+			// Log failure outcome
+			\App\Logger::debug('bulk_user_removal_failed', $role, null, 
+				"Bulk {$roleLabel} removal failed: " . $e->getMessage());
+			\App\Logger::error('bulk_user_removal_failed', $role, null, 
+				"Bulk {$roleLabel} removal failed: " . $e->getMessage());
+			
+			redirect('/admin/users?error=remove_failed');
+		}
+	}
+	
 	public function forceRefresh(): void {
 		require_organizer();
 		require_csrf();

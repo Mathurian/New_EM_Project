@@ -672,6 +672,105 @@ function home_url(): string {
 	}
 }
 
+// Dynamic User Type Management Functions
+function get_user_types(): array {
+	return [
+		'organizer' => [
+			'label' => 'Organizers',
+			'plural' => 'organizers',
+			'has_special_fields' => false,
+			'bulk_removal_enabled' => false, // Never allow removing all organizers
+			'requires_password' => true,
+			'description' => 'System administrators with full access'
+		],
+		'judge' => [
+			'label' => 'Judges',
+			'plural' => 'judges',
+			'has_special_fields' => true,
+			'special_field' => 'is_head_judge',
+			'special_field_label' => 'Head Judge',
+			'bulk_removal_enabled' => true,
+			'requires_password' => false,
+			'description' => 'Contest judges who score contestants'
+		],
+		'contestant' => [
+			'label' => 'Contestants',
+			'plural' => 'contestants',
+			'has_special_fields' => true,
+			'special_field' => 'contestant_number',
+			'special_field_label' => 'Number',
+			'bulk_removal_enabled' => true,
+			'requires_password' => false,
+			'description' => 'Contest participants'
+		],
+		'emcee' => [
+			'label' => 'Emcees',
+			'plural' => 'emcees',
+			'has_special_fields' => false,
+			'bulk_removal_enabled' => true,
+			'requires_password' => false,
+			'description' => 'Event hosts and announcers'
+		],
+		'tally_master' => [
+			'label' => 'Tally Masters',
+			'plural' => 'tally_masters',
+			'has_special_fields' => false,
+			'bulk_removal_enabled' => true,
+			'requires_password' => true,
+			'description' => 'Score verification and certification specialists'
+		]
+	];
+}
+
+function get_user_type_config(string $role): array {
+	$userTypes = get_user_types();
+	return $userTypes[$role] ?? [
+		'label' => ucfirst(str_replace('_', ' ', $role)) . 's',
+		'plural' => str_replace('_', '_', $role) . 's',
+		'has_special_fields' => false,
+		'bulk_removal_enabled' => true,
+		'requires_password' => false,
+		'description' => 'Custom user type'
+	];
+}
+
+function get_available_user_roles(): array {
+	$userTypes = get_user_types();
+	return array_keys($userTypes);
+}
+
+function get_bulk_removal_enabled_roles(): array {
+	$userTypes = get_user_types();
+	return array_filter(array_keys($userTypes), function($role) use ($userTypes) {
+		return $userTypes[$role]['bulk_removal_enabled'] ?? true;
+	});
+}
+
+function generate_role_label(string $role): string {
+	$config = get_user_type_config($role);
+	return $config['label'];
+}
+
+function get_user_type_special_field(string $role): ?string {
+	$config = get_user_type_config($role);
+	return $config['has_special_fields'] ? ($config['special_field'] ?? null) : null;
+}
+
+function get_user_type_special_field_label(string $role): ?string {
+	$config = get_user_type_config($role);
+	return $config['has_special_fields'] ? ($config['special_field_label'] ?? null) : null;
+}
+
+function is_bulk_removal_enabled(string $role): bool {
+	$config = get_user_type_config($role);
+	return $config['bulk_removal_enabled'] ?? true;
+}
+
+function requires_password_for_role(string $role): bool {
+	$config = get_user_type_config($role);
+	return $config['requires_password'] ?? false;
+}
+
 // Score Tabulation Helper Functions
 function calculate_score_tabulation(array $scores): array {
 	$tabulation = [

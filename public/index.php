@@ -20,6 +20,7 @@ $router->post('/admin/users/remove-all-judges', 'UserController@removeAllJudges'
 $router->post('/admin/users/remove-all-contestants', 'UserController@removeAllContestants');
 $router->post('/admin/users/remove-all-emcees', 'UserController@removeAllEmcees');
 $router->post('/admin/users/remove-all-tally-masters', 'UserController@removeAllTallyMasters');
+$router->post('/admin/users/remove-all-{role}', 'UserController@removeAllUsers');
 $router->post('/admin/users/force-refresh', 'UserController@forceRefresh');
 
 // auth
