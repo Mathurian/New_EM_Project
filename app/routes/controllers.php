@@ -2,7 +2,7 @@
 declare(strict_types=1);
 namespace App\Routes;
 use App\DB;
-use function App\{view, render, redirect, param, post, request_array, current_user, is_logged_in, is_organizer, is_judge, is_emcee, is_tally_master, require_login, require_organizer, require_emcee, require_judge, require_tally_master, csrf_field, require_csrf, secure_file_upload, paginate, pagination_links, validate_input, sanitize_input, get_user_validation_rules, uuid, calculate_score_tabulation, format_score_tabulation, calculate_contestant_totals_for_category};
+use function App\{view, render, render_to_string, redirect, param, post, request_array, current_user, is_logged_in, is_organizer, is_judge, is_emcee, is_tally_master, is_board, require_login, require_organizer, require_emcee, require_judge, require_tally_master, require_board, csrf_field, require_csrf, secure_file_upload, paginate, pagination_links, validate_input, sanitize_input, get_user_validation_rules, uuid, calculate_score_tabulation, format_score_tabulation, calculate_contestant_totals_for_category};
 
 class HomeController {
 	public function index(): void { 
@@ -5650,7 +5650,17 @@ class PrintController {
 		// Calculate score tabulation
 		$tabulation = calculate_score_tabulation($scores);
 		
-		render('print/contestant', compact('contestant', 'subcategories', 'scores', 'comments', 'deductions', 'tabulation'));
+		// Prepare data for template
+		$data = [
+			'contestant' => $contestant,
+			'subcategories' => $subcategories,
+			'scores' => $scores,
+			'comments' => $comments,
+			'deductions' => $deductions,
+			'tabulation' => $tabulation
+		];
+		
+		render('print/contestant', $data);
 	}
 	
 	public function judge(array $params): void {
@@ -5715,7 +5725,16 @@ class PrintController {
 		// Calculate score tabulation
 		$tabulation = calculate_score_tabulation($scores);
 		
-		render('print/judge', compact('judge', 'subcategories', 'scores', 'comments', 'tabulation'));
+		// Prepare data for template
+		$data = [
+			'judge' => $judge,
+			'subcategories' => $subcategories,
+			'scores' => $scores,
+			'comments' => $comments,
+			'tabulation' => $tabulation
+		];
+		
+		render('print/judge', $data);
 	}
 	
 	public function category(array $params): void {
@@ -5758,7 +5777,15 @@ class PrintController {
 		// Get contestants with their total scores for this category
 		$contestants = calculate_contestant_totals_for_category($categoryId);
 		
-		render('print/category', compact('category', 'subcategories', 'scores', 'contestants'));
+		// Prepare data for template
+		$data = [
+			'category' => $category,
+			'subcategories' => $subcategories,
+			'scores' => $scores,
+			'contestants' => $contestants
+		];
+		
+		render('print/category', $data);
 	}
 }
 
