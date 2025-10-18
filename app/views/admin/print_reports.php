@@ -1,4 +1,4 @@
-<?php use function App\{url, is_organizer, hierarchical_back_url, home_url}; ?>
+<?php use function App\{url, is_organizer, hierarchical_back_url, home_url, csrf_field}; ?>
 <h2>Print Reports</h2>
 
 <!-- Success/Error Messages -->
@@ -129,12 +129,14 @@
 		<div class="category-list">
 			<?php 
 			$groupedStructure = [];
-			foreach ($structure as $row) {
-				if ($row['id']) {
-					$groupedStructure[$row['contest_id']][$row['id']] = [
-						'contest_name' => $row['contest_name'],
-						'category_name' => $row['name']
-					];
+			if (!empty($structure)) {
+				foreach ($structure as $row) {
+					if ($row['id']) {
+						$groupedStructure[$row['contest_id']][$row['id']] = [
+							'contest_name' => $row['contest_name'],
+							'category_name' => $row['name']
+						];
+					}
 				}
 			}
 			?>
@@ -183,9 +185,11 @@
 			<label for="contest_id">Select Contest:</label>
 			<select id="contest_id" class="form-control" onchange="updateContestEmailId()">
 				<option value="">Choose a contest...</option>
-				<?php foreach ($contests as $contest): ?>
-					<option value="<?= $contest['id'] ?>"><?= htmlspecialchars($contest['name']) ?></option>
-				<?php endforeach; ?>
+				<?php if (!empty($contests)): ?>
+					<?php foreach ($contests as $contest): ?>
+						<option value="<?= $contest['id'] ?>"><?= htmlspecialchars($contest['name']) ?></option>
+					<?php endforeach; ?>
+				<?php endif; ?>
 			</select>
 			<div class="action-buttons">
 				<button type="button" class="btn btn-primary" onclick="generateContestSummary()">Generate Summary</button>
@@ -216,9 +220,11 @@
 			<label for="category_id">Select Category:</label>
 			<select id="category_id" class="form-control" onchange="updateCategoryEmailId()">
 				<option value="">Choose a category...</option>
-				<?php foreach ($summaryCategories as $category): ?>
+				<?php if (!empty($summaryCategories)): ?>
+					<?php foreach ($summaryCategories as $category): ?>
 					<option value="<?= $category['id'] ?>"><?= htmlspecialchars($category['name']) ?></option>
-				<?php endforeach; ?>
+					<?php endforeach; ?>
+				<?php endif; ?>
 			</select>
 			<div class="action-buttons">
 				<button type="button" class="btn btn-primary" onclick="generateContestResults()">Generate Results</button>
