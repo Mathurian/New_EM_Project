@@ -23,6 +23,7 @@
 <?php endif; ?>
 
 <form method="post" action="<?= url('profile') ?>" enctype="multipart/form-data">
+	<?= App\csrf_field() ?>
 	<div class="form-section">
 		<h4>Basic Information</h4>
 		<div class="form-table">

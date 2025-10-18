@@ -41,6 +41,7 @@
 			</div>
 			<div class="card-body">
 				<form method="post" action="<?= url('admin/emcee-scripts') ?>" enctype="multipart/form-data">
+					<?= App\csrf_field() ?>
 					<label for="title">Script Title:</label>
 					<input type="text" id="title" name="title" required style="width: 100%; margin-bottom: 15px;">
 					

@@ -5136,6 +5136,7 @@ class AdminController {
 	
 	public function uploadEmceeScript(): void {
 		require_organizer();
+		require_csrf();
 		
 		// Validate required fields
 		$title = trim($_POST['title'] ?? '');
@@ -5299,6 +5300,7 @@ class ProfileController {
 	
 	public function update(): void {
 		require_login();
+		require_csrf();
 		$userId = $_SESSION['user']['id'];
 		$name = post('name');
 		$email = post('email') ?: null;
