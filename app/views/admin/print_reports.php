@@ -1,5 +1,47 @@
 <?php use function App\{url, is_organizer, hierarchical_back_url, home_url}; ?>
 <h2>Print Reports</h2>
+
+<!-- Success/Error Messages -->
+<?php if (isset($_GET['success'])): ?>
+	<div class="alert alert-success">
+		<?php
+		switch ($_GET['success']) {
+			case 'report_emailed':
+				echo 'Report emailed successfully!';
+				break;
+			default:
+				echo 'Operation completed successfully.';
+		}
+		?>
+	</div>
+<?php endif; ?>
+
+<?php if (isset($_GET['error'])): ?>
+	<div class="alert alert-danger">
+		<?php
+		switch ($_GET['error']) {
+			case 'missing_email':
+				echo 'Please select a recipient for the email.';
+				break;
+			case 'email_failed':
+				echo 'Failed to send email. Please try again.';
+				break;
+			case 'email_exception':
+				echo 'An error occurred while sending the email.';
+				break;
+			case 'invalid_report_type':
+				echo 'Invalid report type selected.';
+				break;
+			case 'contest_not_found':
+				echo 'Contest not found.';
+				break;
+			default:
+				echo 'An error occurred. Please try again.';
+		}
+		?>
+	</div>
+<?php endif; ?>
+
 <div class="navigation-buttons">
 	<a href="<?= hierarchical_back_url() ?>" class="btn btn-secondary">← Back</a>
 	<a href="<?= home_url() ?>" class="btn btn-outline">🏠 Home</a>
@@ -130,6 +172,119 @@
 					</div>
 				<?php endforeach; ?>
 			<?php endif; ?>
+		</div>
+	</div>
+
+	<!-- Summary Reports Section -->
+	<div class="card">
+		<h3>📊 Contest Summary</h3>
+		<p>Generate comprehensive summary for an entire contest including all categories.</p>
+		<div class="report-form">
+			<label for="contest_id">Select Contest:</label>
+			<select id="contest_id" class="form-control" onchange="updateContestEmailId()">
+				<option value="">Choose a contest...</option>
+				<?php foreach ($contests as $contest): ?>
+					<option value="<?= $contest['id'] ?>"><?= htmlspecialchars($contest['name']) ?></option>
+				<?php endforeach; ?>
+			</select>
+			<div class="action-buttons">
+				<button type="button" class="btn btn-primary" onclick="generateContestSummary()">Generate Summary</button>
+				<form method="post" action="/admin/print-reports/email" class="email-form" onsubmit="return validateEmailForm(this)">
+					<?= csrf_field() ?>
+					<input type="hidden" name="report_type" value="contest" />
+					<input type="hidden" name="entity_id" value="" id="contest_email_id" />
+					<input type="hidden" name="user_id" value="" />
+					<input type="hidden" name="to_email" value="" />
+					<select class="email-select" onchange="handleRecipientChange(this)">
+						<option value="">Select recipient…</option>
+						<?php foreach (($usersWithEmail ?? []) as $u): ?>
+							<option value="user:<?= htmlspecialchars($u['id']) ?>"><?= htmlspecialchars(($u['preferred_name'] ?: $u['name']) . ' <' . $u['email'] . '>') ?></option>
+						<?php endforeach; ?>
+						<option value="custom">Custom email…</option>
+					</select>
+					<input type="email" class="email-input" placeholder="Enter email address" style="display:none;" />
+					<button type="submit" class="btn btn-success">📧 Email Summary</button>
+				</form>
+			</div>
+		</div>
+	</div>
+	
+	<div class="card">
+		<h3>📋 Contest Results</h3>
+		<p>Generate results for a specific category with contestant rankings.</p>
+		<div class="report-form">
+			<label for="category_id">Select Category:</label>
+			<select id="category_id" class="form-control" onchange="updateCategoryEmailId()">
+				<option value="">Choose a category...</option>
+				<?php foreach ($categories as $category): ?>
+					<option value="<?= $category['id'] ?>"><?= htmlspecialchars($category['name']) ?></option>
+				<?php endforeach; ?>
+			</select>
+			<div class="action-buttons">
+				<button type="button" class="btn btn-primary" onclick="generateContestResults()">Generate Results</button>
+				<form method="post" action="/admin/print-reports/email" class="email-form" onsubmit="return validateEmailForm(this)">
+					<?= csrf_field() ?>
+					<input type="hidden" name="report_type" value="category" />
+					<input type="hidden" name="entity_id" value="" id="category_email_id" />
+					<input type="hidden" name="user_id" value="" />
+					<input type="hidden" name="to_email" value="" />
+					<select class="email-select" onchange="handleRecipientChange(this)">
+						<option value="">Select recipient…</option>
+						<?php foreach (($usersWithEmail ?? []) as $u): ?>
+							<option value="user:<?= htmlspecialchars($u['id']) ?>"><?= htmlspecialchars(($u['preferred_name'] ?: $u['name']) . ' <' . $u['email'] . '>') ?></option>
+						<?php endforeach; ?>
+						<option value="custom">Custom email…</option>
+					</select>
+					<input type="email" class="email-input" placeholder="Enter email address" style="display:none;" />
+					<button type="submit" class="btn btn-success">📧 Email Results</button>
+				</form>
+			</div>
+		</div>
+	</div>
+
+	<div class="card">
+		<h3>👥 Contestant Summary</h3>
+		<p>Generate a comprehensive summary of all contestants and their scores.</p>
+		<div class="action-buttons">
+			<form method="post" action="/admin/print-reports/email" class="email-form" onsubmit="return validateEmailForm(this)">
+				<?= csrf_field() ?>
+				<input type="hidden" name="report_type" value="contestant_summary" />
+				<input type="hidden" name="entity_id" value="" />
+				<input type="hidden" name="user_id" value="" />
+				<input type="hidden" name="to_email" value="" />
+				<select class="email-select" onchange="handleRecipientChange(this)">
+					<option value="">Select recipient…</option>
+					<?php foreach (($usersWithEmail ?? []) as $u): ?>
+						<option value="user:<?= htmlspecialchars($u['id']) ?>"><?= htmlspecialchars(($u['preferred_name'] ?: $u['name']) . ' <' . $u['email'] . '>') ?></option>
+					<?php endforeach; ?>
+					<option value="custom">Custom email…</option>
+				</select>
+				<input type="email" class="email-input" placeholder="Enter email address" style="display:none;" />
+				<button type="submit" class="btn btn-success">📧 Email Summary</button>
+			</form>
+		</div>
+	</div>
+
+	<div class="card">
+		<h3>⚖️ Judge Summary</h3>
+		<p>Generate a comprehensive summary of all judges and their certifications.</p>
+		<div class="action-buttons">
+			<form method="post" action="/admin/print-reports/email" class="email-form" onsubmit="return validateEmailForm(this)">
+				<?= csrf_field() ?>
+				<input type="hidden" name="report_type" value="judge_summary" />
+				<input type="hidden" name="entity_id" value="" />
+				<input type="hidden" name="user_id" value="" />
+				<input type="hidden" name="to_email" value="" />
+				<select class="email-select" onchange="handleRecipientChange(this)">
+					<option value="">Select recipient…</option>
+					<?php foreach (($usersWithEmail ?? []) as $u): ?>
+						<option value="user:<?= htmlspecialchars($u['id']) ?>"><?= htmlspecialchars(($u['preferred_name'] ?: $u['name']) . ' <' . $u['email'] . '>') ?></option>
+					<?php endforeach; ?>
+					<option value="custom">Custom email…</option>
+				</select>
+				<input type="email" class="email-input" placeholder="Enter email address" style="display:none;" />
+				<button type="submit" class="btn btn-success">📧 Email Summary</button>
+			</form>
 		</div>
 	</div>
 </div>
@@ -282,6 +437,94 @@
 		text-align: center;
 	}
 }
+
+/* Summary Report Styles */
+.report-form {
+	margin-bottom: 15px;
+}
+
+.report-form label {
+	display: block;
+	margin-bottom: 5px;
+	font-weight: bold;
+	color: var(--text-primary);
+}
+
+.form-control {
+	width: 100%;
+	padding: 8px 12px;
+	border: 1px solid var(--border-color);
+	border-radius: 4px;
+	background: var(--bg-primary);
+	color: var(--text-primary);
+	margin-bottom: 10px;
+}
+
+.action-buttons {
+	display: flex;
+	gap: 10px;
+	align-items: center;
+	flex-wrap: wrap;
+}
+
+.email-form {
+	display: flex;
+	gap: 10px;
+	align-items: center;
+	flex-wrap: wrap;
+}
+
+.email-select {
+	padding: 8px 12px;
+	border: 1px solid var(--border-color);
+	border-radius: 4px;
+	background: var(--bg-primary);
+	color: var(--text-primary);
+	min-width: 200px;
+}
+
+.email-input {
+	padding: 8px 12px;
+	border: 1px solid var(--border-color);
+	border-radius: 4px;
+	background: var(--bg-primary);
+	color: var(--text-primary);
+	min-width: 200px;
+}
+
+.btn-success {
+	background: #28a745;
+	color: white;
+	border: none;
+	padding: 8px 16px;
+	border-radius: 4px;
+	cursor: pointer;
+	text-decoration: none;
+	display: inline-block;
+}
+
+.btn-success:hover {
+	background: #218838;
+}
+
+/* Success/Error Messages */
+.alert {
+	padding: 12px 16px;
+	border-radius: 4px;
+	margin: 10px 0;
+}
+
+.alert-success {
+	background: #d4edda;
+	color: #155724;
+	border: 1px solid #c3e6cb;
+}
+
+.alert-danger {
+	background: #f8d7da;
+	color: #721c24;
+	border: 1px solid #f5c6cb;
+}
 </style>
 
 <script>
@@ -343,5 +586,35 @@ function validateEmailForm(form) {
     }
     
     return true;
+}
+
+// Summary report generation functions
+function generateContestSummary() {
+	const contestId = document.getElementById('contest_id').value;
+	if (!contestId) {
+		alert('Please select a contest.');
+		return;
+	}
+	// Generate contest summary by opening a new window with contest data
+	openPrintWindow('/board/contest-summary/' + contestId);
+}
+
+function generateContestResults() {
+	const categoryId = document.getElementById('category_id').value;
+	if (!categoryId) {
+		alert('Please select a category.');
+		return;
+	}
+	openPrintWindow('/print/category/' + categoryId);
+}
+
+function updateContestEmailId() {
+	const contestId = document.getElementById('contest_id').value;
+	document.getElementById('contest_email_id').value = contestId;
+}
+
+function updateCategoryEmailId() {
+	const categoryId = document.getElementById('category_id').value;
+	document.getElementById('category_email_id').value = categoryId;
 }
 </script>

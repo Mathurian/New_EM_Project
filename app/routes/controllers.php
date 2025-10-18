@@ -5230,7 +5230,11 @@ class AdminController {
 		$structure = DB::pdo()->query('SELECT c.id, c.name, co.name as contest_name, co.id as contest_id FROM categories c JOIN contests co ON c.contest_id = co.id ORDER BY co.name, c.name')->fetchAll(\PDO::FETCH_ASSOC);
 		$usersWithEmail = DB::pdo()->query('SELECT id, preferred_name, name, email FROM users WHERE email IS NOT NULL AND email != "" ORDER BY preferred_name IS NULL, preferred_name, name')->fetchAll(\PDO::FETCH_ASSOC);
 		
-		view('admin/print_reports', compact('contestants', 'judges', 'structure', 'usersWithEmail'));
+		// Get contests and categories for summary reports (Board functionality)
+		$contests = DB::pdo()->query('SELECT id, name FROM contests ORDER BY name')->fetchAll(\PDO::FETCH_ASSOC);
+		$categories = DB::pdo()->query('SELECT id, name FROM categories ORDER BY name')->fetchAll(\PDO::FETCH_ASSOC);
+		
+		view('admin/print_reports', compact('contestants', 'judges', 'structure', 'usersWithEmail', 'contests', 'categories'));
 	}
 
 	public function emailReport(): void {
@@ -5257,7 +5261,8 @@ class AdminController {
 		}
 		
 		if (!$toEmail) {
-			redirect('/admin/print-reports?error=missing_email');
+			$redirectUrl = is_board() ? '/board/print-reports?error=missing_email' : '/admin/print-reports?error=missing_email';
+			redirect($redirectUrl);
 			return;
 		}
 		
@@ -5338,7 +5343,8 @@ class AdminController {
 				$contest = $contest->fetch(\PDO::FETCH_ASSOC);
 				
 				if (!$contest) {
-					redirect('/admin/print-reports?error=contest_not_found');
+					$redirectUrl = is_board() ? '/board/print-reports?error=contest_not_found' : '/admin/print-reports?error=contest_not_found';
+					redirect($redirectUrl);
 					return;
 				}
 				
@@ -5487,21 +5493,27 @@ class AdminController {
 				$subject = 'Judge Summary Report';
 				
 			} else {
-				redirect('/admin/print-reports?error=invalid_report_type');
+				$redirectUrl = is_board() ? '/board/print-reports?error=invalid_report_type' : '/admin/print-reports?error=invalid_report_type';
+				redirect($redirectUrl);
 				return;
 			}
 
 			$sent = \App\Mailer::sendHtml($toEmail, $subject, $html);
 			if ($sent) {
 				\App\Logger::logAdminAction('email_report_sent', 'report', $entityId, "type={$reportType}; to={$toEmail}");
-				redirect('/admin/print-reports?success=report_emailed');
+				// Redirect Board users back to Board pages, Admin users to Admin pages
+				$redirectUrl = is_board() ? '/board/print-reports?success=report_emailed' : '/admin/print-reports?success=report_emailed';
+				redirect($redirectUrl);
 			} else {
 				\App\Logger::logAdminAction('email_report_failed', 'report', $entityId, "type={$reportType}; to={$toEmail}");
-				redirect('/admin/print-reports?error=email_failed');
+				// Redirect Board users back to Board pages, Admin users to Admin pages
+				$redirectUrl = is_board() ? '/board/print-reports?error=email_failed' : '/admin/print-reports?error=email_failed';
+				redirect($redirectUrl);
 			}
 		} catch (\Throwable $e) {
 			\App\Logger::error('email_report_exception', 'report', $entityId, $e->getMessage());
-			redirect('/admin/print-reports?error=email_exception');
+			$redirectUrl = is_board() ? '/board/print-reports?error=email_exception' : '/admin/print-reports?error=email_exception';
+			redirect($redirectUrl);
 		}
 	}
 	
