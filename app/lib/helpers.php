@@ -98,9 +98,29 @@ function validate_uploaded_file(array $file, array $allowedTypes = ['image/jpeg'
 		$errors[] = 'Invalid file type. Allowed types: ' . implode(', ', $allowedTypes);
 	}
 	
-	// Check file extension
+	// Check file extension based on allowed MIME types
 	$extension = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-	$allowedExtensions = ['jpg', 'jpeg', 'png', 'gif'];
+	$allowedExtensions = [];
+	
+	// Map MIME types to extensions
+	$mimeToExtension = [
+		'image/jpeg' => ['jpg', 'jpeg'],
+		'image/png' => ['png'],
+		'image/gif' => ['gif'],
+		'application/pdf' => ['pdf'],
+		'text/plain' => ['txt'],
+		'application/msword' => ['doc'],
+		'application/vnd.openxmlformats-officedocument.wordprocessingml.document' => ['docx']
+	];
+	
+	foreach ($allowedTypes as $mimeType) {
+		if (isset($mimeToExtension[$mimeType])) {
+			$allowedExtensions = array_merge($allowedExtensions, $mimeToExtension[$mimeType]);
+		}
+	}
+	
+	$allowedExtensions = array_unique($allowedExtensions);
+	
 	if (!in_array($extension, $allowedExtensions)) {
 		$errors[] = 'Invalid file extension. Allowed extensions: ' . implode(', ', $allowedExtensions);
 	}
@@ -117,7 +137,7 @@ function validate_uploaded_file(array $file, array $allowedTypes = ['image/jpeg'
 }
 
 function secure_file_upload(array $file, string $uploadDir, string $filenamePrefix = '', array $allowedTypes = ['image/jpeg', 'image/png', 'image/gif'], int $maxSize = 5242880): array {
-	$errors = validate_uploaded_file($file);
+	$errors = validate_uploaded_file($file, $allowedTypes, $maxSize);
 	if (!empty($errors)) {
 		return ['success' => false, 'errors' => $errors];
 	}
