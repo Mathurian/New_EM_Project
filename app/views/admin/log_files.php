@@ -96,7 +96,7 @@ $title = 'Log Files';
 											<td>
 												<?= date('Y-m-d H:i:s', $file['modified']) ?>
 												<small class="text-muted d-block">
-													<?= $this->timeAgo($file['modified']) ?>
+													<?= timeAgo($file['modified']) ?>
 												</small>
 											</td>
 											<td>
