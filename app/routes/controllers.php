@@ -21,6 +21,9 @@ class HomeController {
 				case 'tally_master':
 					redirect('/tally-master');
 					break;
+				case 'auditor':
+					redirect('/auditor');
+					break;
 				default:
 					view('home', ['title' => 'Event Manager']);
 			}
@@ -3409,6 +3412,10 @@ class AuthController {
 				redirect('/judge');
 			} elseif ($user['role'] === 'emcee') {
 				redirect('/emcee');
+			} elseif ($user['role'] === 'tally_master') {
+				redirect('/tally-master');
+			} elseif ($user['role'] === 'auditor') {
+				redirect('/auditor');
 			} else {
 				redirect('/');
 			}

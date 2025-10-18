@@ -122,8 +122,9 @@ $router->post('/tally-master/certify-totals', 'TallyMasterController@certifyTota
 $router->get('/emcee', 'EmceeController@index');
 $router->get('/emcee/scripts', 'EmceeController@scripts');
 $router->get('/emcee/contestants', 'EmceeController@contestants');
+$router->get('/emcee/judges', 'EmceeController@judgesByCategory');
 $router->get('/emcee/scripts/{id}/stream', 'EmceeController@streamScript');
-$router->get('/emcee/contestants/{id}/bio', 'EmceeController@contestantBio');
+$router->get('/emcee/contestants/{number}/bio', 'EmceeController@contestantBio');
 
 // auditor
 $router->get('/auditor', 'AuditorController@index');
