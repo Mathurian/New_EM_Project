@@ -1,9 +1,5 @@
 <?php use function App\{url, is_board, home_url}; ?>
 <h2>Board Dashboard</h2>
-<div class="navigation-buttons">
-	<a href="<?= home_url() ?>" class="btn btn-secondary">← Back</a>
-	<a href="<?= home_url() ?>" class="btn btn-outline">🏠 Home</a>
-</div>
 
 <div class="dashboard-grid">
 	<div class="dashboard-card">

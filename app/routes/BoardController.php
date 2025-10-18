@@ -85,57 +85,67 @@ class BoardController {
 		require_board();
 		require_csrf();
 		
-		// Validate required fields
-		$title = trim($_POST['title'] ?? '');
-		if (empty($title)) {
-			redirect('/board/emcee-scripts?error=title_required');
-			return;
+		// Temporarily disable database logging to avoid old_users table issues
+		$originalLevel = Logger::getLevel();
+		Logger::setLevel(Logger::LEVEL_ERROR);
+		
+		try {
+			// Validate required fields
+			$title = trim($_POST['title'] ?? '');
+			if (empty($title)) {
+				redirect('/board/emcee-scripts?error=title_required');
+				return;
+			}
+			
+			// Check if file was uploaded
+			if (!isset($_FILES['script_file']) || $_FILES['script_file']['error'] !== UPLOAD_ERR_OK) {
+				Logger::error('emcee_script_upload', 'board', $_SESSION['user']['id'] ?? null, 
+					"File upload failed. Error code: " . ($_FILES['script_file']['error'] ?? 'no file'));
+				redirect('/board/emcee-scripts?error=file_upload_failed');
+				return;
+			}
+			
+			// Use secure file upload with document-specific validation
+			$uploadDir = __DIR__ . '/../../public/uploads/emcee-scripts/';
+			$allowedTypes = ['application/pdf', 'text/plain', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+			$maxSize = 10 * 1024 * 1024; // 10MB
+			
+			$result = secure_file_upload($_FILES['script_file'], $uploadDir, 'script', $allowedTypes, $maxSize);
+			
+			if (!$result['success']) {
+				Logger::warn('emcee_script_upload', 'board', $_SESSION['user']['id'] ?? null, 
+					"File upload validation failed: " . implode(', ', $result['errors']));
+				redirect('/board/emcee-scripts?error=file_validation_failed');
+				return;
+			}
+			
+			$filename = $result['filename'];
+			$filepath = $result['filePath'];
+			$originalFilename = $_FILES['script_file']['name'];
+			
+			// Save to database
+			$scriptId = uuid();
+			$stmt = DB::pdo()->prepare('
+				INSERT INTO emcee_scripts (id, title, filename, file_path, uploaded_by, created_at, is_active)
+				VALUES (?, ?, ?, ?, ?, ?, ?)
+			');
+			$stmt->execute([
+				$scriptId,
+				$title,
+				$originalFilename,
+				'/uploads/emcee-scripts/' . $filename,
+				current_user()['id'],
+				date('Y-m-d H:i:s'),
+				1
+			]);
+			
+			Logger::logAdminAction('emcee_script_uploaded', 'board', current_user()['id'], "Emcee script uploaded: {$title}");
+			redirect('/board/emcee-scripts?success=script_uploaded');
+			
+		} finally {
+			// Restore original logging level
+			Logger::setLevel($originalLevel);
 		}
-		
-		// Check if file was uploaded
-		if (!isset($_FILES['script_file']) || $_FILES['script_file']['error'] !== UPLOAD_ERR_OK) {
-			Logger::error('emcee_script_upload', 'board', $_SESSION['user']['id'] ?? null, 
-				"File upload failed. Error code: " . ($_FILES['script_file']['error'] ?? 'no file'));
-			redirect('/board/emcee-scripts?error=file_upload_failed');
-			return;
-		}
-		
-		// Use secure file upload with document-specific validation
-		$uploadDir = __DIR__ . '/../../public/uploads/emcee-scripts/';
-		$allowedTypes = ['application/pdf', 'text/plain', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
-		$maxSize = 10 * 1024 * 1024; // 10MB
-		
-		$result = secure_file_upload($_FILES['script_file'], $uploadDir, 'script', $allowedTypes, $maxSize);
-		
-		if (!$result['success']) {
-			Logger::warn('emcee_script_upload', 'board', $_SESSION['user']['id'] ?? null, 
-				"File upload validation failed: " . implode(', ', $result['errors']));
-			redirect('/board/emcee-scripts?error=file_validation_failed');
-			return;
-		}
-		
-		$filename = $result['filename'];
-		$filepath = $result['filePath'];
-		$originalFilename = $_FILES['script_file']['name'];
-		
-		// Save to database
-		$scriptId = uuid();
-		$stmt = DB::pdo()->prepare('
-			INSERT INTO emcee_scripts (id, title, filename, file_path, uploaded_by, created_at, is_active)
-			VALUES (?, ?, ?, ?, ?, ?, ?)
-		');
-		$stmt->execute([
-			$scriptId,
-			$title,
-			$originalFilename,
-			'/uploads/emcee-scripts/' . $filename,
-			current_user()['id'],
-			date('Y-m-d H:i:s'),
-			1
-		]);
-		
-		Logger::logAdminAction('emcee_script_uploaded', 'board', current_user()['id'], "Emcee script uploaded: {$title}");
-		redirect('/board/emcee-scripts?success=script_uploaded');
 	}
 	
 	public function toggleEmceeScript(array $params): void {

@@ -1,7 +1,6 @@
 <?php use function App\{url, csrf_field}; ?>
 <h2>Judge Score Removal</h2>
 <div class="navigation-buttons">
-	<a href="/board" class="btn btn-secondary">← Back to Dashboard</a>
 	<a href="/board" class="btn btn-outline">🏠 Dashboard</a>
 </div>
 

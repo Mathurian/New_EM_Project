@@ -1,7 +1,6 @@
 <?php use function App\{url}; ?>
 <h2>Certification Status</h2>
 <div class="navigation-buttons">
-	<a href="/board" class="btn btn-secondary">← Back to Dashboard</a>
 	<a href="/board" class="btn btn-outline">🏠 Dashboard</a>
 </div>
 

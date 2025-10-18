@@ -1,7 +1,6 @@
 <?php use function App\{url}; ?>
 <h2>Print Reports</h2>
 <div class="navigation-buttons">
-	<a href="/board" class="btn btn-secondary">← Back to Dashboard</a>
 	<a href="/board" class="btn btn-outline">🏠 Dashboard</a>
 </div>
 
@@ -21,7 +20,10 @@
 						<option value="<?= $contest['id'] ?>"><?= htmlspecialchars($contest['name']) ?></option>
 					<?php endforeach; ?>
 				</select>
-				<button type="button" class="btn btn-primary" onclick="generateContestReport()">Generate Report</button>
+				<div class="action-buttons">
+					<button type="button" class="btn btn-primary" onclick="generateContestReport()">Generate Report</button>
+					<button type="button" class="btn btn-success" onclick="emailContestReport()">📧 Email Report</button>
+				</div>
 			</div>
 		</div>
 		
@@ -36,7 +38,10 @@
 						<option value="<?= $category['id'] ?>"><?= htmlspecialchars($category['name']) ?></option>
 					<?php endforeach; ?>
 				</select>
-				<button type="button" class="btn btn-primary" onclick="generateCategoryReport()">Generate Report</button>
+				<div class="action-buttons">
+					<button type="button" class="btn btn-primary" onclick="generateCategoryReport()">Generate Report</button>
+					<button type="button" class="btn btn-success" onclick="emailCategoryReport()">📧 Email Report</button>
+				</div>
 			</div>
 		</div>
 		
@@ -44,7 +49,10 @@
 			<h4>👥 Contestant Summary</h4>
 			<p>Generate a summary of all contestants and their scores.</p>
 			<div class="report-form">
-				<button type="button" class="btn btn-primary" onclick="generateContestantSummary()">Generate Summary</button>
+				<div class="action-buttons">
+					<button type="button" class="btn btn-primary" onclick="generateContestantSummary()">Generate Summary</button>
+					<button type="button" class="btn btn-success" onclick="emailContestantSummary()">📧 Email Summary</button>
+				</div>
 			</div>
 		</div>
 		
@@ -52,7 +60,10 @@
 			<h4>⚖️ Judge Summary</h4>
 			<p>Generate a summary of all judges and their certifications.</p>
 			<div class="report-form">
-				<button type="button" class="btn btn-primary" onclick="generateJudgeSummary()">Generate Summary</button>
+				<div class="action-buttons">
+					<button type="button" class="btn btn-primary" onclick="generateJudgeSummary()">Generate Summary</button>
+					<button type="button" class="btn btn-success" onclick="emailJudgeSummary()">📧 Email Summary</button>
+				</div>
 			</div>
 		</div>
 	</div>
@@ -91,6 +102,44 @@ function generateContestantSummary() {
 
 function generateJudgeSummary() {
 	window.open('/admin/print-reports/judges', '_blank');
+}
+
+function emailContestReport() {
+	const contestId = document.getElementById('contest_id').value;
+	if (!contestId) {
+		alert('Please select a contest.');
+		return;
+	}
+	const email = prompt('Enter email address to send the report to:');
+	if (email && email.includes('@')) {
+		window.open('/admin/print-reports/contest/' + contestId + '/email?email=' + encodeURIComponent(email), '_blank');
+	}
+}
+
+function emailCategoryReport() {
+	const categoryId = document.getElementById('category_id').value;
+	if (!categoryId) {
+		alert('Please select a category.');
+		return;
+	}
+	const email = prompt('Enter email address to send the report to:');
+	if (email && email.includes('@')) {
+		window.open('/admin/print-reports/category/' + categoryId + '/email?email=' + encodeURIComponent(email), '_blank');
+	}
+}
+
+function emailContestantSummary() {
+	const email = prompt('Enter email address to send the summary to:');
+	if (email && email.includes('@')) {
+		window.open('/admin/print-reports/contestants/email?email=' + encodeURIComponent(email), '_blank');
+	}
+}
+
+function emailJudgeSummary() {
+	const email = prompt('Enter email address to send the summary to:');
+	if (email && email.includes('@')) {
+		window.open('/admin/print-reports/judges/email?email=' + encodeURIComponent(email), '_blank');
+	}
 }
 </script>
 
@@ -165,8 +214,19 @@ function generateJudgeSummary() {
 	color: white;
 }
 
-.btn-primary:hover {
-	background: #0056b3;
+.btn-success {
+	background: #28a745;
+	color: white;
+}
+
+.btn-success:hover {
+	background: #218838;
+}
+
+.action-buttons {
+	display: flex;
+	gap: 10px;
+	flex-wrap: wrap;
 }
 
 .recent-reports {

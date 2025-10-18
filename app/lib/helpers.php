@@ -545,7 +545,7 @@ function can_view_nav(string $item): bool {
 	if (is_organizer()) { return true; }
 	if (is_board()) { 
 		// Board has specific permissions - not full organizer access
-		return in_array($item, ['Home','Results','My Profile','Logout'], true);
+		return in_array($item, ['Home','My Profile','Logout'], true);
 	}
 	if (is_emcee()) { return in_array($item, ['Home','Contestant Bios','My Profile','Logout'], true); }
 	if (is_tally_master()) { return in_array($item, ['Home','Score Review','Certification','My Profile','Logout'], true); }
