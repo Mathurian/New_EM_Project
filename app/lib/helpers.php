@@ -43,6 +43,30 @@ function request_array(string $key): array {
 	return is_array($value) ? $value : ($value !== '' ? [$value] : []);
 }
 
+// CSRF Protection Functions
+function csrf_token(): string {
+	if (!isset($_SESSION['csrf_token'])) {
+		$_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+	}
+	return $_SESSION['csrf_token'];
+}
+
+function csrf_field(): string {
+	return '<input type="hidden" name="csrf_token" value="' . htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8') . '">';
+}
+
+function verify_csrf_token(): bool {
+	$token = $_POST['csrf_token'] ?? '';
+	return hash_equals($_SESSION['csrf_token'] ?? '', $token);
+}
+
+function require_csrf(): void {
+	if (!verify_csrf_token()) {
+		http_response_code(403);
+		die('CSRF token verification failed');
+	}
+}
+
 function current_user(): ?array { return $_SESSION['user'] ?? null; }
 function is_logged_in(): bool {
     $user = $_SESSION['user'] ?? null;

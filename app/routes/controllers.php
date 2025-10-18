@@ -2,7 +2,7 @@
 declare(strict_types=1);
 namespace App\Routes;
 use App\DB;
-use function App\{view, render, redirect, param, post, request_array, current_user, is_logged_in, is_organizer, is_judge, is_emcee, require_login, require_organizer, require_emcee};
+use function App\{view, render, redirect, param, post, request_array, current_user, is_logged_in, is_organizer, is_judge, is_emcee, require_login, require_organizer, require_emcee, csrf_field, require_csrf};
 
 function uuid(): string { return bin2hex(random_bytes(16)); }
 
@@ -3325,6 +3325,9 @@ class AuthController {
 	}
 	
 	public function login(): void {
+		// Verify CSRF token
+		require_csrf();
+		
 		$email = post('email');
 		$password = post('password');
 		

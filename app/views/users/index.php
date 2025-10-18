@@ -13,29 +13,34 @@
 		
 		<div class="admin-buttons">
 			<form method="post" action="<?= url('admin/users/remove-all-judges') ?>" style="display: inline-block; margin-right: 10px;">
+				<?= csrf_field() ?>
 				<button type="submit" onclick="return confirm('Are you sure you want to remove ALL judges? This will delete all scores, comments, certifications, and associated images. This action cannot be undone!')" class="btn btn-danger">
 					Remove All Judges
 				</button>
 			</form>
 			
 			<form method="post" action="<?= url('admin/users/remove-all-contestants') ?>" style="display: inline-block; margin-right: 10px;">
+				<?= csrf_field() ?>
 				<button type="submit" onclick="return confirm('Are you sure you want to remove ALL contestants? This will delete all scores, comments, bios, and associated images. This action cannot be undone!')" class="btn btn-danger">
 					Remove All Contestants
 				</button>
 			</form>
 			
 			<form method="post" action="<?= url('admin/users/remove-all-emcees') ?>" style="display: inline-block;">
+				<?= csrf_field() ?>
 				<button type="submit" onclick="return confirm('Are you sure you want to remove ALL emcees? This action cannot be undone!')" class="btn btn-danger">
 					Remove All Emcees
 				</button>
 			</form>
 			
 			<form method="post" action="<?= url('admin/users/force-refresh') ?>" style="display: inline-block; margin-right: 10px; vertical-align: middle;">
+				<?= csrf_field() ?>
 				<button type="submit" class="btn btn-primary">
 					Force Refresh Tables
 				</button>
 			</form>
 			<form method="post" action="<?= url('admin/users/force-logout-all') ?>" style="display: inline-block; margin-right: 10px; vertical-align: middle;">
+				<?= csrf_field() ?>
 				<button type="submit" class="btn btn-primary" onclick="return confirm('Force logout all users? Current sessions will be invalidated.')">Force Logout All Users</button>
 			</form>
 			<a href="<?= url('users/new') ?>" class="btn btn-primary" style="display:inline-block; margin-left: 10px; vertical-align: middle;">Create User</a>
