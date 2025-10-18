@@ -22,7 +22,21 @@
 				</select>
 				<div class="action-buttons">
 					<button type="button" class="btn btn-primary" onclick="generateContestReport()">Generate Report</button>
-					<button type="button" class="btn btn-success" onclick="emailContestReport()">📧 Email Report</button>
+					<form method="post" action="/admin/print-reports/email" class="email-form" onsubmit="return validateEmailForm(this)">
+						<input type="hidden" name="report_type" value="contest" />
+						<input type="hidden" name="entity_id" value="" id="contest_email_id" />
+						<input type="hidden" name="user_id" value="" />
+						<input type="hidden" name="to_email" value="" />
+						<select class="email-select" onchange="handleRecipientChange(this)">
+							<option value="">Select recipient…</option>
+							<?php foreach (($usersWithEmail ?? []) as $u): ?>
+								<option value="user:<?= htmlspecialchars($u['id']) ?>"><?= htmlspecialchars(($u['preferred_name'] ?: $u['name']) . ' <' . $u['email'] . '>') ?></option>
+							<?php endforeach; ?>
+							<option value="custom">Custom email…</option>
+						</select>
+						<input type="email" class="email-input" placeholder="Enter email address" style="display:none;" />
+						<button type="submit" class="btn btn-success">📧 Email Report</button>
+					</form>
 				</div>
 			</div>
 		</div>
@@ -40,7 +54,21 @@
 				</select>
 				<div class="action-buttons">
 					<button type="button" class="btn btn-primary" onclick="generateCategoryReport()">Generate Report</button>
-					<button type="button" class="btn btn-success" onclick="emailCategoryReport()">📧 Email Report</button>
+					<form method="post" action="/admin/print-reports/email" class="email-form" onsubmit="return validateEmailForm(this)">
+						<input type="hidden" name="report_type" value="category" />
+						<input type="hidden" name="entity_id" value="" id="category_email_id" />
+						<input type="hidden" name="user_id" value="" />
+						<input type="hidden" name="to_email" value="" />
+						<select class="email-select" onchange="handleRecipientChange(this)">
+							<option value="">Select recipient…</option>
+							<?php foreach (($usersWithEmail ?? []) as $u): ?>
+								<option value="user:<?= htmlspecialchars($u['id']) ?>"><?= htmlspecialchars(($u['preferred_name'] ?: $u['name']) . ' <' . $u['email'] . '>') ?></option>
+							<?php endforeach; ?>
+							<option value="custom">Custom email…</option>
+						</select>
+						<input type="email" class="email-input" placeholder="Enter email address" style="display:none;" />
+						<button type="submit" class="btn btn-success">📧 Email Report</button>
+					</form>
 				</div>
 			</div>
 		</div>
@@ -51,7 +79,21 @@
 			<div class="report-form">
 				<div class="action-buttons">
 					<button type="button" class="btn btn-primary" onclick="generateContestantSummary()">Generate Summary</button>
-					<button type="button" class="btn btn-success" onclick="emailContestantSummary()">📧 Email Summary</button>
+					<form method="post" action="/admin/print-reports/email" class="email-form" onsubmit="return validateEmailForm(this)">
+						<input type="hidden" name="report_type" value="contestant" />
+						<input type="hidden" name="entity_id" value="" />
+						<input type="hidden" name="user_id" value="" />
+						<input type="hidden" name="to_email" value="" />
+						<select class="email-select" onchange="handleRecipientChange(this)">
+							<option value="">Select recipient…</option>
+							<?php foreach (($usersWithEmail ?? []) as $u): ?>
+								<option value="user:<?= htmlspecialchars($u['id']) ?>"><?= htmlspecialchars(($u['preferred_name'] ?: $u['name']) . ' <' . $u['email'] . '>') ?></option>
+							<?php endforeach; ?>
+							<option value="custom">Custom email…</option>
+						</select>
+						<input type="email" class="email-input" placeholder="Enter email address" style="display:none;" />
+						<button type="submit" class="btn btn-success">📧 Email Summary</button>
+					</form>
 				</div>
 			</div>
 		</div>
@@ -62,7 +104,21 @@
 			<div class="report-form">
 				<div class="action-buttons">
 					<button type="button" class="btn btn-primary" onclick="generateJudgeSummary()">Generate Summary</button>
-					<button type="button" class="btn btn-success" onclick="emailJudgeSummary()">📧 Email Summary</button>
+					<form method="post" action="/admin/print-reports/email" class="email-form" onsubmit="return validateEmailForm(this)">
+						<input type="hidden" name="report_type" value="judge" />
+						<input type="hidden" name="entity_id" value="" />
+						<input type="hidden" name="user_id" value="" />
+						<input type="hidden" name="to_email" value="" />
+						<select class="email-select" onchange="handleRecipientChange(this)">
+							<option value="">Select recipient…</option>
+							<?php foreach (($usersWithEmail ?? []) as $u): ?>
+								<option value="user:<?= htmlspecialchars($u['id']) ?>"><?= htmlspecialchars(($u['preferred_name'] ?: $u['name']) . ' <' . $u['email'] . '>') ?></option>
+							<?php endforeach; ?>
+							<option value="custom">Custom email…</option>
+						</select>
+						<input type="email" class="email-input" placeholder="Enter email address" style="display:none;" />
+						<button type="submit" class="btn btn-success">📧 Email Summary</button>
+					</form>
 				</div>
 			</div>
 		</div>
@@ -104,42 +160,62 @@ function generateJudgeSummary() {
 	window.open('/admin/print-reports/judges', '_blank');
 }
 
-function emailContestReport() {
-	const contestId = document.getElementById('contest_id').value;
-	if (!contestId) {
-		alert('Please select a contest.');
-		return;
-	}
-	const email = prompt('Enter email address to send the report to:');
-	if (email && email.includes('@')) {
-		window.open('/admin/print-reports/contest/' + contestId + '/email?email=' + encodeURIComponent(email), '_blank');
-	}
-}
-
-function emailCategoryReport() {
-	const categoryId = document.getElementById('category_id').value;
-	if (!categoryId) {
-		alert('Please select a category.');
-		return;
-	}
-	const email = prompt('Enter email address to send the report to:');
-	if (email && email.includes('@')) {
-		window.open('/admin/print-reports/category/' + categoryId + '/email?email=' + encodeURIComponent(email), '_blank');
-	}
-}
-
-function emailContestantSummary() {
-	const email = prompt('Enter email address to send the summary to:');
-	if (email && email.includes('@')) {
-		window.open('/admin/print-reports/contestants/email?email=' + encodeURIComponent(email), '_blank');
+// Email form handling functions (from admin view)
+function handleRecipientChange(select) {
+	const form = select.closest('form');
+	const emailInput = form.querySelector('.email-input');
+	const userIdInput = form.querySelector('input[name="user_id"]');
+	const toEmailInput = form.querySelector('input[name="to_email"]');
+	
+	if (select.value === 'custom') {
+		emailInput.style.display = 'block';
+		emailInput.required = true;
+		userIdInput.value = '';
+		toEmailInput.value = '';
+	} else if (select.value.startsWith('user:')) {
+		emailInput.style.display = 'none';
+		emailInput.required = false;
+		userIdInput.value = select.value.replace('user:', '');
+		toEmailInput.value = '';
+	} else {
+		emailInput.style.display = 'none';
+		emailInput.required = false;
+		userIdInput.value = '';
+		toEmailInput.value = '';
 	}
 }
 
-function emailJudgeSummary() {
-	const email = prompt('Enter email address to send the summary to:');
-	if (email && email.includes('@')) {
-		window.open('/admin/print-reports/judges/email?email=' + encodeURIComponent(email), '_blank');
+function validateEmailForm(form) {
+	const select = form.querySelector('.email-select');
+	const emailInput = form.querySelector('.email-input');
+	const userIdInput = form.querySelector('input[name="user_id"]');
+	const toEmailInput = form.querySelector('input[name="to_email"]');
+	
+	if (select.value === 'custom') {
+		if (!emailInput.value || !emailInput.value.includes('@')) {
+			alert('Please enter a valid email address.');
+			return false;
+		}
+		toEmailInput.value = emailInput.value;
+		userIdInput.value = '';
+	} else if (select.value.startsWith('user:')) {
+		// User selected - userIdInput already set
+	} else {
+		alert('Please select a recipient.');
+		return false;
 	}
+	
+	// Set entity_id for contest and category forms
+	const contestSelect = document.getElementById('contest_id');
+	const categorySelect = document.getElementById('category_id');
+	
+	if (contestSelect && contestSelect.value) {
+		form.querySelector('input[name="entity_id"]').value = contestSelect.value;
+	} else if (categorySelect && categorySelect.value) {
+		form.querySelector('input[name="entity_id"]').value = categorySelect.value;
+	}
+	
+	return true;
 }
 </script>
 
@@ -227,6 +303,30 @@ function emailJudgeSummary() {
 	display: flex;
 	gap: 10px;
 	flex-wrap: wrap;
+	align-items: flex-start;
+}
+
+.email-form {
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+	min-width: 200px;
+}
+
+.email-select,
+.email-input {
+	padding: 6px 8px;
+	border: 1px solid #dee2e6;
+	border-radius: 4px;
+	font-size: 12px;
+}
+
+.email-select {
+	background: white;
+}
+
+.email-input {
+	background: white;
 }
 
 .recent-reports {

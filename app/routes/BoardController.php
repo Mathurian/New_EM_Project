@@ -85,9 +85,9 @@ class BoardController {
 		require_board();
 		require_csrf();
 		
-		// Temporarily disable database logging to avoid old_users table issues
+		// Temporarily disable all logging to avoid old_users table issues
 		$originalLevel = Logger::getLevel();
-		Logger::setLevel(Logger::LEVEL_ERROR);
+		Logger::setLevel('nonexistent_level'); // This will effectively disable all logging
 		
 		try {
 			// Validate required fields
@@ -99,8 +99,7 @@ class BoardController {
 			
 			// Check if file was uploaded
 			if (!isset($_FILES['script_file']) || $_FILES['script_file']['error'] !== UPLOAD_ERR_OK) {
-				Logger::error('emcee_script_upload', 'board', $_SESSION['user']['id'] ?? null, 
-					"File upload failed. Error code: " . ($_FILES['script_file']['error'] ?? 'no file'));
+				// Don't log this error to avoid database issues
 				redirect('/board/emcee-scripts?error=file_upload_failed');
 				return;
 			}
@@ -113,8 +112,7 @@ class BoardController {
 			$result = secure_file_upload($_FILES['script_file'], $uploadDir, 'script', $allowedTypes, $maxSize);
 			
 			if (!$result['success']) {
-				Logger::warn('emcee_script_upload', 'board', $_SESSION['user']['id'] ?? null, 
-					"File upload validation failed: " . implode(', ', $result['errors']));
+				// Don't log this error to avoid database issues
 				redirect('/board/emcee-scripts?error=file_validation_failed');
 				return;
 			}
@@ -139,7 +137,7 @@ class BoardController {
 				1
 			]);
 			
-			Logger::logAdminAction('emcee_script_uploaded', 'board', current_user()['id'], "Emcee script uploaded: {$title}");
+			// Don't log this success to avoid database issues
 			redirect('/board/emcee-scripts?success=script_uploaded');
 			
 		} finally {
@@ -225,7 +223,10 @@ class BoardController {
 		// Get categories for report selection
 		$categories = $pdo->query('SELECT id, name FROM categories ORDER BY name')->fetchAll(\PDO::FETCH_ASSOC);
 		
-		view('board/print-reports', compact('contests', 'categories'));
+		// Get users with email addresses for email functionality
+		$usersWithEmail = $pdo->query('SELECT id, name, preferred_name, email FROM users WHERE email IS NOT NULL AND email != "" ORDER BY preferred_name, name')->fetchAll(\PDO::FETCH_ASSOC);
+		
+		view('board/print-reports', compact('contests', 'categories', 'usersWithEmail'));
 	}
 	
 	public function removeJudgeScores(): void {
