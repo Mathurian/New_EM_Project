@@ -8,8 +8,11 @@ echo "<h1>Event Manager Diagnostic</h1>\n";
 echo "<h2>1. File System Check</h2>\n";
 echo "Current directory: " . getcwd() . "<br>\n";
 echo "PHP version: " . phpversion() . "<br>\n";
+echo "Script directory: " . __DIR__ . "<br>\n";
+echo "Project root (estimated): " . dirname(__DIR__) . "<br>\n";
 
 echo "<h2>2. Required Files Check</h2>\n";
+$projectRoot = dirname(__DIR__);
 $requiredFiles = [
     'app/bootstrap.php',
     'app/lib/DB.php',
@@ -26,10 +29,14 @@ $requiredFiles = [
 ];
 
 foreach ($requiredFiles as $file) {
-    $exists = file_exists($file);
-    $readable = $exists ? is_readable($file) : false;
+    $fullPath = $projectRoot . '/' . $file;
+    $exists = file_exists($fullPath);
+    $readable = $exists ? is_readable($fullPath) : false;
     echo "$file: " . ($exists ? "EXISTS" : "MISSING") . 
          ($readable ? " (readable)" : ($exists ? " (not readable)" : "")) . "<br>\n";
+    if (!$exists) {
+        echo "&nbsp;&nbsp;&nbsp;&nbsp;Looking for: $fullPath<br>\n";
+    }
 }
 
 echo "<h2>3. Directory Permissions Check</h2>\n";
@@ -47,15 +54,19 @@ $dirs = [
 ];
 
 foreach ($dirs as $dir) {
-    $exists = is_dir($dir);
-    $writable = $exists ? is_writable($dir) : false;
+    $fullPath = $projectRoot . '/' . $dir;
+    $exists = is_dir($fullPath);
+    $writable = $exists ? is_writable($fullPath) : false;
     echo "$dir: " . ($exists ? "EXISTS" : "MISSING") . 
          ($writable ? " (writable)" : ($exists ? " (not writable)" : "")) . "<br>\n";
+    if (!$exists) {
+        echo "&nbsp;&nbsp;&nbsp;&nbsp;Looking for: $fullPath<br>\n";
+    }
 }
 
 echo "<h2>4. Database Check</h2>\n";
 try {
-    $dbPath = 'app/db/contest.sqlite';
+    $dbPath = $projectRoot . '/app/db/contest.sqlite';
     echo "Database path: $dbPath<br>\n";
     echo "Database exists: " . (file_exists($dbPath) ? "YES" : "NO") . "<br>\n";
     
@@ -71,7 +82,7 @@ try {
 echo "<h2>5. Bootstrap Test</h2>\n";
 try {
     echo "Attempting to load bootstrap...<br>\n";
-    require_once 'app/bootstrap.php';
+    require_once $projectRoot . '/app/bootstrap.php';
     echo "Bootstrap loaded successfully!<br>\n";
     
     echo "Testing database connection...<br>\n";
@@ -97,6 +108,7 @@ try {
     $_SERVER['SCRIPT_NAME'] = '/public/index.php';
     
     // Simulate the login route
+    require_once $projectRoot . '/app/lib/Router.php';
     $router = new App\Router();
     $router->get('/login', 'AuthController@loginForm');
     
