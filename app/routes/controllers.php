@@ -3590,8 +3590,8 @@ class UserController {
 			$passwordHash = !empty($password) ? password_hash($password, PASSWORD_DEFAULT) : null;
 			
 			// Create user
-			$stmt = $pdo->prepare('INSERT INTO users (id, name, email, password_hash, role, preferred_name, gender, pronouns) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
-			$stmt->execute([$userId, $name, $email, $passwordHash, $role, $preferredName, $gender, $pronouns]);
+			$stmt = $pdo->prepare('INSERT INTO users (id, name, email, password_hash, role, preferred_name, gender, pronouns, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
+			$stmt->execute([$userId, $name, $email, $passwordHash, $role, $preferredName, $gender, $pronouns, date('c')]);
 			\App\Logger::debug('user_created', 'user', $userId, 
 				"User created successfully: name={$name}, email={$email}, role={$role}");
 			
@@ -3636,6 +3636,14 @@ class UserController {
 					\App\Logger::debug('contestant_category_assigned', 'contestant', $contestantId, 
 						"Contestant assigned to category: contestant_id={$contestantId}, category_id={$categoryId}");
 				}
+			} elseif (in_array($role, ['organizer', 'emcee', 'tally_master', 'auditor'])) {
+				// These roles only need the user record - no additional tables required
+				\App\Logger::debug('simple_user_created', $role, $userId, 
+					"Simple user created: name={$name}, email={$email}, role={$role}");
+			} else {
+				// Unknown role - log warning but continue
+				\App\Logger::debug('unknown_role_created', $role, $userId, 
+					"User created with unknown role: name={$name}, email={$email}, role={$role}");
 			}
 			
 			$pdo->commit();
