@@ -465,7 +465,7 @@ class BoardController {
 				$categories = $categories->fetchAll(\PDO::FETCH_ASSOC);
 				
 				if (!empty($categories)) {
-					$html .= '<h2>' . htmlspecialchars($contest['contest_name']) . '</h2>';
+					$html .= '<h2>' . htmlspecialchars($contest['contest_name'] ?? '') . '</h2>';
 					
 					foreach ($categories as $category) {
 						// Get judges for this category with their certification status
@@ -493,13 +493,13 @@ class BoardController {
 						$judges = $judges->fetchAll(\PDO::FETCH_ASSOC);
 						
 						if (!empty($judges)) {
-							$html .= '<h3>' . htmlspecialchars($category['category_name']) . '</h3>';
+							$html .= '<h3>' . htmlspecialchars($category['category_name'] ?? '') . '</h3>';
 							$html .= '<table border="1" cellpadding="5" cellspacing="0" style="border-collapse: collapse; width: 100%; margin-bottom: 20px;">';
 							$html .= '<tr style="background-color: #f2f2f2;"><th>Preferred Name</th><th>Certified Categories</th><th>Total Categories</th></tr>';
 							
 							foreach ($judges as $judge) {
 								$html .= '<tr>';
-								$html .= '<td>' . htmlspecialchars($judge['judge_name']) . '</td>';
+								$html .= '<td>' . htmlspecialchars($judge['judge_name'] ?? '') . '</td>';
 								$html .= '<td>' . ($judge['certified_categories'] ?? 0) . '</td>';
 								$html .= '<td>' . ($judge['total_categories'] ?? 0) . '</td>';
 								$html .= '</tr>';
