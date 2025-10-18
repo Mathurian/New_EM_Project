@@ -391,6 +391,7 @@ function get_user_validation_rules(): array {
 		'max' => 9999
 	]
 ];
+}
 
 // Error Handling Functions
 function handle_error(string $message, int $code = 500, array $context = []): void {
