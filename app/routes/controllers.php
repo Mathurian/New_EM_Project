@@ -5178,10 +5178,11 @@ class AdminController {
 		$originalFilename = $_FILES['script_file']['name'];
 		
 		// File uploaded successfully
-			$description = trim($_POST['description'] ?? '');
-			$fileSize = $_FILES['script_file']['size'];
-			$uploadedAt = date('Y-m-d H:i:s');
-			
+		$description = trim($_POST['description'] ?? '');
+		$fileSize = $_FILES['script_file']['size'];
+		$uploadedAt = date('Y-m-d H:i:s');
+		
+		if (move_uploaded_file($_FILES['script_file']['tmp_name'], $filepath)) {
 			try {
 				// Debug: Check if table exists and what columns it has
 				$tableInfo = DB::pdo()->query("PRAGMA table_info(emcee_scripts)")->fetchAll(\PDO::FETCH_ASSOC);

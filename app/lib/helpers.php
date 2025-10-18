@@ -380,8 +380,8 @@ function get_user_validation_rules(): array {
 			'pattern' => '/^[a-zA-Z\s\-\'\.]*$/'
 		],
 		'gender' => [
-		'in' => ['male', 'female', 'non-binary', 'other', 'prefer-not-to-say']
-	],
+			'in' => ['male', 'female', 'non-binary', 'other', 'prefer-not-to-say']
+		],
 	'pronouns' => [
 		'max_length' => 50
 	],
