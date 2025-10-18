@@ -76,7 +76,7 @@
 		<h3>👤 My Profile</h3>
 		<p>Manage your personal information and password.</p>
 		<div class="card-actions">
-			<a href="<?= url('my-profile') ?>" class="btn btn-secondary">Edit Profile</a>
+			<a href="<?= url('profile') ?>" class="btn btn-secondary">Edit Profile</a>
 		</div>
 	</div>
 </div>

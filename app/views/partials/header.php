@@ -143,6 +143,14 @@
 						<a href="/auditor/final-certification" class="role-specific-link">Final Certification</a>
 						<a href="/auditor/summary" class="role-specific-link">Summary</a>
 					<?php endif; ?>
+					
+					<!-- Board Navigation Items -->
+					<?php if (($_SESSION['user']['role'] ?? '') === 'board'): ?>
+						<a href="/board/certification-status" class="role-specific-link">Certification Status</a>
+						<a href="/board/emcee-scripts" class="role-specific-link">Emcee Scripts</a>
+						<a href="/board/print-reports" class="role-specific-link">Print Reports</a>
+						<a href="/board/remove-judge-scores" class="role-specific-link">Score Management</a>
+					<?php endif; ?>
                     
                     <!-- User Menu (Mobile Only) -->
                     <div class="nav-dropdown user-menu-mobile">
