@@ -119,9 +119,20 @@
 						<a href="/judge" class="role-specific-link">Judgy Time!</a>
 					<?php endif; ?>
 					
-					<?php if (($_SESSION['user']['role'] ?? '') === 'emcee' && can_view_nav('Contestant Bios')): ?>
-						<a href="/emcee" class="role-specific-link">Contestant Bios</a>
-                    <?php endif; ?>
+					<!-- Emcee Accordion -->
+					<?php if (($_SESSION['user']['role'] ?? '') === 'emcee'): ?>
+						<div class="nav-dropdown">
+							<a href="#" onclick="toggleDropdown('emcee')" class="nav-dropdown-trigger">
+								Emcee ▼
+							</a>
+							<div id="emcee-dropdown" class="dropdown-content" style="display: none;">
+								<a href="/emcee">Dashboard</a>
+								<a href="/emcee/scripts">Scripts</a>
+								<a href="/emcee/judges">Judges</a>
+								<a href="/emcee/contestants">Contestants</a>
+							</div>
+						</div>
+					<?php endif; ?>
                     
                     <!-- User Menu (Mobile Only) -->
                     <div class="nav-dropdown user-menu-mobile">

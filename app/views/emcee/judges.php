@@ -1,6 +1,5 @@
 <?php use function App\{url}; ?>
 <h2>Judges by Category</h2>
-<p><a href="<?= url('emcee') ?>">Back to Contestant Bios</a></p>
 
 <?php if (empty($groupedJudges)): ?>
 	<p>No judges assigned to contests yet.</p>

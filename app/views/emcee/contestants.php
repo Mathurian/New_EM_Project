@@ -1,5 +1,4 @@
 <h2>Contestant Bios</h2>
-<p><a href="/emcee">← Back to Emcee Dashboard</a></p>
 
 <?php if (!empty($contestants)): ?>
 <div class="contestants-section">

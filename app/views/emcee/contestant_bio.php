@@ -1,5 +1,4 @@
 <h2>Contestant Bio: <?= htmlspecialchars($contestant['name']) ?></h2>
-<p><a href="/emcee">Back to Contestant List</a></p>
 
 <div class="contestant-bio">
 	<?php if (!empty($contestant['image_path'])): ?>

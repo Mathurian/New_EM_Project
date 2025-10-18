@@ -1,5 +1,4 @@
 <h2>Emcee Dashboard</h2>
-<p><a href="/">Back to Home</a></p>
 
 <div class="emcee-dashboard">
 	<div class="dashboard-grid">
