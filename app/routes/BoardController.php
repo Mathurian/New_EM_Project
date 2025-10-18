@@ -114,30 +114,26 @@ class BoardController {
 		$filepath = $result['filePath'];
 		$originalFilename = $_FILES['script_file']['name'];
 		
-		// File uploaded successfully
+		// File uploaded successfully by secure_file_upload
 		$description = trim($_POST['description'] ?? '');
 		$fileSize = $_FILES['script_file']['size'];
 		$uploadedAt = date('Y-m-d H:i:s');
 		
-		if (move_uploaded_file($_FILES['script_file']['tmp_name'], $filepath)) {
-			try {
-				// Use the same database insert as admin (with all columns)
-				$insertValues = [uuid(), $filename, '/uploads/emcee-scripts/' . $filename, 1, date('Y-m-d H:i:s'), current_user()['id'], $title, $description, $originalFilename, $fileSize, $uploadedAt];
-				
-				$stmt = DB::pdo()->prepare('INSERT INTO emcee_scripts (id, filename, file_path, is_active, created_at, uploaded_by, title, description, file_name, file_size, uploaded_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-				$stmt->execute($insertValues);
-				
-				redirect('/board/emcee-scripts?success=script_uploaded');
-			} catch (\Exception $e) {
-				// Clean up uploaded file if database insert fails
-				if (file_exists($filepath)) {
-					unlink($filepath);
-				}
-				// Redirect with error details for debugging
-				redirect('/board/emcee-scripts?error=file_save_failed&details=' . urlencode($e->getMessage()));
+		try {
+			// Use the same database insert as admin (with all columns)
+			$insertValues = [uuid(), $filename, '/uploads/emcee-scripts/' . $filename, 1, date('Y-m-d H:i:s'), current_user()['id'], $title, $description, $originalFilename, $fileSize, $uploadedAt];
+			
+			$stmt = DB::pdo()->prepare('INSERT INTO emcee_scripts (id, filename, file_path, is_active, created_at, uploaded_by, title, description, file_name, file_size, uploaded_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+			$stmt->execute($insertValues);
+			
+			redirect('/board/emcee-scripts?success=script_uploaded');
+		} catch (\Exception $e) {
+			// Clean up uploaded file if database insert fails
+			if (file_exists($filepath)) {
+				unlink($filepath);
 			}
-		} else {
-			redirect('/board/emcee-scripts?error=file_save_failed');
+			// Redirect with error details for debugging
+			redirect('/board/emcee-scripts?error=file_save_failed&details=' . urlencode($e->getMessage()));
 		}
 	}
 	
