@@ -452,7 +452,6 @@ function global_exception_handler(\Throwable $e): void {
 		'line' => $e->getLine()
 	]);
 }
-}
 
 function get_contest_validation_rules(): array {
 	return [
