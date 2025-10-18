@@ -1,5 +1,5 @@
 <?php 
-use function App\{url, hierarchical_back_url, home_url}; 
+use function App\{url, hierarchical_back_url, home_url, csrf_field}; 
 $title = 'Log Files';
 ?>
 
@@ -45,6 +45,7 @@ $title = 'Log Files';
 						</div>
 						<div class="col-md-6">
 							<form method="POST" action="<?= url('admin/log-files/cleanup') ?>" class="d-inline">
+								<?= csrf_field() ?>
 								<div class="input-group">
 									<input type="number" name="days_to_keep" value="30" min="1" max="365" class="form-control" placeholder="Days to keep">
 									<button type="submit" class="btn btn-warning" onclick="return confirm('This will permanently delete old log files. Continue?')">
