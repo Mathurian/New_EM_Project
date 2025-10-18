@@ -5244,7 +5244,7 @@ class AdminController {
 		\App\Logger::debug('email_report_request', 'report', null, 
 			"POST data: " . json_encode($_POST));
 		
-		$reportType = post('report_type'); // contestant|judge|category
+		$reportType = post('report_type'); // contestant|judge|category|contest|contestant_summary|judge_summary
 		$entityId = post('entity_id');
 		$toEmail = trim((string)post('to_email'));
 		$userId = trim((string)post('user_id'));
@@ -5331,6 +5331,161 @@ class AdminController {
 				
 				$html = \App\render_to_string('print/category', compact('category','subcategories','scores','contestants','isEmail'));
 				$subject = 'Category Report: ' . ($category['name'] ?? '');
+			} elseif ($reportType === 'contest') {
+				// Board: Contest Summary Report
+				$contest = DB::pdo()->prepare('SELECT * FROM contests WHERE id = ?');
+				$contest->execute([$entityId]);
+				$contest = $contest->fetch(\PDO::FETCH_ASSOC);
+				
+				if (!$contest) {
+					redirect('/admin/print-reports?error=contest_not_found');
+					return;
+				}
+				
+				// Get all categories for this contest
+				$categories = DB::pdo()->prepare('SELECT * FROM categories WHERE contest_id = ? ORDER BY name');
+				$categories->execute([$entityId]);
+				$categories = $categories->fetchAll(\PDO::FETCH_ASSOC);
+				
+				// Get summary data for each category
+				$categoryData = [];
+				foreach ($categories as $category) {
+					// Get contestants with their total scores for this category
+					$contestants = calculate_contestant_totals_for_category($category['id']);
+					$categoryData[] = [
+						'category' => $category,
+						'contestants' => $contestants
+					];
+				}
+				
+				$html = \App\render_to_string('board/contest-summary', compact('contest','categories','categoryData','isEmail'));
+				$subject = 'Contest Summary: ' . ($contest['name'] ?? '');
+				
+			} elseif ($reportType === 'contestant_summary') {
+				// Board: Contestant Summary Report
+				$pdo = DB::pdo();
+				
+				// Get all contestants with their scores - simplified query
+				$contestants = $pdo->query('
+					SELECT c.id, c.name, c.contestant_number,
+					       COALESCE(COUNT(DISTINCT s.subcategory_id), 0) as subcategories_count,
+					       COALESCE(AVG(s.score), 0) as avg_score,
+					       COALESCE(SUM(s.score), 0) as total_score
+					FROM contestants c
+					LEFT JOIN scores s ON c.id = s.contestant_id
+					GROUP BY c.id, c.name, c.contestant_number
+					ORDER BY total_score DESC, c.name
+				')->fetchAll(\PDO::FETCH_ASSOC);
+				
+				// Get contest statistics
+				$totalContestants = count($contestants);
+				$totalSubcategories = $pdo->query('SELECT COUNT(*) FROM subcategories')->fetchColumn();
+				
+				$html = '<html><body>';
+				$html .= '<h1>Contestant Summary Report</h1>';
+				$html .= '<p><strong>Total Contestants:</strong> ' . $totalContestants . '</p>';
+				$html .= '<p><strong>Total Subcategories:</strong> ' . $totalSubcategories . '</p>';
+				$html .= '<p><strong>Generated:</strong> ' . date('Y-m-d H:i:s') . '</p>';
+				
+				if (!empty($contestants)) {
+					$html .= '<h2>Contestant Rankings</h2>';
+					$html .= '<table border="1" cellpadding="5" cellspacing="0" style="border-collapse: collapse; width: 100%;">';
+					$html .= '<tr style="background-color: #f2f2f2;"><th>Rank</th><th>Name</th><th>Number</th><th>Total Score</th><th>Avg Score</th><th>Subcategories</th></tr>';
+					
+					$rank = 1;
+					foreach ($contestants as $contestant) {
+						$html .= '<tr>';
+						$html .= '<td>' . $rank++ . '</td>';
+						$html .= '<td>' . htmlspecialchars($contestant['name'] ?? '') . '</td>';
+						$html .= '<td>' . htmlspecialchars((string)($contestant['contestant_number'] ?? '')) . '</td>';
+						$html .= '<td>' . number_format($contestant['total_score'], 2) . '</td>';
+						$html .= '<td>' . number_format($contestant['avg_score'], 2) . '</td>';
+						$html .= '<td>' . $contestant['subcategories_count'] . '</td>';
+						$html .= '</tr>';
+					}
+					$html .= '</table>';
+				} else {
+					$html .= '<p>No contestants found.</p>';
+				}
+				
+				$html .= '</body></html>';
+				$subject = 'Contestant Summary Report';
+				
+			} elseif ($reportType === 'judge_summary') {
+				// Board: Judge Summary Report
+				$pdo = DB::pdo();
+				
+				// Get contests and their categories
+				$contests = $pdo->query('
+					SELECT c.id as contest_id, c.name as contest_name
+					FROM contests c
+					ORDER BY c.name
+				')->fetchAll(\PDO::FETCH_ASSOC);
+				
+				$html = '<html><body>';
+				$html .= '<h1>Judge Summary Report</h1>';
+				$html .= '<p><strong>Generated:</strong> ' . date('Y-m-d H:i:s') . '</p>';
+				
+				foreach ($contests as $contest) {
+					// Get categories for this contest
+					$categories = $pdo->prepare('
+						SELECT cat.id as category_id, cat.name as category_name
+						FROM categories cat
+						WHERE cat.contest_id = ?
+						ORDER BY cat.name
+					');
+					$categories->execute([$contest['contest_id']]);
+					$categories = $categories->fetchAll(\PDO::FETCH_ASSOC);
+					
+					if (!empty($categories)) {
+						$html .= '<h2>' . htmlspecialchars($contest['contest_name'] ?? '') . '</h2>';
+						
+						foreach ($categories as $category) {
+							// Get judges for this category with their certification status
+							$judges = $pdo->prepare('
+								SELECT COALESCE(u.preferred_name, u.name, j.name) as judge_name,
+								       COUNT(DISTINCT jc.subcategory_id) as certified_categories,
+								       COUNT(DISTINCT s.subcategory_id) as total_categories
+								FROM judges j
+								LEFT JOIN users u ON u.judge_id = j.id
+								LEFT JOIN scores s ON j.id = s.judge_id AND s.subcategory_id IN (
+									SELECT sc.id FROM subcategories sc WHERE sc.category_id = ?
+								)
+								LEFT JOIN judge_certifications jc ON j.id = jc.judge_id AND jc.certified_at IS NOT NULL AND jc.subcategory_id IN (
+									SELECT sc.id FROM subcategories sc WHERE sc.category_id = ?
+								)
+								WHERE EXISTS (
+									SELECT 1 FROM scores s2 
+									JOIN subcategories sc2 ON s2.subcategory_id = sc2.id 
+									WHERE s2.judge_id = j.id AND sc2.category_id = ?
+								)
+								GROUP BY j.id, u.preferred_name, u.name, j.name
+								ORDER BY judge_name
+							');
+							$judges->execute([$category['category_id'], $category['category_id'], $category['category_id']]);
+							$judges = $judges->fetchAll(\PDO::FETCH_ASSOC);
+							
+							if (!empty($judges)) {
+								$html .= '<h3>' . htmlspecialchars($category['category_name'] ?? '') . '</h3>';
+								$html .= '<table border="1" cellpadding="5" cellspacing="0" style="border-collapse: collapse; width: 100%; margin-bottom: 20px;">';
+								$html .= '<tr style="background-color: #f2f2f2;"><th>Preferred Name</th><th>Certified Categories</th><th>Total Categories</th></tr>';
+								
+								foreach ($judges as $judge) {
+									$html .= '<tr>';
+									$html .= '<td>' . htmlspecialchars($judge['judge_name'] ?? '') . '</td>';
+									$html .= '<td>' . ($judge['certified_categories'] ?? 0) . '</td>';
+									$html .= '<td>' . ($judge['total_categories'] ?? 0) . '</td>';
+									$html .= '</tr>';
+								}
+								$html .= '</table>';
+							}
+						}
+					}
+				}
+				
+				$html .= '</body></html>';
+				$subject = 'Judge Summary Report';
+				
 			} else {
 				redirect('/admin/print-reports?error=invalid_report_type');
 				return;

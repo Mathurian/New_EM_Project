@@ -71,7 +71,7 @@
 				</select>
 				<div class="action-buttons">
 					<button type="button" class="btn btn-primary" onclick="generateContestSummary()">Generate Summary</button>
-					<form method="post" action="/board/print-reports/email" class="email-form" onsubmit="return validateEmailForm(this)">
+					<form method="post" action="/admin/print-reports/email" class="email-form" onsubmit="return validateEmailForm(this)">
 						<?= csrf_field() ?>
 						<input type="hidden" name="report_type" value="contest" />
 						<input type="hidden" name="entity_id" value="" id="contest_email_id" />
@@ -104,7 +104,7 @@
 				</select>
 				<div class="action-buttons">
 					<button type="button" class="btn btn-primary" onclick="generateContestResults()">Generate Results</button>
-					<form method="post" action="/board/print-reports/email" class="email-form" onsubmit="return validateEmailForm(this)">
+					<form method="post" action="/admin/print-reports/email" class="email-form" onsubmit="return validateEmailForm(this)">
 						<?= csrf_field() ?>
 						<input type="hidden" name="report_type" value="category" />
 						<input type="hidden" name="entity_id" value="" id="category_email_id" />
@@ -130,7 +130,7 @@
 			<div class="report-form">
 				<div class="action-buttons">
 					<button type="button" class="btn btn-primary" onclick="generateContestantSummary()">Generate Summary</button>
-					<form method="post" action="/board/print-reports/email" class="email-form" onsubmit="return validateEmailForm(this)">
+					<form method="post" action="/admin/print-reports/email" class="email-form" onsubmit="return validateEmailForm(this)">
 						<?= csrf_field() ?>
 						<input type="hidden" name="report_type" value="contestant_summary" />
 						<input type="hidden" name="entity_id" value="" />
@@ -156,7 +156,7 @@
 			<div class="report-form">
 				<div class="action-buttons">
 					<button type="button" class="btn btn-primary" onclick="generateJudgeSummary()">Generate Summary</button>
-					<form method="post" action="/board/print-reports/email" class="email-form" onsubmit="return validateEmailForm(this)">
+					<form method="post" action="/admin/print-reports/email" class="email-form" onsubmit="return validateEmailForm(this)">
 						<?= csrf_field() ?>
 						<input type="hidden" name="report_type" value="judge_summary" />
 						<input type="hidden" name="entity_id" value="" />

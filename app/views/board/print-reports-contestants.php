@@ -59,7 +59,7 @@
 					</div>
 					<div class="report-actions">
 						<button onclick="openPrintWindow('<?= url('print/contestant/' . $contestant['id']) ?>')" class="btn btn-primary">🖨️ Print</button>
-						<form method="post" action="/board/print-reports/email" class="email-form" onsubmit="return validateEmailForm(this)">
+						<form method="post" action="/admin/print-reports/email" class="email-form" onsubmit="return validateEmailForm(this)">
 							<?= csrf_field() ?>
 							<input type="hidden" name="report_type" value="contestant" />
 							<input type="hidden" name="entity_id" value="<?= htmlspecialchars($contestant['id']) ?>" />
