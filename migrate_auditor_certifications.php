@@ -20,9 +20,9 @@ try {
             auditor_id VARCHAR(32) NOT NULL,
             certified_at DATETIME NULL,
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (auditor_id) REFERENCES users(id) ON DELETE CASCADE,
-            UNIQUE KEY unique_auditor_certification (auditor_id)
+            UNIQUE (auditor_id)
         )
     ";
     
