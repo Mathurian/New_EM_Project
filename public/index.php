@@ -118,6 +118,13 @@ $router->get('/tally-master/score-review', 'TallyMasterController@scoreReview');
 $router->get('/tally-master/certification', 'TallyMasterController@certification');
 $router->post('/tally-master/certify-totals', 'TallyMasterController@certifyTotals');
 
+// emcee
+$router->get('/emcee', 'EmceeController@index');
+$router->get('/emcee/scripts', 'EmceeController@scripts');
+$router->get('/emcee/contestants', 'EmceeController@contestants');
+$router->get('/emcee/scripts/{id}/stream', 'EmceeController@streamScript');
+$router->get('/emcee/contestants/{id}/bio', 'EmceeController@contestantBio');
+
 // auditor
 $router->get('/auditor', 'AuditorController@index');
 $router->get('/auditor/scores', 'AuditorController@scores');
