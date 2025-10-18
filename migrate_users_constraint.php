@@ -5,7 +5,6 @@
  */
 
 require_once __DIR__ . '/app/lib/DB.php';
-require_once __DIR__ . '/app/lib/Logger.php';
 
 echo "Updating users table CHECK constraint\n";
 echo "=====================================\n\n";
@@ -14,12 +13,10 @@ try {
     $pdo = App\DB::pdo();
     echo "✅ Database connection successful\n\n";
     
-    // Get current user types from the application
-    require_once __DIR__ . '/app/lib/helpers.php';
-    $userTypes = get_user_types();
-    $allowedRoles = array_keys($userTypes);
+    // Define current user types (hardcoded to avoid dependency issues)
+    $allowedRoles = ['organizer', 'judge', 'contestant', 'emcee', 'tally_master', 'auditor'];
     
-    echo "1. Current user types in application:\n";
+    echo "1. User types to include in constraint:\n";
     foreach ($allowedRoles as $role) {
         echo "   - {$role}\n";
     }
@@ -149,7 +146,8 @@ try {
         echo "   ✅ Test auditor user created successfully\n";
         
         // Clean up test user
-        $pdo->exec("DELETE FROM users WHERE id = ?");
+        $stmt = $pdo->prepare("DELETE FROM users WHERE id = ?");
+        $stmt->execute([$testUserId]);
         echo "   ✅ Test user cleaned up\n";
         
         echo "\n🎉 CHECK constraint update completed successfully!\n";
@@ -160,8 +158,7 @@ try {
         echo "   ✅ Recreated all indexes\n";
         echo "\n🚀 All user types can now be created successfully!\n";
         
-        // Log the migration
-        App\Logger::info('migration', 'users_check_constraint_updated', null, "Updated users table CHECK constraint to include all user types");
+        // Migration completed successfully
         
     } catch (Exception $e) {
         $pdo->rollBack();
@@ -172,7 +169,6 @@ try {
     echo "❌ Migration failed: " . $e->getMessage() . "\n";
     echo "Stack trace:\n" . $e->getTraceAsString() . "\n";
     
-    // Log the failure
-    App\Logger::error('migration', 'users_check_constraint_failed', null, "Failed to update CHECK constraint: " . $e->getMessage());
+    // Migration failed
     exit(1);
 }
