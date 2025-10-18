@@ -5044,7 +5044,7 @@ class AdminController {
 		// Get all contestants, judges, and categories for print options
 		$contestants = DB::pdo()->query('SELECT * FROM contestants ORDER BY contestant_number IS NULL, contestant_number, name')->fetchAll(\PDO::FETCH_ASSOC);
 		$judges = DB::pdo()->query('SELECT * FROM judges ORDER BY name')->fetchAll(\PDO::FETCH_ASSOC);
-		$structure = DB::pdo()->query('SELECT c.*, co.name as contest_name FROM categories c JOIN contests co ON c.contest_id = co.id ORDER BY co.name, c.name')->fetchAll(\PDO::FETCH_ASSOC);
+		$structure = DB::pdo()->query('SELECT c.id, c.name, co.name as contest_name, co.id as contest_id FROM categories c JOIN contests co ON c.contest_id = co.id ORDER BY co.name, c.name')->fetchAll(\PDO::FETCH_ASSOC);
 		$usersWithEmail = DB::pdo()->query('SELECT id, preferred_name, name, email FROM users WHERE email IS NOT NULL AND email != "" ORDER BY preferred_name IS NULL, preferred_name, name')->fetchAll(\PDO::FETCH_ASSOC);
 		
 		view('admin/print_reports', compact('contestants', 'judges', 'structure', 'usersWithEmail'));
@@ -5126,7 +5126,23 @@ class AdminController {
 				$scoresStmt = DB::pdo()->prepare('SELECT s.*, sc.name as subcategory_name, cr.name as criterion_name, con.name as contestant_name, j.name as judge_name FROM scores s JOIN subcategories sc ON s.subcategory_id = sc.id JOIN criteria cr ON s.criterion_id = cr.id JOIN contestants con ON s.contestant_id = con.id JOIN judges j ON s.judge_id = j.id WHERE sc.category_id = ? ORDER BY sc.name, con.name, cr.name, j.name');
 				$scoresStmt->execute([$entityId]);
 				$scores = $scoresStmt->fetchAll(\PDO::FETCH_ASSOC);
-				$html = \App\render_to_string('print/category', compact('category','subcategories','scores','isEmail'));
+				
+				// Get contestants with their total scores for this category
+				$contestantsStmt = DB::pdo()->prepare('
+					SELECT con.*, 
+						COALESCE(SUM(s.score), 0) as total_score
+					FROM contestants con
+					JOIN subcategory_contestants sc ON con.id = sc.contestant_id
+					JOIN subcategories sub ON sc.subcategory_id = sub.id
+					LEFT JOIN scores s ON con.id = s.contestant_id AND sub.id = s.subcategory_id
+					WHERE sub.category_id = ?
+					GROUP BY con.id, con.name, con.email, con.gender, con.pronouns, con.contestant_number, con.bio, con.image_path
+					ORDER BY total_score DESC, con.name
+				');
+				$contestantsStmt->execute([$entityId]);
+				$contestants = $contestantsStmt->fetchAll(\PDO::FETCH_ASSOC);
+				
+				$html = \App\render_to_string('print/category', compact('category','subcategories','scores','contestants','isEmail'));
 				$subject = 'Category Report: ' . ($category['name'] ?? '');
 			} else {
 				redirect('/admin/print-reports?error=invalid_report_type');
@@ -5521,7 +5537,22 @@ class PrintController {
 		$scores->execute([$categoryId]);
 		$scores = $scores->fetchAll(\PDO::FETCH_ASSOC);
 		
-		view('print/category', compact('category', 'subcategories', 'scores'));
+		// Get contestants with their total scores for this category
+		$contestants = DB::pdo()->prepare('
+			SELECT con.*, 
+				COALESCE(SUM(s.score), 0) as total_score
+			FROM contestants con
+			JOIN subcategory_contestants sc ON con.id = sc.contestant_id
+			JOIN subcategories sub ON sc.subcategory_id = sub.id
+			LEFT JOIN scores s ON con.id = s.contestant_id AND sub.id = s.subcategory_id
+			WHERE sub.category_id = ?
+			GROUP BY con.id, con.name, con.email, con.gender, con.pronouns, con.contestant_number, con.bio, con.image_path
+			ORDER BY total_score DESC, con.name
+		');
+		$contestants->execute([$categoryId]);
+		$contestants = $contestants->fetchAll(\PDO::FETCH_ASSOC);
+		
+		view('print/category', compact('category', 'subcategories', 'scores', 'contestants'));
 	}
 }
 
