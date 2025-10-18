@@ -67,12 +67,12 @@ class AuditorController {
 		$sql = "
 			SELECT 
 				u.name as tally_master_name,
-				COUNT(DISTINCT jc.id) as total_certifications,
-				COUNT(DISTINCT j.id) as total_judges,
-				COUNT(DISTINCT CASE WHEN jc.certified_at IS NOT NULL THEN jc.id END) as certified_count
+				COUNT(DISTINCT tmc.id) as total_certifications,
+				COUNT(DISTINCT sc.id) as total_subcategories,
+				COUNT(DISTINCT CASE WHEN tmc.certified_at IS NOT NULL THEN tmc.id END) as certified_count
 			FROM users u
-			LEFT JOIN judge_certifications jc ON u.id = jc.tally_master_id
-			LEFT JOIN judges j ON jc.judge_id = j.id
+			LEFT JOIN tally_master_certifications tmc ON u.name = tmc.signature_name
+			LEFT JOIN subcategories sc ON tmc.subcategory_id = sc.id
 			WHERE u.role = 'tally_master'
 			GROUP BY u.id, u.name
 		";
@@ -80,16 +80,14 @@ class AuditorController {
 		$tallyMasterStatus = DB::pdo()->query($sql)->fetchAll(\PDO::FETCH_ASSOC);
 		
 		// Calculate overall completion status
-		$totalJudges = DB::pdo()->query('SELECT COUNT(*) FROM judges')->fetchColumn();
-		$totalCertifications = DB::pdo()->query('SELECT COUNT(*) FROM judge_certifications WHERE certified_at IS NOT NULL')->fetchColumn();
-		$expectedCertifications = $totalJudges; // Each judge should have one certification
+		$totalSubcategories = DB::pdo()->query('SELECT COUNT(*) FROM subcategories')->fetchColumn();
+		$totalCertifications = DB::pdo()->query('SELECT COUNT(*) FROM tally_master_certifications WHERE certified_at IS NOT NULL')->fetchColumn();
 		
 		$overallStatus = [
-			'total_judges' => $totalJudges,
+			'total_subcategories' => $totalSubcategories,
 			'total_certifications' => $totalCertifications,
-			'expected_certifications' => $expectedCertifications,
-			'completion_percentage' => $expectedCertifications > 0 ? round(($totalCertifications / $expectedCertifications) * 100, 2) : 0,
-			'is_complete' => $totalCertifications >= $expectedCertifications
+			'completion_percentage' => $totalSubcategories > 0 ? round(($totalCertifications / $totalSubcategories) * 100, 2) : 0,
+			'is_complete' => $totalCertifications >= $totalSubcategories
 		];
 		
 		view('auditor/tally-master-status', compact('tallyMasterStatus', 'overallStatus'));

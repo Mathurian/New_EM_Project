@@ -38,7 +38,7 @@
 											<td class="score-value"><?= htmlspecialchars($score['score']) ?></td>
 											<td><?= date('M j, Y', strtotime($score['created_at'])) ?></td>
 											<td>
-												<?php if ($score['certified_at']): ?>
+												<?php if (!empty($score['certified_at'])): ?>
 													<span class="status-certified">✅ Certified</span>
 												<?php else: ?>
 													<span class="status-pending">⏳ Pending</span>
