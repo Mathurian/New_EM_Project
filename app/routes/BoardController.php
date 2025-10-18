@@ -133,7 +133,8 @@ class BoardController {
 				if (file_exists($filepath)) {
 					unlink($filepath);
 				}
-				redirect('/board/emcee-scripts?error=file_save_failed');
+				// Redirect with error details for debugging
+				redirect('/board/emcee-scripts?error=file_save_failed&details=' . urlencode($e->getMessage()));
 			}
 		} else {
 			redirect('/board/emcee-scripts?error=file_save_failed');

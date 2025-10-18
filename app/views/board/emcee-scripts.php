@@ -4,6 +4,38 @@
 	<a href="/board" class="btn btn-outline">🏠 Dashboard</a>
 </div>
 
+<?php if (isset($_GET['error'])): ?>
+	<div class="alert alert-danger">
+		<?php if ($_GET['error'] === 'title_required'): ?>
+			Title is required.
+		<?php elseif ($_GET['error'] === 'file_upload_failed'): ?>
+			File upload failed. Please try again.
+		<?php elseif ($_GET['error'] === 'file_validation_failed'): ?>
+			File validation failed. Please check file type and size.
+		<?php elseif ($_GET['error'] === 'file_save_failed'): ?>
+			Failed to save file. <?= isset($_GET['details']) ? htmlspecialchars($_GET['details']) : '' ?>
+		<?php else: ?>
+			An error occurred: <?= htmlspecialchars($_GET['error']) ?>
+		<?php endif; ?>
+	</div>
+<?php endif; ?>
+
+<?php if (isset($_GET['success'])): ?>
+	<div class="alert alert-success">
+		<?php if ($_GET['success'] === 'script_uploaded'): ?>
+			Script uploaded successfully!
+		<?php elseif ($_GET['success'] === 'script_activated'): ?>
+			Script activated successfully!
+		<?php elseif ($_GET['success'] === 'script_deactivated'): ?>
+			Script deactivated successfully!
+		<?php elseif ($_GET['success'] === 'script_deleted'): ?>
+			Script deleted successfully!
+		<?php else: ?>
+			Operation completed successfully!
+		<?php endif; ?>
+	</div>
+<?php endif; ?>
+
 <div class="scripts-section">
 	<div class="section-header">
 		<h3>Upload New Script</h3>
@@ -85,6 +117,25 @@
 </div>
 
 <style>
+.alert {
+	padding: 12px 16px;
+	margin: 20px 0;
+	border-radius: 4px;
+	border: 1px solid;
+}
+
+.alert-danger {
+	background-color: #f8d7da;
+	border-color: #f5c6cb;
+	color: #721c24;
+}
+
+.alert-success {
+	background-color: #d4edda;
+	border-color: #c3e6cb;
+	color: #155724;
+}
+
 .scripts-section {
 	margin: 30px 0;
 	padding: 20px;
