@@ -5110,10 +5110,16 @@ class AdminController {
 				$subStmt = DB::pdo()->prepare('SELECT s.*, c.name as category_name FROM subcategories s JOIN categories c ON s.category_id = c.id JOIN subcategory_judges sj ON s.id = sj.subcategory_id WHERE sj.judge_id = ? ORDER BY c.name, s.name');
 				$subStmt->execute([$entityId]);
 				$subcategories = $subStmt->fetchAll(\PDO::FETCH_ASSOC);
-				$scoresStmt = DB::pdo()->prepare('SELECT s.*, sc.name as subcategory_name, cr.name as criterion_name, con.name as contestant_name FROM scores s JOIN subcategories sc ON s.subcategory_id = sc.id JOIN criteria cr ON s.criterion_id = cr.id JOIN contestants con ON s.contestant_id = con.id WHERE s.judge_id = ? ORDER BY sc.name, con.name, cr.name');
+				$scoresStmt = DB::pdo()->prepare('SELECT s.*, sc.name as subcategory_name, cr.name as criterion_name, cr.max_score, con.name as contestant_name, c.name as category_name, co.name as contest_name FROM scores s JOIN subcategories sc ON s.subcategory_id = sc.id JOIN categories c ON sc.category_id = c.id JOIN contests co ON c.contest_id = co.id JOIN criteria cr ON s.criterion_id = cr.id JOIN contestants con ON s.contestant_id = con.id WHERE s.judge_id = ? ORDER BY co.name, c.name, sc.name, con.name, cr.name');
 				$scoresStmt->execute([$entityId]);
 				$scores = $scoresStmt->fetchAll(\PDO::FETCH_ASSOC);
-				$html = \App\render_to_string('print/judge', compact('judge','subcategories','scores','isEmail'));
+				
+				// Get comments for this judge
+				$commentsStmt = DB::pdo()->prepare('SELECT jc.*, sc.name as subcategory_name, c.name as category_name, co.name as contest_name, con.name as contestant_name FROM judge_comments jc JOIN subcategories sc ON jc.subcategory_id = sc.id JOIN categories c ON sc.category_id = c.id JOIN contests co ON c.contest_id = co.id JOIN contestants con ON jc.contestant_id = con.id WHERE jc.judge_id = ? ORDER BY co.name, c.name, sc.name, con.name');
+				$commentsStmt->execute([$entityId]);
+				$comments = $commentsStmt->fetchAll(\PDO::FETCH_ASSOC);
+				
+				$html = \App\render_to_string('print/judge', compact('judge','subcategories','scores','comments','isEmail'));
 				$subject = 'Judge Report: ' . ($judge['name'] ?? '');
 			} elseif ($reportType === 'category') {
 				$catStmt = DB::pdo()->prepare('SELECT c.*, co.name as contest_name FROM categories c JOIN contests co ON c.contest_id = co.id WHERE c.id = ?');
@@ -5459,7 +5465,7 @@ class PrintController {
 		$deductions->execute([$contestantId]);
 		$deductions = $deductions->fetchAll(\PDO::FETCH_ASSOC);
 		
-		view('print/contestant', compact('contestant', 'subcategories', 'scores', 'comments', 'deductions'));
+		render('print/contestant', compact('contestant', 'subcategories', 'scores', 'comments', 'deductions'));
 	}
 	
 	public function judge(array $params): void {
@@ -5490,18 +5496,34 @@ class PrintController {
 		
 		// Get all scores for this judge
 		$scores = DB::pdo()->prepare('
-			SELECT s.*, sc.name as subcategory_name, cr.name as criterion_name, con.name as contestant_name
+			SELECT s.*, sc.name as subcategory_name, cr.name as criterion_name, cr.max_score, con.name as contestant_name, c.name as category_name, co.name as contest_name
 			FROM scores s 
 			JOIN subcategories sc ON s.subcategory_id = sc.id 
+			JOIN categories c ON sc.category_id = c.id
+			JOIN contests co ON c.contest_id = co.id
 			JOIN criteria cr ON s.criterion_id = cr.id 
 			JOIN contestants con ON s.contestant_id = con.id 
 			WHERE s.judge_id = ? 
-			ORDER BY sc.name, con.name, cr.name
+			ORDER BY co.name, c.name, sc.name, con.name, cr.name
 		');
 		$scores->execute([$judgeId]);
 		$scores = $scores->fetchAll(\PDO::FETCH_ASSOC);
 		
-		view('print/judge', compact('judge', 'subcategories', 'scores'));
+		// Get comments for this judge
+		$comments = DB::pdo()->prepare('
+			SELECT jc.*, sc.name as subcategory_name, c.name as category_name, co.name as contest_name, con.name as contestant_name
+			FROM judge_comments jc 
+			JOIN subcategories sc ON jc.subcategory_id = sc.id 
+			JOIN categories c ON sc.category_id = c.id
+			JOIN contests co ON c.contest_id = co.id
+			JOIN contestants con ON jc.contestant_id = con.id
+			WHERE jc.judge_id = ? 
+			ORDER BY co.name, c.name, sc.name, con.name
+		');
+		$comments->execute([$judgeId]);
+		$comments = $comments->fetchAll(\PDO::FETCH_ASSOC);
+		
+		render('print/judge', compact('judge', 'subcategories', 'scores', 'comments'));
 	}
 	
 	public function category(array $params): void {
@@ -5552,7 +5574,7 @@ class PrintController {
 		$contestants->execute([$categoryId]);
 		$contestants = $contestants->fetchAll(\PDO::FETCH_ASSOC);
 		
-		view('print/category', compact('category', 'subcategories', 'scores', 'contestants'));
+		render('print/category', compact('category', 'subcategories', 'scores', 'contestants'));
 	}
 }
 
