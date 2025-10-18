@@ -42,6 +42,7 @@
 			<?php if (!empty($contestant['gender'])): ?>
 				<p><strong>Gender:</strong> <?= htmlspecialchars($contestant['gender']) ?></p>
 			<?php endif; ?>
+			<p><strong>Total Score:</strong> <?= format_score_tabulation($tabulation, 'overall') ?></p>
 			<p><strong>Report Generated:</strong> <?= date('Y-m-d H:i:s') ?></p>
 		</div>
 	</div>

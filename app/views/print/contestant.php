@@ -41,6 +41,7 @@
             <p><strong>Contestant:</strong> <?= htmlspecialchars($contestant['name']) ?> (Number: <?= htmlspecialchars($contestant['contestant_number'] ?? 'N/A') ?>)</p>
             <p><strong>Email:</strong> <?= htmlspecialchars($contestant['email'] ?? 'N/A') ?></p>
             <p><strong>Gender:</strong> <?= htmlspecialchars($contestant['gender'] ?? 'N/A') ?></p>
+            <p><strong>Total Score:</strong> <?= format_score_tabulation($tabulation, 'overall') ?></p>
             <p><strong>Report Generated:</strong> <?= date('Y-m-d H:i:s') ?></p>
         </div>
 
@@ -56,14 +57,26 @@
             ?>
             
             <?php foreach ($groupedScores as $contestName => $categories): ?>
-                <h2><?= htmlspecialchars($contestName) ?></h2>
+                <h2><?= htmlspecialchars($contestName) ?> 
+                    <span style="font-size: 0.8em; font-weight: normal; color: #666;">
+                        (<?= format_score_tabulation($tabulation['by_contest'][$contestName] ?? ['current' => 0, 'possible' => 0]) ?>)
+                    </span>
+                </h2>
                 
                 <?php foreach ($categories as $categoryName => $subcategories): ?>
-                    <h3><?= htmlspecialchars($categoryName) ?></h3>
+                    <h3><?= htmlspecialchars($categoryName) ?> 
+                        <span style="font-size: 0.8em; font-weight: normal; color: #666;">
+                            (<?= format_score_tabulation($tabulation['by_category'][$categoryName] ?? ['current' => 0, 'possible' => 0]) ?>)
+                        </span>
+                    </h3>
                     
                     <?php foreach ($subcategories as $subcategoryName => $subcategoryScores): ?>
                         <div class="category-section">
-                            <h4><?= htmlspecialchars($subcategoryName) ?></h4>
+                            <h4><?= htmlspecialchars($subcategoryName) ?> 
+                                <span style="font-size: 0.8em; font-weight: normal; color: #666;">
+                                    (<?= format_score_tabulation($tabulation['by_subcategory'][$subcategoryName] ?? ['current' => 0, 'possible' => 0]) ?>)
+                                </span>
+                            </h4>
                             
                             <table>
                                 <thead>

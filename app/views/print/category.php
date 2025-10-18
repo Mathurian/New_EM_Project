@@ -41,6 +41,7 @@
             <p><strong>Contest:</strong> <?= htmlspecialchars($category['contest_name']) ?></p>
             <p><strong>Contest:</strong> <?= htmlspecialchars($category['name']) ?></p>
             <p><strong>Description:</strong> <?= htmlspecialchars($category['description'] ?? 'N/A') ?></p>
+            <p><strong>Total Score:</strong> <?= format_score_tabulation($tabulation, 'overall') ?></p>
             <p><strong>Report Generated:</strong> <?= date('Y-m-d H:i:s') ?></p>
         </div>
 
@@ -56,6 +57,9 @@
                             <?php if ($subcategory['score_cap']): ?>
                                 (Score Cap: <?= htmlspecialchars($subcategory['score_cap']) ?>)
                             <?php endif; ?>
+                            <span style="color: #666; font-size: 0.9em;">
+                                - <?= format_score_tabulation($tabulation['by_subcategory'][$subcategory['name']] ?? ['current' => 0, 'possible' => 0]) ?>
+                            </span>
                         </li>
                     <?php endforeach; ?>
                 </ul>

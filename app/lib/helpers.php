@@ -665,5 +665,114 @@ function home_url(): string {
 	}
 }
 
+// Score Tabulation Helper Functions
+function calculate_score_tabulation(array $scores): array {
+	$tabulation = [
+		'total_current' => 0,
+		'total_possible' => 0,
+		'by_contest' => [],
+		'by_category' => [],
+		'by_subcategory' => []
+	];
+	
+	foreach ($scores as $score) {
+		$current = (float)$score['score'];
+		$possible = (float)$score['max_score'];
+		
+		// Overall totals
+		$tabulation['total_current'] += $current;
+		$tabulation['total_possible'] += $possible;
+		
+		// By contest
+		$contestName = $score['contest_name'] ?? 'Unknown Contest';
+		if (!isset($tabulation['by_contest'][$contestName])) {
+			$tabulation['by_contest'][$contestName] = ['current' => 0, 'possible' => 0];
+		}
+		$tabulation['by_contest'][$contestName]['current'] += $current;
+		$tabulation['by_contest'][$contestName]['possible'] += $possible;
+		
+		// By category
+		$categoryName = $score['category_name'] ?? 'Unknown Category';
+		if (!isset($tabulation['by_category'][$categoryName])) {
+			$tabulation['by_category'][$categoryName] = ['current' => 0, 'possible' => 0];
+		}
+		$tabulation['by_category'][$categoryName]['current'] += $current;
+		$tabulation['by_category'][$categoryName]['possible'] += $possible;
+		
+		// By subcategory
+		$subcategoryName = $score['subcategory_name'] ?? 'Unknown Subcategory';
+		if (!isset($tabulation['by_subcategory'][$subcategoryName])) {
+			$tabulation['by_subcategory'][$subcategoryName] = ['current' => 0, 'possible' => 0];
+		}
+		$tabulation['by_subcategory'][$subcategoryName]['current'] += $current;
+		$tabulation['by_subcategory'][$subcategoryName]['possible'] += $possible;
+	}
+	
+	return $tabulation;
+}
+
+function format_score_tabulation(array $tabulation, string $level = 'overall'): string {
+	if ($level === 'overall') {
+		$current = $tabulation['total_current'];
+		$possible = $tabulation['total_possible'];
+	} else {
+		$current = $tabulation['current'] ?? 0;
+		$possible = $tabulation['possible'] ?? 0;
+	}
+	
+	if ($possible > 0) {
+		$percentage = number_format(($current / $possible) * 100, 1);
+		return number_format($current, 1) . ' / ' . number_format($possible, 1) . ' (' . $percentage . '%)';
+	}
+	
+	return number_format($current, 1) . ' / ' . number_format($possible, 1) . ' (N/A%)';
+}
+
+function get_contestant_total_score(string $contestantId): array {
+	$stmt = DB::pdo()->prepare('
+		SELECT 
+			COALESCE(SUM(s.score), 0) as total_current,
+			COALESCE(SUM(cr.max_score), 0) as total_possible
+		FROM contestants con
+		JOIN subcategory_contestants sc ON con.id = sc.contestant_id
+		JOIN subcategories sub ON sc.subcategory_id = sub.id
+		LEFT JOIN scores s ON con.id = s.contestant_id AND sub.id = s.subcategory_id
+		LEFT JOIN criteria cr ON s.criterion_id = cr.id
+		WHERE con.id = ?
+	');
+	$stmt->execute([$contestantId]);
+	return $stmt->fetch(\PDO::FETCH_ASSOC) ?: ['total_current' => 0, 'total_possible' => 0];
+}
+
+function get_judge_total_score(string $judgeId): array {
+	$stmt = DB::pdo()->prepare('
+		SELECT 
+			COALESCE(SUM(s.score), 0) as total_current,
+			COALESCE(SUM(cr.max_score), 0) as total_possible
+		FROM judges j
+		JOIN subcategory_judges sj ON j.id = sj.judge_id
+		JOIN subcategories sub ON sj.subcategory_id = sub.id
+		LEFT JOIN scores s ON j.id = s.judge_id AND sub.id = s.subcategory_id
+		LEFT JOIN criteria cr ON s.criterion_id = cr.id
+		WHERE j.id = ?
+	');
+	$stmt->execute([$judgeId]);
+	return $stmt->fetch(\PDO::FETCH_ASSOC) ?: ['total_current' => 0, 'total_possible' => 0];
+}
+
+function get_category_total_score(string $categoryId): array {
+	$stmt = DB::pdo()->prepare('
+		SELECT 
+			COALESCE(SUM(s.score), 0) as total_current,
+			COALESCE(SUM(cr.max_score), 0) as total_possible
+		FROM categories c
+		JOIN subcategories sub ON c.id = sub.category_id
+		LEFT JOIN scores s ON sub.id = s.subcategory_id
+		LEFT JOIN criteria cr ON s.criterion_id = cr.id
+		WHERE c.id = ?
+	');
+	$stmt->execute([$categoryId]);
+	return $stmt->fetch(\PDO::FETCH_ASSOC) ?: ['total_current' => 0, 'total_possible' => 0];
+}
 
 

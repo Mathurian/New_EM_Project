@@ -5100,7 +5100,10 @@ class AdminController {
 				$dedStmt->execute([$entityId]);
 				$deductions = $dedStmt->fetchAll(\PDO::FETCH_ASSOC);
 				
-				$html = \App\render_to_string('print/contestant', compact('contestant','subcategories','scores','comments','deductions','isEmail'));
+				// Calculate score tabulation
+				$tabulation = calculate_score_tabulation($scores);
+				
+				$html = \App\render_to_string('print/contestant', compact('contestant','subcategories','scores','comments','deductions','tabulation','isEmail'));
 				$subject = 'Contestant Report: ' . ($contestant['name'] ?? '');
 			} elseif ($reportType === 'judge') {
 				$judgeStmt = DB::pdo()->prepare('SELECT * FROM judges WHERE id = ?');
@@ -5119,7 +5122,10 @@ class AdminController {
 				$commentsStmt->execute([$entityId]);
 				$comments = $commentsStmt->fetchAll(\PDO::FETCH_ASSOC);
 				
-				$html = \App\render_to_string('print/judge', compact('judge','subcategories','scores','comments','isEmail'));
+				// Calculate score tabulation
+				$tabulation = calculate_score_tabulation($scores);
+				
+				$html = \App\render_to_string('print/judge', compact('judge','subcategories','scores','comments','tabulation','isEmail'));
 				$subject = 'Judge Report: ' . ($judge['name'] ?? '');
 			} elseif ($reportType === 'category') {
 				$catStmt = DB::pdo()->prepare('SELECT c.*, co.name as contest_name FROM categories c JOIN contests co ON c.contest_id = co.id WHERE c.id = ?');
@@ -5148,7 +5154,10 @@ class AdminController {
 				$contestantsStmt->execute([$entityId]);
 				$contestants = $contestantsStmt->fetchAll(\PDO::FETCH_ASSOC);
 				
-				$html = \App\render_to_string('print/category', compact('category','subcategories','scores','contestants','isEmail'));
+				// Calculate score tabulation
+				$tabulation = calculate_score_tabulation($scores);
+				
+				$html = \App\render_to_string('print/category', compact('category','subcategories','scores','contestants','tabulation','isEmail'));
 				$subject = 'Category Report: ' . ($category['name'] ?? '');
 			} else {
 				redirect('/admin/print-reports?error=invalid_report_type');
@@ -5305,7 +5314,7 @@ class AdminController {
 		
 		// Get all scores for this contestant
 		$scores = DB::pdo()->prepare('
-			SELECT s.*, sc.name as subcategory_name, cr.name as criterion_name, j.name as judge_name
+			SELECT s.*, sc.name as subcategory_name, cr.name as criterion_name, cr.max_score, j.name as judge_name
 			FROM scores s 
 			JOIN subcategories sc ON s.subcategory_id = sc.id 
 			JOIN criteria cr ON s.criterion_id = cr.id 
@@ -5328,7 +5337,10 @@ class AdminController {
 		$comments->execute([$contestantId]);
 		$comments = $comments->fetchAll(\PDO::FETCH_ASSOC);
 		
-		view('admin/contestant_scores', compact('contestant', 'subcategories', 'scores', 'comments'));
+		// Calculate score tabulation
+		$tabulation = calculate_score_tabulation($scores);
+		
+		view('admin/contestant_scores', compact('contestant', 'subcategories', 'scores', 'comments', 'tabulation'));
 	}
 }
 
@@ -5465,7 +5477,10 @@ class PrintController {
 		$deductions->execute([$contestantId]);
 		$deductions = $deductions->fetchAll(\PDO::FETCH_ASSOC);
 		
-		render('print/contestant', compact('contestant', 'subcategories', 'scores', 'comments', 'deductions'));
+		// Calculate score tabulation
+		$tabulation = calculate_score_tabulation($scores);
+		
+		render('print/contestant', compact('contestant', 'subcategories', 'scores', 'comments', 'deductions', 'tabulation'));
 	}
 	
 	public function judge(array $params): void {
@@ -5523,7 +5538,10 @@ class PrintController {
 		$comments->execute([$judgeId]);
 		$comments = $comments->fetchAll(\PDO::FETCH_ASSOC);
 		
-		render('print/judge', compact('judge', 'subcategories', 'scores', 'comments'));
+		// Calculate score tabulation
+		$tabulation = calculate_score_tabulation($scores);
+		
+		render('print/judge', compact('judge', 'subcategories', 'scores', 'comments', 'tabulation'));
 	}
 	
 	public function category(array $params): void {
@@ -5574,7 +5592,10 @@ class PrintController {
 		$contestants->execute([$categoryId]);
 		$contestants = $contestants->fetchAll(\PDO::FETCH_ASSOC);
 		
-		render('print/category', compact('category', 'subcategories', 'scores', 'contestants'));
+		// Calculate score tabulation
+		$tabulation = calculate_score_tabulation($scores);
+		
+		render('print/category', compact('category', 'subcategories', 'scores', 'contestants', 'tabulation'));
 	}
 }
 
