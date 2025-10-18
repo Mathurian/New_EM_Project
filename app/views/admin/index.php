@@ -8,6 +8,10 @@
 		<h3>📊 System Overview</h3>
 		<div class="stats-grid">
 			<?php
+			// Get the current active contest (most recent one)
+			$currentContest = DB::pdo()->query('SELECT * FROM contests ORDER BY start_date DESC LIMIT 1')->fetch(\PDO::FETCH_ASSOC);
+			$currentContestId = $currentContest['id'] ?? null;
+			
 			$stats = [
 				'Total Users' => DB::pdo()->query('SELECT COUNT(*) FROM users')->fetchColumn(),
 				'Active Judges' => DB::pdo()->query('SELECT COUNT(*) FROM users WHERE role = "judge"')->fetchColumn(),
@@ -27,9 +31,9 @@
 					'Active Judges' => url('admin/judges'),
 					'Contestants' => url('admin/contestants'),
 					'Emcees' => url('admin/users'), // Use users page since no dedicated emcee admin page
-					'Contests' => url('contests'),
-					'Categories' => url('contests'), // Categories are managed within contests
-					'Subcategories' => url('contests'), // Subcategories are managed within contests
+					'Contests' => $currentContestId ? url('contests/' . $currentContestId . '/categories') : url('contests'),
+					'Categories' => $currentContestId ? url('contests/' . $currentContestId . '/categories') : url('contests'),
+					'Subcategories' => $currentContestId ? url('contests/' . $currentContestId . '/subcategories') : url('contests'),
 					'Templates' => url('admin/templates')
 				];
 				$url = $clickableUrls[$label] ?? null;
