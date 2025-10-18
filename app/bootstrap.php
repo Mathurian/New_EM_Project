@@ -59,6 +59,18 @@ if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity'] > 
 // Update last activity time
 $_SESSION['last_activity'] = time();
 
-App\DB::migrate();
+// Only run migration if database doesn't exist or is empty
+try {
+	$pdo = App\DB::pdo();
+	$stmt = $pdo->query("SELECT name FROM sqlite_master WHERE type='table' AND name='users'");
+	if (!$stmt->fetch()) {
+		// Database is empty, run migration
+		App\DB::migrate();
+	}
+} catch (\Exception $e) {
+	// If we can't check the database, try to run migration
+	error_log('Bootstrap: Could not check database state, running migration: ' . $e->getMessage());
+	App\DB::migrate();
+}
 
 
