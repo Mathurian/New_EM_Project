@@ -1,0 +1,23 @@
+RewriteEngine On
+
+# Set MIME types for static assets
+<FilesMatch "\.(css)$">
+    Header set Content-Type "text/css; charset=UTF-8"
+</FilesMatch>
+
+<FilesMatch "\.(js)$">
+    Header set Content-Type "application/javascript; charset=UTF-8"
+</FilesMatch>
+
+<FilesMatch "\.(json)$">
+    Header set Content-Type "application/json; charset=UTF-8"
+</FilesMatch>
+
+# Serve static assets directly
+RewriteCond %{REQUEST_FILENAME} -f
+RewriteRule ^assets/(.*)$ assets/$1 [L]
+
+# Route all other requests to index.php
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^(.*)$ index.php [QSA,L]
