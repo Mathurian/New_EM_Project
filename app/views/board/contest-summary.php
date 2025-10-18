@@ -71,16 +71,16 @@
                                 <?php 
                                 // Sort contestants by total score (descending)
                                 usort($data['contestants'], function($a, $b) {
-                                    return $b['total_score'] <=> $a['total_score'];
+                                    return $b['total_current'] <=> $a['total_current'];
                                 });
                                 
                                 $rank = 1;
                                 foreach ($data['contestants'] as $contestant): 
                                 ?>
                                     <tr>
-                                        <td><?= htmlspecialchars($contestant['name']) ?></td>
+                                        <td><?= htmlspecialchars($contestant['contestant_name']) ?></td>
                                         <td><?= htmlspecialchars($contestant['contestant_number'] ?? '') ?></td>
-                                        <td><?= number_format($contestant['total_score'], 2) ?></td>
+                                        <td><?= number_format($contestant['total_current'], 2) ?></td>
                                         <td><?= $rank++ ?></td>
                                     </tr>
                                 <?php endforeach; ?>

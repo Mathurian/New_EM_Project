@@ -396,11 +396,11 @@ class BoardController {
 			$contestants = $pdo->query('
 				SELECT c.*, 
 				       COUNT(DISTINCT s.subcategory_id) as subcategories_count,
-				       AVG(s.score) as avg_score,
-				       SUM(s.score) as total_score
+				       COALESCE(AVG(s.score), 0) as avg_score,
+				       COALESCE(SUM(s.score), 0) as total_score
 				FROM contestants c
 				LEFT JOIN scores s ON c.id = s.contestant_id
-				GROUP BY c.id
+				GROUP BY c.id, c.name, c.contestant_number
 				ORDER BY total_score DESC, c.name
 			')->fetchAll(\PDO::FETCH_ASSOC);
 			
@@ -448,11 +448,11 @@ class BoardController {
 				       COUNT(DISTINCT jc.subcategory_id) as certified_subcategories,
 				       COUNT(DISTINCT s.subcategory_id) as total_subcategories,
 				       COUNT(s.id) as total_scores,
-				       AVG(s.score) as avg_score
+				       COALESCE(AVG(s.score), 0) as avg_score
 				FROM judges j
 				LEFT JOIN scores s ON j.id = s.judge_id
 				LEFT JOIN judge_certifications jc ON j.id = jc.judge_id AND jc.certified_at IS NOT NULL
-				GROUP BY j.id
+				GROUP BY j.id, j.name, j.email
 				ORDER BY j.name
 			')->fetchAll(\PDO::FETCH_ASSOC);
 			
@@ -474,8 +474,10 @@ class BoardController {
 				$html .= '<tr style="background-color: #f2f2f2;"><th>Name</th><th>Email</th><th>Certified Subcategories</th><th>Total Subcategories</th><th>Total Scores</th><th>Avg Score</th><th>Certification %</th></tr>';
 				
 				foreach ($judges as $judge) {
-					$certificationPercent = $judge['total_subcategories'] > 0 ? 
-						round(($judge['certified_subcategories'] / $judge['total_subcategories']) * 100, 1) : 0;
+					$certificationPercent = 0;
+					if ($judge['total_subcategories'] > 0) {
+						$certificationPercent = round(($judge['certified_subcategories'] / $judge['total_subcategories']) * 100, 1);
+					}
 					
 					$html .= '<tr>';
 					$html .= '<td>' . htmlspecialchars($judge['name']) . '</td>';
@@ -574,6 +576,12 @@ class BoardController {
 			
 			// Get contestants with their total scores for this category
 			$contestants = calculate_contestant_totals_for_category($entityId);
+			
+			// Transform data to match template expectations
+			foreach ($contestants as &$contestant) {
+				$contestant['total_score'] = $contestant['total_current'];
+				$contestant['name'] = $contestant['contestant_name'];
+			}
 			
 			$html = \App\render_to_string('print/category', compact('category','subcategories','scores','contestants','isEmail'));
 			$subject = 'Category Report: ' . ($category['name'] ?? '');
