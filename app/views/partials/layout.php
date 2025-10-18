@@ -1,4 +1,4 @@
-<?php use function App\{render, can_view_nav}; ?>
+<?php use function App\{render, can_view_nav, csrf_field, url, redirect, param, post, uuid, is_logged_in, is_organizer, is_judge, is_emcee, current_user, require_login, require_organizer, require_emcee, require_judge, back_url, hierarchical_back_url, home_url}; ?>
 <!doctype html>
 <html>
 	<head>
