@@ -439,43 +439,75 @@ class BoardController {
 			$subject = 'Contestant Summary Report';
 			
 		} else if ($reportType === 'judge_summary') {
-			// Generate comprehensive judge summary email
+			// Generate comprehensive judge summary email grouped by contest/category
 			$pdo = DB::pdo();
 			
-			// Get all judges with their certification status and scores
-			$judges = $pdo->query('
-				SELECT j.id, j.name, u.preferred_name,
-				       COUNT(DISTINCT jc.subcategory_id) as certified_categories,
-				       COUNT(DISTINCT s.subcategory_id) as total_categories,
-				       COALESCE(SUM(s.score), 0) as total_scores_given
-				FROM judges j
-				LEFT JOIN users u ON j.id = u.id
-				LEFT JOIN scores s ON j.id = s.judge_id
-				LEFT JOIN judge_certifications jc ON j.id = jc.judge_id AND jc.certified_at IS NOT NULL
-				GROUP BY j.id, j.name, u.preferred_name
-				ORDER BY j.name
+			// Get contests and their categories
+			$contests = $pdo->query('
+				SELECT c.id as contest_id, c.name as contest_name
+				FROM contests c
+				ORDER BY c.name
 			')->fetchAll(\PDO::FETCH_ASSOC);
 			
 			$html = '<html><body>';
 			$html .= '<h1>Judge Summary Report</h1>';
 			$html .= '<p><strong>Generated:</strong> ' . date('Y-m-d H:i:s') . '</p>';
 			
-			if (!empty($judges)) {
-				$html .= '<h2>Judge Status</h2>';
-				$html .= '<table border="1" cellpadding="5" cellspacing="0" style="border-collapse: collapse; width: 100%;">';
-				$html .= '<tr style="background-color: #f2f2f2;"><th>Preferred Name</th><th>Certified Categories</th><th>Total Categories</th><th>Total Scores Given</th></tr>';
+			foreach ($contests as $contest) {
+				// Get categories for this contest
+				$categories = $pdo->prepare('
+					SELECT cat.id as category_id, cat.name as category_name
+					FROM categories cat
+					WHERE cat.contest_id = ?
+					ORDER BY cat.name
+				');
+				$categories->execute([$contest['contest_id']]);
+				$categories = $categories->fetchAll(\PDO::FETCH_ASSOC);
 				
-				foreach ($judges as $judge) {
-					$html .= '<tr>';
-					$html .= '<td>' . htmlspecialchars($judge['preferred_name'] ?? $judge['name'] ?? '') . '</td>';
-					$html .= '<td>' . ($judge['certified_categories'] ?? 0) . '</td>';
-					$html .= '<td>' . ($judge['total_categories'] ?? 0) . '</td>';
-					$html .= '<td>' . number_format($judge['total_scores_given'], 2) . '</td>';
-					$html .= '</tr>';
+				if (!empty($categories)) {
+					$html .= '<h2>' . htmlspecialchars($contest['contest_name']) . '</h2>';
+					
+					foreach ($categories as $category) {
+						// Get judges for this category with their certification status
+						$judges = $pdo->prepare('
+							SELECT COALESCE(u.preferred_name, u.name) as judge_name,
+							       COUNT(DISTINCT jc.subcategory_id) as certified_categories,
+							       COUNT(DISTINCT s.subcategory_id) as total_categories
+							FROM judges j
+							LEFT JOIN users u ON j.id = u.id
+							LEFT JOIN scores s ON j.id = s.judge_id AND s.subcategory_id IN (
+								SELECT sc.id FROM subcategories sc WHERE sc.category_id = ?
+							)
+							LEFT JOIN judge_certifications jc ON j.id = jc.judge_id AND jc.certified_at IS NOT NULL AND jc.subcategory_id IN (
+								SELECT sc.id FROM subcategories sc WHERE sc.category_id = ?
+							)
+							WHERE EXISTS (
+								SELECT 1 FROM scores s2 
+								JOIN subcategories sc2 ON s2.subcategory_id = sc2.id 
+								WHERE s2.judge_id = j.id AND sc2.category_id = ?
+							)
+							GROUP BY j.id, u.preferred_name, u.name
+							ORDER BY judge_name
+						');
+						$judges->execute([$category['category_id'], $category['category_id'], $category['category_id']]);
+						$judges = $judges->fetchAll(\PDO::FETCH_ASSOC);
+						
+						if (!empty($judges)) {
+							$html .= '<h3>' . htmlspecialchars($category['category_name']) . '</h3>';
+							$html .= '<table border="1" cellpadding="5" cellspacing="0" style="border-collapse: collapse; width: 100%; margin-bottom: 20px;">';
+							$html .= '<tr style="background-color: #f2f2f2;"><th>Preferred Name</th><th>Certified Categories</th><th>Total Categories</th></tr>';
+							
+							foreach ($judges as $judge) {
+								$html .= '<tr>';
+								$html .= '<td>' . htmlspecialchars($judge['judge_name']) . '</td>';
+								$html .= '<td>' . ($judge['certified_categories'] ?? 0) . '</td>';
+								$html .= '<td>' . ($judge['total_categories'] ?? 0) . '</td>';
+								$html .= '</tr>';
+							}
+							$html .= '</table>';
+						}
+					}
 				}
-				$html .= '</table>';
-			} else {
-				$html .= '<p>No judges found.</p>';
 			}
 			
 			$html .= '</body></html>';
