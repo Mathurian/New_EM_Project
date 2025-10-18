@@ -42,6 +42,18 @@
 		$errorMessage = $errorMessages[$_GET['error']] ?? 'An error occurred';
 		?>
 		<div class="alert alert-danger"><?= htmlspecialchars($errorMessage) ?></div>
+		
+		<?php if ($_GET['error'] === 'validation_failed' && !empty($_SESSION['validation_errors'])): ?>
+			<div class="alert alert-warning">
+				<strong>Validation Details:</strong>
+				<ul style="margin: 8px 0 0 0; padding-left: 20px;">
+					<?php foreach ($_SESSION['validation_errors'] as $field => $errors): ?>
+						<li><strong><?= htmlspecialchars(ucfirst($field)) ?>:</strong> <?= htmlspecialchars(implode(', ', $errors)) ?></li>
+					<?php endforeach; ?>
+				</ul>
+			</div>
+			<?php unset($_SESSION['validation_errors']); ?>
+		<?php endif; ?>
 		<?php if ($_GET['error'] === 'constraint_failed'): ?>
 			<div class="alert alert-warning">
 				<strong>Fix:</strong> Run <code>php fix_constraint.php</code> from the project root directory to update the database constraint.
