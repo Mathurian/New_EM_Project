@@ -62,6 +62,7 @@
 						<option value="organizer" <?= $user['role'] === 'organizer' ? 'selected' : '' ?>>Organizer</option>
 						<option value="judge" <?= $user['role'] === 'judge' ? 'selected' : '' ?>>Judge</option>
 						<option value="emcee" <?= $user['role'] === 'emcee' ? 'selected' : '' ?>>Emcee</option>
+						<option value="tally_master" <?= $user['role'] === 'tally_master' ? 'selected' : '' ?>>Tally Master</option>
 						<option value="contestant" <?= $user['role'] === 'contestant' ? 'selected' : '' ?>>Contestant</option>
 					</select>
 				</div>

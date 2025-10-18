@@ -110,13 +110,11 @@ $router->post('/categories/{id}/subcategories/from-template', 'SubcategoryContro
 $router->post('/categories/{id}/subcategories/bulk-delete', 'SubcategoryController@bulkDelete');
 $router->post('/categories/{id}/subcategories/bulk-update', 'SubcategoryController@bulkUpdate');
 
-// emcee
-$router->get('/emcee', 'EmceeController@index');
-$router->get('/emcee/scripts', 'EmceeController@scripts');
-$router->get('/emcee/contestants', 'EmceeController@contestants');
-$router->get('/emcee/scripts/{id}/view', 'EmceeController@streamScript');
-$router->get('/emcee/contestant/{number}', 'EmceeController@contestantBio');
-$router->get('/emcee/judges', 'EmceeController@judgesByCategory');
+// tally master
+$router->get('/tally-master', 'TallyMasterController@index');
+$router->get('/tally-master/score-review', 'TallyMasterController@scoreReview');
+$router->get('/tally-master/certification', 'TallyMasterController@certification');
+$router->post('/tally-master/certify-totals', 'TallyMasterController@certifyTotals');
 
 // templates
 $router->get('/admin/templates', 'TemplateController@index');

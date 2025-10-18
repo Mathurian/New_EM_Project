@@ -375,7 +375,7 @@ function get_user_validation_rules(): array {
 		],
 		'role' => [
 			'required' => true,
-			'in' => ['organizer', 'judge', 'contestant', 'emcee']
+			'in' => ['organizer', 'judge', 'contestant', 'emcee', 'tally_master']
 		],
 		'preferred_name' => [
 			'max_length' => 100,
@@ -528,14 +528,17 @@ function is_logged_in(): bool {
 function is_organizer(): bool { return is_logged_in() && (current_user()['role'] ?? '') === 'organizer'; }
 function is_judge(): bool { return is_logged_in() && (current_user()['role'] ?? '') === 'judge'; }
 function is_emcee(): bool { return is_logged_in() && (current_user()['role'] ?? '') === 'emcee'; }
+function is_tally_master(): bool { return is_logged_in() && (current_user()['role'] ?? '') === 'tally_master'; }
 function require_login(): void { if (!is_logged_in()) { redirect('/'); } }
 function require_organizer(): void { if (!is_organizer()) { redirect('/'); } }
 function require_emcee(): void { if (!is_emcee()) { redirect('/'); } }
 function require_judge(): void { if (!is_judge()) { redirect('/'); } }
+function require_tally_master(): void { if (!is_tally_master()) { redirect('/'); } }
 function can_view_nav(string $item): bool {
 	if (!is_logged_in()) { return in_array($item, ['Home','Login'], true); }
 	if (is_organizer()) { return true; }
 	if (is_emcee()) { return in_array($item, ['Home','Contestant Bios','My Profile','Logout'], true); }
+	if (is_tally_master()) { return in_array($item, ['Home','Score Review','Certification','My Profile','Logout'], true); }
 	// judge
 	return in_array($item, ['Home','My Assignments','My Profile','Logout','Results'], true);
 }
@@ -660,6 +663,8 @@ function home_url(): string {
 			return url('/emcee');
 		case 'organizer':
 			return url('/admin');
+		case 'tally_master':
+			return url('/tally-master');
 		default:
 			return url('/');
 	}

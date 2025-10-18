@@ -30,7 +30,8 @@
 			'database_error' => 'Database error occurred',
 			'upload_failed' => 'Failed to upload image',
 			'missing_fields' => 'Required fields are missing',
-			'creation_failed' => 'User creation failed'
+			'creation_failed' => 'User creation failed',
+			'password_required' => 'Password is required for this role'
 		];
 		$errorMessage = $errorMessages[$_GET['error']] ?? 'An error occurred';
 		?>

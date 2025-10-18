@@ -2,7 +2,7 @@
 declare(strict_types=1);
 namespace App\Routes;
 use App\DB;
-use function App\{view, render, redirect, param, post, request_array, current_user, is_logged_in, is_organizer, is_judge, is_emcee, require_login, require_organizer, require_emcee, csrf_field, require_csrf, secure_file_upload, paginate, pagination_links, validate_input, sanitize_input, get_user_validation_rules, uuid, calculate_score_tabulation, format_score_tabulation, calculate_contestant_totals_for_category};
+use function App\{view, render, redirect, param, post, request_array, current_user, is_logged_in, is_organizer, is_judge, is_emcee, is_tally_master, require_login, require_organizer, require_emcee, require_judge, require_tally_master, csrf_field, require_csrf, secure_file_upload, paginate, pagination_links, validate_input, sanitize_input, get_user_validation_rules, uuid, calculate_score_tabulation, format_score_tabulation, calculate_contestant_totals_for_category};
 
 class HomeController {
 	public function index(): void { 
@@ -17,6 +17,9 @@ class HomeController {
 					break;
 				case 'judge':
 					redirect('/judge');
+					break;
+				case 'tally_master':
+					redirect('/tally-master');
 					break;
 				default:
 					view('home', ['title' => 'Event Manager']);
@@ -3571,6 +3574,14 @@ class UserController {
 			}
 		}
 		
+		// Require password for certain roles
+		if (in_array($role, ['organizer', 'tally_master']) && empty($password)) {
+			\App\Logger::debug('user_creation_password_required', 'user', null, 
+				"User creation failed: password required for role {$role}");
+			redirect('/users/new?error=password_required');
+			return;
+		}
+		
 		$pdo = DB::pdo();
 		$pdo->beginTransaction();
 		
@@ -5566,6 +5577,166 @@ class PrintController {
 		$contestants = calculate_contestant_totals_for_category($categoryId);
 		
 		render('print/category', compact('category', 'subcategories', 'scores', 'contestants'));
+	}
+}
+
+class TallyMasterController {
+	public function index(): void {
+		require_tally_master();
+		
+		// Get overview statistics
+		$totalContests = DB::pdo()->query('SELECT COUNT(*) as count FROM contests')->fetch(\PDO::FETCH_ASSOC)['count'];
+		$totalCategories = DB::pdo()->query('SELECT COUNT(*) as count FROM categories')->fetch(\PDO::FETCH_ASSOC)['count'];
+		$totalSubcategories = DB::pdo()->query('SELECT COUNT(*) as count FROM subcategories')->fetch(\PDO::FETCH_ASSOC)['count'];
+		$totalContestants = DB::pdo()->query('SELECT COUNT(*) as count FROM contestants')->fetch(\PDO::FETCH_ASSOC)['count'];
+		$totalJudges = DB::pdo()->query('SELECT COUNT(*) as count FROM judges')->fetch(\PDO::FETCH_ASSOC)['count'];
+		
+		// Get certification status
+		$certificationStatus = $this->getCertificationStatus();
+		
+		view('tally_master/index', compact('totalContests', 'totalCategories', 'totalSubcategories', 'totalContestants', 'totalJudges', 'certificationStatus'));
+	}
+	
+	public function scoreReview(): void {
+		require_tally_master();
+		
+		// Get all scores with detailed information
+		$scores = DB::pdo()->query('
+			SELECT 
+				s.*,
+				con.name as contestant_name,
+				con.contestant_number,
+				j.name as judge_name,
+				cr.name as criterion_name,
+				cr.max_score,
+				sc.name as subcategory_name,
+				c.name as category_name,
+				co.name as contest_name,
+				jc.signature_name as judge_certified,
+				jc.certified_at as judge_certified_at
+			FROM scores s
+			JOIN contestants con ON s.contestant_id = con.id
+			JOIN judges j ON s.judge_id = j.id
+			JOIN criteria cr ON s.criterion_id = cr.id
+			JOIN subcategories sc ON s.subcategory_id = sc.id
+			JOIN categories c ON sc.category_id = c.id
+			JOIN contests co ON c.contest_id = co.id
+			LEFT JOIN judge_certifications jc ON s.subcategory_id = jc.subcategory_id 
+				AND s.contestant_id = jc.contestant_id 
+				AND s.judge_id = jc.judge_id
+			ORDER BY co.name, c.name, sc.name, con.name, j.name, cr.name
+		')->fetchAll(\PDO::FETCH_ASSOC);
+		
+		// Group scores for display
+		$groupedScores = [];
+		foreach ($scores as $score) {
+			$key = $score['contest_name'] . '|' . $score['category_name'] . '|' . $score['subcategory_name'];
+			$groupedScores[$key][] = $score;
+		}
+		
+		view('tally_master/score_review', compact('scores', 'groupedScores'));
+	}
+	
+	public function certification(): void {
+		require_tally_master();
+		
+		// Get certification status for all subcategories
+		$certificationData = $this->getDetailedCertificationStatus();
+		
+		view('tally_master/certification', compact('certificationData'));
+	}
+	
+	public function certifyTotals(): void {
+		require_tally_master();
+		require_csrf();
+		
+		$subcategoryId = post('subcategory_id');
+		$signatureName = post('signature_name');
+		
+		if (!$subcategoryId || !$signatureName) {
+			redirect('/tally-master/certification?error=missing_fields');
+			return;
+		}
+		
+		// Verify signature matches user's preferred name
+		$user = current_user();
+		$expectedSignature = $user['preferred_name'] ?? $user['name'];
+		
+		if ($signatureName !== $expectedSignature) {
+			redirect('/tally-master/certification?error=signature_mismatch');
+			return;
+		}
+		
+		// Check if all judges have certified their scores for this subcategory
+		$allJudgesCertified = $this->areAllJudgesCertified($subcategoryId);
+		if (!$allJudgesCertified) {
+			redirect('/tally-master/certification?error=judges_not_certified');
+			return;
+		}
+		
+		// Create tally master certification
+		$certificationId = uuid();
+		$stmt = DB::pdo()->prepare('
+			INSERT INTO tally_master_certifications (id, subcategory_id, signature_name, certified_at)
+			VALUES (?, ?, ?, ?)
+		');
+		$stmt->execute([$certificationId, $subcategoryId, $signatureName, date('Y-m-d H:i:s')]);
+		
+		redirect('/tally-master/certification?success=totals_certified');
+	}
+	
+	private function getCertificationStatus(): array {
+		// Get overall certification statistics
+		$totalSubcategories = DB::pdo()->query('SELECT COUNT(*) as count FROM subcategories')->fetch(\PDO::FETCH_ASSOC)['count'];
+		$certifiedSubcategories = DB::pdo()->query('SELECT COUNT(DISTINCT subcategory_id) as count FROM judge_certifications')->fetch(\PDO::FETCH_ASSOC)['count'];
+		$tallyMasterCertified = DB::pdo()->query('SELECT COUNT(*) as count FROM tally_master_certifications')->fetch(\PDO::FETCH_ASSOC)['count'];
+		
+		return [
+			'total_subcategories' => $totalSubcategories,
+			'judge_certified' => $certifiedSubcategories,
+			'tally_master_certified' => $tallyMasterCertified,
+			'pending_certification' => $totalSubcategories - $tallyMasterCertified
+		];
+	}
+	
+	private function getDetailedCertificationStatus(): array {
+		$stmt = DB::pdo()->query('
+			SELECT 
+				sc.id as subcategory_id,
+				sc.name as subcategory_name,
+				c.name as category_name,
+				co.name as contest_name,
+				COUNT(DISTINCT jc.judge_id) as judges_certified,
+				COUNT(DISTINCT sj.judge_id) as total_judges,
+				tmc.signature_name as tally_master_signature,
+				tmc.certified_at as tally_master_certified_at
+			FROM subcategories sc
+			JOIN categories c ON sc.category_id = c.id
+			JOIN contests co ON c.contest_id = co.id
+			LEFT JOIN subcategory_judges sj ON sc.id = sj.subcategory_id
+			LEFT JOIN judge_certifications jc ON sc.id = jc.subcategory_id
+			LEFT JOIN tally_master_certifications tmc ON sc.id = tmc.subcategory_id
+			GROUP BY sc.id, sc.name, c.name, co.name, tmc.signature_name, tmc.certified_at
+			ORDER BY co.name, c.name, sc.name
+		');
+		
+		return $stmt->fetchAll(\PDO::FETCH_ASSOC);
+	}
+	
+	private function areAllJudgesCertified(string $subcategoryId): bool {
+		$stmt = DB::pdo()->prepare('
+			SELECT 
+				COUNT(DISTINCT sj.judge_id) as total_judges,
+				COUNT(DISTINCT jc.judge_id) as certified_judges
+			FROM subcategory_judges sj
+			LEFT JOIN judge_certifications jc ON sj.subcategory_id = jc.subcategory_id 
+				AND sj.judge_id = jc.judge_id
+			WHERE sj.subcategory_id = ?
+		');
+		$stmt->execute([$subcategoryId]);
+		$result = $stmt->fetch(\PDO::FETCH_ASSOC);
+		
+		return $result['total_judges'] > 0 && $result['total_judges'] === $result['certified_judges'];
 	}
 }
 

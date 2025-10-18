@@ -129,7 +129,7 @@ CREATE TABLE IF NOT EXISTS users (
 	preferred_name TEXT,
 	email TEXT UNIQUE,
 	password_hash TEXT,
-	role TEXT NOT NULL CHECK (role IN ('organizer','judge','emcee','contestant')),
+	role TEXT NOT NULL CHECK (role IN ('organizer','judge','emcee','contestant','tally_master')),
 	judge_id TEXT,
 	gender TEXT,
 	pronouns TEXT,
@@ -150,17 +150,12 @@ CREATE TABLE IF NOT EXISTS judge_comments (
 	FOREIGN KEY (judge_id) REFERENCES judges(id) ON DELETE CASCADE
 );
 -- Judge certifications to lock edits post-submit
-CREATE TABLE IF NOT EXISTS judge_certifications (
+CREATE TABLE IF NOT EXISTS tally_master_certifications (
 	id TEXT PRIMARY KEY,
 	subcategory_id TEXT NOT NULL,
-	contestant_id TEXT NOT NULL,
-	judge_id TEXT NOT NULL,
 	signature_name TEXT NOT NULL,
 	certified_at TEXT NOT NULL,
-	UNIQUE (subcategory_id, contestant_id, judge_id),
-	FOREIGN KEY (subcategory_id) REFERENCES subcategories(id) ON DELETE CASCADE,
-	FOREIGN KEY (contestant_id) REFERENCES contestants(id) ON DELETE CASCADE,
-	FOREIGN KEY (judge_id) REFERENCES judges(id) ON DELETE CASCADE
+	FOREIGN KEY (subcategory_id) REFERENCES subcategories(id) ON DELETE CASCADE
 );
 -- Subcategory templates for reuse across categories
 CREATE TABLE IF NOT EXISTS subcategory_templates (

@@ -18,7 +18,8 @@
 					'database_error' => 'Database error occurred',
 					'upload_failed' => 'Failed to upload image',
 					'missing_fields' => 'Required fields are missing',
-					'creation_failed' => 'User creation failed'
+					'creation_failed' => 'User creation failed',
+					'password_required' => 'Password is required for this role'
 				];
 				$errorMessage = $errorMessages[$_GET['error']] ?? 'An error occurred';
 				?>
@@ -76,6 +77,7 @@
 									<option value="organizer">Organizer</option>
 									<option value="judge">Judge</option>
 									<option value="emcee">Emcee</option>
+									<option value="tally_master">Tally Master</option>
 									<option value="contestant">Contestant</option>
 								</select>
 							</div>
