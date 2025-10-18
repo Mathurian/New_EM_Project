@@ -21,7 +21,7 @@
 						<?php endif; ?>
 					</div>
 					<div class="report-actions">
-						<a href="<?= url('print/judge/' . $judge['id']) ?>" class="btn btn-primary" target="_blank">🖨️ Print</a>
+						<button onclick="openPrintWindow('<?= url('print/judge/' . $judge['id']) ?>')" class="btn btn-primary">🖨️ Print</button>
 						<form method="post" action="/admin/print-reports/email" class="email-form" onsubmit="return validateEmailForm(this)">
 							<input type="hidden" name="report_type" value="judge" />
 							<input type="hidden" name="entity_id" value="<?= htmlspecialchars($judge['id']) ?>" />
@@ -45,6 +45,14 @@
 </div>
 
 <script>
+// Function to open print windows that can be closed properly
+function openPrintWindow(url) {
+	const printWindow = window.open(url, 'printWindow', 'width=800,height=600,scrollbars=yes,resizable=yes');
+	if (printWindow) {
+		printWindow.focus();
+	}
+}
+
 // Email form handling functions (from admin view)
 function handleRecipientChange(select) {
 	const form = select.closest('form');

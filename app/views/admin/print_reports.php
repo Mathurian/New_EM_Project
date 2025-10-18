@@ -22,7 +22,7 @@
 							<?php endif; ?>
 						</div>
                         <div class="report-actions">
-                            <a href="<?= url('print/contestant/' . $contestant['id']) ?>" class="btn btn-primary" target="_blank">🖨️ Print</a>
+                            <button onclick="openPrintWindow('<?= url('print/contestant/' . $contestant['id']) ?>')" class="btn btn-primary">🖨️ Print</button>
                             <form method="post" action="<?= url('admin/print-reports/email') ?>" class="email-form stacked" onsubmit="return validateEmailForm(this)">
                                 <input type="hidden" name="report_type" value="contestant" />
                                 <input type="hidden" name="entity_id" value="<?= htmlspecialchars($contestant['id']) ?>" />
@@ -58,7 +58,7 @@
 							<strong><?= htmlspecialchars($judge['name']) ?></strong>
 						</div>
                         <div class="report-actions">
-                            <a href="<?= url('print/judge/' . $judge['id']) ?>" class="btn btn-primary" target="_blank">🖨️ Print</a>
+                            <button onclick="openPrintWindow('<?= url('print/judge/' . $judge['id']) ?>')" class="btn btn-primary">🖨️ Print</button>
                             <form method="post" action="<?= url('admin/print-reports/email') ?>" class="email-form stacked" onsubmit="return validateEmailForm(this)">
                                 <input type="hidden" name="report_type" value="judge" />
                                 <input type="hidden" name="entity_id" value="<?= htmlspecialchars($judge['id']) ?>" />
@@ -108,7 +108,7 @@
 									<strong><?= htmlspecialchars($category['category_name']) ?></strong>
 								</div>
                                 <div class="report-actions">
-                                    <a href="<?= url('print/category/' . $categoryId) ?>" class="btn btn-primary" target="_blank">🖨️ Print</a>
+                                    <button onclick="openPrintWindow('<?= url('print/category/' . $categoryId) ?>')" class="btn btn-primary">🖨️ Print</button>
                                     <form method="post" action="<?= url('admin/print-reports/email') ?>" class="email-form stacked" onsubmit="return validateEmailForm(this)">
                                         <input type="hidden" name="report_type" value="category" />
                                         <input type="hidden" name="entity_id" value="<?= htmlspecialchars($categoryId) ?>" />
@@ -285,6 +285,14 @@
 </style>
 
 <script>
+// Function to open print windows that can be closed properly
+function openPrintWindow(url) {
+	const printWindow = window.open(url, 'printWindow', 'width=800,height=600,scrollbars=yes,resizable=yes');
+	if (printWindow) {
+		printWindow.focus();
+	}
+}
+
 function handleRecipientChange(selectEl) {
     const form = selectEl.closest('form');
     const hiddenUserId = form.querySelector('input[name="user_id"]');

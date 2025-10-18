@@ -134,6 +134,14 @@
 </div>
 
 <script>
+// Function to open print windows that can be closed properly
+function openPrintWindow(url) {
+	const printWindow = window.open(url, 'printWindow', 'width=800,height=600,scrollbars=yes,resizable=yes');
+	if (printWindow) {
+		printWindow.focus();
+	}
+}
+
 function generateContestReport() {
 	const contestId = document.getElementById('contest_id').value;
 	if (!contestId) {
@@ -151,7 +159,7 @@ function generateCategoryReport() {
 		alert('Please select a category.');
 		return;
 	}
-	window.open('/print/category/' + categoryId, '_blank');
+	openPrintWindow('/print/category/' + categoryId);
 }
 
 function generateContestantSummary() {
