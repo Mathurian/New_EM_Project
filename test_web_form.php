@@ -4,6 +4,8 @@
  * Tests the actual web form submission process
  */
 
+require_once __DIR__ . '/app/lib/DB.php';
+require_once __DIR__ . '/app/lib/SecurityService.php';
 require_once __DIR__ . '/app/lib/helpers.php';
 
 // Import functions from App namespace
