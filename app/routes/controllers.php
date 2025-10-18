@@ -5218,7 +5218,11 @@ class AdminController {
 	}
 	
 	public function printReports(): void {
-		require_organizer();
+		require_login();
+		if (!is_organizer() && !is_board()) {
+			redirect('/');
+			return;
+		}
 		
 		// Get all contestants, judges, and categories for print options
 		$contestants = DB::pdo()->query('SELECT * FROM contestants ORDER BY contestant_number IS NULL, contestant_number, name')->fetchAll(\PDO::FETCH_ASSOC);
@@ -5230,7 +5234,11 @@ class AdminController {
 	}
 
 	public function emailReport(): void {
-		require_organizer();
+		require_login();
+		if (!is_organizer() && !is_board()) {
+			redirect('/');
+			return;
+		}
 		
 		// Debug log the incoming request
 		\App\Logger::debug('email_report_request', 'report', null, 
@@ -5569,7 +5577,11 @@ class ProfileController {
 
 class PrintController {
 	public function contestant(array $params): void {
-		require_organizer();
+		require_login();
+		if (!is_organizer() && !is_board()) {
+			redirect('/');
+			return;
+		}
 		$contestantId = param('id', $params);
 		
 		// Get contestant info
@@ -5642,7 +5654,11 @@ class PrintController {
 	}
 	
 	public function judge(array $params): void {
-		require_organizer();
+		require_login();
+		if (!is_organizer() && !is_board()) {
+			redirect('/');
+			return;
+		}
 		$judgeId = param('id', $params);
 		
 		// Get judge info
@@ -5703,7 +5719,11 @@ class PrintController {
 	}
 	
 	public function category(array $params): void {
-		require_organizer();
+		require_login();
+		if (!is_organizer() && !is_board()) {
+			redirect('/');
+			return;
+		}
 		$categoryId = param('id', $params);
 		
 		// Get category info
