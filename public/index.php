@@ -64,6 +64,7 @@ $router->post('/admin/archived-contest/{id}/reactivate', 'ContestController@reac
 $router->get('/print/contestant/{id}', 'PrintController@contestant');
 $router->get('/print/judge/{id}', 'PrintController@judge');
 $router->get('/print/category/{id}', 'PrintController@category');
+$router->get('/print/contest/{id}', 'AdminController@contestSummary');
 $router->get('/admin/settings', 'AdminController@settings');
 $router->post('/admin/settings', 'AdminController@updateSettings');
 $router->post('/admin/settings/test-email', 'AdminController@testEmailConnection');

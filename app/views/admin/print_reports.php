@@ -602,7 +602,7 @@ function generateContestSummary() {
 		return;
 	}
 	// Generate contest summary by opening a new window with contest data
-	openPrintWindow('/board/contest-summary/' + contestId);
+	openPrintWindow('/print/contest/' + contestId);
 }
 
 function generateContestResults() {

@@ -5236,6 +5236,50 @@ class AdminController {
 		
 		view('admin/print_reports', compact('contestants', 'judges', 'structure', 'usersWithEmail', 'contests', 'summaryCategories'));
 	}
+	
+	public function contestSummary(array $params): void {
+		require_login();
+		if (!is_organizer() && !is_board()) {
+			redirect('/');
+			return;
+		}
+		
+		$contestId = $params['id'] ?? '';
+		if (empty($contestId)) {
+			redirect('/admin/print-reports?error=invalid_contest');
+			return;
+		}
+		
+		$pdo = DB::pdo();
+		
+		// Get contest data
+		$contest = $pdo->prepare('SELECT * FROM contests WHERE id = ?');
+		$contest->execute([$contestId]);
+		$contest = $contest->fetch(\PDO::FETCH_ASSOC);
+		
+		if (!$contest) {
+			redirect('/admin/print-reports?error=contest_not_found');
+			return;
+		}
+		
+		// Get all categories for this contest
+		$categories = $pdo->prepare('SELECT * FROM categories WHERE contest_id = ? ORDER BY name');
+		$categories->execute([$contestId]);
+		$categories = $categories->fetchAll(\PDO::FETCH_ASSOC);
+		
+		// Get summary data for each category
+		$categoryData = [];
+		foreach ($categories as $category) {
+			// Get contestants with their total scores for this category
+			$contestants = calculate_contestant_totals_for_category($category['id']);
+			$categoryData[] = [
+				'category' => $category,
+				'contestants' => $contestants
+			];
+		}
+		
+		view('board/contest-summary', compact('contest', 'categories', 'categoryData'));
+	}
 
 	public function emailReport(): void {
 		require_login();
