@@ -1,6 +1,5 @@
 <?php use function App\{url, is_organizer}; use App\DB; ?>
 <h2>Admin Dashboard</h2>
-<p><a href="/">← Back to Home</a></p>
 
 <div class="dashboard-grid">
 	<!-- Quick Stats -->
