@@ -85,8 +85,59 @@ class BoardController {
 		require_board();
 		require_csrf();
 		
-		// Simple test - just redirect with success to see if the method is being called
-		redirect('/board/emcee-scripts?success=test_upload');
+		// Validate required fields
+		$title = trim($_POST['title'] ?? '');
+		if (empty($title)) {
+			redirect('/board/emcee-scripts?error=title_required');
+			return;
+		}
+		
+		// Check if file was uploaded
+		if (!isset($_FILES['script_file']) || $_FILES['script_file']['error'] !== UPLOAD_ERR_OK) {
+			redirect('/board/emcee-scripts?error=file_upload_failed');
+			return;
+		}
+		
+		// Use secure file upload with document-specific validation (same as admin)
+		$uploadDir = __DIR__ . '/../../public/uploads/emcee-scripts/';
+		$allowedTypes = ['application/pdf', 'text/plain', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+		$maxSize = 10 * 1024 * 1024; // 10MB
+		
+		$result = secure_file_upload($_FILES['script_file'], $uploadDir, 'script', $allowedTypes, $maxSize);
+		
+		if (!$result['success']) {
+			redirect('/board/emcee-scripts?error=file_validation_failed');
+			return;
+		}
+		
+		$filename = $result['filename'];
+		$filepath = $result['filePath'];
+		$originalFilename = $_FILES['script_file']['name'];
+		
+		// File uploaded successfully
+		$description = trim($_POST['description'] ?? '');
+		$fileSize = $_FILES['script_file']['size'];
+		$uploadedAt = date('Y-m-d H:i:s');
+		
+		if (move_uploaded_file($_FILES['script_file']['tmp_name'], $filepath)) {
+			try {
+				// Use the same database insert as admin (with all columns)
+				$insertValues = [uuid(), $filename, '/uploads/emcee-scripts/' . $filename, 1, date('Y-m-d H:i:s'), current_user()['id'], $title, $description, $originalFilename, $fileSize, $uploadedAt];
+				
+				$stmt = DB::pdo()->prepare('INSERT INTO emcee_scripts (id, filename, file_path, is_active, created_at, uploaded_by, title, description, file_name, file_size, uploaded_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+				$stmt->execute($insertValues);
+				
+				redirect('/board/emcee-scripts?success=script_uploaded');
+			} catch (\Exception $e) {
+				// Clean up uploaded file if database insert fails
+				if (file_exists($filepath)) {
+					unlink($filepath);
+				}
+				redirect('/board/emcee-scripts?error=file_save_failed');
+			}
+		} else {
+			redirect('/board/emcee-scripts?error=file_save_failed');
+		}
 	}
 	
 	public function toggleEmceeScript(array $params): void {

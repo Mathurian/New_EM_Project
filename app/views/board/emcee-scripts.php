@@ -16,6 +16,10 @@
 			<input type="text" id="title" name="title" required class="form-control">
 		</div>
 		<div class="form-group">
+			<label for="description">Description (Optional):</label>
+			<textarea id="description" name="description" rows="3" class="form-control"></textarea>
+		</div>
+		<div class="form-group">
 			<label for="script_file">Script File:</label>
 			<input type="file" id="script_file" name="script_file" accept=".pdf,.doc,.docx,.txt" required class="form-control">
 			<small class="form-text">Accepted formats: PDF, DOC, DOCX, TXT (Max 10MB)</small>
