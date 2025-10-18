@@ -2594,6 +2594,29 @@ class PeopleController {
 			redirect('/people');
 		}
 	}
+	
+	public function viewContestantBio(array $params): void {
+		require_login();
+		$id = param('id', $params);
+		
+		// Get contestant with user info if available
+		$stmt = DB::pdo()->prepare('
+			SELECT c.*, u.preferred_name, u.pronouns
+			FROM contestants c 
+			LEFT JOIN users u ON c.id = u.contestant_id 
+			WHERE c.id = ?
+		');
+		$stmt->execute([$id]);
+		$contestant = $stmt->fetch(\PDO::FETCH_ASSOC);
+		
+		if (!$contestant) {
+			http_response_code(404);
+			echo 'Contestant not found';
+			return;
+		}
+		
+		view('people/contestant_bio', compact('contestant'));
+	}
 }
 
 class AssignmentController {
