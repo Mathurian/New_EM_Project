@@ -1,4 +1,4 @@
-<?php use function App\{can_view_nav, is_organizer}; ?>
+<?php use function App\{can_view_nav, is_organizer, is_logged_in, current_user}; ?>
 <header>
 	<nav>
 		<div class="nav-container">
