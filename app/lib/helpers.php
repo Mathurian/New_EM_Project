@@ -4,6 +4,7 @@ namespace App;
 
 function view(string $template, array $data = []): void {
 	extract($data);
+	$template = $template; // Make template available to layout
 	include __DIR__ . '/../views/partials/layout.php';
 }
 
