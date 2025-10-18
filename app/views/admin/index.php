@@ -19,7 +19,6 @@
 				'Emcees' => DB::pdo()->query('SELECT COUNT(*) FROM users WHERE role = "emcee"')->fetchColumn(),
 				'Contests' => DB::pdo()->query('SELECT COUNT(*) FROM contests')->fetchColumn(),
 				'Categories' => DB::pdo()->query('SELECT COUNT(*) FROM categories')->fetchColumn(),
-				'Subcategories' => DB::pdo()->query('SELECT COUNT(*) FROM subcategories')->fetchColumn(),
 				'Templates' => DB::pdo()->query('SELECT COUNT(*) FROM subcategory_templates')->fetchColumn()
 			];
 			?>
@@ -32,8 +31,7 @@
 					'Contestants' => url('admin/contestants'),
 					'Emcees' => url('admin/users'), // Use users page since no dedicated emcee admin page
 					'Contests' => $currentContestId ? url('contests/' . $currentContestId . '/categories') : url('contests'),
-					'Categories' => $currentContestId ? url('contests/' . $currentContestId . '/categories') : url('contests'),
-					'Subcategories' => $currentContestId ? url('contests/' . $currentContestId . '/subcategories') : url('contests'),
+					'Categories' => $currentContestId ? url('contests/' . $currentContestId . '/subcategories') : url('contests'),
 					'Templates' => url('admin/templates')
 				];
 				$url = $clickableUrls[$label] ?? null;
@@ -41,12 +39,34 @@
 				<?php if ($url): ?>
 					<a href="<?= $url ?>" class="stat-card clickable-stat">
 						<div class="stat-number"><?= number_format($count) ?></div>
-						<div class="stat-label"><?= htmlspecialchars($label) ?></div>
+						<div class="stat-label">
+							<?php
+							// Handle singular/plural for specific labels
+							if ($label === 'Contests') {
+								echo htmlspecialchars($count == 1 ? 'Contest' : 'Contests');
+							} elseif ($label === 'Categories') {
+								echo htmlspecialchars($count == 1 ? 'Category' : 'Categories');
+							} else {
+								echo htmlspecialchars($label);
+							}
+							?>
+						</div>
 					</a>
 				<?php else: ?>
 					<div class="stat-card">
 						<div class="stat-number"><?= number_format($count) ?></div>
-						<div class="stat-label"><?= htmlspecialchars($label) ?></div>
+						<div class="stat-label">
+							<?php
+							// Handle singular/plural for specific labels
+							if ($label === 'Contests') {
+								echo htmlspecialchars($count == 1 ? 'Contest' : 'Contests');
+							} elseif ($label === 'Categories') {
+								echo htmlspecialchars($count == 1 ? 'Category' : 'Categories');
+							} else {
+								echo htmlspecialchars($label);
+							}
+							?>
+						</div>
 					</div>
 				<?php endif; ?>
 			<?php endforeach; ?>
