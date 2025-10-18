@@ -199,14 +199,14 @@
 					<input type="hidden" name="entity_id" value="" id="contest_email_id" />
 					<input type="hidden" name="user_id" value="" />
 					<input type="hidden" name="to_email" value="" />
-					<select class="email-select" onchange="handleRecipientChange(this)">
+					<select class="email-select unified-recipient" onchange="handleRecipientChange(this)">
 						<option value="">Select recipient…</option>
 						<?php foreach (($usersWithEmail ?? []) as $u): ?>
 							<option value="user:<?= htmlspecialchars($u['id']) ?>"><?= htmlspecialchars(($u['preferred_name'] ?: $u['name']) . ' <' . $u['email'] . '>') ?></option>
 						<?php endforeach; ?>
 						<option value="custom">Custom email…</option>
 					</select>
-					<input type="email" class="email-input" placeholder="Enter email address" style="display:none;" />
+					<input type="email" class="email-input unified-email" placeholder="Enter email address" style="display:none;" />
 					<button type="submit" class="btn btn-success">📧 Email Summary</button>
 				</form>
 			</div>
@@ -234,14 +234,14 @@
 					<input type="hidden" name="entity_id" value="" id="category_email_id" />
 					<input type="hidden" name="user_id" value="" />
 					<input type="hidden" name="to_email" value="" />
-					<select class="email-select" onchange="handleRecipientChange(this)">
+					<select class="email-select unified-recipient" onchange="handleRecipientChange(this)">
 						<option value="">Select recipient…</option>
 						<?php foreach (($usersWithEmail ?? []) as $u): ?>
 							<option value="user:<?= htmlspecialchars($u['id']) ?>"><?= htmlspecialchars(($u['preferred_name'] ?: $u['name']) . ' <' . $u['email'] . '>') ?></option>
 						<?php endforeach; ?>
 						<option value="custom">Custom email…</option>
 					</select>
-					<input type="email" class="email-input" placeholder="Enter email address" style="display:none;" />
+					<input type="email" class="email-input unified-email" placeholder="Enter email address" style="display:none;" />
 					<button type="submit" class="btn btn-success">📧 Email Results</button>
 				</form>
 			</div>
@@ -258,14 +258,14 @@
 				<input type="hidden" name="entity_id" value="" />
 				<input type="hidden" name="user_id" value="" />
 				<input type="hidden" name="to_email" value="" />
-				<select class="email-select" onchange="handleRecipientChange(this)">
+				<select class="email-select unified-recipient" onchange="handleRecipientChange(this)">
 					<option value="">Select recipient…</option>
 					<?php foreach (($usersWithEmail ?? []) as $u): ?>
 						<option value="user:<?= htmlspecialchars($u['id']) ?>"><?= htmlspecialchars(($u['preferred_name'] ?: $u['name']) . ' <' . $u['email'] . '>') ?></option>
 					<?php endforeach; ?>
 					<option value="custom">Custom email…</option>
 				</select>
-				<input type="email" class="email-input" placeholder="Enter email address" style="display:none;" />
+				<input type="email" class="email-input unified-email" placeholder="Enter email address" style="display:none;" />
 				<button type="submit" class="btn btn-success">📧 Email Summary</button>
 			</form>
 		</div>
@@ -275,22 +275,22 @@
 		<h3>⚖️ Judge Summary</h3>
 		<p>Generate a comprehensive summary of all judges and their certifications.</p>
 		<div class="action-buttons">
-			<form method="post" action="/admin/print-reports/email" class="email-form" onsubmit="return validateEmailForm(this)">
-				<?= csrf_field() ?>
-				<input type="hidden" name="report_type" value="judge_summary" />
-				<input type="hidden" name="entity_id" value="" />
-				<input type="hidden" name="user_id" value="" />
-				<input type="hidden" name="to_email" value="" />
-				<select class="email-select" onchange="handleRecipientChange(this)">
-					<option value="">Select recipient…</option>
-					<?php foreach (($usersWithEmail ?? []) as $u): ?>
-						<option value="user:<?= htmlspecialchars($u['id']) ?>"><?= htmlspecialchars(($u['preferred_name'] ?: $u['name']) . ' <' . $u['email'] . '>') ?></option>
-					<?php endforeach; ?>
-					<option value="custom">Custom email…</option>
-				</select>
-				<input type="email" class="email-input" placeholder="Enter email address" style="display:none;" />
-				<button type="submit" class="btn btn-success">📧 Email Summary</button>
-			</form>
+		<form method="post" action="/admin/print-reports/email" class="email-form" onsubmit="return validateEmailForm(this)">
+			<?= csrf_field() ?>
+			<input type="hidden" name="report_type" value="judge_summary" />
+			<input type="hidden" name="entity_id" value="" />
+			<input type="hidden" name="user_id" value="" />
+			<input type="hidden" name="to_email" value="" />
+			<select class="email-select unified-recipient" onchange="handleRecipientChange(this)">
+				<option value="">Select recipient…</option>
+				<?php foreach (($usersWithEmail ?? []) as $u): ?>
+					<option value="user:<?= htmlspecialchars($u['id']) ?>"><?= htmlspecialchars(($u['preferred_name'] ?: $u['name']) . ' <' . $u['email'] . '>') ?></option>
+				<?php endforeach; ?>
+				<option value="custom">Custom email…</option>
+			</select>
+			<input type="email" class="email-input unified-email" placeholder="Enter email address" style="display:none;" />
+			<button type="submit" class="btn btn-success">📧 Email Summary</button>
+		</form>
 		</div>
 	</div>
 </div>
