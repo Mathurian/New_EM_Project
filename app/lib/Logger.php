@@ -160,8 +160,12 @@ class Logger {
 				]);
 			}, 'activity_logging');
 		} catch (\Exception $e) {
-			// If database logging fails, it's already logged to file, so we can continue
-			error_log('Database logging failed: ' . $e->getMessage());
+			// If database logging fails, silently continue since file logging succeeded
+			// Only log to error_log if it's a critical error (not permission issues)
+			if (strpos($e->getMessage(), 'readonly database') === false && 
+				strpos($e->getMessage(), 'permission denied') === false) {
+				error_log('Database logging failed: ' . $e->getMessage());
+			}
 		}
 	}
 

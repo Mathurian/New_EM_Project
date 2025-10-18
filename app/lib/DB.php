@@ -606,7 +606,14 @@ SQL;
 		try {
 			return self::executeWithRetry($operation);
 		} catch (\PDOException $e) {
-			// Log the error but don't let it break the application
+			// For readonly database errors, silently fail for non-critical operations
+			if (strpos($e->getMessage(), 'readonly database') !== false || 
+				strpos($e->getMessage(), 'permission denied') !== false) {
+				// Return null for non-critical operations like logging
+				return null;
+			}
+			
+			// For other database errors, log and potentially rethrow
 			error_log("Database error in {$context}: " . $e->getMessage());
 			
 			// For critical operations, we might want to rethrow
