@@ -1,4 +1,4 @@
-<?php use function App\{url}; ?>
+<?php use function App\{url, csrf_field}; ?>
 <h2>Print Reports</h2>
 <div class="navigation-buttons">
 	<a href="/board" class="btn btn-outline">🏠 Dashboard</a>
@@ -23,6 +23,7 @@
 				<div class="action-buttons">
 					<button type="button" class="btn btn-primary" onclick="generateContestSummary()">Generate Summary</button>
 					<form method="post" action="/board/print-reports/email" class="email-form" onsubmit="return validateEmailForm(this)">
+						<?= csrf_field() ?>
 						<input type="hidden" name="report_type" value="contest" />
 						<input type="hidden" name="entity_id" value="" id="contest_email_id" />
 						<input type="hidden" name="user_id" value="" />
@@ -55,6 +56,7 @@
 				<div class="action-buttons">
 					<button type="button" class="btn btn-primary" onclick="generateContestResults()">Generate Results</button>
 					<form method="post" action="/board/print-reports/email" class="email-form" onsubmit="return validateEmailForm(this)">
+						<?= csrf_field() ?>
 						<input type="hidden" name="report_type" value="category" />
 						<input type="hidden" name="entity_id" value="" id="category_email_id" />
 						<input type="hidden" name="user_id" value="" />
@@ -80,6 +82,7 @@
 				<div class="action-buttons">
 					<button type="button" class="btn btn-primary" onclick="generateContestantSummary()">Generate Summary</button>
 					<form method="post" action="/board/print-reports/email" class="email-form" onsubmit="return validateEmailForm(this)">
+						<?= csrf_field() ?>
 						<input type="hidden" name="report_type" value="contestant" />
 						<input type="hidden" name="entity_id" value="" />
 						<input type="hidden" name="user_id" value="" />
@@ -105,6 +108,7 @@
 				<div class="action-buttons">
 					<button type="button" class="btn btn-primary" onclick="generateJudgeSummary()">Generate Summary</button>
 					<form method="post" action="/board/print-reports/email" class="email-form" onsubmit="return validateEmailForm(this)">
+						<?= csrf_field() ?>
 						<input type="hidden" name="report_type" value="judge" />
 						<input type="hidden" name="entity_id" value="" />
 						<input type="hidden" name="user_id" value="" />
