@@ -27,8 +27,12 @@ function render_to_string(string $template, array $data = []): string {
 }
 
 function url(string $path = ''): string {
-	$baseUrl = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'];
-	$basePath = dirname($_SERVER['SCRIPT_NAME']);
+	// Handle missing HTTP_HOST (e.g., CLI context)
+	$host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+	$protocol = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? 'https' : 'http';
+	$baseUrl = $protocol . '://' . $host;
+	
+	$basePath = dirname($_SERVER['SCRIPT_NAME'] ?? '');
 	if ($basePath === '/') $basePath = '';
 	return $baseUrl . $basePath . '/' . ltrim($path, '/');
 }
