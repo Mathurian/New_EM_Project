@@ -5,8 +5,7 @@
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<title><?= $title ?? 'Event Manager' ?></title>
-		<?= App\FrontendOptimizer::cssLink('style.css') ?>
-		<?= App\FrontendOptimizer::generatePreloads() ?>
+		<link rel="stylesheet" href="assets/css/style.css?v=<?= filemtime(__DIR__ . '/../../public/assets/css/style.css') ?>">
         <script>
             // Prevent white flash by setting theme immediately
             (function() {
