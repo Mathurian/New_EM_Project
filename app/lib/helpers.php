@@ -413,7 +413,7 @@ function handle_file_upload_error(string $message, array $file = []): void {
 }
 
 // Global error handler
-function global_error_handler(int $severity, string $message, string $file, int $line): void {
+function global_error_handler(int $severity, string $message, string $file, int $line): bool {
 	$errorTypes = [
 		E_ERROR => 'Fatal Error',
 		E_WARNING => 'Warning',
