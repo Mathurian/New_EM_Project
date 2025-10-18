@@ -5,6 +5,7 @@
  */
 
 require_once __DIR__ . '/app/lib/DB.php';
+require_once __DIR__ . '/app/lib/helpers.php';
 
 try {
     $pdo = App\DB::pdo();
@@ -46,9 +47,74 @@ try {
     $fkList = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
     if (!empty($fkList)) {
-        echo "   ✅ Foreign key constraints are properly configured\n";
+        echo "   Found foreign key constraints:\n";
+        $needsFix = false;
         foreach ($fkList as $fk) {
             echo "   - {$fk['table']}.{$fk['from']} -> {$fk['table']}.{$fk['to']}\n";
+            if ($fk['table'] === 'old_users') {
+                $needsFix = true;
+            }
+        }
+        
+        if ($needsFix) {
+            echo "   ❌ Found foreign key constraint pointing to old_users table\n";
+            echo "   🔧 Fixing foreign key constraint...\n";
+            
+            // Backup existing activity_logs data
+            $stmt = $pdo->query("SELECT * FROM activity_logs");
+            $activityLogsData = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            echo "   📦 Backed up " . count($activityLogsData) . " activity log records\n";
+            
+            // Drop and recreate activity_logs table with correct foreign key
+            $pdo->exec("DROP TABLE activity_logs");
+            echo "   🗑️  Dropped old activity_logs table\n";
+            
+            $pdo->exec("
+                CREATE TABLE activity_logs (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT,
+                    user_name TEXT,
+                    user_role TEXT,
+                    action TEXT NOT NULL,
+                    resource_type TEXT,
+                    resource_id TEXT,
+                    details TEXT,
+                    ip_address TEXT,
+                    user_agent TEXT,
+                    log_level TEXT NOT NULL DEFAULT 'info',
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+                )
+            ");
+            echo "   ✅ Recreated activity_logs table with correct foreign key\n";
+            
+            // Restore data
+            if (!empty($activityLogsData)) {
+                $stmt = $pdo->prepare("
+                    INSERT INTO activity_logs (id, user_id, user_name, user_role, action, resource_type, resource_id, details, ip_address, user_agent, log_level, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ");
+                
+                foreach ($activityLogsData as $log) {
+                    $stmt->execute([
+                        $log['id'],
+                        $log['user_id'],
+                        $log['user_name'],
+                        $log['user_role'],
+                        $log['action'],
+                        $log['resource_type'],
+                        $log['resource_id'],
+                        $log['details'],
+                        $log['ip_address'],
+                        $log['user_agent'],
+                        $log['log_level'],
+                        $log['created_at']
+                    ]);
+                }
+                echo "   ✅ Restored " . count($activityLogsData) . " activity log records\n";
+            }
+        } else {
+            echo "   ✅ Foreign key constraints are properly configured\n";
         }
     } else {
         echo "   ⚠️  No foreign key constraints found (this might be expected)\n";
