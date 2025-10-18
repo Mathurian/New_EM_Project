@@ -26,10 +26,17 @@
 				</button>
 			</form>
 			
-			<form method="post" action="<?= url('admin/users/remove-all-emcees') ?>" style="display: inline-block;">
+			<form method="post" action="<?= url('admin/users/remove-all-emcees') ?>" style="display: inline-block; margin-right: 10px;">
 				<?= App\csrf_field() ?>
 				<button type="submit" onclick="return confirm('Are you sure you want to remove ALL emcees? This action cannot be undone!')" class="btn btn-danger">
 					Remove All Emcees
+				</button>
+			</form>
+			
+			<form method="post" action="<?= url('admin/users/remove-all-tally-masters') ?>" style="display: inline-block;">
+				<?= App\csrf_field() ?>
+				<button type="submit" onclick="return confirm('Are you sure you want to remove ALL tally masters? This action cannot be undone!')" class="btn btn-danger">
+					Remove All Tally Masters
 				</button>
 			</form>
 			
@@ -57,6 +64,7 @@
 		'all_judges_removed' => 'All judges and associated data have been removed successfully!',
 		'all_contestants_removed' => 'All contestants and associated data have been removed successfully!',
         'all_emcees_removed' => 'All emcees have been removed successfully!',
+        'all_tally_masters_removed' => 'All tally masters have been removed successfully!',
         'table_refreshed' => 'User tables have been refreshed successfully!',
         'forced_logout_user' => 'User has been forced to log out.',
         'forced_logout_all' => 'All users have been forced to log out.'
@@ -88,7 +96,8 @@ $roleLabels = [
 	'organizer' => 'Organizers',
 	'judge' => 'Judges', 
 	'emcee' => 'Emcees',
-	'contestant' => 'Contestants'
+	'contestant' => 'Contestants',
+	'tally_master' => 'Tally Masters'
 ];
 ?>
 

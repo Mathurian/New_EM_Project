@@ -4052,6 +4052,49 @@ class UserController {
 		}
 	}
 	
+	public function removeAllTallyMasters(): void {
+		require_organizer();
+		require_csrf();
+		
+		// Debug log bulk removal attempt
+		\App\Logger::debug('bulk_tally_master_removal_attempt', 'tally_master', null, 
+			"Attempting to remove all tally masters");
+		
+		$pdo = DB::pdo();
+		$pdo->beginTransaction();
+		
+		try {
+			// Get count before deletion for logging
+			$tallyMasterCount = $pdo->query('SELECT COUNT(*) FROM users WHERE role = "tally_master"')->fetchColumn();
+			
+			\App\Logger::debug('bulk_tally_master_removal_details', 'tally_master', null, 
+				"Found {$tallyMasterCount} tally masters to remove");
+			
+			// Delete all tally master users
+			$pdo->prepare('DELETE FROM users WHERE role = "tally_master"')->execute();
+			
+			$pdo->commit();
+			
+			// Log successful outcome
+			\App\Logger::debug('bulk_tally_master_removal_success', 'tally_master', null, 
+				"Bulk tally master removal completed successfully: removed {$tallyMasterCount} tally masters");
+			\App\Logger::logBulkOperation('tally_master_removal', 'tally_master', null, 
+				"Removed all {$tallyMasterCount} tally masters");
+			
+			redirect('/admin/users?success=all_tally_masters_removed');
+		} catch (\Exception $e) {
+			$pdo->rollBack();
+			
+			// Log failure outcome
+			\App\Logger::debug('bulk_tally_master_removal_failed', 'tally_master', null, 
+				"Bulk tally master removal failed: " . $e->getMessage());
+			\App\Logger::error('bulk_tally_master_removal_failed', 'tally_master', null, 
+				"Bulk tally master removal failed: " . $e->getMessage());
+			
+			redirect('/admin/users?error=remove_failed');
+		}
+	}
+	
 	public function forceRefresh(): void {
 		require_organizer();
 		require_csrf();
