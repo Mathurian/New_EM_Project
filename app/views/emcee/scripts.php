@@ -1,4 +1,5 @@
 <h2>Contest Scripts</h2>
+<p><a href="/emcee">← Back to Dashboard</a></p>
 
 <?php if (!empty($scripts)): ?>
 <div class="scripts-section">

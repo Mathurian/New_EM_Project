@@ -1,5 +1,6 @@
 <?php use function App\{url}; ?>
 <h2>Judges by Category</h2>
+<p><a href="/emcee">← Back to Dashboard</a></p>
 
 <?php if (empty($groupedJudges)): ?>
 	<p>No judges assigned to contests yet.</p>
