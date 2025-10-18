@@ -2,6 +2,7 @@
 declare(strict_types=1);
 namespace App;
 use PDO;
+use function App\uuid;
 
 class DB {
 	private static ?PDO $pdo = null;
@@ -37,9 +38,6 @@ class DB {
 		return self::$pdo;
 	}
 	
-	private static function uuid(): string {
-		return bin2hex(random_bytes(16));
-	}
 	
 	public static function migrate(): void {
 		$sql = <<<'SQL'

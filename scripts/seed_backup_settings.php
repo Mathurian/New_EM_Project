@@ -31,8 +31,8 @@ try {
     
     // Insert default backup settings
     $stmt = $pdo->prepare('INSERT INTO backup_settings (id, backup_type, enabled, frequency, retention_days) VALUES (?, ?, ?, ?, ?)');
-    $stmt->execute([App\DB::uuid(), 'schema', 0, 'daily', 30]);
-    $stmt->execute([App\DB::uuid(), 'full', 0, 'weekly', 30]);
+    $stmt->execute([\App\uuid(), 'schema', 0, 'daily', 30]);
+    $stmt->execute([\App\uuid(), 'full', 0, 'weekly', 30]);
     
     echo "Successfully seeded backup settings!\n";
     echo "- Schema backup: disabled, daily frequency, 30-day retention\n";

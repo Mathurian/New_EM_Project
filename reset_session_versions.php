@@ -21,7 +21,7 @@ try {
     
     foreach ($users as $user) {
         // Generate a new session version
-        $newSessionVersion = App\DB::uuid();
+        $newSessionVersion = \App\uuid();
         
         // Update the user's session version
         $stmt = $pdo->prepare("UPDATE users SET session_version = ? WHERE id = ?");

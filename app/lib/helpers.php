@@ -139,6 +139,28 @@ function secure_file_upload(array $file, string $uploadDir, string $filenamePref
 function paginate(string $table, array $conditions = [], array $params = [], int $page = 1, int $perPage = 50, string $orderBy = 'id'): array {
 	$offset = ($page - 1) * $perPage;
 	
+	// Validate and sanitize table name
+	$allowedTables = ['contests', 'users', 'categories', 'subcategories', 'criteria', 'scores', 'judge_certifications', 'judge_comments', 'deductions', 'system_settings', 'backup_settings', 'emcee_scripts', 'templates'];
+	if (!in_array($table, $allowedTables)) {
+		throw new \InvalidArgumentException("Invalid table name: {$table}");
+	}
+	
+	// Validate and sanitize orderBy column
+	$allowedOrderColumns = ['id', 'name', 'created_at', 'updated_at', 'start_date', 'end_date', 'email', 'role', 'score', 'max_score', 'created_by', 'filename', 'title', 'description'];
+	$orderByParts = explode(' ', trim($orderBy));
+	$orderColumn = $orderByParts[0];
+	$orderDirection = isset($orderByParts[1]) ? strtoupper($orderByParts[1]) : 'ASC';
+	
+	if (!in_array($orderColumn, $allowedOrderColumns)) {
+		throw new \InvalidArgumentException("Invalid order column: {$orderColumn}");
+	}
+	
+	if (!in_array($orderDirection, ['ASC', 'DESC'])) {
+		throw new \InvalidArgumentException("Invalid order direction: {$orderDirection}");
+	}
+	
+	$orderBy = $orderColumn . ' ' . $orderDirection;
+	
 	// Build WHERE clause
 	$whereClause = '';
 	if (!empty($conditions)) {

@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
-use function App\{view, render, redirect, param, post, request_array, current_user, is_logged_in, is_organizer, is_judge, is_emcee, require_login, require_organizer, require_emcee, csrf_field, require_csrf, secure_file_upload, paginate, pagination_links, validate_input, sanitize_input, get_user_validation_rules, handle_error, handle_validation_errors, handle_database_error};
+use function App\{view, render, redirect, param, post, request_array, current_user, is_logged_in, is_organizer, is_judge, is_emcee, require_login, require_organizer, require_emcee, csrf_field, require_csrf, secure_file_upload, paginate, pagination_links, validate_input, sanitize_input, get_user_validation_rules, handle_error, handle_validation_errors, handle_database_error, uuid};
 
 class UserController {
 	public function new(): void {

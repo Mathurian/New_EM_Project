@@ -25,11 +25,43 @@ class PaginationService
         $page = max(1, $page);
         $perPage = max(1, min(100, $perPage)); // Cap at 100 items per page
         
+        // Validate and sanitize table name
+        $allowedTables = ['contests', 'users', 'categories', 'subcategories', 'criteria', 'scores', 'judge_certifications', 'judge_comments', 'deductions', 'system_settings', 'backup_settings', 'emcee_scripts', 'templates'];
+        if (!in_array($table, $allowedTables)) {
+            throw new \InvalidArgumentException("Invalid table name: {$table}");
+        }
+        
+        // Validate and sanitize orderBy column
+        $allowedOrderColumns = ['id', 'name', 'created_at', 'updated_at', 'start_date', 'end_date', 'email', 'role', 'score', 'max_score', 'created_by', 'filename', 'title', 'description'];
+        $orderByParts = explode(' ', trim($orderBy));
+        $orderColumn = $orderByParts[0];
+        $orderDirection = isset($orderByParts[1]) ? strtoupper($orderByParts[1]) : 'ASC';
+        
+        if (!in_array($orderColumn, $allowedOrderColumns)) {
+            throw new \InvalidArgumentException("Invalid order column: {$orderColumn}");
+        }
+        
+        if (!in_array($orderDirection, ['ASC', 'DESC'])) {
+            throw new \InvalidArgumentException("Invalid order direction: {$orderDirection}");
+        }
+        
+        $orderBy = $orderColumn . ' ' . $orderDirection;
+        
+        // Validate select columns (basic check)
+        if ($select !== '*' && !preg_match('/^[a-zA-Z_][a-zA-Z0-9_,\s]*$/', $select)) {
+            throw new \InvalidArgumentException("Invalid select columns: {$select}");
+        }
+        
+        // Validate joins (basic check)
+        if ($joins && !preg_match('/^[a-zA-Z_\s,]*$/', $joins)) {
+            throw new \InvalidArgumentException("Invalid joins: {$joins}");
+        }
+        
         $offset = ($page - 1) * $perPage;
         
         // Build query
         $whereClause = $where ? "WHERE {$where}" : '';
-        $sql = "SELECT {$select} FROM {$table} {$joins} {$whereClause} ORDER BY {$orderBy} LIMIT ? OFFSET ?";
+        $sql = "SELECT {$select} FROM `{$table}` {$joins} {$whereClause} ORDER BY {$orderBy} LIMIT ? OFFSET ?";
         
         $queryParams = array_merge($params, [$perPage, $offset]);
         
@@ -39,7 +71,7 @@ class PaginationService
         $items = $stmt->fetchAll(\PDO::FETCH_ASSOC);
         
         // Get total count
-        $countSql = "SELECT COUNT(*) as total FROM {$table} {$joins} {$whereClause}";
+        $countSql = "SELECT COUNT(*) as total FROM `{$table}` {$joins} {$whereClause}";
         $countStmt = DB::pdo()->prepare($countSql);
         $countStmt->execute($params);
         $total = (int)$countStmt->fetchColumn();
