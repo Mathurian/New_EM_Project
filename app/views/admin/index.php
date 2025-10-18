@@ -12,13 +12,27 @@
 			$currentContest = DB::pdo()->query('SELECT * FROM contests ORDER BY start_date DESC LIMIT 1')->fetch(\PDO::FETCH_ASSOC);
 			$currentContestId = $currentContest['id'] ?? null;
 			
+			// Calculate counts for current contest
+			$currentContestCategoriesCount = 0;
+			$currentContestSubcategoriesCount = 0;
+			
+			if ($currentContestId) {
+				$stmt = DB::pdo()->prepare('SELECT COUNT(*) FROM categories WHERE contest_id = ?');
+				$stmt->execute([$currentContestId]);
+				$currentContestCategoriesCount = $stmt->fetchColumn();
+				
+				$stmt = DB::pdo()->prepare('SELECT COUNT(*) FROM subcategories sc JOIN categories c ON sc.category_id = c.id WHERE c.contest_id = ?');
+				$stmt->execute([$currentContestId]);
+				$currentContestSubcategoriesCount = $stmt->fetchColumn();
+			}
+			
 			$stats = [
 				'Total Users' => DB::pdo()->query('SELECT COUNT(*) FROM users')->fetchColumn(),
 				'Active Judges' => DB::pdo()->query('SELECT COUNT(*) FROM users WHERE role = "judge"')->fetchColumn(),
 				'Contestants' => DB::pdo()->query('SELECT COUNT(*) FROM users WHERE role = "contestant"')->fetchColumn(),
 				'Emcees' => DB::pdo()->query('SELECT COUNT(*) FROM users WHERE role = "emcee"')->fetchColumn(),
-				'Contests' => DB::pdo()->query('SELECT COUNT(*) FROM contests')->fetchColumn(),
-				'Categories' => DB::pdo()->query('SELECT COUNT(*) FROM categories')->fetchColumn(),
+				'Contests' => $currentContestCategoriesCount, // Count of categories in current contest
+				'Categories' => $currentContestSubcategoriesCount, // Count of subcategories in current contest
 				'Templates' => DB::pdo()->query('SELECT COUNT(*) FROM subcategory_templates')->fetchColumn()
 			];
 			?>
