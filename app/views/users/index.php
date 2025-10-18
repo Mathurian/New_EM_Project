@@ -133,6 +133,7 @@ $roleLabels = [
 							<a href="<?= url('people/contestants/' . urlencode($user['id']) . '/bio') ?>">Bio</a> |
 							<a href="<?= url('admin/contestant/' . urlencode($user['id']) . '/scores') ?>">Scores</a> |
 							<form method="post" action="<?= url('people/contestants/' . urlencode($user['id']) . '/delete') ?>" style="display:inline">
+								<?= csrf_field() ?>
 								<button type="submit" onclick="return confirm('Are you sure you want to delete this contestant?')">Delete</button>
 							</form>
                         <?php else: ?>
@@ -141,9 +142,11 @@ $roleLabels = [
 								<a href="<?= url('people/judges/' . urlencode($user['judge_id'] ?? '') . '/bio') ?>">Bio</a> |
 							<?php endif; ?>
                             <form method="post" action="<?= url('admin/users/' . urlencode($user['id']) . '/force-logout') ?>" style="display:inline">
+                                <?= csrf_field() ?>
                                 <button type="submit" onclick="return confirm('Force this user to log out?')">Force Logout</button>
                             </form> |
 							<form method="post" action="<?= url('admin/users/' . urlencode($user['id']) . '/delete') ?>" style="display:inline">
+								<?= csrf_field() ?>
 								<button type="submit" onclick="return confirm('Are you sure you want to delete this user?')">Delete</button>
 							</form>
 						<?php endif; ?>

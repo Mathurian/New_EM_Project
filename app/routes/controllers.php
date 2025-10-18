@@ -2,7 +2,7 @@
 declare(strict_types=1);
 namespace App\Routes;
 use App\DB;
-use function App\{view, render, redirect, param, post, request_array, current_user, is_logged_in, is_organizer, is_judge, is_emcee, require_login, require_organizer, require_emcee, csrf_field, require_csrf};
+use function App\{view, render, redirect, param, post, request_array, current_user, is_logged_in, is_organizer, is_judge, is_emcee, require_login, require_organizer, require_emcee, csrf_field, require_csrf, secure_file_upload};
 
 function uuid(): string { return bin2hex(random_bytes(16)); }
 
@@ -2258,19 +2258,15 @@ class PeopleController {
 		// Handle image upload
 		if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
 			$uploadDir = __DIR__ . '/../../public/uploads/contestants/';
-			// Create directory if it doesn't exist
-			if (!is_dir($uploadDir)) {
-				mkdir($uploadDir, 0755, true);
-			}
-			$extension = pathinfo($_FILES['image']['name'], PATHINFO_EXTENSION);
-			$filename = uuid() . '.' . $extension;
-			$imagePath = '/uploads/contestants/' . $filename;
+			$result = secure_file_upload($_FILES['image'], $uploadDir, 'contestant');
 			
-			if (!move_uploaded_file($_FILES['image']['tmp_name'], $uploadDir . $filename)) {
-				$_SESSION['error_message'] = 'Failed to upload image - check directory permissions';
+			if (!$result['success']) {
+				$_SESSION['error_message'] = 'Image upload failed: ' . implode(', ', $result['errors']);
 				redirect('/people/new');
 				return;
 			}
+			
+			$imagePath = '/uploads/contestants/' . $result['filename'];
 		}
 		
 		// Auto-assign contestant number if not provided
@@ -2292,19 +2288,15 @@ class PeopleController {
 		// Handle image upload
 		if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
 			$uploadDir = __DIR__ . '/../../public/uploads/judges/';
-			// Create directory if it doesn't exist
-			if (!is_dir($uploadDir)) {
-				mkdir($uploadDir, 0755, true);
-			}
-			$extension = pathinfo($_FILES['image']['name'], PATHINFO_EXTENSION);
-			$filename = uuid() . '.' . $extension;
-			$imagePath = '/uploads/judges/' . $filename;
+			$result = secure_file_upload($_FILES['image'], $uploadDir, 'judge');
 			
-			if (!move_uploaded_file($_FILES['image']['tmp_name'], $uploadDir . $filename)) {
-				$_SESSION['error_message'] = 'Failed to upload image - check directory permissions';
+			if (!$result['success']) {
+				$_SESSION['error_message'] = 'Image upload failed: ' . implode(', ', $result['errors']);
 				redirect('/people/new');
 				return;
 			}
+			
+			$imagePath = '/uploads/judges/' . $result['filename'];
 		}
 		
 		$stmt = DB::pdo()->prepare('INSERT INTO judges (id, name, email, gender, pronouns, bio, image_path) VALUES (?, ?, ?, ?, ?, ?, ?)');
@@ -2340,19 +2332,15 @@ class PeopleController {
 		// Handle image upload
 		if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
 			$uploadDir = __DIR__ . '/../../public/uploads/contestants/';
-			// Create directory if it doesn't exist
-			if (!is_dir($uploadDir)) {
-				mkdir($uploadDir, 0755, true);
-			}
-			$extension = pathinfo($_FILES['image']['name'], PATHINFO_EXTENSION);
-			$filename = uuid() . '.' . $extension;
-			$imagePath = '/uploads/contestants/' . $filename;
+			$result = secure_file_upload($_FILES['image'], $uploadDir, 'contestant');
 			
-			if (!move_uploaded_file($_FILES['image']['tmp_name'], $uploadDir . $filename)) {
-				$_SESSION['error_message'] = 'Failed to upload image - check directory permissions';
+			if (!$result['success']) {
+				$_SESSION['error_message'] = 'Image upload failed: ' . implode(', ', $result['errors']);
 				redirect('/people/contestants/' . $id . '/edit');
 				return;
 			}
+			
+			$imagePath = '/uploads/contestants/' . $result['filename'];
 		}
 		
 		// Get current image path if no new image uploaded
@@ -2481,19 +2469,15 @@ class PeopleController {
 		// Handle image upload
 		if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
 			$uploadDir = __DIR__ . '/../../public/uploads/judges/';
-			// Create directory if it doesn't exist
-			if (!is_dir($uploadDir)) {
-				mkdir($uploadDir, 0755, true);
-			}
-			$extension = pathinfo($_FILES['image']['name'], PATHINFO_EXTENSION);
-			$filename = uuid() . '.' . $extension;
-			$imagePath = '/uploads/judges/' . $filename;
+			$result = secure_file_upload($_FILES['image'], $uploadDir, 'judge');
 			
-			if (!move_uploaded_file($_FILES['image']['tmp_name'], $uploadDir . $filename)) {
-				$_SESSION['error_message'] = 'Failed to upload image - check directory permissions';
+			if (!$result['success']) {
+				$_SESSION['error_message'] = 'Image upload failed: ' . implode(', ', $result['errors']);
 				redirect('/people/judges/' . $id . '/edit');
 				return;
 			}
+			
+			$imagePath = '/uploads/judges/' . $result['filename'];
 		}
 		
 		// Get current image path if no new image uploaded
@@ -2611,6 +2595,7 @@ class AssignmentController {
 	}
 	public function update(array $params): void {
 		require_organizer();
+		require_csrf();
 		$subcategoryId = param('id', $params);
 		$contestants = request_array('contestants');
 		$judges = request_array('judges');
@@ -5132,44 +5117,25 @@ class AdminController {
 			return;
 		}
 		
-		// Validate file type
-		$allowedTypes = ['application/pdf', 'text/plain', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
-		$fileType = $_FILES['script_file']['type'];
-		if (!in_array($fileType, $allowedTypes)) {
-			\App\Logger::warn('emcee_script_upload', 'admin', $_SESSION['user']['id'] ?? null, 
-				"Invalid file type attempted: {$fileType}");
-			redirect('/admin/emcee-scripts?error=invalid_file_type');
-			return;
-		}
-		
-		// Validate file size (10MB limit)
-		$maxSize = 10 * 1024 * 1024; // 10MB
-		if ($_FILES['script_file']['size'] > $maxSize) {
-			\App\Logger::warn('emcee_script_upload', 'admin', $_SESSION['user']['id'] ?? null, 
-				"File too large: " . $_FILES['script_file']['size'] . " bytes");
-			redirect('/admin/emcee-scripts?error=file_too_large');
-			return;
-		}
-		
-		// Create upload directory if it doesn't exist
+		// Use secure file upload with document-specific validation
 		$uploadDir = __DIR__ . '/../../public/uploads/emcee-scripts/';
-		if (!is_dir($uploadDir)) {
-			if (!mkdir($uploadDir, 0755, true)) {
-				\App\Logger::error('emcee_script_upload', 'admin', $_SESSION['user']['id'] ?? null, 
-					"Failed to create upload directory: {$uploadDir}");
-				redirect('/admin/emcee-scripts?error=file_save_failed');
-				return;
-			}
+		$allowedTypes = ['application/pdf', 'text/plain', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+		$maxSize = 10 * 1024 * 1024; // 10MB
+		
+		$result = secure_file_upload($_FILES['script_file'], $uploadDir, 'script', $allowedTypes, $maxSize);
+		
+		if (!$result['success']) {
+			\App\Logger::warn('emcee_script_upload', 'admin', $_SESSION['user']['id'] ?? null, 
+				"File upload validation failed: " . implode(', ', $result['errors']));
+			redirect('/admin/emcee-scripts?error=file_validation_failed');
+			return;
 		}
 		
-		// Generate unique filename to prevent conflicts
+		$filename = $result['filename'];
+		$filepath = $result['filePath'];
 		$originalFilename = $_FILES['script_file']['name'];
-		$fileExtension = pathinfo($originalFilename, PATHINFO_EXTENSION);
-		$filename = uniqid() . '_' . preg_replace('/[^a-zA-Z0-9._-]/', '_', $originalFilename);
-		$filepath = $uploadDir . $filename;
 		
-		// Move uploaded file
-		if (move_uploaded_file($_FILES['script_file']['tmp_name'], $filepath)) {
+		// File uploaded successfully
 			$description = trim($_POST['description'] ?? '');
 			$fileSize = $_FILES['script_file']['size'];
 			$uploadedAt = date('Y-m-d H:i:s');

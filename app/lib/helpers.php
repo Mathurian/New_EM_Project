@@ -67,6 +67,77 @@ function require_csrf(): void {
 	}
 }
 
+// Secure File Upload Functions
+function validate_uploaded_file(array $file, array $allowedTypes = ['image/jpeg', 'image/png', 'image/gif'], int $maxSize = 5242880): array {
+	$errors = [];
+	
+	// Check for upload errors
+	if ($file['error'] !== UPLOAD_ERR_OK) {
+		$errors[] = 'File upload failed with error code: ' . $file['error'];
+		return $errors;
+	}
+	
+	// Check file size
+	if ($file['size'] > $maxSize) {
+		$errors[] = 'File size exceeds maximum allowed size of ' . ($maxSize / 1024 / 1024) . 'MB';
+	}
+	
+	// Check MIME type
+	$finfo = finfo_open(FILEINFO_MIME_TYPE);
+	$mimeType = finfo_file($finfo, $file['tmp_name']);
+	finfo_close($finfo);
+	
+	if (!in_array($mimeType, $allowedTypes)) {
+		$errors[] = 'Invalid file type. Allowed types: ' . implode(', ', $allowedTypes);
+	}
+	
+	// Check file extension
+	$extension = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+	$allowedExtensions = ['jpg', 'jpeg', 'png', 'gif'];
+	if (!in_array($extension, $allowedExtensions)) {
+		$errors[] = 'Invalid file extension. Allowed extensions: ' . implode(', ', $allowedExtensions);
+	}
+	
+	// Additional security: check if file is actually an image
+	if (in_array($mimeType, ['image/jpeg', 'image/png', 'image/gif'])) {
+		$imageInfo = getimagesize($file['tmp_name']);
+		if ($imageInfo === false) {
+			$errors[] = 'File is not a valid image';
+		}
+	}
+	
+	return $errors;
+}
+
+function secure_file_upload(array $file, string $uploadDir, string $filenamePrefix = '', array $allowedTypes = ['image/jpeg', 'image/png', 'image/gif'], int $maxSize = 5242880): array {
+	$errors = validate_uploaded_file($file);
+	if (!empty($errors)) {
+		return ['success' => false, 'errors' => $errors];
+	}
+	
+	// Create upload directory if it doesn't exist
+	if (!is_dir($uploadDir)) {
+		if (!mkdir($uploadDir, 0755, true)) {
+			return ['success' => false, 'errors' => ['Failed to create upload directory']];
+		}
+	}
+	
+	// Generate secure filename
+	$extension = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+	$filename = ($filenamePrefix ? $filenamePrefix . '_' : '') . uuid() . '.' . $extension;
+	$filePath = $uploadDir . $filename;
+	
+	// Move uploaded file
+	if (!move_uploaded_file($file['tmp_name'], $filePath)) {
+		return ['success' => false, 'errors' => ['Failed to move uploaded file']];
+	}
+	
+	// Set proper permissions
+	chmod($filePath, 0644);
+	
+	return ['success' => true, 'filename' => $filename, 'filePath' => $filePath];
+}
+
 function current_user(): ?array { return $_SESSION['user'] ?? null; }
 function is_logged_in(): bool {
     $user = $_SESSION['user'] ?? null;

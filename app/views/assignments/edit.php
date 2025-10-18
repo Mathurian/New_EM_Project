@@ -6,6 +6,7 @@
 	<?php unset($_SESSION['success_message']); ?>
 <?php endif; ?>
 <form method="post" action="/subcategories/<?= urlencode($subcategory['id']) ?>/assign">
+	<?= csrf_field() ?>
 	<div class="two-col">
 		<div>
 			<h3>Contestants</h3>
