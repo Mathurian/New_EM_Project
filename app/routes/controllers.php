@@ -19,6 +19,7 @@ class ContestController {
 	public function new(): void { require_organizer(); view('contests/new'); }
 	public function create(): void {
 		require_organizer();
+		require_csrf();
 		
 		$name = post('name');
 		$startDate = post('start_date');

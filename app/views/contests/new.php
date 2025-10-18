@@ -6,6 +6,7 @@
 </div>
 
 <form method="post" action="/contests" class="card">
+	<?= App\csrf_field() ?>
 	<div class="form-group">
 		<label for="name">Contest Name</label>
 		<input type="text" id="name" name="name" required />
