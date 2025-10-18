@@ -40,8 +40,10 @@ try {
             role TEXT NOT NULL CHECK (role IN ('organizer','judge','emcee','contestant','tally_master')),
             judge_id TEXT,
             gender TEXT,
-            pronouns TEXT,
             session_version INTEGER NOT NULL DEFAULT 1,
+            last_login TEXT,
+            contestant_id TEXT,
+            pronouns TEXT,
             FOREIGN KEY (judge_id) REFERENCES judges(id) ON DELETE SET NULL
         )
     ");
