@@ -118,6 +118,14 @@ $router->get('/tally-master/score-review', 'TallyMasterController@scoreReview');
 $router->get('/tally-master/certification', 'TallyMasterController@certification');
 $router->post('/tally-master/certify-totals', 'TallyMasterController@certifyTotals');
 
+// auditor
+$router->get('/auditor', 'AuditorController@index');
+$router->get('/auditor/scores', 'AuditorController@scores');
+$router->get('/auditor/tally-master-status', 'AuditorController@tallyMasterStatus');
+$router->get('/auditor/final-certification', 'AuditorController@finalCertification');
+$router->post('/auditor/final-certification', 'AuditorController@performFinalCertification');
+$router->get('/auditor/summary', 'AuditorController@summary');
+
 // templates
 $router->get('/admin/templates', 'TemplateController@index');
 $router->get('/admin/templates/new', 'TemplateController@new');

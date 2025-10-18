@@ -3575,7 +3575,7 @@ class UserController {
 		}
 		
 		// Require password for certain roles
-		if (in_array($role, ['organizer', 'tally_master']) && empty($password)) {
+		if (in_array($role, ['organizer', 'tally_master', 'auditor']) && empty($password)) {
 			\App\Logger::debug('user_creation_password_required', 'user', null, 
 				"User creation failed: password required for role {$role}");
 			redirect('/users/new?error=password_required');
