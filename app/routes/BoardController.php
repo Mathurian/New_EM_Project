@@ -85,18 +85,25 @@ class BoardController {
 		require_board();
 		require_csrf();
 		
+		// Debug: Log the start of upload process
+		error_log('Board upload: Starting upload process');
+		
 		// Validate required fields
 		$title = trim($_POST['title'] ?? '');
 		if (empty($title)) {
+			error_log('Board upload: Title validation failed');
 			redirect('/board/emcee-scripts?error=title_required');
 			return;
 		}
 		
 		// Check if file was uploaded
 		if (!isset($_FILES['script_file']) || $_FILES['script_file']['error'] !== UPLOAD_ERR_OK) {
+			error_log('Board upload: File upload failed - error code: ' . ($_FILES['script_file']['error'] ?? 'no file'));
 			redirect('/board/emcee-scripts?error=file_upload_failed');
 			return;
 		}
+		
+		error_log('Board upload: File validation passed, proceeding with secure_file_upload');
 		
 		// Use secure file upload with document-specific validation (same as admin)
 		$uploadDir = __DIR__ . '/../../public/uploads/emcee-scripts/';
@@ -106,9 +113,12 @@ class BoardController {
 		$result = secure_file_upload($_FILES['script_file'], $uploadDir, 'script', $allowedTypes, $maxSize);
 		
 		if (!$result['success']) {
-			redirect('/board/emcee-scripts?error=file_validation_failed');
+			error_log('Board upload: secure_file_upload failed - ' . implode(', ', $result['errors']));
+			redirect('/board/emcee-scripts?error=file_validation_failed&details=' . urlencode(implode(', ', $result['errors'])));
 			return;
 		}
+		
+		error_log('Board upload: secure_file_upload successful');
 		
 		$filename = $result['filename'];
 		$filepath = $result['filePath'];
@@ -120,17 +130,27 @@ class BoardController {
 		$uploadedAt = date('Y-m-d H:i:s');
 		
 		try {
+			// Debug: Log the database insert attempt
+			error_log('Board upload: Attempting database insert for file: ' . $filename);
+			error_log('Board upload: User ID: ' . current_user()['id']);
+			
 			// Use the same database insert as admin (with all columns)
 			$insertValues = [uuid(), $filename, '/uploads/emcee-scripts/' . $filename, 1, date('Y-m-d H:i:s'), current_user()['id'], $title, $description, $originalFilename, $fileSize, $uploadedAt];
 			
 			$stmt = DB::pdo()->prepare('INSERT INTO emcee_scripts (id, filename, file_path, is_active, created_at, uploaded_by, title, description, file_name, file_size, uploaded_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
 			$stmt->execute($insertValues);
 			
+			error_log('Board upload: Database insert successful');
 			redirect('/board/emcee-scripts?success=script_uploaded');
 		} catch (\Exception $e) {
+			// Debug: Log the database error
+			error_log('Board upload: Database insert failed - ' . $e->getMessage());
+			error_log('Board upload: Exception trace - ' . $e->getTraceAsString());
+			
 			// Clean up uploaded file if database insert fails
 			if (file_exists($filepath)) {
 				unlink($filepath);
+				error_log('Board upload: Cleaned up uploaded file');
 			}
 			// Redirect with error details for debugging
 			redirect('/board/emcee-scripts?error=file_save_failed&details=' . urlencode($e->getMessage()));
