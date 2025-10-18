@@ -132,10 +132,10 @@ class BoardController {
 		try {
 			// Debug: Log the database insert attempt
 			error_log('Board upload: Attempting database insert for file: ' . $filename);
-			error_log('Board upload: User ID: ' . current_user()['id']);
+			error_log('Board upload: User ID: ' . \App\current_user()['id']);
 			
 			// Use the same database insert as admin (with all columns)
-			$insertValues = [uuid(), $filename, '/uploads/emcee-scripts/' . $filename, 1, date('Y-m-d H:i:s'), current_user()['id'], $title, $description, $originalFilename, $fileSize, $uploadedAt];
+			$insertValues = [\App\uuid(), $filename, '/uploads/emcee-scripts/' . $filename, 1, date('Y-m-d H:i:s'), \App\current_user()['id'], $title, $description, $originalFilename, $fileSize, $uploadedAt];
 			
 			$stmt = DB::pdo()->prepare('INSERT INTO emcee_scripts (id, filename, file_path, is_active, created_at, uploaded_by, title, description, file_name, file_size, uploaded_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
 			$stmt->execute($insertValues);
@@ -295,7 +295,7 @@ class BoardController {
 		}
 		
 		// Create removal request
-		$requestId = uuid();
+		$requestId = \App\uuid();
 		$stmt = $pdo->prepare('
 			INSERT INTO judge_score_removal_requests (id, judge_id, requested_by, reason, status, created_at)
 			VALUES (?, ?, ?, ?, ?, ?)
