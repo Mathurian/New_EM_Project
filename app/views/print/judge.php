@@ -1,4 +1,4 @@
-<?php use function App\{url}; ?>
+<?php use function App\{url, calculate_score_tabulation, format_score_tabulation}; ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>

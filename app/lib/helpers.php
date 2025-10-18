@@ -675,6 +675,11 @@ function calculate_score_tabulation(array $scores): array {
 		'by_subcategory' => []
 	];
 	
+	// Handle empty scores array
+	if (empty($scores)) {
+		return $tabulation;
+	}
+	
 	foreach ($scores as $score) {
 		$current = (float)$score['score'];
 		$possible = (float)$score['max_score'];
@@ -712,9 +717,14 @@ function calculate_score_tabulation(array $scores): array {
 }
 
 function format_score_tabulation(array $tabulation, string $level = 'overall'): string {
+	// Handle empty or invalid tabulation
+	if (empty($tabulation) || !is_array($tabulation)) {
+		return '0.0 / 0.0 (N/A%)';
+	}
+	
 	if ($level === 'overall') {
-		$current = $tabulation['total_current'];
-		$possible = $tabulation['total_possible'];
+		$current = $tabulation['total_current'] ?? 0;
+		$possible = $tabulation['total_possible'] ?? 0;
 	} else {
 		$current = $tabulation['current'] ?? 0;
 		$possible = $tabulation['possible'] ?? 0;
