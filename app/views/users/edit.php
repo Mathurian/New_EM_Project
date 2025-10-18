@@ -38,7 +38,7 @@
 				<label class="form-label">Email Address (optional)</label>
 				<div class="form-input">
 					<input type="email" name="email" value="<?= htmlspecialchars($user['email'] ?? '') ?>" placeholder="Leave blank if no email needed" />
-					<small>Required for organizers, optional for others</small>
+					<small>Required for organizers and tally masters, optional for others</small>
 				</div>
 			</div>
 			

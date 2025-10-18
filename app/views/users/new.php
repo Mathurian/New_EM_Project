@@ -67,7 +67,7 @@
 					<label class="form-label">Email Address (optional)</label>
 					<div class="form-input">
 						<input type="email" name="email" placeholder="Leave blank if no email needed" />
-						<small>Required for organizers, optional for others</small>
+						<small>Required for organizers and tally masters, optional for others</small>
 					</div>
 				</div>
 				
@@ -78,7 +78,7 @@
 						<div class="alert alert-info" style="margin-top:6px;">
 							Password must be at least 8 characters and include uppercase, lowercase, number, and symbol.
 						</div>
-						<small>Required for organizers, optional for others</small>
+						<small>Required for organizers and tally masters, optional for others</small>
 					</div>
 				</div>
 			</div>
@@ -95,6 +95,7 @@
 							<option value="organizer">Organizer</option>
 							<option value="judge">Judge</option>
 							<option value="emcee">Emcee</option>
+							<option value="tally_master">Tally Master</option>
 							<option value="contestant">Contestant</option>
 						</select>
 					</div>
