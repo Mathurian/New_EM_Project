@@ -2,7 +2,7 @@
 
 namespace App;
 
-function uuid(): string { return bin2hex(random_bytes(16)); }
+use function App\uuid;
 
 class Logger {
 	const LEVEL_DEBUG = 'debug';
