@@ -16,7 +16,10 @@ class Cache
     {
         self::$cacheDir = __DIR__ . '/../../storage/cache/';
         if (!is_dir(self::$cacheDir)) {
-            mkdir(self::$cacheDir, 0755, true);
+            if (!mkdir(self::$cacheDir, 0755, true)) {
+                error_log("Cache: Failed to create cache directory: " . self::$cacheDir);
+                throw new \RuntimeException("Failed to create cache directory: " . self::$cacheDir);
+            }
         }
     }
 
