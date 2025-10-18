@@ -1501,7 +1501,7 @@ class BackupController {
 		$output = [];
 		$returnCode = 0;
 		
-		exec("php \"$scriptPath\" 2>&1", $output, $returnCode);
+		exec("php \"" . escapeshellarg($scriptPath) . "\" 2>&1", $output, $returnCode);
 		
 		echo '<pre>SQLite3 Script Output:</pre>';
 		echo '<pre>' . implode("\n", $output) . '</pre>';
