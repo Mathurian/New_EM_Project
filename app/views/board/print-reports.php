@@ -14,7 +14,7 @@
 			<p>Generate comprehensive summary for an entire contest including all categories.</p>
 			<div class="report-form">
 				<label for="contest_id">Select Contest:</label>
-				<select id="contest_id" class="form-control">
+				<select id="contest_id" class="form-control" onchange="updateContestEmailId()">
 					<option value="">Choose a contest...</option>
 					<?php foreach ($contests as $contest): ?>
 						<option value="<?= $contest['id'] ?>"><?= htmlspecialchars($contest['name']) ?></option>
@@ -47,7 +47,7 @@
 			<p>Generate detailed results for a specific contest category.</p>
 			<div class="report-form">
 				<label for="category_id">Select Category:</label>
-				<select id="category_id" class="form-control">
+				<select id="category_id" class="form-control" onchange="updateCategoryEmailId()">
 					<option value="">Choose a category...</option>
 					<?php foreach ($categories as $category): ?>
 						<option value="<?= $category['id'] ?>"><?= htmlspecialchars($category['name']) ?></option>
@@ -83,7 +83,7 @@
 					<button type="button" class="btn btn-primary" onclick="generateContestantSummary()">Generate Summary</button>
 					<form method="post" action="/board/print-reports/email" class="email-form" onsubmit="return validateEmailForm(this)">
 						<?= csrf_field() ?>
-						<input type="hidden" name="report_type" value="contestant" />
+						<input type="hidden" name="report_type" value="contestant_summary" />
 						<input type="hidden" name="entity_id" value="" />
 						<input type="hidden" name="user_id" value="" />
 						<input type="hidden" name="to_email" value="" />
@@ -109,7 +109,7 @@
 					<button type="button" class="btn btn-primary" onclick="generateJudgeSummary()">Generate Summary</button>
 					<form method="post" action="/board/print-reports/email" class="email-form" onsubmit="return validateEmailForm(this)">
 						<?= csrf_field() ?>
-						<input type="hidden" name="report_type" value="judge" />
+						<input type="hidden" name="report_type" value="judge_summary" />
 						<input type="hidden" name="entity_id" value="" />
 						<input type="hidden" name="user_id" value="" />
 						<input type="hidden" name="to_email" value="" />
@@ -134,6 +134,24 @@ function openPrintWindow(url) {
 	const printWindow = window.open(url, 'printWindow', 'width=800,height=600,scrollbars=yes,resizable=yes');
 	if (printWindow) {
 		printWindow.focus();
+	}
+}
+
+// Function to update contest email entity_id
+function updateContestEmailId() {
+	const contestId = document.getElementById('contest_id').value;
+	const emailIdField = document.getElementById('contest_email_id');
+	if (emailIdField) {
+		emailIdField.value = contestId;
+	}
+}
+
+// Function to update category email entity_id
+function updateCategoryEmailId() {
+	const categoryId = document.getElementById('category_id').value;
+	const emailIdField = document.getElementById('category_email_id');
+	if (emailIdField) {
+		emailIdField.value = categoryId;
 	}
 }
 

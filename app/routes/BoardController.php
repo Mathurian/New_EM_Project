@@ -350,7 +350,45 @@ class BoardController {
 		$subject = '';
 		$isEmail = true; // Flag for email templates
 		
-		if ($reportType === 'contestant') {
+		if ($reportType === 'contest') {
+			// Get contest data
+			$contest = DB::pdo()->prepare('SELECT * FROM contests WHERE id = ?');
+			$contest->execute([$entityId]);
+			$contest = $contest->fetch(\PDO::FETCH_ASSOC);
+			
+			if (!$contest) {
+				redirect('/board/print-reports?error=contest_not_found');
+				return;
+			}
+			
+			// For contest summary, we'll generate a simple HTML email
+			$html = '<html><body>';
+			$html .= '<h1>Contest Summary: ' . htmlspecialchars($contest['name']) . '</h1>';
+			$html .= '<p>This is a summary of the contest: ' . htmlspecialchars($contest['name']) . '</p>';
+			$html .= '<p>Contest ID: ' . htmlspecialchars($contest['id']) . '</p>';
+			$html .= '<p>Generated on: ' . date('Y-m-d H:i:s') . '</p>';
+			$html .= '</body></html>';
+			$subject = 'Contest Summary: ' . ($contest['name'] ?? '');
+			
+		} else if ($reportType === 'contestant_summary') {
+			// Generate contestant summary email
+			$html = '<html><body>';
+			$html .= '<h1>Contestant Summary Report</h1>';
+			$html .= '<p>This is a summary of all contestants and their scores.</p>';
+			$html .= '<p>Generated on: ' . date('Y-m-d H:i:s') . '</p>';
+			$html .= '</body></html>';
+			$subject = 'Contestant Summary Report';
+			
+		} else if ($reportType === 'judge_summary') {
+			// Generate judge summary email
+			$html = '<html><body>';
+			$html .= '<h1>Judge Summary Report</h1>';
+			$html .= '<p>This is a summary of all judges and their certifications.</p>';
+			$html .= '<p>Generated on: ' . date('Y-m-d H:i:s') . '</p>';
+			$html .= '</body></html>';
+			$subject = 'Judge Summary Report';
+			
+		} else if ($reportType === 'contestant') {
 			// Get contestant data
 			$contestant = DB::pdo()->prepare('SELECT * FROM contestants WHERE id = ?');
 			$contestant->execute([$entityId]);
