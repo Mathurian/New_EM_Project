@@ -10,8 +10,8 @@
 	
 	<div class="report-options">
 		<div class="report-card">
-			<h4>📊 Contest Results</h4>
-			<p>Generate comprehensive results for an entire contest.</p>
+			<h4>📊 Contest Summary</h4>
+			<p>Generate comprehensive summary for an entire contest including all categories.</p>
 			<div class="report-form">
 				<label for="contest_id">Select Contest:</label>
 				<select id="contest_id" class="form-control">
@@ -21,8 +21,8 @@
 					<?php endforeach; ?>
 				</select>
 				<div class="action-buttons">
-					<button type="button" class="btn btn-primary" onclick="generateContestReport()">Generate Report</button>
-					<form method="post" action="/admin/print-reports/email" class="email-form" onsubmit="return validateEmailForm(this)">
+					<button type="button" class="btn btn-primary" onclick="generateContestSummary()">Generate Summary</button>
+					<form method="post" action="/board/print-reports/email" class="email-form" onsubmit="return validateEmailForm(this)">
 						<input type="hidden" name="report_type" value="contest" />
 						<input type="hidden" name="entity_id" value="" id="contest_email_id" />
 						<input type="hidden" name="user_id" value="" />
@@ -35,15 +35,15 @@
 							<option value="custom">Custom email…</option>
 						</select>
 						<input type="email" class="email-input" placeholder="Enter email address" style="display:none;" />
-						<button type="submit" class="btn btn-success">📧 Email Report</button>
+						<button type="submit" class="btn btn-success">📧 Email Summary</button>
 					</form>
 				</div>
 			</div>
 		</div>
 		
 		<div class="report-card">
-			<h4>📋 Category Results</h4>
-			<p>Generate detailed results for a specific category.</p>
+			<h4>📋 Contest Results</h4>
+			<p>Generate detailed results for a specific contest category.</p>
 			<div class="report-form">
 				<label for="category_id">Select Category:</label>
 				<select id="category_id" class="form-control">
@@ -53,8 +53,8 @@
 					<?php endforeach; ?>
 				</select>
 				<div class="action-buttons">
-					<button type="button" class="btn btn-primary" onclick="generateCategoryReport()">Generate Report</button>
-					<form method="post" action="/admin/print-reports/email" class="email-form" onsubmit="return validateEmailForm(this)">
+					<button type="button" class="btn btn-primary" onclick="generateContestResults()">Generate Results</button>
+					<form method="post" action="/board/print-reports/email" class="email-form" onsubmit="return validateEmailForm(this)">
 						<input type="hidden" name="report_type" value="category" />
 						<input type="hidden" name="entity_id" value="" id="category_email_id" />
 						<input type="hidden" name="user_id" value="" />
@@ -67,7 +67,7 @@
 							<option value="custom">Custom email…</option>
 						</select>
 						<input type="email" class="email-input" placeholder="Enter email address" style="display:none;" />
-						<button type="submit" class="btn btn-success">📧 Email Report</button>
+						<button type="submit" class="btn btn-success">📧 Email Results</button>
 					</form>
 				</div>
 			</div>
@@ -79,7 +79,7 @@
 			<div class="report-form">
 				<div class="action-buttons">
 					<button type="button" class="btn btn-primary" onclick="generateContestantSummary()">Generate Summary</button>
-					<form method="post" action="/admin/print-reports/email" class="email-form" onsubmit="return validateEmailForm(this)">
+					<form method="post" action="/board/print-reports/email" class="email-form" onsubmit="return validateEmailForm(this)">
 						<input type="hidden" name="report_type" value="contestant" />
 						<input type="hidden" name="entity_id" value="" />
 						<input type="hidden" name="user_id" value="" />
@@ -104,7 +104,7 @@
 			<div class="report-form">
 				<div class="action-buttons">
 					<button type="button" class="btn btn-primary" onclick="generateJudgeSummary()">Generate Summary</button>
-					<form method="post" action="/admin/print-reports/email" class="email-form" onsubmit="return validateEmailForm(this)">
+					<form method="post" action="/board/print-reports/email" class="email-form" onsubmit="return validateEmailForm(this)">
 						<input type="hidden" name="report_type" value="judge" />
 						<input type="hidden" name="entity_id" value="" />
 						<input type="hidden" name="user_id" value="" />
@@ -122,15 +122,6 @@
 				</div>
 			</div>
 		</div>
-	</div>
-</div>
-
-<div class="recent-reports">
-	<h3>Recent Reports</h3>
-	<p>Reports will be generated and available for download here.</p>
-	<div class="reports-list">
-		<p class="text-muted">No recent reports available.</p>
-	</div>
 </div>
 
 <script>
@@ -142,18 +133,18 @@ function openPrintWindow(url) {
 	}
 }
 
-function generateContestReport() {
+function generateContestSummary() {
 	const contestId = document.getElementById('contest_id').value;
 	if (!contestId) {
 		alert('Please select a contest.');
 		return;
 	}
-	// For contest reports, we'll generate a category report for each category in the contest
-	// This is a simplified approach - you might want to create a dedicated contest report
-	alert('Contest reports are not yet implemented. Please use category reports for now.');
+	// For contest summary, we'll generate a category report for each category in the contest
+	// This is a simplified approach - you might want to create a dedicated contest summary report
+	alert('Contest summary reports are not yet implemented. Please use contest results for now.');
 }
 
-function generateCategoryReport() {
+function generateContestResults() {
 	const categoryId = document.getElementById('category_id').value;
 	if (!categoryId) {
 		alert('Please select a category.');

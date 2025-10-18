@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace App\Routes;
 
-use function App\{view, redirect, require_board, require_csrf, url, current_user, is_board, is_organizer, is_auditor, is_tally_master, secure_file_upload, uuid};
+use function App\{view, redirect, require_board, require_csrf, url, current_user, is_board, is_organizer, is_auditor, is_tally_master, secure_file_upload, uuid, render_to_string};
 use App\DB;
 use App\Logger;
 
@@ -313,5 +313,115 @@ class BoardController {
 			"Judge score removal initiated for judge {$judgeId}: {$reason}");
 		
 		redirect('/board/remove-judge-scores?success=removal_initiated');
+	}
+	
+	public function emailReport(): void {
+		require_board();
+		require_csrf();
+		
+		$reportType = $_POST['report_type'] ?? '';
+		$entityId = $_POST['entity_id'] ?? '';
+		$userId = $_POST['user_id'] ?? '';
+		$toEmail = $_POST['to_email'] ?? '';
+		
+		if (empty($reportType) || empty($entityId) || (empty($userId) && empty($toEmail))) {
+			redirect('/board/print-reports?error=missing_email_data');
+			return;
+		}
+		
+		// Determine recipient email
+		$recipientEmail = '';
+		if (!empty($userId)) {
+			$user = DB::pdo()->prepare('SELECT email FROM users WHERE id = ?');
+			$user->execute([$userId]);
+			$userData = $user->fetch(\PDO::FETCH_ASSOC);
+			$recipientEmail = $userData['email'] ?? '';
+		} else {
+			$recipientEmail = $toEmail;
+		}
+		
+		if (empty($recipientEmail)) {
+			redirect('/board/print-reports?error=invalid_email');
+			return;
+		}
+		
+		// Generate report HTML based on type
+		$html = '';
+		$subject = '';
+		$isEmail = true; // Flag for email templates
+		
+		if ($reportType === 'contestant') {
+			// Get contestant data
+			$contestant = DB::pdo()->prepare('SELECT * FROM contestants WHERE id = ?');
+			$contestant->execute([$entityId]);
+			$contestant = $contestant->fetch(\PDO::FETCH_ASSOC);
+			
+			if (!$contestant) {
+				redirect('/board/print-reports?error=contestant_not_found');
+				return;
+			}
+			
+			// Get subcategories, scores, comments, deductions (simplified for email)
+			$subcategories = [];
+			$scores = [];
+			$comments = [];
+			$deductions = [];
+			$tabulation = [];
+			
+			$html = \App\render_to_string('print/contestant', compact('contestant','subcategories','scores','comments','deductions','tabulation','isEmail'));
+			$subject = 'Contestant Report: ' . ($contestant['name'] ?? '');
+			
+		} else if ($reportType === 'judge') {
+			// Get judge data
+			$judge = DB::pdo()->prepare('SELECT * FROM judges WHERE id = ?');
+			$judge->execute([$entityId]);
+			$judge = $judge->fetch(\PDO::FETCH_ASSOC);
+			
+			if (!$judge) {
+				redirect('/board/print-reports?error=judge_not_found');
+				return;
+			}
+			
+			// Get subcategories, scores, comments (simplified for email)
+			$subcategories = [];
+			$scores = [];
+			$comments = [];
+			$tabulation = [];
+			
+			$html = \App\render_to_string('print/judge', compact('judge','subcategories','scores','comments','tabulation','isEmail'));
+			$subject = 'Judge Report: ' . ($judge['name'] ?? '');
+			
+		} else if ($reportType === 'category') {
+			// Get category data
+			$category = DB::pdo()->prepare('SELECT * FROM categories WHERE id = ?');
+			$category->execute([$entityId]);
+			$category = $category->fetch(\PDO::FETCH_ASSOC);
+			
+			if (!$category) {
+				redirect('/board/print-reports?error=category_not_found');
+				return;
+			}
+			
+			// Get subcategories, scores, contestants (simplified for email)
+			$subcategories = [];
+			$scores = [];
+			$contestants = [];
+			
+			$html = \App\render_to_string('print/category', compact('category','subcategories','scores','contestants','isEmail'));
+			$subject = 'Category Report: ' . ($category['name'] ?? '');
+			
+		} else {
+			redirect('/board/print-reports?error=invalid_report_type');
+			return;
+		}
+		
+		$sent = \App\Mailer::sendHtml($recipientEmail, $subject, $html);
+		if ($sent) {
+			\App\Logger::logAdminAction('email_report_sent', 'board', current_user()['id'], 
+				"type={$reportType}; to={$recipientEmail}");
+			redirect('/board/print-reports?success=report_emailed');
+		} else {
+			redirect('/board/print-reports?error=email_failed');
+		}
 	}
 }
