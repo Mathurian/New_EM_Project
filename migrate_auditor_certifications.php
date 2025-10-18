@@ -29,15 +29,15 @@ try {
     $pdo->exec($sql);
     echo "✅ auditor_certifications table created successfully\n";
     
-    // Verify table structure
-    $stmt = $pdo->query("DESCRIBE auditor_certifications");
+    // Verify table structure (SQLite compatible)
+    $stmt = $pdo->query("PRAGMA table_info(auditor_certifications)");
     $columns = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
     echo "\nTable structure:\n";
     foreach ($columns as $column) {
-        echo "  {$column['Field']}: {$column['Type']} " . 
-             ($column['Null'] === 'NO' ? 'NOT NULL' : 'NULL') . 
-             ($column['Key'] ? " ({$column['Key']})" : '') . "\n";
+        $nullInfo = $column['notnull'] ? 'NOT NULL' : 'NULL';
+        $keyInfo = $column['pk'] ? ' (PRIMARY KEY)' : '';
+        echo "  {$column['name']}: {$column['type']} {$nullInfo}{$keyInfo}\n";
     }
     
     echo "\n🎉 Auditor certification table migration completed successfully!\n";
