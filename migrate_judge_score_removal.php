@@ -17,6 +17,11 @@ echo "==========================================\n\n";
 try {
     $pdo = DB::pdo();
     
+    // Disable database logging temporarily to avoid issues with old table references
+    Logger::setLevel(Logger::LEVEL_ERROR);
+    
+    echo "✅ Database connection successful\n";
+    
     // Create judge_score_removal_requests table
     $sql = "
         CREATE TABLE IF NOT EXISTS judge_score_removal_requests (
@@ -39,7 +44,6 @@ try {
         );
     ";
     $pdo->exec($sql);
-    Logger::info('migration', 'judge_score_removal_requests_table_created', null, "Judge score removal requests table created or already exists.");
     echo "Judge score removal requests table created or already exists.\n";
 
     // Add indexes for better performance
@@ -53,14 +57,11 @@ try {
         $pdo->exec($indexSql);
     }
     
-    Logger::info('migration', 'judge_score_removal_requests_indexes_created', null, "Indexes for judge score removal requests created or already exist.");
     echo "Indexes created or already exist.\n";
 
     echo "Judge Score Removal Requests migration completed successfully.\n";
-    Logger::info('migration', 'judge_score_removal_requests_migration_success', null, "Judge Score Removal Requests migration completed successfully.");
 
 } catch (\PDOException $e) {
-    Logger::error('migration', 'judge_score_removal_requests_migration_failed', null, "Judge Score Removal Requests migration failed: " . $e->getMessage());
     echo "Judge Score Removal Requests migration failed: " . $e->getMessage() . "\n";
     exit(1);
 }
