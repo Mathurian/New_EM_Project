@@ -187,3 +187,15 @@ document.addEventListener('DOMContentLoaded', function(){
     });
 });
 </script>
+
+<?php if (isset($pagination) && $pagination['total_pages'] > 1): ?>
+<div class="pagination-container" style="margin-top: 2rem; text-align: center;">
+	<?= pagination_links($pagination, url('admin/users'), ['role' => $role ?? '']) ?>
+	
+	<div class="pagination-info" style="margin-top: 1rem; color: #666; font-size: 0.9rem;">
+		Showing <?= $pagination['per_page'] * ($pagination['current_page'] - 1) + 1 ?> to 
+		<?= min($pagination['per_page'] * $pagination['current_page'], $pagination['total_count']) ?> 
+		of <?= $pagination['total_count'] ?> users
+	</div>
+</div>
+<?php endif; ?>

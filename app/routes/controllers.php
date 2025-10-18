@@ -2,7 +2,7 @@
 declare(strict_types=1);
 namespace App\Routes;
 use App\DB;
-use function App\{view, render, redirect, param, post, request_array, current_user, is_logged_in, is_organizer, is_judge, is_emcee, require_login, require_organizer, require_emcee, csrf_field, require_csrf, secure_file_upload};
+use function App\{view, render, redirect, param, post, request_array, current_user, is_logged_in, is_organizer, is_judge, is_emcee, require_login, require_organizer, require_emcee, csrf_field, require_csrf, secure_file_upload, paginate, pagination_links, validate_input, sanitize_input, get_user_validation_rules};
 
 function uuid(): string { return bin2hex(random_bytes(16)); }
 
@@ -3499,25 +3499,31 @@ class UserController {
 		require_organizer();
 		require_csrf();
 		
-		$name = post('name');
-		$email = post('email') ?: null;
-		$password = post('password');
-		$role = post('role');
-		$preferredName = post('preferred_name') ?: $name;
-		$gender = post('gender') ?: null;
-		$pronouns = post('pronouns') ?: null;
-		$categoryId = post('category_id') ?: null;
-		$isHeadJudge = post('is_head_judge') ? 1 : 0;
+		// Get and sanitize input data
+		$inputData = sanitize_input($_POST);
+		$name = $inputData['name'] ?? '';
+		$email = $inputData['email'] ?? null;
+		$password = $inputData['password'] ?? '';
+		$role = $inputData['role'] ?? '';
+		$preferredName = $inputData['preferred_name'] ?? $name;
+		$gender = $inputData['gender'] ?? null;
+		$pronouns = $inputData['pronouns'] ?? null;
+		$categoryId = $inputData['category_id'] ?? null;
+		$isHeadJudge = isset($inputData['is_head_judge']) ? 1 : 0;
 		
 		// Debug log user creation attempt
 		\App\Logger::debug('user_creation_attempt', 'user', null, 
 			"Attempting to create user: name={$name}, email={$email}, role={$role}, category_id={$categoryId}, is_head_judge={$isHeadJudge}");
 		
-		// Validate required fields
-		if (empty($name) || empty($role)) {
+		// Validate input data
+		$validationRules = get_user_validation_rules();
+		$validationErrors = validate_input($inputData, $validationRules);
+		
+		if (!empty($validationErrors)) {
 			\App\Logger::debug('user_creation_validation_failed', 'user', null, 
-				"User creation failed validation: missing name or role");
-			redirect('/users/new?error=missing_fields');
+				"User creation failed validation: " . json_encode($validationErrors));
+			$_SESSION['validation_errors'] = $validationErrors;
+			redirect('/users/new?error=validation_failed');
 			return;
 		}
 		
@@ -3635,19 +3641,44 @@ class UserController {
 	public function index(): void {
 		require_organizer();
 		
+		$page = (int)($_GET['page'] ?? 1);
+		$perPage = 50;
+		$role = $_GET['role'] ?? '';
+		
 		// Debug log data retrieval
 		\App\Logger::debug('users_index_data_retrieval', 'users', null, 
-			"Retrieving users with their associated contestant/judge data");
+			"Retrieving users with their associated contestant/judge data, page: {$page}, role: {$role}");
 		
-		$users = DB::pdo()->query('
+		// Build query with optional role filter
+		$whereClause = '';
+		$params = [];
+		if (!empty($role)) {
+			$whereClause = ' WHERE u.role = ?';
+			$params[] = $role;
+		}
+		
+		$sql = "
 			SELECT u.*, 
 			       c.contestant_number,
 			       j.is_head_judge
 			FROM users u 
 			LEFT JOIN contestants c ON u.contestant_id = c.id 
 			LEFT JOIN judges j ON u.judge_id = j.id
+			{$whereClause}
 			ORDER BY u.role, u.name
-		')->fetchAll(\PDO::FETCH_ASSOC);
+		";
+		
+		// Get total count
+		$countSql = "SELECT COUNT(*) FROM users u{$whereClause}";
+		$stmt = DB::pdo()->prepare($countSql);
+		$stmt->execute($params);
+		$totalCount = $stmt->fetchColumn();
+		
+		// Get paginated data
+		$offset = ($page - 1) * $perPage;
+		$stmt = DB::pdo()->prepare($sql . " LIMIT ? OFFSET ?");
+		$stmt->execute(array_merge($params, [$perPage, $offset]));
+		$users = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 		
 		// Group users by role
 		$usersByRole = [];
@@ -3655,14 +3686,27 @@ class UserController {
 			$usersByRole[$user['role']][] = $user;
 		}
 		
+		// Calculate pagination info
+		$totalPages = ceil($totalCount / $perPage);
+		$pagination = [
+			'current_page' => $page,
+			'per_page' => $perPage,
+			'total_count' => $totalCount,
+			'total_pages' => $totalPages,
+			'has_next' => $page < $totalPages,
+			'has_prev' => $page > 1,
+			'next_page' => $page < $totalPages ? $page + 1 : null,
+			'prev_page' => $page > 1 ? $page - 1 : null,
+		];
+		
 		\App\Logger::debug('users_index_data_retrieved', 'users', null, 
-			"Retrieved " . count($users) . " total users: " . 
+			"Retrieved " . count($users) . " users (page {$page}/{$totalPages}): " . 
 			(count($usersByRole['organizer'] ?? []) . " organizers, " .
 			count($usersByRole['judge'] ?? []) . " judges, " .
 			count($usersByRole['contestant'] ?? []) . " contestants, " .
 			count($usersByRole['emcee'] ?? []) . " emcees"));
 		
-		view('users/index', compact('usersByRole'));
+		view('users/index', compact('usersByRole', 'pagination', 'role'));
 	}
 	
 	public function edit(array $params): void {

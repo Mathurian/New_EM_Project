@@ -10,7 +10,12 @@ require __DIR__ . '/lib/Router.php';
 require __DIR__ . '/lib/DB.php';
 require __DIR__ . '/lib/Logger.php';
 require __DIR__ . '/lib/Mailer.php';
+require __DIR__ . '/controllers/UserController.php';
 require __DIR__ . '/routes/controllers.php';
+
+// Set up global error handlers
+set_error_handler('App\global_error_handler');
+set_exception_handler('App\global_exception_handler');
 
 // Session timeout check (configurable)
 $timeout = 30 * 60; // Default 30 minutes in seconds
