@@ -45,10 +45,7 @@ function request_array(string $key): array {
 
 // CSRF Protection Functions
 function csrf_token(): string {
-	if (!isset($_SESSION['csrf_token'])) {
-		$_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-	}
-	return $_SESSION['csrf_token'];
+	return SecurityService::generateCsrfToken();
 }
 
 function csrf_field(): string {
@@ -57,7 +54,7 @@ function csrf_field(): string {
 
 function verify_csrf_token(): bool {
 	$token = $_POST['csrf_token'] ?? '';
-	return hash_equals($_SESSION['csrf_token'] ?? '', $token);
+	return SecurityService::verifyCsrfToken($token);
 }
 
 function require_csrf(): void {
@@ -401,18 +398,12 @@ function handle_error(string $message, int $code = 500, array $context = []): vo
 }
 
 function handle_validation_errors(array $errors): void {
-	$_SESSION['validation_errors'] = $errors;
+	ErrorHandler::handleValidationErrors($errors);
 	redirect($_SERVER['HTTP_REFERER'] ?? '/');
 }
 
 function handle_database_error(\PDOException $e, string $operation = 'database_operation'): void {
-	\App\Logger::error('database_error', 'database', null, 
-		"Database error during {$operation}: " . $e->getMessage());
-	
-	handle_error('Database operation failed', 500, [
-		'operation' => $operation,
-		'error' => $e->getMessage()
-	]);
+	ErrorHandler::handleDatabaseError($e, $operation);
 }
 
 function handle_file_upload_error(string $message, array $file = []): void {
