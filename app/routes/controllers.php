@@ -3506,6 +3506,43 @@ class AuthController {
 		
 		view('auth/judge_contestants', compact('subcategory', 'contestants'));
 	}
+	
+	public function judgeContestants(): void {
+		require_login();
+		if (!is_judge()) {
+			http_response_code(403);
+			echo 'Forbidden';
+			return;
+		}
+		
+		// Get all contestants with numbers
+		$contestants = DB::pdo()->query('SELECT * FROM contestants WHERE contestant_number IS NOT NULL ORDER BY contestant_number')->fetchAll(\PDO::FETCH_ASSOC);
+		
+		view('auth/judge_contestants_list', compact('contestants'));
+	}
+	
+	public function judgeContestantBio(array $params): void {
+		require_login();
+		if (!is_judge()) {
+			http_response_code(403);
+			echo 'Forbidden';
+			return;
+		}
+		
+		$number = param('number', $params);
+		
+		$stmt = DB::pdo()->prepare('SELECT * FROM contestants WHERE contestant_number = ?');
+		$stmt->execute([$number]);
+		$contestant = $stmt->fetch(\PDO::FETCH_ASSOC);
+		
+		if (!$contestant) {
+			http_response_code(404);
+			echo 'Contestant not found';
+			return;
+		}
+		
+		view('auth/judge_contestant_bio', compact('contestant'));
+	}
 }
 
 class UserController {

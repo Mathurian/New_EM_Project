@@ -545,7 +545,7 @@ function can_view_nav(string $item): bool {
 	if (is_tally_master()) { return in_array($item, ['Home','Score Review','Certification','My Profile','Logout'], true); }
 	if (is_auditor()) { return in_array($item, ['Home','Score Audit','Final Certification','My Profile','Logout'], true); }
 	// judge
-	return in_array($item, ['Home','My Assignments','My Profile','Logout','Results'], true);
+	return in_array($item, ['Home','My Assignments','Contestant Bios','My Profile','Logout','Results'], true);
 }
 
 function back_url(string $default = '/'): string {

@@ -31,6 +31,8 @@ $router->post('/logout', 'AuthController@logout');
 // judge dashboard (assigned subcategories)
 $router->get('/judge', 'AuthController@judgeDashboard');
 $router->get('/judge/subcategory/{id}', 'AuthController@judgeSubcategoryContestants');
+$router->get('/judge/contestants', 'AuthController@judgeContestants');
+$router->get('/judge/contestant/{number}', 'AuthController@judgeContestantBio');
 
 // admin
 $router->get('/admin', 'AdminController@index');

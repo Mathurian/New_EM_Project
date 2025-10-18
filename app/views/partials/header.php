@@ -119,6 +119,10 @@
 						<a href="/judge" class="role-specific-link">Judgy Time!</a>
 					<?php endif; ?>
 					
+					<?php if (($_SESSION['user']['role'] ?? '') === 'judge' && can_view_nav('Contestant Bios')): ?>
+						<a href="/judge/contestants" class="role-specific-link">Contestant Bios</a>
+					<?php endif; ?>
+					
 					<!-- Emcee Navigation Items -->
 					<?php if (($_SESSION['user']['role'] ?? '') === 'emcee'): ?>
 						<a href="/emcee/scripts" class="role-specific-link">Scripts</a>

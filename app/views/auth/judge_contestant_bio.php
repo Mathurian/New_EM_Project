@@ -1,8 +1,8 @@
 <h2>Contestant Bio: <?= htmlspecialchars($contestant['name']) ?></h2>
 
 <div class="navigation-buttons">
-	<a href="/emcee/contestants" class="btn btn-secondary">← Back to Contestants</a>
-	<a href="/emcee" class="btn btn-outline">🏠 Dashboard</a>
+	<a href="/judge/contestants" class="btn btn-secondary">← Back to Contestants</a>
+	<a href="/judge" class="btn btn-outline">🏠 Dashboard</a>
 </div>
 
 <div class="contestant-bio">
