@@ -144,6 +144,7 @@ $router->post('/board/emcee-scripts', 'BoardController@uploadEmceeScript');
 $router->post('/board/emcee-scripts/{id}/toggle', 'BoardController@toggleEmceeScript');
 $router->post('/board/emcee-scripts/{id}/delete', 'BoardController@deleteEmceeScript');
 $router->get('/board/print-reports', 'BoardController@printReports');
+$router->get('/board/contest-summary/{id}', 'BoardController@contestSummary');
 $router->post('/board/print-reports/email', 'BoardController@emailReport');
 $router->get('/board/remove-judge-scores', 'BoardController@removeJudgeScores');
 $router->post('/board/remove-judge-scores', 'BoardController@initiateScoreRemoval');

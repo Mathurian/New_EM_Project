@@ -4,6 +4,55 @@
 	<a href="/board" class="btn btn-outline">🏠 Dashboard</a>
 </div>
 
+<?php if (isset($_GET['success'])): ?>
+	<div class="alert alert-success">
+		<?php
+		switch ($_GET['success']) {
+			case 'report_emailed':
+				echo 'Report emailed successfully!';
+				break;
+			default:
+				echo 'Operation completed successfully!';
+		}
+		?>
+	</div>
+<?php endif; ?>
+
+<?php if (isset($_GET['error'])): ?>
+	<div class="alert alert-danger">
+		<?php
+		switch ($_GET['error']) {
+			case 'missing_email_data':
+				echo 'Please select a recipient for the email.';
+				break;
+			case 'missing_entity_id':
+				echo 'Please select a contest or category before emailing.';
+				break;
+			case 'invalid_email':
+				echo 'Invalid email address provided.';
+				break;
+			case 'email_failed':
+				echo 'Failed to send email. Please try again.';
+				break;
+			case 'contest_not_found':
+				echo 'Contest not found.';
+				break;
+			case 'category_not_found':
+				echo 'Category not found.';
+				break;
+			case 'contestant_not_found':
+				echo 'Contestant not found.';
+				break;
+			case 'judge_not_found':
+				echo 'Judge not found.';
+				break;
+			default:
+				echo 'An error occurred. Please try again.';
+		}
+		?>
+	</div>
+<?php endif; ?>
+
 <div class="reports-section">
 	<h3>Available Reports</h3>
 	<p>Select a contest and category to generate reports.</p>
@@ -128,6 +177,27 @@
 		</div>
 </div>
 
+<style>
+.alert {
+	padding: 12px 16px;
+	margin-bottom: 20px;
+	border-radius: 4px;
+	border: 1px solid transparent;
+}
+
+.alert-success {
+	color: #155724;
+	background-color: #d4edda;
+	border-color: #c3e6cb;
+}
+
+.alert-danger {
+	color: #721c24;
+	background-color: #f8d7da;
+	border-color: #f5c6cb;
+}
+</style>
+
 <script>
 // Function to open print windows that can be closed properly
 function openPrintWindow(url) {
@@ -161,9 +231,8 @@ function generateContestSummary() {
 		alert('Please select a contest.');
 		return;
 	}
-	// For contest summary, we'll generate a category report for each category in the contest
-	// This is a simplified approach - you might want to create a dedicated contest summary report
-	alert('Contest summary reports are not yet implemented. Please use contest results for now.');
+	// Generate contest summary by opening a new window with contest data
+	openPrintWindow('/board/contest-summary/' + contestId);
 }
 
 function generateContestResults() {

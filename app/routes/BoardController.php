@@ -324,8 +324,16 @@ class BoardController {
 		$userId = $_POST['user_id'] ?? '';
 		$toEmail = $_POST['to_email'] ?? '';
 		
-		if (empty($reportType) || empty($entityId) || (empty($userId) && empty($toEmail))) {
+		// Validate required fields based on report type
+		$requiresEntityId = in_array($reportType, ['contest', 'contestant', 'judge', 'category']);
+		
+		if (empty($reportType) || (empty($userId) && empty($toEmail))) {
 			redirect('/board/print-reports?error=missing_email_data');
+			return;
+		}
+		
+		if ($requiresEntityId && empty($entityId)) {
+			redirect('/board/print-reports?error=missing_entity_id');
 			return;
 		}
 		
@@ -440,10 +448,28 @@ class BoardController {
 				return;
 			}
 			
-			// Get subcategories, scores, contestants (simplified for email)
-			$subcategories = [];
-			$scores = [];
-			$contestants = [];
+			// Get subcategories, scores, contestants for email
+			$subcategories = $pdo->prepare('SELECT * FROM subcategories WHERE category_id = ? ORDER BY name');
+			$subcategories->execute([$entityId]);
+			$subcategories = $subcategories->fetchAll(\PDO::FETCH_ASSOC);
+			
+			// Get all scores for this category
+			$scores = $pdo->prepare('
+				SELECT s.*, sc.name as subcategory_name, cr.name as criterion_name, cr.max_score, j.name as judge_name,
+				       con.name as contestant_name, con.contestant_number
+				FROM scores s 
+				JOIN subcategories sc ON s.subcategory_id = sc.id 
+				JOIN criteria cr ON s.criterion_id = cr.id 
+				JOIN contestants con ON s.contestant_id = con.id
+				JOIN judges j ON s.judge_id = j.id 
+				WHERE sc.category_id = ? 
+				ORDER BY sc.name, con.name, cr.name, j.name
+			');
+			$scores->execute([$entityId]);
+			$scores = $scores->fetchAll(\PDO::FETCH_ASSOC);
+			
+			// Get contestants with their total scores for this category
+			$contestants = calculate_contestant_totals_for_category($entityId);
 			
 			$html = \App\render_to_string('print/category', compact('category','subcategories','scores','contestants','isEmail'));
 			$subject = 'Category Report: ' . ($category['name'] ?? '');
@@ -461,5 +487,45 @@ class BoardController {
 		} else {
 			redirect('/board/print-reports?error=email_failed');
 		}
+	}
+	
+	public function contestSummary(array $params): void {
+		require_board();
+		
+		$contestId = $params['id'] ?? '';
+		if (empty($contestId)) {
+			redirect('/board/print-reports?error=invalid_contest');
+			return;
+		}
+		
+		$pdo = DB::pdo();
+		
+		// Get contest data
+		$contest = $pdo->prepare('SELECT * FROM contests WHERE id = ?');
+		$contest->execute([$contestId]);
+		$contest = $contest->fetch(\PDO::FETCH_ASSOC);
+		
+		if (!$contest) {
+			redirect('/board/print-reports?error=contest_not_found');
+			return;
+		}
+		
+		// Get all categories for this contest
+		$categories = $pdo->prepare('SELECT * FROM categories WHERE contest_id = ? ORDER BY name');
+		$categories->execute([$contestId]);
+		$categories = $categories->fetchAll(\PDO::FETCH_ASSOC);
+		
+		// Get summary data for each category
+		$categoryData = [];
+		foreach ($categories as $category) {
+			// Get contestants with their total scores for this category
+			$contestants = calculate_contestant_totals_for_category($category['id']);
+			$categoryData[] = [
+				'category' => $category,
+				'contestants' => $contestants
+			];
+		}
+		
+		view('board/contest-summary', compact('contest', 'categories', 'categoryData'));
 	}
 }

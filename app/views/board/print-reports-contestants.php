@@ -4,6 +4,43 @@
 	<a href="/board/print-reports" class="btn btn-outline">🏠 Dashboard</a>
 </div>
 
+<?php if (isset($_GET['success'])): ?>
+	<div class="alert alert-success">
+		<?php
+		switch ($_GET['success']) {
+			case 'report_emailed':
+				echo 'Report emailed successfully!';
+				break;
+			default:
+				echo 'Operation completed successfully!';
+		}
+		?>
+	</div>
+<?php endif; ?>
+
+<?php if (isset($_GET['error'])): ?>
+	<div class="alert alert-danger">
+		<?php
+		switch ($_GET['error']) {
+			case 'missing_email_data':
+				echo 'Please select a recipient for the email.';
+				break;
+			case 'invalid_email':
+				echo 'Invalid email address provided.';
+				break;
+			case 'email_failed':
+				echo 'Failed to send email. Please try again.';
+				break;
+			case 'contestant_not_found':
+				echo 'Contestant not found.';
+				break;
+			default:
+				echo 'An error occurred. Please try again.';
+		}
+		?>
+	</div>
+<?php endif; ?>
+
 <div class="reports-section">
 	<h3>Contestant Reports</h3>
 	<p>Generate individual reports for each contestant.</p>
@@ -44,6 +81,27 @@
 		<?php endif; ?>
 	</div>
 </div>
+
+<style>
+.alert {
+	padding: 12px 16px;
+	margin-bottom: 20px;
+	border-radius: 4px;
+	border: 1px solid transparent;
+}
+
+.alert-success {
+	color: #155724;
+	background-color: #d4edda;
+	border-color: #c3e6cb;
+}
+
+.alert-danger {
+	color: #721c24;
+	background-color: #f8d7da;
+	border-color: #f5c6cb;
+}
+</style>
 
 <script>
 // Function to open print windows that can be closed properly
