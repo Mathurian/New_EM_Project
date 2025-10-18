@@ -392,10 +392,10 @@ class BoardController {
 			// Generate comprehensive contestant summary email
 			$pdo = DB::pdo();
 			
-			// Get all contestants with their scores
+			// Get all contestants with their scores - simplified query
 			$contestants = $pdo->query('
-				SELECT c.*, 
-				       COUNT(DISTINCT s.subcategory_id) as subcategories_count,
+				SELECT c.id, c.name, c.contestant_number,
+				       COALESCE(COUNT(DISTINCT s.subcategory_id), 0) as subcategories_count,
 				       COALESCE(AVG(s.score), 0) as avg_score,
 				       COALESCE(SUM(s.score), 0) as total_score
 				FROM contestants c
@@ -425,9 +425,9 @@ class BoardController {
 					$html .= '<td>' . $rank++ . '</td>';
 					$html .= '<td>' . htmlspecialchars($contestant['name']) . '</td>';
 					$html .= '<td>' . htmlspecialchars($contestant['contestant_number'] ?? '') . '</td>';
-					$html .= '<td>' . number_format($contestant['total_score'] ?? 0, 2) . '</td>';
-					$html .= '<td>' . number_format($contestant['avg_score'] ?? 0, 2) . '</td>';
-					$html .= '<td>' . ($contestant['subcategories_count'] ?? 0) . '</td>';
+					$html .= '<td>' . number_format($contestant['total_score'], 2) . '</td>';
+					$html .= '<td>' . number_format($contestant['avg_score'], 2) . '</td>';
+					$html .= '<td>' . $contestant['subcategories_count'] . '</td>';
 					$html .= '</tr>';
 				}
 				$html .= '</table>';
@@ -442,51 +442,34 @@ class BoardController {
 			// Generate comprehensive judge summary email
 			$pdo = DB::pdo();
 			
-			// Get all judges with their certification status
+			// Get all judges with their certification status and scores
 			$judges = $pdo->query('
-				SELECT j.*, 
-				       COUNT(DISTINCT jc.subcategory_id) as certified_subcategories,
-				       COUNT(DISTINCT s.subcategory_id) as total_subcategories,
-				       COUNT(s.id) as total_scores,
-				       COALESCE(AVG(s.score), 0) as avg_score
+				SELECT j.id, j.name, j.preferred_name,
+				       COUNT(DISTINCT jc.subcategory_id) as certified_categories,
+				       COUNT(DISTINCT s.subcategory_id) as total_categories,
+				       COALESCE(SUM(s.score), 0) as total_scores_given
 				FROM judges j
 				LEFT JOIN scores s ON j.id = s.judge_id
 				LEFT JOIN judge_certifications jc ON j.id = jc.judge_id AND jc.certified_at IS NOT NULL
-				GROUP BY j.id, j.name, j.email
+				GROUP BY j.id, j.name, j.preferred_name
 				ORDER BY j.name
 			')->fetchAll(\PDO::FETCH_ASSOC);
 			
-			// Get certification statistics
-			$totalJudges = count($judges);
-			$totalSubcategories = $pdo->query('SELECT COUNT(*) FROM subcategories')->fetchColumn();
-			$totalCertifications = $pdo->query('SELECT COUNT(*) FROM judge_certifications WHERE certified_at IS NOT NULL')->fetchColumn();
-			
 			$html = '<html><body>';
 			$html .= '<h1>Judge Summary Report</h1>';
-			$html .= '<p><strong>Total Judges:</strong> ' . $totalJudges . '</p>';
-			$html .= '<p><strong>Total Subcategories:</strong> ' . $totalSubcategories . '</p>';
-			$html .= '<p><strong>Total Certifications:</strong> ' . $totalCertifications . '</p>';
 			$html .= '<p><strong>Generated:</strong> ' . date('Y-m-d H:i:s') . '</p>';
 			
 			if (!empty($judges)) {
 				$html .= '<h2>Judge Status</h2>';
 				$html .= '<table border="1" cellpadding="5" cellspacing="0" style="border-collapse: collapse; width: 100%;">';
-				$html .= '<tr style="background-color: #f2f2f2;"><th>Name</th><th>Email</th><th>Certified Subcategories</th><th>Total Subcategories</th><th>Total Scores</th><th>Avg Score</th><th>Certification %</th></tr>';
+				$html .= '<tr style="background-color: #f2f2f2;"><th>Preferred Name</th><th>Certified Categories</th><th>Total Categories</th><th>Total Scores Given</th></tr>';
 				
 				foreach ($judges as $judge) {
-					$certificationPercent = 0;
-					if ($judge['total_subcategories'] > 0) {
-						$certificationPercent = round(($judge['certified_subcategories'] / $judge['total_subcategories']) * 100, 1);
-					}
-					
 					$html .= '<tr>';
-					$html .= '<td>' . htmlspecialchars($judge['name']) . '</td>';
-					$html .= '<td>' . htmlspecialchars($judge['email'] ?? '') . '</td>';
-					$html .= '<td>' . ($judge['certified_subcategories'] ?? 0) . '</td>';
-					$html .= '<td>' . ($judge['total_subcategories'] ?? 0) . '</td>';
-					$html .= '<td>' . ($judge['total_scores'] ?? 0) . '</td>';
-					$html .= '<td>' . number_format($judge['avg_score'] ?? 0, 2) . '</td>';
-					$html .= '<td>' . $certificationPercent . '%</td>';
+					$html .= '<td>' . htmlspecialchars($judge['preferred_name'] ?? $judge['name']) . '</td>';
+					$html .= '<td>' . ($judge['certified_categories'] ?? 0) . '</td>';
+					$html .= '<td>' . ($judge['total_categories'] ?? 0) . '</td>';
+					$html .= '<td>' . number_format($judge['total_scores_given'], 2) . '</td>';
 					$html .= '</tr>';
 				}
 				$html .= '</table>';
@@ -554,37 +537,38 @@ class BoardController {
 				return;
 			}
 			
-			// Get subcategories, scores, contestants for email
-			$subcategories = $pdo->prepare('SELECT * FROM subcategories WHERE category_id = ? ORDER BY name');
-			$subcategories->execute([$entityId]);
-			$subcategories = $subcategories->fetchAll(\PDO::FETCH_ASSOC);
-			
-			// Get all scores for this category
-			$scores = $pdo->prepare('
-				SELECT s.*, sc.name as subcategory_name, cr.name as criterion_name, cr.max_score, j.name as judge_name,
-				       con.name as contestant_name, con.contestant_number
-				FROM scores s 
-				JOIN subcategories sc ON s.subcategory_id = sc.id 
-				JOIN criteria cr ON s.criterion_id = cr.id 
-				JOIN contestants con ON s.contestant_id = con.id
-				JOIN judges j ON s.judge_id = j.id 
-				WHERE sc.category_id = ? 
-				ORDER BY sc.name, con.name, cr.name, j.name
-			');
-			$scores->execute([$entityId]);
-			$scores = $scores->fetchAll(\PDO::FETCH_ASSOC);
-			
 			// Get contestants with their total scores for this category
 			$contestants = calculate_contestant_totals_for_category($entityId);
 			
-			// Transform data to match template expectations
-			foreach ($contestants as &$contestant) {
-				$contestant['total_score'] = $contestant['total_current'];
-				$contestant['name'] = $contestant['contestant_name'];
+			// Generate simple HTML email for category results
+			$html = '<html><body>';
+			$html .= '<h1>Contest Results: ' . htmlspecialchars($category['name']) . '</h1>';
+			$html .= '<p><strong>Contest:</strong> ' . htmlspecialchars($category['contest_name']) . '</p>';
+			$html .= '<p><strong>Category:</strong> ' . htmlspecialchars($category['name']) . '</p>';
+			$html .= '<p><strong>Description:</strong> ' . htmlspecialchars($category['description'] ?? 'N/A') . '</p>';
+			$html .= '<p><strong>Generated:</strong> ' . date('Y-m-d H:i:s') . '</p>';
+			
+			if (!empty($contestants)) {
+				$html .= '<h2>Contestant Rankings</h2>';
+				$html .= '<table border="1" cellpadding="5" cellspacing="0" style="border-collapse: collapse; width: 100%;">';
+				$html .= '<tr style="background-color: #f2f2f2;"><th>Rank</th><th>Contestant</th><th>Number</th><th>Total Score</th></tr>';
+				
+				$rank = 1;
+				foreach ($contestants as $contestant) {
+					$html .= '<tr>';
+					$html .= '<td>' . $rank++ . '</td>';
+					$html .= '<td>' . htmlspecialchars($contestant['contestant_name']) . '</td>';
+					$html .= '<td>' . htmlspecialchars($contestant['contestant_number'] ?? '') . '</td>';
+					$html .= '<td>' . number_format($contestant['total_current'], 2) . '</td>';
+					$html .= '</tr>';
+				}
+				$html .= '</table>';
+			} else {
+				$html .= '<p>No contestants found for this category.</p>';
 			}
 			
-			$html = \App\render_to_string('print/category', compact('category','subcategories','scores','contestants','isEmail'));
-			$subject = 'Category Report: ' . ($category['name'] ?? '');
+			$html .= '</body></html>';
+			$subject = 'Contest Results: ' . ($category['name'] ?? '');
 			
 		} else {
 			redirect('/board/print-reports?error=invalid_report_type');
