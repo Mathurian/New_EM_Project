@@ -112,6 +112,8 @@ $router->post('/categories/{id}/subcategories/bulk-update', 'SubcategoryControll
 
 // emcee
 $router->get('/emcee', 'EmceeController@index');
+$router->get('/emcee/scripts', 'EmceeController@scripts');
+$router->get('/emcee/contestants', 'EmceeController@contestants');
 $router->get('/emcee/scripts/{id}/view', 'EmceeController@streamScript');
 $router->get('/emcee/contestant/{number}', 'EmceeController@contestantBio');
 $router->get('/emcee/judges', 'EmceeController@judgesByCategory');

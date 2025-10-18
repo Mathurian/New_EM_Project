@@ -4,12 +4,12 @@
 		<div class="nav-container">
             <div class="nav-left" style="display:flex; align-items:center;">
                 <button id="mobile-menu-toggle" class="btn btn-secondary btn-sm" aria-label="Toggle navigation">☰</button>
-                <a href="/" class="home-link-desktop">Home</a>
+                <a href="<?= is_logged_in() ? (current_user()['role'] === 'organizer' ? '/admin' : (current_user()['role'] === 'emcee' ? '/emcee' : (current_user()['role'] === 'judge' ? '/judge' : '/'))) : '/' ?>" class="home-link-desktop">Home</a>
 				
 				<?php if (!empty($_SESSION['user'])): ?>
                     <div id="nav-sections" style="display:flex; gap:14px;">
                     <!-- Home Link (Mobile Only). Hidden on desktop via CSS -->
-                    <a href="/" class="home-link-mobile">🏠 Home</a>
+                    <a href="<?= is_logged_in() ? (current_user()['role'] === 'organizer' ? '/admin' : (current_user()['role'] === 'emcee' ? '/emcee' : (current_user()['role'] === 'judge' ? '/judge' : '/'))) : '/' ?>" class="home-link-mobile">🏠 Home</a>
                     
                     <!-- Contests Accordion -->
 					<?php if (can_view_nav('Contests')): ?>
@@ -140,11 +140,7 @@
                     </div>
                     </div>
 				<?php else: ?>
-                    <!-- Mobile navigation for logged-out users -->
-                    <div id="nav-sections" class="nav-sections-logged-out">
-                        <!-- Home Link (Mobile Only) -->
-                        <a href="/" class="home-link-mobile">🏠 Home</a>
-                    </div>
+                    <!-- No navigation for logged-out users -->
 				<?php endif; ?>
 			</div>
 			
@@ -165,11 +161,7 @@
                             </form>
                         </div>
                     </div>
-                <?php else: ?>
-					<?php if (can_view_nav('Login')): ?>
-						<a href="/login" class="btn btn-primary btn-sm">Login</a>
-					<?php endif; ?>
-				<?php endif; ?>
+                <?php endif; ?>
 			</div>
 		</div>
 	</nav>

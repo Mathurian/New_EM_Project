@@ -5,7 +5,26 @@ use App\DB;
 use function App\{view, render, redirect, param, post, request_array, current_user, is_logged_in, is_organizer, is_judge, is_emcee, require_login, require_organizer, require_emcee, csrf_field, require_csrf, secure_file_upload, paginate, pagination_links, validate_input, sanitize_input, get_user_validation_rules, uuid};
 
 class HomeController {
-	public function index(): void { view('home', ['title' => 'Contest Judge']); }
+	public function index(): void { 
+		if (is_logged_in()) {
+			$user = current_user();
+			switch ($user['role']) {
+				case 'organizer':
+					redirect('/admin');
+					break;
+				case 'emcee':
+					redirect('/emcee');
+					break;
+				case 'judge':
+					redirect('/judge');
+					break;
+				default:
+					view('home', ['title' => 'Event Manager']);
+			}
+		} else {
+			view('home', ['title' => 'Event Manager']);
+		}
+	}
 	public function health(): void { header('Content-Type: application/json'); echo json_encode(['ok'=>true]); }
 }
 
@@ -5507,6 +5526,24 @@ class PrintController {
 }
 
 class EmceeController {
+	public function scripts(): void {
+		require_emcee();
+		
+		// Get active emcee scripts
+		$scripts = DB::pdo()->query('SELECT *, COALESCE(created_at, "Unknown") as created_at FROM emcee_scripts WHERE is_active = 1 ORDER BY COALESCE(created_at, "1970-01-01 00:00:00") DESC')->fetchAll(\PDO::FETCH_ASSOC);
+		
+		view('emcee/scripts', compact('scripts'));
+	}
+	
+	public function contestants(): void {
+		require_emcee();
+		
+		// Get all contestants with numbers
+		$contestants = DB::pdo()->query('SELECT * FROM contestants WHERE contestant_number IS NOT NULL ORDER BY contestant_number')->fetchAll(\PDO::FETCH_ASSOC);
+		
+		view('emcee/contestants', compact('contestants'));
+	}
+	
 	public function index(): void {
 		require_emcee();
 		
