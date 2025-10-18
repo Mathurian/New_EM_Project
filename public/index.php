@@ -124,7 +124,7 @@ $router->get('/emcee/scripts', 'EmceeController@scripts');
 $router->get('/emcee/contestants', 'EmceeController@contestants');
 $router->get('/emcee/judges', 'EmceeController@judgesByCategory');
 $router->get('/emcee/scripts/{id}/stream', 'EmceeController@streamScript');
-$router->get('/emcee/contestants/{number}/bio', 'EmceeController@contestantBio');
+$router->get('/emcee/contestant/{number}', 'EmceeController@contestantBio');
 
 // auditor
 $router->get('/auditor', 'AuditorController@index');
