@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace App\Routes;
 
-use function App\{view, redirect, require_board, require_csrf, url, current_user, is_board, is_organizer, is_auditor, is_tally_master};
+use function App\{view, redirect, require_board, require_csrf, url, current_user, is_board, is_organizer, is_auditor, is_tally_master, secure_file_upload, uuid};
 use App\DB;
 use App\Logger;
 

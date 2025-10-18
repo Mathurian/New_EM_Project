@@ -5,6 +5,7 @@
  */
 
 require_once __DIR__ . '/app/lib/DB.php';
+require_once __DIR__ . '/app/lib/helpers.php';
 
 echo "Updating users table CHECK constraint to include Board\n";
 echo "=====================================================\n\n";
@@ -107,7 +108,7 @@ try {
         
         // 5. Test board user creation
         echo "\n5. Testing board user creation...\n";
-        $testUserId = App\uuid();
+        $testUserId = \App\uuid();
         $testSql = "INSERT INTO users (id, name, email, role, created_at) VALUES (?, ?, ?, ?, ?)";
         $stmt = $pdo->prepare($testSql);
         $stmt->execute([$testUserId, 'Test Board Member', 'test@example.com', 'board', date('c')]);

@@ -6,6 +6,7 @@
 
 require_once __DIR__ . '/app/lib/DB.php';
 require_once __DIR__ . '/app/lib/Logger.php';
+require_once __DIR__ . '/app/lib/helpers.php';
 
 use App\DB;
 use App\Logger;
