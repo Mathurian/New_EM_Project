@@ -12,7 +12,7 @@ if (!headers_sent()) {
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<title><?= $title ?? 'Event Manager' ?></title>
-		<link rel="stylesheet" href="assets/css/style.css?v=<?= filemtime(__DIR__ . '/../../public/assets/css/style.css') ?>">
+		<link rel="stylesheet" href="/assets/css/style.css?v=<?= filemtime(__DIR__ . '/../../public/assets/css/style.css') ?>">
         <script>
             // Prevent white flash by setting theme immediately
             (function() {
