@@ -6,6 +6,9 @@
 
 require_once __DIR__ . '/app/lib/helpers.php';
 
+// Import functions from App namespace
+use function App\{csrf_field, sanitize_input, url, redirect, uuid};
+
 echo "Web Form Submission Test\n";
 echo "=======================\n\n";
 
