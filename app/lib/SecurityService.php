@@ -49,15 +49,16 @@ class SecurityService
      */
     public static function startSecureSession(): void
     {
-        // Set secure session parameters
-        ini_set('session.cookie_httponly', '1');
-        ini_set('session.cookie_secure', isset($_SERVER['HTTPS']) ? '1' : '0');
-        ini_set('session.cookie_samesite', 'Strict');
-        ini_set('session.use_strict_mode', '1');
-        ini_set('session.cookie_lifetime', '0'); // Session cookie
-        
-        // Start session if not already started
+        // Only set session parameters if no session is active
         if (session_status() === PHP_SESSION_NONE) {
+            // Set secure session parameters
+            ini_set('session.cookie_httponly', '1');
+            ini_set('session.cookie_secure', isset($_SERVER['HTTPS']) ? '1' : '0');
+            ini_set('session.cookie_samesite', 'Strict');
+            ini_set('session.use_strict_mode', '1');
+            ini_set('session.cookie_lifetime', '0'); // Session cookie
+            
+            // Start session
             session_start();
         }
         

@@ -1,9 +1,6 @@
 <?php
 declare(strict_types=1);
-// Sessions for authentication
-if (session_status() === PHP_SESSION_NONE) {
-	session_start();
-}
+// Sessions will be handled by SecurityService::startSecureSession()
 
 require __DIR__ . '/lib/helpers.php';
 require __DIR__ . '/lib/Router.php';
@@ -54,7 +51,8 @@ if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity'] > 
 	// Session expired
 	session_unset();
 	session_destroy();
-	session_start();
+	// Start a new session with secure settings
+	App\SecurityService::startSecureSession();
 	$_SESSION['timeout_message'] = 'Your session has expired. Please log in again.';
 }
 
