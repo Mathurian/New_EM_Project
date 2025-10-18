@@ -474,7 +474,7 @@ class BoardController {
 							       COUNT(DISTINCT jc.subcategory_id) as certified_categories,
 							       COUNT(DISTINCT s.subcategory_id) as total_categories
 							FROM judges j
-							LEFT JOIN users u ON j.user_id = u.id
+							LEFT JOIN users u ON u.judge_id = j.id
 							LEFT JOIN scores s ON j.id = s.judge_id AND s.subcategory_id IN (
 								SELECT sc.id FROM subcategories sc WHERE sc.category_id = ?
 							)
