@@ -90,9 +90,12 @@ class ErrorHandler
         
         // Try to render custom error page, fallback to generic
         try {
-            view("errors/{$code}", $errorData);
-        } catch (\Exception $e) {
             view('errors/generic', $errorData);
+        } catch (\Exception $e) {
+            // Ultimate fallback - render basic HTML
+            echo "<!DOCTYPE html><html><head><title>{$title}</title></head><body>";
+            echo "<h1>{$code}</h1><h2>{$title}</h2><p>{$errorData['message']}</p>";
+            echo "<a href='/'>Go Home</a></body></html>";
         }
         
         exit;
