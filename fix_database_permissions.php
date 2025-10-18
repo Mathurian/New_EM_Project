@@ -9,7 +9,7 @@
 echo "=== Database Permissions Fix ===\n";
 
 // Database file path
-$dbPath = __DIR__ . '/storage/database.sqlite';
+$dbPath = __DIR__ . '/app/db/contest.sqlite';
 $dbDir = dirname($dbPath);
 
 echo "1. Checking database file and directory...\n";
