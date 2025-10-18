@@ -43,6 +43,10 @@ function request_array(string $key): array {
 	return is_array($value) ? $value : ($value !== '' ? [$value] : []);
 }
 
+function uuid(): string {
+	return bin2hex(random_bytes(16));
+}
+
 // CSRF Protection Functions
 function csrf_token(): string {
 	return SecurityService::generateCsrfToken();
@@ -524,6 +528,7 @@ function is_emcee(): bool { return is_logged_in() && (current_user()['role'] ?? 
 function require_login(): void { if (!is_logged_in()) { redirect('/'); } }
 function require_organizer(): void { if (!is_organizer()) { redirect('/'); } }
 function require_emcee(): void { if (!is_emcee()) { redirect('/'); } }
+function require_judge(): void { if (!is_judge()) { redirect('/'); } }
 function can_view_nav(string $item): bool {
 	if (!is_logged_in()) { return in_array($item, ['Home','Login'], true); }
 	if (is_organizer()) { return true; }
