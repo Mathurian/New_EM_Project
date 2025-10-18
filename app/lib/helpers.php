@@ -4,7 +4,8 @@ namespace App;
 
 function view(string $template, array $data = []): void {
 	extract($data);
-	$template = $template; // Make template available to layout
+	// Ensure template variable is available to layout and not overwritten by extract()
+	$templateName = $template;
 	include __DIR__ . '/../views/partials/layout.php';
 }
 

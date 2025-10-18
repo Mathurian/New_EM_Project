@@ -28,12 +28,25 @@
 			<?php include __DIR__ . '/user_creation_modal.php'; ?>
             <main class="content-main">
 				<?php 
-				$templateName = is_string($template) ? $template : 'home';
+				// Debug: Check what template is being requested
+				$templateName = isset($templateName) ? $templateName : (is_string($template) ? $template : 'home');
 				$templateFile = __DIR__ . '/../' . $templateName . '.php';
+				
+				// Debug output (remove this after fixing)
+				if (isset($_GET['debug'])) {
+					echo "<!-- Debug: template = " . var_export($template ?? 'undefined', true) . " -->";
+					echo "<!-- Debug: templateName = " . htmlspecialchars($templateName) . " -->";
+					echo "<!-- Debug: templateFile = " . htmlspecialchars($templateFile) . " -->";
+					echo "<!-- Debug: file_exists = " . (file_exists($templateFile) ? 'YES' : 'NO') . " -->";
+				}
+				
 				if (file_exists($templateFile)) {
 					include $templateFile;
 				} else {
 					echo '<p>Template not found: ' . htmlspecialchars($templateName) . '</p>';
+					if (isset($_GET['debug'])) {
+						echo '<p>Debug: Looking for file: ' . htmlspecialchars($templateFile) . '</p>';
+					}
 				}
 				?>
 			</main>
