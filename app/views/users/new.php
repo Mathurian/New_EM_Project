@@ -43,7 +43,7 @@
 	<?php endif; ?>
 
 	<form method="post" action="<?= url('users') ?>" enctype="multipart/form-data" id="userForm">
-		<?= csrf_field() ?>
+		<?= App\csrf_field() ?>
 		<div class="form-section">
 			<h4>Basic Information</h4>
 			<div class="form-table">

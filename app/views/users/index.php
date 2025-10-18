@@ -13,34 +13,34 @@
 		
 		<div class="admin-buttons">
 			<form method="post" action="<?= url('admin/users/remove-all-judges') ?>" style="display: inline-block; margin-right: 10px;">
-				<?= csrf_field() ?>
+				<?= App\csrf_field() ?>
 				<button type="submit" onclick="return confirm('Are you sure you want to remove ALL judges? This will delete all scores, comments, certifications, and associated images. This action cannot be undone!')" class="btn btn-danger">
 					Remove All Judges
 				</button>
 			</form>
 			
 			<form method="post" action="<?= url('admin/users/remove-all-contestants') ?>" style="display: inline-block; margin-right: 10px;">
-				<?= csrf_field() ?>
+				<?= App\csrf_field() ?>
 				<button type="submit" onclick="return confirm('Are you sure you want to remove ALL contestants? This will delete all scores, comments, bios, and associated images. This action cannot be undone!')" class="btn btn-danger">
 					Remove All Contestants
 				</button>
 			</form>
 			
 			<form method="post" action="<?= url('admin/users/remove-all-emcees') ?>" style="display: inline-block;">
-				<?= csrf_field() ?>
+				<?= App\csrf_field() ?>
 				<button type="submit" onclick="return confirm('Are you sure you want to remove ALL emcees? This action cannot be undone!')" class="btn btn-danger">
 					Remove All Emcees
 				</button>
 			</form>
 			
 			<form method="post" action="<?= url('admin/users/force-refresh') ?>" style="display: inline-block; margin-right: 10px; vertical-align: middle;">
-				<?= csrf_field() ?>
+				<?= App\csrf_field() ?>
 				<button type="submit" class="btn btn-primary">
 					Force Refresh Tables
 				</button>
 			</form>
 			<form method="post" action="<?= url('admin/users/force-logout-all') ?>" style="display: inline-block; margin-right: 10px; vertical-align: middle;">
-				<?= csrf_field() ?>
+				<?= App\csrf_field() ?>
 				<button type="submit" class="btn btn-primary" onclick="return confirm('Force logout all users? Current sessions will be invalidated.')">Force Logout All Users</button>
 			</form>
 			<a href="<?= url('users/new') ?>" class="btn btn-primary" style="display:inline-block; margin-left: 10px; vertical-align: middle;">Create User</a>
@@ -133,7 +133,7 @@ $roleLabels = [
 							<a href="<?= url('people/contestants/' . urlencode($user['id']) . '/bio') ?>">Bio</a> |
 							<a href="<?= url('admin/contestant/' . urlencode($user['id']) . '/scores') ?>">Scores</a> |
 							<form method="post" action="<?= url('people/contestants/' . urlencode($user['id']) . '/delete') ?>" style="display:inline">
-								<?= csrf_field() ?>
+								<?= App\csrf_field() ?>
 								<button type="submit" onclick="return confirm('Are you sure you want to delete this contestant?')">Delete</button>
 							</form>
                         <?php else: ?>
@@ -142,11 +142,11 @@ $roleLabels = [
 								<a href="<?= url('people/judges/' . urlencode($user['judge_id'] ?? '') . '/bio') ?>">Bio</a> |
 							<?php endif; ?>
                             <form method="post" action="<?= url('admin/users/' . urlencode($user['id']) . '/force-logout') ?>" style="display:inline">
-                                <?= csrf_field() ?>
+								<?= App\csrf_field() ?>
                                 <button type="submit" onclick="return confirm('Force this user to log out?')">Force Logout</button>
                             </form> |
 							<form method="post" action="<?= url('admin/users/' . urlencode($user['id']) . '/delete') ?>" style="display:inline">
-								<?= csrf_field() ?>
+								<?= App\csrf_field() ?>
 								<button type="submit" onclick="return confirm('Are you sure you want to delete this user?')">Delete</button>
 							</form>
 						<?php endif; ?>
