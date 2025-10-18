@@ -470,11 +470,11 @@ class BoardController {
 					foreach ($categories as $category) {
 						// Get judges for this category with their certification status
 						$judges = $pdo->prepare('
-							SELECT COALESCE(u.preferred_name, u.name) as judge_name,
+							SELECT COALESCE(u.preferred_name, u.name, j.name) as judge_name,
 							       COUNT(DISTINCT jc.subcategory_id) as certified_categories,
 							       COUNT(DISTINCT s.subcategory_id) as total_categories
 							FROM judges j
-							LEFT JOIN users u ON j.id = u.id
+							LEFT JOIN users u ON j.user_id = u.id
 							LEFT JOIN scores s ON j.id = s.judge_id AND s.subcategory_id IN (
 								SELECT sc.id FROM subcategories sc WHERE sc.category_id = ?
 							)
@@ -486,7 +486,7 @@ class BoardController {
 								JOIN subcategories sc2 ON s2.subcategory_id = sc2.id 
 								WHERE s2.judge_id = j.id AND sc2.category_id = ?
 							)
-							GROUP BY j.id, u.preferred_name, u.name
+							GROUP BY j.id, u.preferred_name, u.name, j.name
 							ORDER BY judge_name
 						');
 						$judges->execute([$category['category_id'], $category['category_id'], $category['category_id']]);
