@@ -3,7 +3,9 @@ declare(strict_types=1);
 
 namespace App\Routes;
 
-use function App\{view, redirect, require_auditor, DB};
+use function App\{view, redirect, require_auditor, require_csrf, url, current_user, is_auditor, is_organizer, is_tally_master};
+use App\DB;
+use App\Logger;
 
 class AuditorController {
 	public function index(): void {
@@ -158,9 +160,8 @@ class AuditorController {
 		try {
 			// Create or update auditor certification
 			$sql = "
-				INSERT INTO auditor_certifications (auditor_id, certified_at, created_at)
-				VALUES (?, NOW(), NOW())
-				ON DUPLICATE KEY UPDATE certified_at = NOW()
+				INSERT OR REPLACE INTO auditor_certifications (auditor_id, certified_at, created_at)
+				VALUES (?, datetime('now'), datetime('now'))
 			";
 			$stmt = $pdo->prepare($sql);
 			$stmt->execute([$auditorId]);
