@@ -19,7 +19,8 @@
 					'upload_failed' => 'Failed to upload image',
 					'missing_fields' => 'Required fields are missing',
 					'creation_failed' => 'User creation failed',
-					'password_required' => 'Password is required for this role'
+					'password_required' => 'Password is required for this role',
+					'validation_failed' => 'Form validation failed. Please check your input.'
 				];
 				$errorMessage = $errorMessages[$_GET['error']] ?? 'An error occurred';
 				?>
