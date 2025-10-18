@@ -6,6 +6,8 @@
 
 require_once __DIR__ . '/app/lib/DB.php';
 
+require_once __DIR__ . '/app/lib/helpers.php';
+
 echo "User Creation Form Test\n";
 echo "======================\n\n";
 
@@ -30,7 +32,7 @@ try {
     // Test the validation rules
     echo "1. Testing validation rules...\n";
     
-    require_once __DIR__ . '/app/lib/helpers.php';
+    // Remove the duplicate require_once line
     
     $validationRules = get_user_validation_rules();
     echo "Validation rules loaded: " . count($validationRules) . " rules\n";

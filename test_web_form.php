@@ -4,13 +4,14 @@
  * Tests the actual web form submission process
  */
 
+require_once __DIR__ . '/app/lib/helpers.php';
+
 echo "Web Form Submission Test\n";
 echo "=======================\n\n";
 
 // Test CSRF token generation
 echo "1. Testing CSRF token generation...\n";
 try {
-    require_once __DIR__ . '/app/lib/helpers.php';
     
     $csrfToken = csrf_field();
     if (!empty($csrfToken)) {
