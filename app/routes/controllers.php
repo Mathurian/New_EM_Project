@@ -5385,41 +5385,35 @@ class AdminController {
 		$filepath = $result['filePath'];
 		$originalFilename = $_FILES['script_file']['name'];
 		
-		// File uploaded successfully
+		// File uploaded successfully by secure_file_upload
 		$description = trim($_POST['description'] ?? '');
 		$fileSize = $_FILES['script_file']['size'];
 		$uploadedAt = date('Y-m-d H:i:s');
 		
-		if (move_uploaded_file($_FILES['script_file']['tmp_name'], $filepath)) {
-			try {
-				// Debug: Check if table exists and what columns it has
-				$tableInfo = DB::pdo()->query("PRAGMA table_info(emcee_scripts)")->fetchAll(\PDO::FETCH_ASSOC);
-				\App\Logger::debug('emcee_script_upload', 'admin', $_SESSION['user']['id'] ?? null, 
-					"emcee_scripts table info: " . json_encode($tableInfo));
-				
-				// Debug: Log the values we're trying to insert
-				$insertValues = [uuid(), $filename, '/uploads/emcee-scripts/' . $filename, 1, date('Y-m-d H:i:s'), $_SESSION['user']['id'], $title, $description, $originalFilename, $fileSize, $uploadedAt];
-				\App\Logger::debug('emcee_script_upload', 'admin', $_SESSION['user']['id'] ?? null, 
-					"Insert values: " . json_encode($insertValues));
-				
-				$stmt = DB::pdo()->prepare('INSERT INTO emcee_scripts (id, filename, file_path, is_active, created_at, uploaded_by, title, description, file_name, file_size, uploaded_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-				$stmt->execute($insertValues);
-				
-				\App\Logger::info('emcee_script_upload', 'admin', $_SESSION['user']['id'] ?? null, 
-					"Successfully uploaded emcee script: {$title} ({$originalFilename})");
-				redirect('/admin/emcee-scripts?success=script_uploaded');
-			} catch (\Exception $e) {
-				// Clean up uploaded file if database insert fails
-				if (file_exists($filepath)) {
-					unlink($filepath);
-				}
-				\App\Logger::error('emcee_script_upload', 'admin', $_SESSION['user']['id'] ?? null, 
-					"Database insert failed: " . $e->getMessage());
-				redirect('/admin/emcee-scripts?error=file_save_failed');
+		try {
+			// Debug: Check if table exists and what columns it has
+			$tableInfo = DB::pdo()->query("PRAGMA table_info(emcee_scripts)")->fetchAll(\PDO::FETCH_ASSOC);
+			\App\Logger::debug('emcee_script_upload', 'admin', $_SESSION['user']['id'] ?? null, 
+				"emcee_scripts table info: " . json_encode($tableInfo));
+			
+			// Debug: Log the values we're trying to insert
+			$insertValues = [uuid(), $filename, '/uploads/emcee-scripts/' . $filename, 1, date('Y-m-d H:i:s'), $_SESSION['user']['id'], $title, $description, $originalFilename, $fileSize, $uploadedAt];
+			\App\Logger::debug('emcee_script_upload', 'admin', $_SESSION['user']['id'] ?? null, 
+				"Insert values: " . json_encode($insertValues));
+			
+			$stmt = DB::pdo()->prepare('INSERT INTO emcee_scripts (id, filename, file_path, is_active, created_at, uploaded_by, title, description, file_name, file_size, uploaded_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+			$stmt->execute($insertValues);
+			
+			\App\Logger::info('emcee_script_upload', 'admin', $_SESSION['user']['id'] ?? null, 
+				"Successfully uploaded emcee script: {$title} ({$originalFilename})");
+			redirect('/admin/emcee-scripts?success=script_uploaded');
+		} catch (\Exception $e) {
+			// Clean up uploaded file if database insert fails
+			if (file_exists($filepath)) {
+				unlink($filepath);
 			}
-		} else {
 			\App\Logger::error('emcee_script_upload', 'admin', $_SESSION['user']['id'] ?? null, 
-				"Failed to move uploaded file to: {$filepath}");
+				"Database insert failed: " . $e->getMessage());
 			redirect('/admin/emcee-scripts?error=file_save_failed');
 		}
 	}
