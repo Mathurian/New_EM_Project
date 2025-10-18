@@ -64,7 +64,8 @@ try {
     foreach ($columns as $column) {
         if ($column['name'] === 'created_at') {
             $hasCreatedAt = true;
-            echo "✅ created_at column verified: {$column['type']} {$column['notnull'] ? 'NOT NULL' : 'NULL'}\n";
+            $nullInfo = $column['notnull'] ? 'NOT NULL' : 'NULL';
+            echo "✅ created_at column verified: {$column['type']} {$nullInfo}\n";
             break;
         }
     }
