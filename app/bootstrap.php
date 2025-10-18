@@ -10,12 +10,27 @@ require __DIR__ . '/lib/Router.php';
 require __DIR__ . '/lib/DB.php';
 require __DIR__ . '/lib/Logger.php';
 require __DIR__ . '/lib/Mailer.php';
+require __DIR__ . '/lib/Cache.php';
+require __DIR__ . '/lib/DatabaseService.php';
+require __DIR__ . '/lib/SecurityService.php';
+require __DIR__ . '/lib/PaginationService.php';
+require __DIR__ . '/lib/ErrorHandler.php';
+require __DIR__ . '/lib/FrontendOptimizer.php';
 require __DIR__ . '/controllers/UserController.php';
+require __DIR__ . '/controllers/BaseController.php';
+require __DIR__ . '/controllers/ContestController.php';
+require __DIR__ . '/controllers/AdminController.php';
 require __DIR__ . '/routes/controllers.php';
 
+// Initialize services
+App\Cache::init();
+App\SecurityService::setSecurityHeaders();
+App\SecurityService::startSecureSession();
+App\FrontendOptimizer::init();
+
 // Set up global error handlers
-set_error_handler('App\global_error_handler');
-set_exception_handler('App\global_exception_handler');
+set_error_handler('App\ErrorHandler::handleError');
+set_exception_handler('App\ErrorHandler::handleException');
 
 // Session timeout check (configurable)
 $timeout = 30 * 60; // Default 30 minutes in seconds
