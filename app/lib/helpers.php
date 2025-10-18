@@ -365,8 +365,7 @@ function get_user_validation_rules(): array {
 		'name' => [
 			'required' => true,
 			'min_length' => 2,
-			'max_length' => 100,
-			'pattern' => '/^[a-zA-Z\s\-\'\.]+$/'
+			'max_length' => 100
 		],
 		'email' => [
 			'email' => true,
@@ -382,8 +381,7 @@ function get_user_validation_rules(): array {
 			'in' => ['organizer', 'judge', 'contestant', 'emcee', 'tally_master']
 		],
 		'preferred_name' => [
-			'max_length' => 100,
-			'pattern' => '/^[a-zA-Z\s\-\'\.]*$/'
+			'max_length' => 100
 		],
 		'gender' => [
 			'in' => ['male', 'female', 'non-binary', 'other', 'prefer-not-to-say']
