@@ -43,6 +43,446 @@ function request_array(string $key): array {
 	return is_array($value) ? $value : ($value !== '' ? [$value] : []);
 }
 
+// CSRF Protection Functions
+function csrf_token(): string {
+	if (!isset($_SESSION['csrf_token'])) {
+		$_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+	}
+	return $_SESSION['csrf_token'];
+}
+
+function csrf_field(): string {
+	return '<input type="hidden" name="csrf_token" value="' . htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8') . '">';
+}
+
+function verify_csrf_token(): bool {
+	$token = $_POST['csrf_token'] ?? '';
+	return hash_equals($_SESSION['csrf_token'] ?? '', $token);
+}
+
+function require_csrf(): void {
+	if (!verify_csrf_token()) {
+		http_response_code(403);
+		die('CSRF token verification failed');
+	}
+}
+
+// Secure File Upload Functions
+function validate_uploaded_file(array $file, array $allowedTypes = ['image/jpeg', 'image/png', 'image/gif'], int $maxSize = 5242880): array {
+	$errors = [];
+	
+	// Check for upload errors
+	if ($file['error'] !== UPLOAD_ERR_OK) {
+		$errors[] = 'File upload failed with error code: ' . $file['error'];
+		return $errors;
+	}
+	
+	// Check file size
+	if ($file['size'] > $maxSize) {
+		$errors[] = 'File size exceeds maximum allowed size of ' . ($maxSize / 1024 / 1024) . 'MB';
+	}
+	
+	// Check MIME type
+	$finfo = finfo_open(FILEINFO_MIME_TYPE);
+	$mimeType = finfo_file($finfo, $file['tmp_name']);
+	finfo_close($finfo);
+	
+	if (!in_array($mimeType, $allowedTypes)) {
+		$errors[] = 'Invalid file type. Allowed types: ' . implode(', ', $allowedTypes);
+	}
+	
+	// Check file extension
+	$extension = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+	$allowedExtensions = ['jpg', 'jpeg', 'png', 'gif'];
+	if (!in_array($extension, $allowedExtensions)) {
+		$errors[] = 'Invalid file extension. Allowed extensions: ' . implode(', ', $allowedExtensions);
+	}
+	
+	// Additional security: check if file is actually an image
+	if (in_array($mimeType, ['image/jpeg', 'image/png', 'image/gif'])) {
+		$imageInfo = getimagesize($file['tmp_name']);
+		if ($imageInfo === false) {
+			$errors[] = 'File is not a valid image';
+		}
+	}
+	
+	return $errors;
+}
+
+function secure_file_upload(array $file, string $uploadDir, string $filenamePrefix = '', array $allowedTypes = ['image/jpeg', 'image/png', 'image/gif'], int $maxSize = 5242880): array {
+	$errors = validate_uploaded_file($file);
+	if (!empty($errors)) {
+		return ['success' => false, 'errors' => $errors];
+	}
+	
+	// Create upload directory if it doesn't exist
+	if (!is_dir($uploadDir)) {
+		if (!mkdir($uploadDir, 0755, true)) {
+			return ['success' => false, 'errors' => ['Failed to create upload directory']];
+		}
+	}
+	
+	// Generate secure filename
+	$extension = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+	$filename = ($filenamePrefix ? $filenamePrefix . '_' : '') . uuid() . '.' . $extension;
+	$filePath = $uploadDir . $filename;
+	
+	// Move uploaded file
+	if (!move_uploaded_file($file['tmp_name'], $filePath)) {
+		return ['success' => false, 'errors' => ['Failed to move uploaded file']];
+	}
+	
+	// Set proper permissions
+	chmod($filePath, 0644);
+	
+	return ['success' => true, 'filename' => $filename, 'filePath' => $filePath];
+}
+
+// Pagination Helper Functions
+function paginate(string $table, array $conditions = [], array $params = [], int $page = 1, int $perPage = 50, string $orderBy = 'id'): array {
+	$offset = ($page - 1) * $perPage;
+	
+	// Build WHERE clause
+	$whereClause = '';
+	if (!empty($conditions)) {
+		$whereClause = ' WHERE ' . implode(' AND ', $conditions);
+	}
+	
+	// Get total count
+	$countSql = "SELECT COUNT(*) FROM `{$table}`{$whereClause}";
+	$stmt = DB::pdo()->prepare($countSql);
+	$stmt->execute($params);
+	$totalCount = $stmt->fetchColumn();
+	
+	// Get paginated data
+	$dataSql = "SELECT * FROM `{$table}`{$whereClause} ORDER BY {$orderBy} LIMIT ? OFFSET ?";
+	$stmt = DB::pdo()->prepare($dataSql);
+	$stmt->execute(array_merge($params, [$perPage, $offset]));
+	$data = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+	
+	$totalPages = ceil($totalCount / $perPage);
+	
+	return [
+		'data' => $data,
+		'pagination' => [
+			'current_page' => $page,
+			'per_page' => $perPage,
+			'total_count' => $totalCount,
+			'total_pages' => $totalPages,
+			'has_next' => $page < $totalPages,
+			'has_prev' => $page > 1,
+			'next_page' => $page < $totalPages ? $page + 1 : null,
+			'prev_page' => $page > 1 ? $page - 1 : null,
+		]
+	];
+}
+
+function pagination_links(array $pagination, string $baseUrl, array $queryParams = []): string {
+	if ($pagination['total_pages'] <= 1) {
+		return '';
+	}
+	
+	$html = '<nav aria-label="Pagination"><ul class="pagination">';
+	
+	// Previous button
+	if ($pagination['has_prev']) {
+		$prevUrl = $baseUrl . '?' . http_build_query(array_merge($queryParams, ['page' => $pagination['prev_page']]));
+		$html .= '<li class="page-item"><a class="page-link" href="' . htmlspecialchars($prevUrl) . '">Previous</a></li>';
+	} else {
+		$html .= '<li class="page-item disabled"><span class="page-link">Previous</span></li>';
+	}
+	
+	// Page numbers
+	$start = max(1, $pagination['current_page'] - 2);
+	$end = min($pagination['total_pages'], $pagination['current_page'] + 2);
+	
+	if ($start > 1) {
+		$url = $baseUrl . '?' . http_build_query(array_merge($queryParams, ['page' => 1]));
+		$html .= '<li class="page-item"><a class="page-link" href="' . htmlspecialchars($url) . '">1</a></li>';
+		if ($start > 2) {
+			$html .= '<li class="page-item disabled"><span class="page-link">...</span></li>';
+		}
+	}
+	
+	for ($i = $start; $i <= $end; $i++) {
+		$url = $baseUrl . '?' . http_build_query(array_merge($queryParams, ['page' => $i]));
+		$activeClass = $i === $pagination['current_page'] ? ' active' : '';
+		$html .= '<li class="page-item' . $activeClass . '"><a class="page-link" href="' . htmlspecialchars($url) . '">' . $i . '</a></li>';
+	}
+	
+	if ($end < $pagination['total_pages']) {
+		if ($end < $pagination['total_pages'] - 1) {
+			$html .= '<li class="page-item disabled"><span class="page-link">...</span></li>';
+		}
+		$url = $baseUrl . '?' . http_build_query(array_merge($queryParams, ['page' => $pagination['total_pages']]));
+		$html .= '<li class="page-item"><a class="page-link" href="' . htmlspecialchars($url) . '">' . $pagination['total_pages'] . '</a></li>';
+	}
+	
+	// Next button
+	if ($pagination['has_next']) {
+		$nextUrl = $baseUrl . '?' . http_build_query(array_merge($queryParams, ['page' => $pagination['next_page']]));
+		$html .= '<li class="page-item"><a class="page-link" href="' . htmlspecialchars($nextUrl) . '">Next</a></li>';
+	} else {
+		$html .= '<li class="page-item disabled"><span class="page-link">Next</span></li>';
+	}
+	
+	$html .= '</ul></nav>';
+	return $html;
+}
+
+// Input Validation Functions
+function validate_input(array $data, array $rules): array {
+	$errors = [];
+	
+	foreach ($rules as $field => $rule) {
+		$value = $data[$field] ?? null;
+		$fieldErrors = [];
+		
+		// Required validation
+		if (isset($rule['required']) && $rule['required'] && empty($value)) {
+			$fieldErrors[] = ucfirst($field) . ' is required';
+		}
+		
+		// Skip other validations if field is empty and not required
+		if (empty($value) && !isset($rule['required'])) {
+			continue;
+		}
+		
+		// String length validation
+		if (isset($rule['min_length']) && strlen($value) < $rule['min_length']) {
+			$fieldErrors[] = ucfirst($field) . ' must be at least ' . $rule['min_length'] . ' characters';
+		}
+		
+		if (isset($rule['max_length']) && strlen($value) > $rule['max_length']) {
+			$fieldErrors[] = ucfirst($field) . ' must be no more than ' . $rule['max_length'] . ' characters';
+		}
+		
+		// Email validation
+		if (isset($rule['email']) && $rule['email'] && !filter_var($value, FILTER_VALIDATE_EMAIL)) {
+			$fieldErrors[] = ucfirst($field) . ' must be a valid email address';
+		}
+		
+		// Numeric validation
+		if (isset($rule['numeric']) && $rule['numeric'] && !is_numeric($value)) {
+			$fieldErrors[] = ucfirst($field) . ' must be a number';
+		}
+		
+		// Integer validation
+		if (isset($rule['integer']) && $rule['integer'] && !filter_var($value, FILTER_VALIDATE_INT)) {
+			$fieldErrors[] = ucfirst($field) . ' must be an integer';
+		}
+		
+		// Range validation
+		if (isset($rule['min']) && is_numeric($value) && $value < $rule['min']) {
+			$fieldErrors[] = ucfirst($field) . ' must be at least ' . $rule['min'];
+		}
+		
+		if (isset($rule['max']) && is_numeric($value) && $value > $rule['max']) {
+			$fieldErrors[] = ucfirst($field) . ' must be no more than ' . $rule['max'];
+		}
+		
+		// Pattern validation
+		if (isset($rule['pattern']) && !preg_match($rule['pattern'], $value)) {
+			$fieldErrors[] = ucfirst($field) . ' format is invalid';
+		}
+		
+		// In array validation
+		if (isset($rule['in']) && !in_array($value, $rule['in'])) {
+			$fieldErrors[] = ucfirst($field) . ' must be one of: ' . implode(', ', $rule['in']);
+		}
+		
+		// Custom validation
+		if (isset($rule['custom']) && is_callable($rule['custom'])) {
+			$customError = $rule['custom']($value, $data);
+			if ($customError) {
+				$fieldErrors[] = $customError;
+			}
+		}
+		
+		if (!empty($fieldErrors)) {
+			$errors[$field] = $fieldErrors;
+		}
+	}
+	
+	return $errors;
+}
+
+function sanitize_input(array $data, array $rules = []): array {
+	$sanitized = [];
+	
+	foreach ($data as $key => $value) {
+		if (is_string($value)) {
+			// Basic sanitization
+			$value = trim($value);
+			
+			// HTML sanitization
+			if (isset($rules[$key]['html']) && !$rules[$key]['html']) {
+				$value = strip_tags($value);
+			}
+			
+			// SQL injection prevention
+			$value = addslashes($value);
+		}
+		
+		$sanitized[$key] = $value;
+	}
+	
+	return $sanitized;
+}
+
+// Common validation rules
+function get_user_validation_rules(): array {
+	return [
+		'name' => [
+			'required' => true,
+			'min_length' => 2,
+			'max_length' => 100,
+			'pattern' => '/^[a-zA-Z\s\-\'\.]+$/'
+		],
+		'email' => [
+			'email' => true,
+			'max_length' => 255
+		],
+		'password' => [
+			'min_length' => 8,
+			'max_length' => 255,
+			'pattern' => '/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/'
+		],
+		'role' => [
+			'required' => true,
+			'in' => ['organizer', 'judge', 'contestant', 'emcee']
+		],
+		'preferred_name' => [
+			'max_length' => 100,
+			'pattern' => '/^[a-zA-Z\s\-\'\.]*$/'
+		],
+		'gender' => [
+		'in' => ['male', 'female', 'non-binary', 'other', 'prefer-not-to-say']
+	],
+	'pronouns' => [
+		'max_length' => 50
+	],
+	'contestant_number' => [
+		'integer' => true,
+		'min' => 1,
+		'max' => 9999
+	]
+];
+
+// Error Handling Functions
+function handle_error(string $message, int $code = 500, array $context = []): void {
+	// Log the error
+	\App\Logger::error('application_error', 'system', null, $message, $context);
+	
+	// Set appropriate HTTP status code
+	http_response_code($code);
+	
+	// Show user-friendly error message
+	$errorMessages = [
+		400 => 'Bad Request',
+		401 => 'Unauthorized',
+		403 => 'Forbidden',
+		404 => 'Not Found',
+		422 => 'Validation Error',
+		500 => 'Internal Server Error'
+	];
+	
+	$title = $errorMessages[$code] ?? 'Error';
+	
+	// Don't show detailed errors in production
+	$showDetails = ($_ENV['APP_ENV'] ?? 'production') === 'development';
+	
+	view('errors/generic', [
+		'title' => $title,
+		'message' => $showDetails ? $message : 'An error occurred. Please try again.',
+		'code' => $code,
+		'context' => $showDetails ? $context : []
+	]);
+}
+
+function handle_validation_errors(array $errors): void {
+	$_SESSION['validation_errors'] = $errors;
+	redirect($_SERVER['HTTP_REFERER'] ?? '/');
+}
+
+function handle_database_error(\PDOException $e, string $operation = 'database_operation'): void {
+	\App\Logger::error('database_error', 'database', null, 
+		"Database error during {$operation}: " . $e->getMessage());
+	
+	handle_error('Database operation failed', 500, [
+		'operation' => $operation,
+		'error' => $e->getMessage()
+	]);
+}
+
+function handle_file_upload_error(string $message, array $file = []): void {
+	\App\Logger::error('file_upload_error', 'file_upload', null, $message, $file);
+	
+	handle_error('File upload failed: ' . $message, 400, ['file' => $file]);
+}
+
+// Global error handler
+function global_error_handler(int $severity, string $message, string $file, int $line): void {
+	$errorTypes = [
+		E_ERROR => 'Fatal Error',
+		E_WARNING => 'Warning',
+		E_PARSE => 'Parse Error',
+		E_NOTICE => 'Notice',
+		E_CORE_ERROR => 'Core Error',
+		E_CORE_WARNING => 'Core Warning',
+		E_COMPILE_ERROR => 'Compile Error',
+		E_COMPILE_WARNING => 'Compile Warning',
+		E_USER_ERROR => 'User Error',
+		E_USER_WARNING => 'User Warning',
+		E_USER_NOTICE => 'User Notice',
+		E_STRICT => 'Strict Notice',
+		E_RECOVERABLE_ERROR => 'Recoverable Error',
+		E_DEPRECATED => 'Deprecated',
+		E_USER_DEPRECATED => 'User Deprecated'
+	];
+	
+	$errorType = $errorTypes[$severity] ?? 'Unknown Error';
+	
+	\App\Logger::error('php_error', 'system', null, 
+		"{$errorType}: {$message} in {$file} on line {$line}");
+	
+	// Don't execute PHP internal error handler
+	return true;
+}
+
+// Exception handler
+function global_exception_handler(\Throwable $e): void {
+	\App\Logger::error('uncaught_exception', 'system', null, 
+		"Uncaught exception: " . $e->getMessage() . " in " . $e->getFile() . " on line " . $e->getLine());
+	
+	handle_error('An unexpected error occurred', 500, [
+		'exception' => $e->getMessage(),
+		'file' => $e->getFile(),
+		'line' => $e->getLine()
+	]);
+}
+}
+
+function get_contest_validation_rules(): array {
+	return [
+		'name' => [
+			'required' => true,
+			'min_length' => 2,
+			'max_length' => 100
+		],
+		'description' => [
+			'max_length' => 1000
+		],
+		'start_date' => [
+			'required' => true,
+			'pattern' => '/^\d{4}-\d{2}-\d{2}$/'
+		],
+		'end_date' => [
+			'pattern' => '/^\d{4}-\d{2}-\d{2}$/'
+		]
+	];
+}
+
 function current_user(): ?array { return $_SESSION['user'] ?? null; }
 function is_logged_in(): bool {
     $user = $_SESSION['user'] ?? null;

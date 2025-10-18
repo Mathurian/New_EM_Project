@@ -791,6 +791,72 @@ SQL;
 			$pdo->exec('DROP INDEX IF EXISTS sqlite_autoindex_judge_certifications_1');
 			$pdo->exec('CREATE UNIQUE INDEX IF NOT EXISTS judge_certifications_unique ON judge_certifications (subcategory_id, contestant_id, judge_id)');
 		}
+		
+		// Add performance indexes
+		self::addPerformanceIndexes();
+	}
+	
+	private static function addPerformanceIndexes(): void {
+		$pdo = self::pdo();
+		
+		// Indexes for frequently queried columns
+		$indexes = [
+			// User-related indexes
+			'CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)',
+			'CREATE INDEX IF NOT EXISTS idx_users_preferred_name ON users(preferred_name)',
+			'CREATE INDEX IF NOT EXISTS idx_users_role ON users(role)',
+			'CREATE INDEX IF NOT EXISTS idx_users_last_login ON users(last_login)',
+			
+			// Contest-related indexes
+			'CREATE INDEX IF NOT EXISTS idx_categories_contest_id ON categories(contest_id)',
+			'CREATE INDEX IF NOT EXISTS idx_subcategories_category_id ON subcategories(category_id)',
+			
+			// Contestant-related indexes
+			'CREATE INDEX IF NOT EXISTS idx_contestants_contestant_number ON contestants(contestant_number)',
+			'CREATE INDEX IF NOT EXISTS idx_contestants_name ON contestants(name)',
+			'CREATE INDEX IF NOT EXISTS idx_subcategory_contestants_subcategory_id ON subcategory_contestants(subcategory_id)',
+			'CREATE INDEX IF NOT EXISTS idx_subcategory_contestants_contestant_id ON subcategory_contestants(contestant_id)',
+			
+			// Judge-related indexes
+			'CREATE INDEX IF NOT EXISTS idx_judges_name ON judges(name)',
+			'CREATE INDEX IF NOT EXISTS idx_judges_is_head_judge ON judges(is_head_judge)',
+			'CREATE INDEX IF NOT EXISTS idx_subcategory_judges_subcategory_id ON subcategory_judges(subcategory_id)',
+			'CREATE INDEX IF NOT EXISTS idx_subcategory_judges_judge_id ON subcategory_judges(judge_id)',
+			
+			// Scoring-related indexes
+			'CREATE INDEX IF NOT EXISTS idx_scores_subcategory_id ON scores(subcategory_id)',
+			'CREATE INDEX IF NOT EXISTS idx_scores_contestant_id ON scores(contestant_id)',
+			'CREATE INDEX IF NOT EXISTS idx_scores_judge_id ON scores(judge_id)',
+			'CREATE INDEX IF NOT EXISTS idx_scores_criterion_id ON scores(criterion_id)',
+			'CREATE INDEX IF NOT EXISTS idx_scores_created_at ON scores(created_at)',
+			
+			// Criteria-related indexes
+			'CREATE INDEX IF NOT EXISTS idx_criteria_subcategory_id ON criteria(subcategory_id)',
+			
+			// Activity logs indexes
+			'CREATE INDEX IF NOT EXISTS idx_activity_logs_user_id ON activity_logs(user_id)',
+			'CREATE INDEX IF NOT EXISTS idx_activity_logs_created_at ON activity_logs(created_at)',
+			'CREATE INDEX IF NOT EXISTS idx_activity_logs_action ON activity_logs(action)',
+			
+			// Judge certifications indexes
+			'CREATE INDEX IF NOT EXISTS idx_judge_certifications_judge_id ON judge_certifications(judge_id)',
+			'CREATE INDEX IF NOT EXISTS idx_judge_certifications_contestant_id ON judge_certifications(contestant_id)',
+			'CREATE INDEX IF NOT EXISTS idx_judge_certifications_certified_at ON judge_certifications(certified_at)',
+			
+			// Emcee scripts indexes
+			'CREATE INDEX IF NOT EXISTS idx_emcee_scripts_is_active ON emcee_scripts(is_active)',
+			'CREATE INDEX IF NOT EXISTS idx_emcee_scripts_uploaded_by ON emcee_scripts(uploaded_by)',
+			'CREATE INDEX IF NOT EXISTS idx_emcee_scripts_created_at ON emcee_scripts(created_at)',
+		];
+		
+		foreach ($indexes as $indexSql) {
+			try {
+				$pdo->exec($indexSql);
+			} catch (\PDOException $e) {
+				// Log index creation errors but don't fail the migration
+				error_log("Failed to create index: " . $e->getMessage());
+			}
+		}
 	}
 
 	private static function seedDefaultAdmin(): void {

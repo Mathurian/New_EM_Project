@@ -14,6 +14,7 @@
 			<p style="color:red; text-align:center; margin: 8px 0 16px;"><?= htmlspecialchars($errorMessage) ?></p>
 		<?php endif; ?>
 		<form method="post" action="/login" style="display:block;">
+			<?= csrf_field() ?>
 			<label style="display:block; margin-bottom:12px;">Email or Preferred Name
 				<input type="text" name="email" required style="width:100%; padding:10px 12px; border:1px solid var(--border-color); border-radius:4px;" />
 			</label>

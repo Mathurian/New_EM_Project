@@ -2,7 +2,7 @@
 declare(strict_types=1);
 namespace App\Routes;
 use App\DB;
-use function App\{view, render, redirect, param, post, request_array, current_user, is_logged_in, is_organizer, is_judge, is_emcee, require_login, require_organizer, require_emcee};
+use function App\{view, render, redirect, param, post, request_array, current_user, is_logged_in, is_organizer, is_judge, is_emcee, require_login, require_organizer, require_emcee, csrf_field, require_csrf, secure_file_upload, paginate, pagination_links, validate_input, sanitize_input, get_user_validation_rules};
 
 function uuid(): string { return bin2hex(random_bytes(16)); }
 
@@ -1439,10 +1439,17 @@ class BackupController {
 		}
 		flush();
 		
-		$scriptPath = __DIR__ . '/../../fix_constraint_cli.php';
+		$scriptPath = realpath(__DIR__ . '/../../fix_constraint_cli.php');
 		
-		if (!file_exists($scriptPath)) {
-			echo '<pre>Error: CLI script not found at: ' . $scriptPath . '</pre>';
+		if (!$scriptPath || !file_exists($scriptPath)) {
+			echo '<pre>Error: CLI script not found at: ' . htmlspecialchars($scriptPath) . '</pre>';
+			exit;
+		}
+		
+		// Validate script path is within project directory
+		$projectRoot = realpath(__DIR__ . '/../..');
+		if (strpos($scriptPath, $projectRoot) !== 0) {
+			echo '<pre>Error: Invalid script path</pre>';
 			exit;
 		}
 		
@@ -1450,7 +1457,7 @@ class BackupController {
 		$output = [];
 		$returnCode = 0;
 		
-		exec("php \"$scriptPath\" 2>&1", $output, $returnCode);
+		exec("php \"" . escapeshellarg($scriptPath) . "\" 2>&1", $output, $returnCode);
 		
 		echo '<pre>CLI Script Output:</pre>';
 		echo '<pre>' . implode("\n", $output) . '</pre>';
@@ -1476,10 +1483,17 @@ class BackupController {
 		}
 		flush();
 		
-		$scriptPath = __DIR__ . '/../../fix_constraint_sqlite3.php';
+		$scriptPath = realpath(__DIR__ . '/../../fix_constraint_sqlite3.php');
 		
-		if (!file_exists($scriptPath)) {
-			echo '<pre>Error: SQLite3 script not found at: ' . $scriptPath . '</pre>';
+		if (!$scriptPath || !file_exists($scriptPath)) {
+			echo '<pre>Error: SQLite3 script not found at: ' . htmlspecialchars($scriptPath) . '</pre>';
+			exit;
+		}
+		
+		// Validate script path is within project directory
+		$projectRoot = realpath(__DIR__ . '/../..');
+		if (strpos($scriptPath, $projectRoot) !== 0) {
+			echo '<pre>Error: Invalid script path</pre>';
 			exit;
 		}
 		
@@ -1487,7 +1501,7 @@ class BackupController {
 		$output = [];
 		$returnCode = 0;
 		
-		exec("php \"$scriptPath\" 2>&1", $output, $returnCode);
+		exec("php \"" . escapeshellarg($scriptPath) . "\" 2>&1", $output, $returnCode);
 		
 		echo '<pre>SQLite3 Script Output:</pre>';
 		echo '<pre>' . implode("\n", $output) . '</pre>';
@@ -1513,10 +1527,17 @@ class BackupController {
 		}
 		flush();
 		
-		$scriptPath = __DIR__ . '/../../fix_constraint.sh';
+		$scriptPath = realpath(__DIR__ . '/../../fix_constraint.sh');
 		
-		if (!file_exists($scriptPath)) {
-			echo '<pre>Error: Shell script not found at: ' . $scriptPath . '</pre>';
+		if (!$scriptPath || !file_exists($scriptPath)) {
+			echo '<pre>Error: Shell script not found at: ' . htmlspecialchars($scriptPath) . '</pre>';
+			exit;
+		}
+		
+		// Validate script path is within project directory
+		$projectRoot = realpath(__DIR__ . '/../..');
+		if (strpos($scriptPath, $projectRoot) !== 0) {
+			echo '<pre>Error: Invalid script path</pre>';
 			exit;
 		}
 		
@@ -2237,19 +2258,15 @@ class PeopleController {
 		// Handle image upload
 		if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
 			$uploadDir = __DIR__ . '/../../public/uploads/contestants/';
-			// Create directory if it doesn't exist
-			if (!is_dir($uploadDir)) {
-				mkdir($uploadDir, 0755, true);
-			}
-			$extension = pathinfo($_FILES['image']['name'], PATHINFO_EXTENSION);
-			$filename = uuid() . '.' . $extension;
-			$imagePath = '/uploads/contestants/' . $filename;
+			$result = secure_file_upload($_FILES['image'], $uploadDir, 'contestant');
 			
-			if (!move_uploaded_file($_FILES['image']['tmp_name'], $uploadDir . $filename)) {
-				$_SESSION['error_message'] = 'Failed to upload image - check directory permissions';
+			if (!$result['success']) {
+				$_SESSION['error_message'] = 'Image upload failed: ' . implode(', ', $result['errors']);
 				redirect('/people/new');
 				return;
 			}
+			
+			$imagePath = '/uploads/contestants/' . $result['filename'];
 		}
 		
 		// Auto-assign contestant number if not provided
@@ -2271,19 +2288,15 @@ class PeopleController {
 		// Handle image upload
 		if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
 			$uploadDir = __DIR__ . '/../../public/uploads/judges/';
-			// Create directory if it doesn't exist
-			if (!is_dir($uploadDir)) {
-				mkdir($uploadDir, 0755, true);
-			}
-			$extension = pathinfo($_FILES['image']['name'], PATHINFO_EXTENSION);
-			$filename = uuid() . '.' . $extension;
-			$imagePath = '/uploads/judges/' . $filename;
+			$result = secure_file_upload($_FILES['image'], $uploadDir, 'judge');
 			
-			if (!move_uploaded_file($_FILES['image']['tmp_name'], $uploadDir . $filename)) {
-				$_SESSION['error_message'] = 'Failed to upload image - check directory permissions';
+			if (!$result['success']) {
+				$_SESSION['error_message'] = 'Image upload failed: ' . implode(', ', $result['errors']);
 				redirect('/people/new');
 				return;
 			}
+			
+			$imagePath = '/uploads/judges/' . $result['filename'];
 		}
 		
 		$stmt = DB::pdo()->prepare('INSERT INTO judges (id, name, email, gender, pronouns, bio, image_path) VALUES (?, ?, ?, ?, ?, ?, ?)');
@@ -2319,19 +2332,15 @@ class PeopleController {
 		// Handle image upload
 		if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
 			$uploadDir = __DIR__ . '/../../public/uploads/contestants/';
-			// Create directory if it doesn't exist
-			if (!is_dir($uploadDir)) {
-				mkdir($uploadDir, 0755, true);
-			}
-			$extension = pathinfo($_FILES['image']['name'], PATHINFO_EXTENSION);
-			$filename = uuid() . '.' . $extension;
-			$imagePath = '/uploads/contestants/' . $filename;
+			$result = secure_file_upload($_FILES['image'], $uploadDir, 'contestant');
 			
-			if (!move_uploaded_file($_FILES['image']['tmp_name'], $uploadDir . $filename)) {
-				$_SESSION['error_message'] = 'Failed to upload image - check directory permissions';
+			if (!$result['success']) {
+				$_SESSION['error_message'] = 'Image upload failed: ' . implode(', ', $result['errors']);
 				redirect('/people/contestants/' . $id . '/edit');
 				return;
 			}
+			
+			$imagePath = '/uploads/contestants/' . $result['filename'];
 		}
 		
 		// Get current image path if no new image uploaded
@@ -2460,19 +2469,15 @@ class PeopleController {
 		// Handle image upload
 		if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
 			$uploadDir = __DIR__ . '/../../public/uploads/judges/';
-			// Create directory if it doesn't exist
-			if (!is_dir($uploadDir)) {
-				mkdir($uploadDir, 0755, true);
-			}
-			$extension = pathinfo($_FILES['image']['name'], PATHINFO_EXTENSION);
-			$filename = uuid() . '.' . $extension;
-			$imagePath = '/uploads/judges/' . $filename;
+			$result = secure_file_upload($_FILES['image'], $uploadDir, 'judge');
 			
-			if (!move_uploaded_file($_FILES['image']['tmp_name'], $uploadDir . $filename)) {
-				$_SESSION['error_message'] = 'Failed to upload image - check directory permissions';
+			if (!$result['success']) {
+				$_SESSION['error_message'] = 'Image upload failed: ' . implode(', ', $result['errors']);
 				redirect('/people/judges/' . $id . '/edit');
 				return;
 			}
+			
+			$imagePath = '/uploads/judges/' . $result['filename'];
 		}
 		
 		// Get current image path if no new image uploaded
@@ -2590,6 +2595,7 @@ class AssignmentController {
 	}
 	public function update(array $params): void {
 		require_organizer();
+		require_csrf();
 		$subcategoryId = param('id', $params);
 		$contestants = request_array('contestants');
 		$judges = request_array('judges');
@@ -3325,6 +3331,9 @@ class AuthController {
 	}
 	
 	public function login(): void {
+		// Verify CSRF token
+		require_csrf();
+		
 		$email = post('email');
 		$password = post('password');
 		
@@ -3488,26 +3497,33 @@ class UserController {
 	
 	public function create(): void {
 		require_organizer();
+		require_csrf();
 		
-		$name = post('name');
-		$email = post('email') ?: null;
-		$password = post('password');
-		$role = post('role');
-		$preferredName = post('preferred_name') ?: $name;
-		$gender = post('gender') ?: null;
-		$pronouns = post('pronouns') ?: null;
-		$categoryId = post('category_id') ?: null;
-		$isHeadJudge = post('is_head_judge') ? 1 : 0;
+		// Get and sanitize input data
+		$inputData = sanitize_input($_POST);
+		$name = $inputData['name'] ?? '';
+		$email = $inputData['email'] ?? null;
+		$password = $inputData['password'] ?? '';
+		$role = $inputData['role'] ?? '';
+		$preferredName = $inputData['preferred_name'] ?? $name;
+		$gender = $inputData['gender'] ?? null;
+		$pronouns = $inputData['pronouns'] ?? null;
+		$categoryId = $inputData['category_id'] ?? null;
+		$isHeadJudge = isset($inputData['is_head_judge']) ? 1 : 0;
 		
 		// Debug log user creation attempt
 		\App\Logger::debug('user_creation_attempt', 'user', null, 
 			"Attempting to create user: name={$name}, email={$email}, role={$role}, category_id={$categoryId}, is_head_judge={$isHeadJudge}");
 		
-		// Validate required fields
-		if (empty($name) || empty($role)) {
+		// Validate input data
+		$validationRules = get_user_validation_rules();
+		$validationErrors = validate_input($inputData, $validationRules);
+		
+		if (!empty($validationErrors)) {
 			\App\Logger::debug('user_creation_validation_failed', 'user', null, 
-				"User creation failed validation: missing name or role");
-			redirect('/users/new?error=missing_fields');
+				"User creation failed validation: " . json_encode($validationErrors));
+			$_SESSION['validation_errors'] = $validationErrors;
+			redirect('/users/new?error=validation_failed');
 			return;
 		}
 		
@@ -3625,19 +3641,44 @@ class UserController {
 	public function index(): void {
 		require_organizer();
 		
+		$page = (int)($_GET['page'] ?? 1);
+		$perPage = 50;
+		$role = $_GET['role'] ?? '';
+		
 		// Debug log data retrieval
 		\App\Logger::debug('users_index_data_retrieval', 'users', null, 
-			"Retrieving users with their associated contestant/judge data");
+			"Retrieving users with their associated contestant/judge data, page: {$page}, role: {$role}");
 		
-		$users = DB::pdo()->query('
+		// Build query with optional role filter
+		$whereClause = '';
+		$params = [];
+		if (!empty($role)) {
+			$whereClause = ' WHERE u.role = ?';
+			$params[] = $role;
+		}
+		
+		$sql = "
 			SELECT u.*, 
 			       c.contestant_number,
 			       j.is_head_judge
 			FROM users u 
 			LEFT JOIN contestants c ON u.contestant_id = c.id 
 			LEFT JOIN judges j ON u.judge_id = j.id
+			{$whereClause}
 			ORDER BY u.role, u.name
-		')->fetchAll(\PDO::FETCH_ASSOC);
+		";
+		
+		// Get total count
+		$countSql = "SELECT COUNT(*) FROM users u{$whereClause}";
+		$stmt = DB::pdo()->prepare($countSql);
+		$stmt->execute($params);
+		$totalCount = $stmt->fetchColumn();
+		
+		// Get paginated data
+		$offset = ($page - 1) * $perPage;
+		$stmt = DB::pdo()->prepare($sql . " LIMIT ? OFFSET ?");
+		$stmt->execute(array_merge($params, [$perPage, $offset]));
+		$users = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 		
 		// Group users by role
 		$usersByRole = [];
@@ -3645,14 +3686,27 @@ class UserController {
 			$usersByRole[$user['role']][] = $user;
 		}
 		
+		// Calculate pagination info
+		$totalPages = ceil($totalCount / $perPage);
+		$pagination = [
+			'current_page' => $page,
+			'per_page' => $perPage,
+			'total_count' => $totalCount,
+			'total_pages' => $totalPages,
+			'has_next' => $page < $totalPages,
+			'has_prev' => $page > 1,
+			'next_page' => $page < $totalPages ? $page + 1 : null,
+			'prev_page' => $page > 1 ? $page - 1 : null,
+		];
+		
 		\App\Logger::debug('users_index_data_retrieved', 'users', null, 
-			"Retrieved " . count($users) . " total users: " . 
+			"Retrieved " . count($users) . " users (page {$page}/{$totalPages}): " . 
 			(count($usersByRole['organizer'] ?? []) . " organizers, " .
 			count($usersByRole['judge'] ?? []) . " judges, " .
 			count($usersByRole['contestant'] ?? []) . " contestants, " .
 			count($usersByRole['emcee'] ?? []) . " emcees"));
 		
-		view('users/index', compact('usersByRole'));
+		view('users/index', compact('usersByRole', 'pagination', 'role'));
 	}
 	
 	public function edit(array $params): void {
@@ -3807,6 +3861,7 @@ class UserController {
 	
 	public function removeAllJudges(): void {
 		require_organizer();
+		require_csrf();
 		
 		// Debug log bulk removal attempt
 		\App\Logger::debug('bulk_judge_removal_attempt', 'judge', null, 
@@ -3871,6 +3926,7 @@ class UserController {
 	
 	public function removeAllContestants(): void {
 		require_organizer();
+		require_csrf();
 		
 		// Debug log bulk removal attempt
 		\App\Logger::debug('bulk_contestant_removal_attempt', 'contestant', null, 
@@ -3934,6 +3990,7 @@ class UserController {
 	
 	public function removeAllEmcees(): void {
 		require_organizer();
+		require_csrf();
 		
 		// Debug log bulk removal attempt
 		\App\Logger::debug('bulk_emcee_removal_attempt', 'emcee', null, 
@@ -3976,6 +4033,7 @@ class UserController {
 	
 	public function forceRefresh(): void {
 		require_organizer();
+		require_csrf();
 		
 		// Debug log refresh attempt
 		\App\Logger::debug('table_refresh_attempt', 'system', null, 
@@ -4046,12 +4104,16 @@ class DatabaseBrowserController {
 		// Get table structure
 		$columns = $this->getTableColumns($tableName);
 		
-		// Get total count
-		$totalCount = DB::pdo()->query("SELECT COUNT(*) FROM `{$tableName}`")->fetchColumn();
+		// Get total count using prepared statement
+		$stmt = DB::pdo()->prepare("SELECT COUNT(*) FROM `{$tableName}`");
+		$stmt->execute();
+		$totalCount = $stmt->fetchColumn();
 		$totalPages = ceil($totalCount / $perPage);
 		
-		// Get data with pagination
-		$data = DB::pdo()->query("SELECT * FROM `{$tableName}` LIMIT {$perPage} OFFSET {$offset}")->fetchAll(\PDO::FETCH_ASSOC);
+		// Get data with pagination using prepared statement
+		$stmt = DB::pdo()->prepare("SELECT * FROM `{$tableName}` LIMIT ? OFFSET ?");
+		$stmt->execute([$perPage, $offset]);
+		$data = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 		
 		view('admin/database_table', compact('tableName', 'columns', 'data', 'page', 'totalPages', 'totalCount', 'perPage'));
 	}
@@ -4070,13 +4132,24 @@ class DatabaseBrowserController {
 			return;
 		}
 		
-		// Security: Only allow SELECT statements
+		// Security: Only allow SELECT statements and restrict dangerous keywords
 		$sqlTrimmed = trim(strtoupper($sql));
 		if (!str_starts_with($sqlTrimmed, 'SELECT')) {
 			\App\Logger::warn('db_browser_security_block', 'database', null, 
 				"Blocked non-SELECT query: " . substr($sql, 0, 50));
 			redirect('/admin/database?error=invalid_query_type');
 			return;
+		}
+		
+		// Block dangerous SQL keywords
+		$dangerousKeywords = ['DROP', 'DELETE', 'UPDATE', 'INSERT', 'ALTER', 'CREATE', 'EXEC', 'EXECUTE', 'UNION', '--', '/*', '*/'];
+		foreach ($dangerousKeywords as $keyword) {
+			if (strpos($sqlTrimmed, $keyword) !== false) {
+				\App\Logger::warn('db_browser_security_block', 'database', null, 
+					"Blocked query with dangerous keyword '{$keyword}': " . substr($sql, 0, 50));
+				redirect('/admin/database?error=dangerous_keyword');
+				return;
+			}
 		}
 		
 		try {
@@ -4103,7 +4176,15 @@ class DatabaseBrowserController {
 	}
 	
 	private function getTableColumns(string $tableName): array {
-		$columns = DB::pdo()->query("PRAGMA table_info(`{$tableName}`)")->fetchAll(\PDO::FETCH_ASSOC);
+		// Validate table name first
+		$validTables = DB::pdo()->query("SELECT name FROM sqlite_master WHERE type='table'")->fetchAll(\PDO::FETCH_COLUMN);
+		if (!in_array($tableName, $validTables)) {
+			return [];
+		}
+		
+		$stmt = DB::pdo()->prepare("PRAGMA table_info(`{$tableName}`)");
+		$stmt->execute();
+		$columns = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 		return $columns;
 	}
 }
@@ -4875,6 +4956,7 @@ class AdminController {
 	
 	public function forceLogoutAll(): void {
 		require_organizer();
+		require_csrf();
 		
 		// Debug log logout attempt
 		\App\Logger::debug('force_logout_all_attempt', 'system', null, 
@@ -5079,44 +5161,25 @@ class AdminController {
 			return;
 		}
 		
-		// Validate file type
-		$allowedTypes = ['application/pdf', 'text/plain', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
-		$fileType = $_FILES['script_file']['type'];
-		if (!in_array($fileType, $allowedTypes)) {
-			\App\Logger::warn('emcee_script_upload', 'admin', $_SESSION['user']['id'] ?? null, 
-				"Invalid file type attempted: {$fileType}");
-			redirect('/admin/emcee-scripts?error=invalid_file_type');
-			return;
-		}
-		
-		// Validate file size (10MB limit)
-		$maxSize = 10 * 1024 * 1024; // 10MB
-		if ($_FILES['script_file']['size'] > $maxSize) {
-			\App\Logger::warn('emcee_script_upload', 'admin', $_SESSION['user']['id'] ?? null, 
-				"File too large: " . $_FILES['script_file']['size'] . " bytes");
-			redirect('/admin/emcee-scripts?error=file_too_large');
-			return;
-		}
-		
-		// Create upload directory if it doesn't exist
+		// Use secure file upload with document-specific validation
 		$uploadDir = __DIR__ . '/../../public/uploads/emcee-scripts/';
-		if (!is_dir($uploadDir)) {
-			if (!mkdir($uploadDir, 0755, true)) {
-				\App\Logger::error('emcee_script_upload', 'admin', $_SESSION['user']['id'] ?? null, 
-					"Failed to create upload directory: {$uploadDir}");
-				redirect('/admin/emcee-scripts?error=file_save_failed');
-				return;
-			}
+		$allowedTypes = ['application/pdf', 'text/plain', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+		$maxSize = 10 * 1024 * 1024; // 10MB
+		
+		$result = secure_file_upload($_FILES['script_file'], $uploadDir, 'script', $allowedTypes, $maxSize);
+		
+		if (!$result['success']) {
+			\App\Logger::warn('emcee_script_upload', 'admin', $_SESSION['user']['id'] ?? null, 
+				"File upload validation failed: " . implode(', ', $result['errors']));
+			redirect('/admin/emcee-scripts?error=file_validation_failed');
+			return;
 		}
 		
-		// Generate unique filename to prevent conflicts
+		$filename = $result['filename'];
+		$filepath = $result['filePath'];
 		$originalFilename = $_FILES['script_file']['name'];
-		$fileExtension = pathinfo($originalFilename, PATHINFO_EXTENSION);
-		$filename = uniqid() . '_' . preg_replace('/[^a-zA-Z0-9._-]/', '_', $originalFilename);
-		$filepath = $uploadDir . $filename;
 		
-		// Move uploaded file
-		if (move_uploaded_file($_FILES['script_file']['tmp_name'], $filepath)) {
+		// File uploaded successfully
 			$description = trim($_POST['description'] ?? '');
 			$fileSize = $_FILES['script_file']['size'];
 			$uploadedAt = date('Y-m-d H:i:s');
