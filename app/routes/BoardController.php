@@ -423,8 +423,8 @@ class BoardController {
 				foreach ($contestants as $contestant) {
 					$html .= '<tr>';
 					$html .= '<td>' . $rank++ . '</td>';
-					$html .= '<td>' . htmlspecialchars($contestant['name']) . '</td>';
-					$html .= '<td>' . htmlspecialchars($contestant['contestant_number'] ?? '') . '</td>';
+					$html .= '<td>' . htmlspecialchars($contestant['name'] ?? '') . '</td>';
+					$html .= '<td>' . htmlspecialchars((string)($contestant['contestant_number'] ?? '')) . '</td>';
 					$html .= '<td>' . number_format($contestant['total_score'], 2) . '</td>';
 					$html .= '<td>' . number_format($contestant['avg_score'], 2) . '</td>';
 					$html .= '<td>' . $contestant['subcategories_count'] . '</td>';
@@ -444,14 +444,14 @@ class BoardController {
 			
 			// Get all judges with their certification status and scores
 			$judges = $pdo->query('
-				SELECT j.id, j.name, j.preferred_name,
+				SELECT j.id, j.name,
 				       COUNT(DISTINCT jc.subcategory_id) as certified_categories,
 				       COUNT(DISTINCT s.subcategory_id) as total_categories,
 				       COALESCE(SUM(s.score), 0) as total_scores_given
 				FROM judges j
 				LEFT JOIN scores s ON j.id = s.judge_id
 				LEFT JOIN judge_certifications jc ON j.id = jc.judge_id AND jc.certified_at IS NOT NULL
-				GROUP BY j.id, j.name, j.preferred_name
+				GROUP BY j.id, j.name
 				ORDER BY j.name
 			')->fetchAll(\PDO::FETCH_ASSOC);
 			
@@ -462,11 +462,11 @@ class BoardController {
 			if (!empty($judges)) {
 				$html .= '<h2>Judge Status</h2>';
 				$html .= '<table border="1" cellpadding="5" cellspacing="0" style="border-collapse: collapse; width: 100%;">';
-				$html .= '<tr style="background-color: #f2f2f2;"><th>Preferred Name</th><th>Certified Categories</th><th>Total Categories</th><th>Total Scores Given</th></tr>';
+				$html .= '<tr style="background-color: #f2f2f2;"><th>Name</th><th>Certified Categories</th><th>Total Categories</th><th>Total Scores Given</th></tr>';
 				
 				foreach ($judges as $judge) {
 					$html .= '<tr>';
-					$html .= '<td>' . htmlspecialchars($judge['preferred_name'] ?? $judge['name']) . '</td>';
+					$html .= '<td>' . htmlspecialchars($judge['name'] ?? '') . '</td>';
 					$html .= '<td>' . ($judge['certified_categories'] ?? 0) . '</td>';
 					$html .= '<td>' . ($judge['total_categories'] ?? 0) . '</td>';
 					$html .= '<td>' . number_format($judge['total_scores_given'], 2) . '</td>';
@@ -557,8 +557,8 @@ class BoardController {
 				foreach ($contestants as $contestant) {
 					$html .= '<tr>';
 					$html .= '<td>' . $rank++ . '</td>';
-					$html .= '<td>' . htmlspecialchars($contestant['contestant_name']) . '</td>';
-					$html .= '<td>' . htmlspecialchars($contestant['contestant_number'] ?? '') . '</td>';
+					$html .= '<td>' . htmlspecialchars($contestant['contestant_name'] ?? '') . '</td>';
+					$html .= '<td>' . htmlspecialchars((string)($contestant['contestant_number'] ?? '')) . '</td>';
 					$html .= '<td>' . number_format($contestant['total_current'], 2) . '</td>';
 					$html .= '</tr>';
 				}
