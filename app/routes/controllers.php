@@ -5047,15 +5047,9 @@ class AdminController {
 	public function logFiles(): void {
 		require_organizer();
 		
-		// Debug log file retrieval
-		\App\Logger::debug('log_files_retrieval', 'log_files', null, 
-			"Retrieving log files for admin view");
-		
+		// Get log files without using Logger debug (which requires DB access)
 		$logFiles = \App\Logger::getLogFiles();
 		$logDirectory = \App\Logger::getLogDirectoryPublic();
-		
-		\App\Logger::debug('log_files_found', 'log_files', null, 
-			"Found " . count($logFiles) . " log files in directory: " . $logDirectory);
 		
 		// Get file info for each log file
 		$fileInfo = [];
@@ -5067,10 +5061,6 @@ class AdminController {
 				'modified' => filemtime($file),
 				'readable' => is_readable($file)
 			];
-			
-			// Debug log each file's status
-			\App\Logger::debug('log_file_info', 'log_files', basename($file), 
-				"File: " . basename($file) . ", Size: " . filesize($file) . " bytes, Readable: " . (is_readable($file) ? 'Yes' : 'No'));
 		}
 		
 		view('admin/log_files', compact('fileInfo', 'logDirectory'));
@@ -5138,7 +5128,8 @@ class AdminController {
 		$daysToKeep = (int)(post('days_to_keep') ?: 30);
 		$deletedCount = \App\Logger::cleanupOldLogFiles($daysToKeep);
 		
-		\App\Logger::logAdminAction('log_cleanup', 'system', null, "Cleaned up {$deletedCount} log files older than {$daysToKeep} days");
+		// Note: Skipping database logging to avoid DB access issues
+		// The cleanup operation itself is logged to file by cleanupOldLogFiles()
 		
 		redirect('/admin/log-files?success=cleanup_complete&deleted=' . $deletedCount);
 	}
