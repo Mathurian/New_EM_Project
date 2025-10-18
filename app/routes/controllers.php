@@ -24,6 +24,9 @@ class HomeController {
 				case 'auditor':
 					redirect('/auditor');
 					break;
+				case 'board':
+					redirect('/board');
+					break;
 				default:
 					view('home', ['title' => 'Event Manager']);
 			}
@@ -3416,6 +3419,8 @@ class AuthController {
 				redirect('/tally-master');
 			} elseif ($user['role'] === 'auditor') {
 				redirect('/auditor');
+			} elseif ($user['role'] === 'board') {
+				redirect('/board');
 			} else {
 				redirect('/');
 			}
@@ -3619,7 +3624,7 @@ class UserController {
 		}
 		
 		// Require password for certain roles
-		if (in_array($role, ['organizer', 'tally_master', 'auditor']) && empty($password)) {
+		if (in_array($role, ['organizer', 'tally_master', 'auditor', 'board']) && empty($password)) {
 			\App\Logger::debug('user_creation_password_required', 'user', null, 
 				"User creation failed: password required for role {$role}");
 			redirect('/users/new?error=password_required');
@@ -3680,7 +3685,7 @@ class UserController {
 					\App\Logger::debug('contestant_category_assigned', 'contestant', $contestantId, 
 						"Contestant assigned to category: contestant_id={$contestantId}, category_id={$categoryId}");
 				}
-			} elseif (in_array($role, ['organizer', 'emcee', 'tally_master', 'auditor'])) {
+			} elseif (in_array($role, ['organizer', 'emcee', 'tally_master', 'auditor', 'board'])) {
 				// These roles only need the user record - no additional tables required
 				\App\Logger::debug('simple_user_created', $role, $userId, 
 					"Simple user created: name={$name}, email={$email}, role={$role}");

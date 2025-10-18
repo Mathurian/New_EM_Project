@@ -19,6 +19,7 @@ require __DIR__ . '/controllers/ContestController.php';
 require __DIR__ . '/controllers/AdminController.php';
 require __DIR__ . '/routes/controllers.php';
 require __DIR__ . '/routes/AuditorController.php';
+require __DIR__ . '/routes/BoardController.php';
 
 // Initialize services
 App\Cache::init();

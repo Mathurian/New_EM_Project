@@ -136,6 +136,17 @@ $router->get('/auditor/final-certification', 'AuditorController@finalCertificati
 $router->post('/auditor/final-certification', 'AuditorController@performFinalCertification');
 $router->get('/auditor/summary', 'AuditorController@summary');
 
+// board
+$router->get('/board', 'BoardController@index');
+$router->get('/board/certification-status', 'BoardController@certificationStatus');
+$router->get('/board/emcee-scripts', 'BoardController@emceeScripts');
+$router->post('/board/emcee-scripts', 'BoardController@uploadEmceeScript');
+$router->post('/board/emcee-scripts/{id}/toggle', 'BoardController@toggleEmceeScript');
+$router->post('/board/emcee-scripts/{id}/delete', 'BoardController@deleteEmceeScript');
+$router->get('/board/print-reports', 'BoardController@printReports');
+$router->get('/board/remove-judge-scores', 'BoardController@removeJudgeScores');
+$router->post('/board/remove-judge-scores', 'BoardController@initiateScoreRemoval');
+
 // templates
 $router->get('/admin/templates', 'TemplateController@index');
 $router->get('/admin/templates/new', 'TemplateController@new');
