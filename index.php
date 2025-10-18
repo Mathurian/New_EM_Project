@@ -1,5 +1,4 @@
 <?php
-// Redirect all requests to the public directory
-header('Location: /public/');
-exit;
+// Handle all requests by including the public index.php
+require __DIR__ . '/public/index.php';
 ?>
