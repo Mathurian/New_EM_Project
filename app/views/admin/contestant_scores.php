@@ -22,10 +22,22 @@
 		.total-score { font-weight: bold; font-size: 1.2em; }
 		.subcategory-header { background: #007cba; color: white; padding: 10px; margin: 20px 0 10px 0; }
 	</style>
+	<script>
+		function handleBackClick(link) {
+			// Check if this window was opened by another window (popup/new tab)
+			if (window.opener || window.history.length <= 1) {
+				// Close the window/tab
+				window.close();
+				return false; // Prevent default navigation
+			}
+			// If not a popup, allow normal navigation
+			return true;
+		}
+	</script>
 </head>
 <body>
 	<div class="no-print">
-		<p><a href="<?= url('admin/users') ?>">Back to User Management</a></p>
+		<p><a href="<?= url('admin/users') ?>" onclick="return handleBackClick(this)">Back to User Management</a></p>
 		<button onclick="window.print()" style="background: #007cba; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer;">Print Scores</button>
 	</div>
 

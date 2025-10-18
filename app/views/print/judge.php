@@ -28,11 +28,23 @@
             .category-section { page-break-inside: avoid; }
         }
     </style>
+    <script>
+        function handleBackClick(link) {
+            // Check if this window was opened by another window (popup/new tab)
+            if (window.opener || window.history.length <= 1) {
+                // Close the window/tab
+                window.close();
+                return false; // Prevent default navigation
+            }
+            // If not a popup, allow normal navigation
+            return true;
+        }
+    </script>
 </head>
 <body>
     <div class="container">
         <?php if (empty($isEmail)): ?>
-            <a href="<?= url('admin/print-reports') ?>" class="print-button" style="background-color: #6c757d;">Back to Print Reports</a>
+            <a href="<?= url('admin/print-reports') ?>" class="print-button" style="background-color: #6c757d;" onclick="return handleBackClick(this)">Back to Print Reports</a>
             <a href="#" onclick="window.print()" class="print-button">Print Report</a>
         <?php endif; ?>
 
