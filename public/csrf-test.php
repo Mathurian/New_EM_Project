@@ -15,12 +15,12 @@ try {
     echo "✅ csrf_field() function works<br>\n";
     echo "Output: " . htmlspecialchars($csrfField) . "<br>\n";
     
-    echo "<h2>3. Testing Login Template Directly</h2>\n";
+    echo "<h2>3. Testing Login Template via View Helper</h2>\n";
     ob_start();
     try {
-        include '../app/views/auth/login.php';
+        App\view('auth/login', []);
         $loginOutput = ob_get_clean();
-        echo "✅ Login template loaded successfully<br>\n";
+        echo "✅ Login template loaded successfully via view helper<br>\n";
         echo "Output length: " . strlen($loginOutput) . " characters<br>\n";
         echo "<h3>Login Template Preview:</h3>\n";
         echo "<div style='border: 1px solid #ccc; padding: 10px; max-height: 300px; overflow-y: auto;'>\n";
