@@ -17,7 +17,7 @@ require_once __DIR__ . '/app/lib/DB.php';
 echo "1. Fixing log directory permissions...\n";
 
 try {
-    $logDir = \App\Logger::getLogDirectory();
+    $logDir = \App\Logger::getLogDirectoryPublic();
     echo "✅ Log directory: $logDir\n";
     
     // Ensure directory exists and has proper permissions

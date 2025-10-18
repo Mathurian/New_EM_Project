@@ -14,7 +14,7 @@ require_once __DIR__ . '/app/lib/Logger.php';
 echo "1. Checking Logger's log directory detection...\n";
 
 try {
-    $logDir = \App\Logger::getLogDirectory();
+    $logDir = \App\Logger::getLogDirectoryPublic();
     echo "✅ Logger detected log directory: $logDir\n";
 } catch (Exception $e) {
     echo "❌ Logger failed to detect log directory: " . $e->getMessage() . "\n";
