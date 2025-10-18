@@ -785,4 +785,25 @@ function get_category_total_score(string $categoryId): array {
 	return $stmt->fetch(\PDO::FETCH_ASSOC) ?: ['total_current' => 0, 'total_possible' => 0];
 }
 
+function calculate_contestant_totals_for_category(string $categoryId): array {
+	$stmt = DB::pdo()->prepare('
+		SELECT 
+			con.id as contestant_id,
+			con.name as contestant_name,
+			con.contestant_number,
+			COALESCE(SUM(s.score), 0) as total_current,
+			COALESCE(SUM(cr.max_score), 0) as total_possible
+		FROM contestants con
+		JOIN subcategory_contestants sc ON con.id = sc.contestant_id
+		JOIN subcategories sub ON sc.subcategory_id = sub.id
+		LEFT JOIN scores s ON con.id = s.contestant_id AND sub.id = s.subcategory_id
+		LEFT JOIN criteria cr ON s.criterion_id = cr.id
+		WHERE sub.category_id = ?
+		GROUP BY con.id, con.name, con.contestant_number
+		ORDER BY total_current DESC, con.name
+	');
+	$stmt->execute([$categoryId]);
+	return $stmt->fetchAll(\PDO::FETCH_ASSOC);
+}
+
 

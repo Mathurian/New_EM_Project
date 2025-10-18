@@ -2,7 +2,7 @@
 declare(strict_types=1);
 namespace App\Routes;
 use App\DB;
-use function App\{view, render, redirect, param, post, request_array, current_user, is_logged_in, is_organizer, is_judge, is_emcee, require_login, require_organizer, require_emcee, csrf_field, require_csrf, secure_file_upload, paginate, pagination_links, validate_input, sanitize_input, get_user_validation_rules, uuid, calculate_score_tabulation, format_score_tabulation};
+use function App\{view, render, redirect, param, post, request_array, current_user, is_logged_in, is_organizer, is_judge, is_emcee, require_login, require_organizer, require_emcee, csrf_field, require_csrf, secure_file_upload, paginate, pagination_links, validate_input, sanitize_input, get_user_validation_rules, uuid, calculate_score_tabulation, format_score_tabulation, calculate_contestant_totals_for_category};
 
 class HomeController {
 	public function index(): void { 
@@ -5140,24 +5140,9 @@ class AdminController {
 				$scores = $scoresStmt->fetchAll(\PDO::FETCH_ASSOC);
 				
 				// Get contestants with their total scores for this category
-				$contestantsStmt = DB::pdo()->prepare('
-					SELECT con.*, 
-						COALESCE(SUM(s.score), 0) as total_score
-					FROM contestants con
-					JOIN subcategory_contestants sc ON con.id = sc.contestant_id
-					JOIN subcategories sub ON sc.subcategory_id = sub.id
-					LEFT JOIN scores s ON con.id = s.contestant_id AND sub.id = s.subcategory_id
-					WHERE sub.category_id = ?
-					GROUP BY con.id, con.name, con.email, con.gender, con.pronouns, con.contestant_number, con.bio, con.image_path
-					ORDER BY total_score DESC, con.name
-				');
-				$contestantsStmt->execute([$entityId]);
-				$contestants = $contestantsStmt->fetchAll(\PDO::FETCH_ASSOC);
+				$contestants = calculate_contestant_totals_for_category($entityId);
 				
-				// Calculate score tabulation
-				$tabulation = calculate_score_tabulation($scores);
-				
-				$html = \App\render_to_string('print/category', compact('category','subcategories','scores','contestants','tabulation','isEmail'));
+				$html = \App\render_to_string('print/category', compact('category','subcategories','scores','contestants','isEmail'));
 				$subject = 'Category Report: ' . ($category['name'] ?? '');
 			} else {
 				redirect('/admin/print-reports?error=invalid_report_type');
@@ -5578,24 +5563,9 @@ class PrintController {
 		$scores = $scores->fetchAll(\PDO::FETCH_ASSOC);
 		
 		// Get contestants with their total scores for this category
-		$contestants = DB::pdo()->prepare('
-			SELECT con.*, 
-				COALESCE(SUM(s.score), 0) as total_score
-			FROM contestants con
-			JOIN subcategory_contestants sc ON con.id = sc.contestant_id
-			JOIN subcategories sub ON sc.subcategory_id = sub.id
-			LEFT JOIN scores s ON con.id = s.contestant_id AND sub.id = s.subcategory_id
-			WHERE sub.category_id = ?
-			GROUP BY con.id, con.name, con.email, con.gender, con.pronouns, con.contestant_number, con.bio, con.image_path
-			ORDER BY total_score DESC, con.name
-		');
-		$contestants->execute([$categoryId]);
-		$contestants = $contestants->fetchAll(\PDO::FETCH_ASSOC);
+		$contestants = calculate_contestant_totals_for_category($categoryId);
 		
-		// Calculate score tabulation
-		$tabulation = calculate_score_tabulation($scores);
-		
-		render('print/category', compact('category', 'subcategories', 'scores', 'contestants', 'tabulation'));
+		render('print/category', compact('category', 'subcategories', 'scores', 'contestants'));
 	}
 }
 

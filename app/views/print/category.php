@@ -1,4 +1,4 @@
-<?php use function App\{url, calculate_score_tabulation, format_score_tabulation}; ?>
+<?php use function App\{url}; ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -41,7 +41,6 @@
             <p><strong>Contest:</strong> <?= htmlspecialchars($category['contest_name']) ?></p>
             <p><strong>Contest:</strong> <?= htmlspecialchars($category['name']) ?></p>
             <p><strong>Description:</strong> <?= htmlspecialchars($category['description'] ?? 'N/A') ?></p>
-            <p><strong>Total Score:</strong> <?= format_score_tabulation($tabulation, 'overall') ?></p>
             <p><strong>Report Generated:</strong> <?= date('Y-m-d H:i:s') ?></p>
         </div>
 
@@ -57,9 +56,6 @@
                             <?php if ($subcategory['score_cap']): ?>
                                 (Score Cap: <?= htmlspecialchars($subcategory['score_cap']) ?>)
                             <?php endif; ?>
-                            <span style="color: #666; font-size: 0.9em;">
-                                - <?= format_score_tabulation($tabulation['by_subcategory'][$subcategory['name']] ?? ['current' => 0, 'possible' => 0]) ?>
-                            </span>
                         </li>
                     <?php endforeach; ?>
                 </ul>
@@ -76,7 +72,7 @@
                         <th>Rank</th>
                         <th>Contestant Number</th>
                         <th>Name</th>
-                        <th>Total Score</th>
+                        <th>Score (Current / Possible)</th>
                         <th>Email</th>
                     </tr>
                 </thead>
@@ -85,8 +81,8 @@
                         <tr class="rank-<?= $rank <= 3 ? $rank : '' ?>">
                             <td><?= $rank++ ?></td>
                             <td><?= htmlspecialchars($contestant['contestant_number'] ?? 'N/A') ?></td>
-                            <td><?= htmlspecialchars($contestant['name']) ?></td>
-                            <td><?= number_format((float)$contestant['total_score'], 2) ?></td>
+                            <td><?= htmlspecialchars($contestant['contestant_name']) ?></td>
+                            <td><?= number_format((float)$contestant['total_current'], 1) ?> / <?= number_format((float)$contestant['total_possible'], 1) ?> (<?= $contestant['total_possible'] > 0 ? number_format(($contestant['total_current'] / $contestant['total_possible']) * 100, 1) : 'N/A' ?>%)</td>
                             <td><?= htmlspecialchars($contestant['email'] ?? 'N/A') ?></td>
                         </tr>
                     <?php endforeach; ?>
