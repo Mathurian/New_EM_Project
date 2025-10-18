@@ -11,6 +11,7 @@ require_once __DIR__ . '/app/lib/helpers.php';
 
 // Import functions from App namespace
 use function App\{get_user_validation_rules, validate_input, sanitize_input, csrf_field, url, uuid};
+use App\DB;
 
 echo "Comprehensive User Creation Test\n";
 echo "================================\n\n";
@@ -66,7 +67,7 @@ echo "\n";
 // Test 3: Database Operations
 echo "3. Testing database operations...\n";
 try {
-    $pdo = App\DB::pdo();
+    $pdo = DB::pdo();
     echo "✅ Database connection successful\n";
     
     // Test creating a user
@@ -141,7 +142,7 @@ try {
         echo "✅ Validation passed\n";
         
         // Test database insertion
-        $pdo = App\DB::pdo();
+        $pdo = DB::pdo();
         $pdo->beginTransaction();
         
         try {

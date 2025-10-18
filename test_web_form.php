@@ -94,7 +94,7 @@ try {
 echo "\n5. Testing redirect function...\n";
 try {
     // We can't actually redirect in a test script, but we can test if the function exists
-    if (function_exists('redirect')) {
+    if (function_exists('App\redirect')) {
         echo "✅ Redirect function exists\n";
     } else {
         echo "❌ Redirect function not found\n";

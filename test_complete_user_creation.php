@@ -10,6 +10,7 @@ require_once __DIR__ . '/app/lib/helpers.php';
 
 // Import functions from App namespace
 use function App\{get_user_validation_rules, validate_input, sanitize_input, uuid};
+use App\DB;
 
 echo "Complete User Creation Test\n";
 echo "==========================\n\n";
