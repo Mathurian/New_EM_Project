@@ -4,10 +4,12 @@ if (is_logged_in()): ?>
 	<h1>Event Manager</h1>
 	<p>Use this tool to manage contests, categories, people, scoring and results.</p>
 <?php else: ?>
-	<h1>Event Manager</h1>
-	<p>Welcome to the Event Manager. Please log in to access the system.</p>
+	<div style="text-align: center; margin-bottom: 40px;">
+		<h1 style="margin-bottom: 16px;">Event Manager</h1>
+		<p style="font-size: 18px; color: var(--text-secondary);">Welcome to the Event Manager. Please log in to access the system.</p>
+	</div>
 	
-	<div style="min-height: 60vh; display: flex; align-items: center; justify-content: center;">
+	<div style="min-height: 50vh; display: flex; align-items: center; justify-content: center;">
 		<div style="width: 100%; max-width: 380px; padding: 24px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-primary); box-shadow: 0 2px 6px rgba(0,0,0,0.06);">
 			<h2 style="text-align:center; margin-top:0;">Login</h2>
 			<?php if (!empty($_GET['error'])): ?>

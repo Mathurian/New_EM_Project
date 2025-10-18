@@ -31,7 +31,9 @@ if (!headers_sent()) {
 					<?php unset($_SESSION['timeout_message']); ?>
 				</div>
 			<?php endif; ?>
-			<?php include __DIR__ . '/header.php'; ?>
+			<?php if (is_logged_in()): ?>
+				<?php include __DIR__ . '/header.php'; ?>
+			<?php endif; ?>
 			<?php include __DIR__ . '/user_creation_modal.php'; ?>
             <main class="content-main">
 				<?php 
