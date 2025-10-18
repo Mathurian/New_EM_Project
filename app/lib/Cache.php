@@ -14,7 +14,7 @@ class Cache
 
     public static function init(): void
     {
-        self::$cacheDir = __DIR__ . '/../../storage/cache/';
+        self::$cacheDir = __DIR__ . 'storage/cache/';
         if (!is_dir(self::$cacheDir)) {
             if (!mkdir(self::$cacheDir, 0755, true)) {
                 error_log("Cache: Failed to create cache directory: " . self::$cacheDir);
