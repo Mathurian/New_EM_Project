@@ -1439,10 +1439,17 @@ class BackupController {
 		}
 		flush();
 		
-		$scriptPath = __DIR__ . '/../../fix_constraint_cli.php';
+		$scriptPath = realpath(__DIR__ . '/../../fix_constraint_cli.php');
 		
-		if (!file_exists($scriptPath)) {
-			echo '<pre>Error: CLI script not found at: ' . $scriptPath . '</pre>';
+		if (!$scriptPath || !file_exists($scriptPath)) {
+			echo '<pre>Error: CLI script not found at: ' . htmlspecialchars($scriptPath) . '</pre>';
+			exit;
+		}
+		
+		// Validate script path is within project directory
+		$projectRoot = realpath(__DIR__ . '/../..');
+		if (strpos($scriptPath, $projectRoot) !== 0) {
+			echo '<pre>Error: Invalid script path</pre>';
 			exit;
 		}
 		
@@ -1450,7 +1457,7 @@ class BackupController {
 		$output = [];
 		$returnCode = 0;
 		
-		exec("php \"$scriptPath\" 2>&1", $output, $returnCode);
+		exec("php \"" . escapeshellarg($scriptPath) . "\" 2>&1", $output, $returnCode);
 		
 		echo '<pre>CLI Script Output:</pre>';
 		echo '<pre>' . implode("\n", $output) . '</pre>';
@@ -1476,10 +1483,17 @@ class BackupController {
 		}
 		flush();
 		
-		$scriptPath = __DIR__ . '/../../fix_constraint_sqlite3.php';
+		$scriptPath = realpath(__DIR__ . '/../../fix_constraint_sqlite3.php');
 		
-		if (!file_exists($scriptPath)) {
-			echo '<pre>Error: SQLite3 script not found at: ' . $scriptPath . '</pre>';
+		if (!$scriptPath || !file_exists($scriptPath)) {
+			echo '<pre>Error: SQLite3 script not found at: ' . htmlspecialchars($scriptPath) . '</pre>';
+			exit;
+		}
+		
+		// Validate script path is within project directory
+		$projectRoot = realpath(__DIR__ . '/../..');
+		if (strpos($scriptPath, $projectRoot) !== 0) {
+			echo '<pre>Error: Invalid script path</pre>';
 			exit;
 		}
 		
@@ -1513,10 +1527,17 @@ class BackupController {
 		}
 		flush();
 		
-		$scriptPath = __DIR__ . '/../../fix_constraint.sh';
+		$scriptPath = realpath(__DIR__ . '/../../fix_constraint.sh');
 		
-		if (!file_exists($scriptPath)) {
-			echo '<pre>Error: Shell script not found at: ' . $scriptPath . '</pre>';
+		if (!$scriptPath || !file_exists($scriptPath)) {
+			echo '<pre>Error: Shell script not found at: ' . htmlspecialchars($scriptPath) . '</pre>';
+			exit;
+		}
+		
+		// Validate script path is within project directory
+		$projectRoot = realpath(__DIR__ . '/../..');
+		if (strpos($scriptPath, $projectRoot) !== 0) {
+			echo '<pre>Error: Invalid script path</pre>';
 			exit;
 		}
 		
@@ -3491,6 +3512,7 @@ class UserController {
 	
 	public function create(): void {
 		require_organizer();
+		require_csrf();
 		
 		$name = post('name');
 		$email = post('email') ?: null;
@@ -3810,6 +3832,7 @@ class UserController {
 	
 	public function removeAllJudges(): void {
 		require_organizer();
+		require_csrf();
 		
 		// Debug log bulk removal attempt
 		\App\Logger::debug('bulk_judge_removal_attempt', 'judge', null, 
@@ -3874,6 +3897,7 @@ class UserController {
 	
 	public function removeAllContestants(): void {
 		require_organizer();
+		require_csrf();
 		
 		// Debug log bulk removal attempt
 		\App\Logger::debug('bulk_contestant_removal_attempt', 'contestant', null, 
@@ -3937,6 +3961,7 @@ class UserController {
 	
 	public function removeAllEmcees(): void {
 		require_organizer();
+		require_csrf();
 		
 		// Debug log bulk removal attempt
 		\App\Logger::debug('bulk_emcee_removal_attempt', 'emcee', null, 
@@ -3979,6 +4004,7 @@ class UserController {
 	
 	public function forceRefresh(): void {
 		require_organizer();
+		require_csrf();
 		
 		// Debug log refresh attempt
 		\App\Logger::debug('table_refresh_attempt', 'system', null, 
@@ -4049,12 +4075,16 @@ class DatabaseBrowserController {
 		// Get table structure
 		$columns = $this->getTableColumns($tableName);
 		
-		// Get total count
-		$totalCount = DB::pdo()->query("SELECT COUNT(*) FROM `{$tableName}`")->fetchColumn();
+		// Get total count using prepared statement
+		$stmt = DB::pdo()->prepare("SELECT COUNT(*) FROM `{$tableName}`");
+		$stmt->execute();
+		$totalCount = $stmt->fetchColumn();
 		$totalPages = ceil($totalCount / $perPage);
 		
-		// Get data with pagination
-		$data = DB::pdo()->query("SELECT * FROM `{$tableName}` LIMIT {$perPage} OFFSET {$offset}")->fetchAll(\PDO::FETCH_ASSOC);
+		// Get data with pagination using prepared statement
+		$stmt = DB::pdo()->prepare("SELECT * FROM `{$tableName}` LIMIT ? OFFSET ?");
+		$stmt->execute([$perPage, $offset]);
+		$data = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 		
 		view('admin/database_table', compact('tableName', 'columns', 'data', 'page', 'totalPages', 'totalCount', 'perPage'));
 	}
@@ -4073,13 +4103,24 @@ class DatabaseBrowserController {
 			return;
 		}
 		
-		// Security: Only allow SELECT statements
+		// Security: Only allow SELECT statements and restrict dangerous keywords
 		$sqlTrimmed = trim(strtoupper($sql));
 		if (!str_starts_with($sqlTrimmed, 'SELECT')) {
 			\App\Logger::warn('db_browser_security_block', 'database', null, 
 				"Blocked non-SELECT query: " . substr($sql, 0, 50));
 			redirect('/admin/database?error=invalid_query_type');
 			return;
+		}
+		
+		// Block dangerous SQL keywords
+		$dangerousKeywords = ['DROP', 'DELETE', 'UPDATE', 'INSERT', 'ALTER', 'CREATE', 'EXEC', 'EXECUTE', 'UNION', '--', '/*', '*/'];
+		foreach ($dangerousKeywords as $keyword) {
+			if (strpos($sqlTrimmed, $keyword) !== false) {
+				\App\Logger::warn('db_browser_security_block', 'database', null, 
+					"Blocked query with dangerous keyword '{$keyword}': " . substr($sql, 0, 50));
+				redirect('/admin/database?error=dangerous_keyword');
+				return;
+			}
 		}
 		
 		try {
@@ -4106,7 +4147,15 @@ class DatabaseBrowserController {
 	}
 	
 	private function getTableColumns(string $tableName): array {
-		$columns = DB::pdo()->query("PRAGMA table_info(`{$tableName}`)")->fetchAll(\PDO::FETCH_ASSOC);
+		// Validate table name first
+		$validTables = DB::pdo()->query("SELECT name FROM sqlite_master WHERE type='table'")->fetchAll(\PDO::FETCH_COLUMN);
+		if (!in_array($tableName, $validTables)) {
+			return [];
+		}
+		
+		$stmt = DB::pdo()->prepare("PRAGMA table_info(`{$tableName}`)");
+		$stmt->execute();
+		$columns = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 		return $columns;
 	}
 }
@@ -4878,6 +4927,7 @@ class AdminController {
 	
 	public function forceLogoutAll(): void {
 		require_organizer();
+		require_csrf();
 		
 		// Debug log logout attempt
 		\App\Logger::debug('force_logout_all_attempt', 'system', null, 
