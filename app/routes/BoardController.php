@@ -85,65 +85,101 @@ class BoardController {
 		require_board();
 		require_csrf();
 		
-		// Temporarily disable all logging to avoid old_users table issues
-		$originalLevel = Logger::getLevel();
-		Logger::setLevel('nonexistent_level'); // This will effectively disable all logging
-		
-		try {
-			// Validate required fields
-			$title = trim($_POST['title'] ?? '');
-			if (empty($title)) {
-				redirect('/board/emcee-scripts?error=title_required');
-				return;
-			}
-			
-			// Check if file was uploaded
-			if (!isset($_FILES['script_file']) || $_FILES['script_file']['error'] !== UPLOAD_ERR_OK) {
-				// Don't log this error to avoid database issues
-				redirect('/board/emcee-scripts?error=file_upload_failed');
-				return;
-			}
-			
-			// Use secure file upload with document-specific validation
-			$uploadDir = __DIR__ . '/../../public/uploads/emcee-scripts/';
-			$allowedTypes = ['application/pdf', 'text/plain', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
-			$maxSize = 10 * 1024 * 1024; // 10MB
-			
-			$result = secure_file_upload($_FILES['script_file'], $uploadDir, 'script', $allowedTypes, $maxSize);
-			
-			if (!$result['success']) {
-				// Don't log this error to avoid database issues
-				redirect('/board/emcee-scripts?error=file_validation_failed');
-				return;
-			}
-			
-			$filename = $result['filename'];
-			$filepath = $result['filePath'];
-			$originalFilename = $_FILES['script_file']['name'];
-			
-			// Save to database
-			$scriptId = uuid();
-			$stmt = DB::pdo()->prepare('
-				INSERT INTO emcee_scripts (id, title, filename, file_path, uploaded_by, created_at, is_active)
-				VALUES (?, ?, ?, ?, ?, ?, ?)
-			');
-			$stmt->execute([
-				$scriptId,
-				$title,
-				$originalFilename,
-				'/uploads/emcee-scripts/' . $filename,
-				current_user()['id'],
-				date('Y-m-d H:i:s'),
-				1
-			]);
-			
-			// Don't log this success to avoid database issues
-			redirect('/board/emcee-scripts?success=script_uploaded');
-			
-		} finally {
-			// Restore original logging level
-			Logger::setLevel($originalLevel);
+		// Validate required fields
+		$title = trim($_POST['title'] ?? '');
+		if (empty($title)) {
+			redirect('/board/emcee-scripts?error=title_required');
+			return;
 		}
+		
+		// Check if file was uploaded
+		if (!isset($_FILES['script_file']) || $_FILES['script_file']['error'] !== UPLOAD_ERR_OK) {
+			Logger::error('emcee_script_upload', 'board', $_SESSION['user']['id'] ?? null, 
+				"File upload failed. Error code: " . ($_FILES['script_file']['error'] ?? 'no file'));
+			redirect('/board/emcee-scripts?error=file_upload_failed');
+			return;
+		}
+		
+		// Validate file type and size manually
+		$file = $_FILES['script_file'];
+		$allowedTypes = ['application/pdf', 'text/plain', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+		$allowedExtensions = ['pdf', 'txt', 'doc', 'docx'];
+		$maxSize = 10 * 1024 * 1024; // 10MB
+		
+		// Check file size
+		if ($file['size'] > $maxSize) {
+			Logger::warn('emcee_script_upload', 'board', $_SESSION['user']['id'] ?? null, 
+				"File too large: " . $file['size'] . " bytes");
+			redirect('/board/emcee-scripts?error=file_too_large');
+			return;
+		}
+		
+		// Check MIME type
+		$finfo = finfo_open(FILEINFO_MIME_TYPE);
+		$mimeType = finfo_file($finfo, $file['tmp_name']);
+		finfo_close($finfo);
+		
+		if (!in_array($mimeType, $allowedTypes)) {
+			Logger::warn('emcee_script_upload', 'board', $_SESSION['user']['id'] ?? null, 
+				"Invalid MIME type: " . $mimeType);
+			redirect('/board/emcee-scripts?error=invalid_file_type');
+			return;
+		}
+		
+		// Check file extension
+		$extension = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+		if (!in_array($extension, $allowedExtensions)) {
+			Logger::warn('emcee_script_upload', 'board', $_SESSION['user']['id'] ?? null, 
+				"Invalid file extension: " . $extension);
+			redirect('/board/emcee-scripts?error=invalid_file_extension');
+			return;
+		}
+		
+		// Create upload directory if it doesn't exist
+		$uploadDir = __DIR__ . '/../../public/uploads/emcee-scripts/';
+		if (!is_dir($uploadDir)) {
+			if (!mkdir($uploadDir, 0755, true)) {
+				Logger::error('emcee_script_upload', 'board', $_SESSION['user']['id'] ?? null, 
+					"Failed to create upload directory");
+				redirect('/board/emcee-scripts?error=upload_directory_failed');
+				return;
+			}
+		}
+		
+		// Generate secure filename and upload
+		$filename = 'script_' . uuid() . '.' . $extension;
+		$filepath = $uploadDir . $filename;
+		
+		if (!move_uploaded_file($file['tmp_name'], $filepath)) {
+			Logger::error('emcee_script_upload', 'board', $_SESSION['user']['id'] ?? null, 
+				"Failed to move uploaded file");
+			redirect('/board/emcee-scripts?error=upload_failed');
+			return;
+		}
+		
+		// Set proper permissions
+		chmod($filepath, 0644);
+		
+		$originalFilename = $_FILES['script_file']['name'];
+		
+		// Save to database
+		$scriptId = uuid();
+		$stmt = DB::pdo()->prepare('
+			INSERT INTO emcee_scripts (id, title, filename, file_path, uploaded_by, created_at, is_active)
+			VALUES (?, ?, ?, ?, ?, ?, ?)
+		');
+		$stmt->execute([
+			$scriptId,
+			$title,
+			$originalFilename,
+			'/uploads/emcee-scripts/' . $filename,
+			current_user()['id'],
+			date('Y-m-d H:i:s'),
+			1
+		]);
+		
+		Logger::logAdminAction('emcee_script_uploaded', 'board', current_user()['id'], "Emcee script uploaded: {$title}");
+		redirect('/board/emcee-scripts?success=script_uploaded');
 	}
 	
 	public function toggleEmceeScript(array $params): void {
@@ -216,14 +252,27 @@ class BoardController {
 		require_board();
 		
 		$pdo = DB::pdo();
+		$view = $_GET['view'] ?? 'main';
 		
-		// Get contests for report selection
+		if ($view === 'contestants') {
+			// Get all contestants for individual printing
+			$contestants = $pdo->query('SELECT * FROM contestants ORDER BY contestant_number IS NULL, contestant_number, name')->fetchAll(\PDO::FETCH_ASSOC);
+			$usersWithEmail = $pdo->query('SELECT id, name, preferred_name, email FROM users WHERE email IS NOT NULL AND email != "" ORDER BY preferred_name, name')->fetchAll(\PDO::FETCH_ASSOC);
+			view('board/print-reports-contestants', compact('contestants', 'usersWithEmail'));
+			return;
+		}
+		
+		if ($view === 'judges') {
+			// Get all judges for individual printing
+			$judges = $pdo->query('SELECT * FROM judges ORDER BY name')->fetchAll(\PDO::FETCH_ASSOC);
+			$usersWithEmail = $pdo->query('SELECT id, name, preferred_name, email FROM users WHERE email IS NOT NULL AND email != "" ORDER BY preferred_name, name')->fetchAll(\PDO::FETCH_ASSOC);
+			view('board/print-reports-judges', compact('judges', 'usersWithEmail'));
+			return;
+		}
+		
+		// Main view - get contests and categories for report selection
 		$contests = $pdo->query('SELECT id, name FROM contests ORDER BY name')->fetchAll(\PDO::FETCH_ASSOC);
-		
-		// Get categories for report selection
 		$categories = $pdo->query('SELECT id, name FROM categories ORDER BY name')->fetchAll(\PDO::FETCH_ASSOC);
-		
-		// Get users with email addresses for email functionality
 		$usersWithEmail = $pdo->query('SELECT id, name, preferred_name, email FROM users WHERE email IS NOT NULL AND email != "" ORDER BY preferred_name, name')->fetchAll(\PDO::FETCH_ASSOC);
 		
 		view('board/print-reports', compact('contests', 'categories', 'usersWithEmail'));

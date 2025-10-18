@@ -140,7 +140,9 @@ function generateContestReport() {
 		alert('Please select a contest.');
 		return;
 	}
-	window.open('/admin/print-reports/contest/' + contestId, '_blank');
+	// For contest reports, we'll generate a category report for each category in the contest
+	// This is a simplified approach - you might want to create a dedicated contest report
+	alert('Contest reports are not yet implemented. Please use category reports for now.');
 }
 
 function generateCategoryReport() {
@@ -149,15 +151,17 @@ function generateCategoryReport() {
 		alert('Please select a category.');
 		return;
 	}
-	window.open('/admin/print-reports/category/' + categoryId, '_blank');
+	window.open('/print/category/' + categoryId, '_blank');
 }
 
 function generateContestantSummary() {
-	window.open('/admin/print-reports/contestants', '_blank');
+	// Show all contestants for individual printing
+	window.location.href = '/board/print-reports?view=contestants';
 }
 
 function generateJudgeSummary() {
-	window.open('/admin/print-reports/judges', '_blank');
+	// Show all judges for individual printing
+	window.location.href = '/board/print-reports?view=judges';
 }
 
 // Email form handling functions (from admin view)
