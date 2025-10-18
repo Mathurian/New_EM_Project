@@ -10,18 +10,23 @@
 		<div class="modal-body">
 			<?php if (!empty($_GET['error'])): ?>
 				<?php 
-				$errorMessages = [
-					'invalid_role' => 'Invalid role selected',
-					'email_exists' => 'Email already exists',
-					'preferred_name_exists' => 'Preferred name already exists',
-					'constraint_failed' => 'Database constraint error. Please run the constraint fix script.',
-					'database_error' => 'Database error occurred',
-					'upload_failed' => 'Failed to upload image',
-					'missing_fields' => 'Required fields are missing',
-					'creation_failed' => 'User creation failed',
-					'password_required' => 'Password is required for this role',
-					'validation_failed' => 'Form validation failed. Please check your input.'
-				];
+		$errorMessages = [
+			'invalid_role' => 'Invalid role selected',
+			'email_exists' => 'Email already exists',
+			'preferred_name_exists' => 'Preferred name already exists',
+			'constraint_failed' => 'Database constraint error. Please run the constraint fix script.',
+			'database_error' => 'Database error occurred',
+			'upload_failed' => 'Failed to upload image',
+			'missing_fields' => 'Required fields are missing',
+			'creation_failed' => 'User creation failed',
+			'password_required' => 'Password is required for this role',
+			'password_too_short' => 'Password must be at least 8 characters long',
+			'password_no_uppercase' => 'Password must contain at least one uppercase letter',
+			'password_no_lowercase' => 'Password must contain at least one lowercase letter',
+			'password_no_number' => 'Password must contain at least one number',
+			'password_no_symbol' => 'Password must contain at least one symbol',
+			'validation_failed' => 'Form validation failed. Please check your input.'
+		];
 				$errorMessage = $errorMessages[$_GET['error']] ?? 'An error occurred';
 				?>
 				<div class="alert alert-danger"><?= htmlspecialchars($errorMessage) ?></div>

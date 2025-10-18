@@ -32,6 +32,11 @@
 			'missing_fields' => 'Required fields are missing',
 			'creation_failed' => 'User creation failed',
 			'password_required' => 'Password is required for this role',
+			'password_too_short' => 'Password must be at least 8 characters long',
+			'password_no_uppercase' => 'Password must contain at least one uppercase letter',
+			'password_no_lowercase' => 'Password must contain at least one lowercase letter',
+			'password_no_number' => 'Password must contain at least one number',
+			'password_no_symbol' => 'Password must contain at least one symbol',
 			'validation_failed' => 'Form validation failed. Please check your input.'
 		];
 		$errorMessage = $errorMessages[$_GET['error']] ?? 'An error occurred';
