@@ -3335,40 +3335,31 @@ class AuthController {
 		$email = post('email');
 		$password = post('password');
 		
-		// Debug log login attempt
-		\App\Logger::debug('login_attempt', 'auth', null, 
-			"Login attempt: email={$email}");
-		
 		if (empty($email) || empty($password)) {
-			\App\Logger::debug('login_failed', 'auth', null, 
-				"Login failed: missing email or password");
 			redirect('/login?error=missing_fields');
 			return;
 		}
 		
 		try {
-			// Try to find user by email or preferred name
-			$stmt = DB::pdo()->prepare('SELECT * FROM users WHERE email = ? OR preferred_name = ?');
-			$stmt->execute([$email, $email]);
-			$user = $stmt->fetch(\PDO::FETCH_ASSOC);
+			// Use safe database execution with retry
+			$user = DB::safeExecute(function() use ($email) {
+				$stmt = DB::pdo()->prepare('SELECT * FROM users WHERE email = ? OR preferred_name = ?');
+				$stmt->execute([$email, $email]);
+				return $stmt->fetch(\PDO::FETCH_ASSOC);
+			}, 'user_lookup');
 			
 			if (!$user || !password_verify($password, $user['password_hash'])) {
-				\App\Logger::debug('login_failed', 'auth', null, 
-					"Login failed: invalid credentials for email={$email}");
+				// Log failed login attempt (non-blocking)
 				\App\Logger::logLogin($email, false);
 				redirect('/login?error=invalid_credentials');
 				return;
 			}
 			
 			// Check if user's session has been invalidated
-			// This check is only relevant if the user is already logged in
-			// For fresh logins, we don't need to check session version mismatch
 			if (isset($_SESSION['user']) && isset($_SESSION['session_version'])) {
 				$dbSessionVersion = $user['session_version'] ?? '1';
 				$sessionVersion = $_SESSION['session_version'] ?? '1';
 				if ($dbSessionVersion !== $sessionVersion) {
-					\App\Logger::debug('login_failed', 'auth', $user['id'] ?? null, 
-						"Login failed: session invalidated for user={$user['email']}");
 					\App\Logger::logLogin($user['email'] ?? $user['preferred_name'], false, 'session_invalidated');
 					redirect('/login?error=session_invalidated');
 					return;
@@ -3378,13 +3369,14 @@ class AuthController {
 			$_SESSION['user'] = $user;
 			$_SESSION['session_version'] = $user['session_version'];
 			
-			// Update last_login timestamp
-			$now = date('c');
-			$stmt = DB::pdo()->prepare('UPDATE users SET last_login = ? WHERE id = ?');
-			$stmt->execute([$now, $user['id']]);
+			// Update last_login timestamp (non-blocking)
+			DB::safeExecute(function() use ($user) {
+				$now = date('c');
+				$stmt = DB::pdo()->prepare('UPDATE users SET last_login = ? WHERE id = ?');
+				$stmt->execute([$now, $user['id']]);
+			}, 'update_last_login');
 			
-			\App\Logger::debug('login_successful', 'auth', $user['id'], 
-				"Login successful: user_id={$user['id']}, email={$user['email']}, role={$user['role']}");
+			// Log successful login (non-blocking)
 			\App\Logger::logLogin($user['email'] ?? $user['preferred_name'], true);
 			
 			// Redirect based on role

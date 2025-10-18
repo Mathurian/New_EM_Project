@@ -33,7 +33,15 @@ class DB {
 			$path = $dbDir . '/contest.sqlite';
 			self::$pdo = new PDO('sqlite:' . $path);
 			self::$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+			
+			// Configure SQLite for better concurrency and reduced locking
 			self::$pdo->exec('PRAGMA foreign_keys = ON');
+			self::$pdo->exec('PRAGMA journal_mode = WAL');
+			self::$pdo->exec('PRAGMA synchronous = NORMAL');
+			self::$pdo->exec('PRAGMA cache_size = 10000');
+			self::$pdo->exec('PRAGMA temp_store = MEMORY');
+			self::$pdo->exec('PRAGMA busy_timeout = 30000');
+			self::$pdo->exec('PRAGMA wal_autocheckpoint = 1000');
 		}
 		return self::$pdo;
 	}
@@ -566,7 +574,7 @@ SQL;
 		}
 	}
 
-	private static function executeWithRetry(callable $operation, int $maxRetries = 3): mixed {
+	public static function executeWithRetry(callable $operation, int $maxRetries = 3): mixed {
 		$attempt = 0;
 		$lastException = null;
 		
@@ -594,6 +602,60 @@ SQL;
 		}
 		
 		throw $lastException;
+	}
+
+	/**
+	 * Execute a database operation with automatic retry and error handling
+	 */
+	public static function safeExecute(callable $operation, string $context = ''): mixed {
+		try {
+			return self::executeWithRetry($operation);
+		} catch (\PDOException $e) {
+			// Log the error but don't let it break the application
+			error_log("Database error in {$context}: " . $e->getMessage());
+			
+			// For critical operations, we might want to rethrow
+			if (strpos($e->getMessage(), 'database is locked') !== false) {
+				// Return a safe default or null for non-critical operations
+				return null;
+			}
+			
+			throw $e;
+		}
+	}
+
+	/**
+	 * Check database health and optimize if needed
+	 */
+	public static function optimizeDatabase(): void {
+		try {
+			$pdo = self::pdo();
+			
+			// Run VACUUM to optimize database
+			$pdo->exec('VACUUM');
+			
+			// Analyze tables for better query planning
+			$pdo->exec('ANALYZE');
+			
+			// Set optimal pragmas
+			$pdo->exec('PRAGMA optimize');
+			
+		} catch (\Exception $e) {
+			error_log('Database optimization failed: ' . $e->getMessage());
+		}
+	}
+
+	/**
+	 * Check if database is accessible and not locked
+	 */
+	public static function isHealthy(): bool {
+		try {
+			$pdo = self::pdo();
+			$stmt = $pdo->query('SELECT 1');
+			return $stmt !== false;
+		} catch (\Exception $e) {
+			return false;
+		}
 	}
 	
 	private static function updateBackupSettingsConstraint(): void {
@@ -679,17 +741,18 @@ SQL;
 			error_log('Role constraint update needed: ' . $e->getMessage());
 		}
 		
+		// Use safe execution with retry for the constraint update
 		try {
-			// Ensure we're not in a transaction before setting WAL mode
-			if ($pdo->inTransaction()) {
-				$pdo->rollBack();
-			}
-			
-			// Set WAL mode to reduce locking issues (outside transaction)
-			$pdo->exec('PRAGMA journal_mode=WAL');
-			$pdo->exec('PRAGMA busy_timeout=30000');
-			
-			self::executeWithRetry(function() use ($pdo) {
+			self::safeExecute(function() use ($pdo) {
+				// Ensure we're not in a transaction before setting WAL mode
+				if ($pdo->inTransaction()) {
+					$pdo->rollBack();
+				}
+				
+				// Set WAL mode to reduce locking issues (outside transaction)
+				$pdo->exec('PRAGMA journal_mode=WAL');
+				$pdo->exec('PRAGMA busy_timeout=30000');
+				
 				// Clean up any existing users_new table from previous failed attempts
 				$pdo->exec('DROP TABLE IF EXISTS users_new');
 				
@@ -703,19 +766,24 @@ SQL;
 					role TEXT NOT NULL CHECK (role IN (\'organizer\',\'judge\',\'emcee\',\'contestant\')),
 					judge_id TEXT,
 					gender TEXT,
+					pronouns TEXT,
+					session_version INTEGER NOT NULL DEFAULT 1,
+					last_login TEXT,
+					contestant_id TEXT,
+					emcee_id TEXT,
 					FOREIGN KEY (judge_id) REFERENCES judges(id) ON DELETE SET NULL
 				)');
 				
 				// Copy data from old table with explicit column mapping
-				$pdo->exec('INSERT INTO users_new (id, name, preferred_name, email, password_hash, role, judge_id, gender) 
-							SELECT id, name, preferred_name, email, password_hash, role, judge_id, gender FROM users');
+				$pdo->exec('INSERT INTO users_new (id, name, preferred_name, email, password_hash, role, judge_id, gender, pronouns, session_version, last_login, contestant_id, emcee_id) 
+							SELECT id, name, preferred_name, email, password_hash, role, judge_id, gender, pronouns, session_version, last_login, contestant_id, emcee_id FROM users');
 				
 				// Drop old table and rename new one
 				$pdo->exec('DROP TABLE users');
 				$pdo->exec('ALTER TABLE users_new RENAME TO users');
 				
 				return true;
-			});
+			}, 'role_constraint_update');
 			
 			error_log('Role constraint updated successfully');
 		} catch (\PDOException $e) {
@@ -726,7 +794,8 @@ SQL;
 			} catch (\PDOException $cleanupError) {
 				error_log('Failed to cleanup users_new table: ' . $cleanupError->getMessage());
 			}
-			throw $e;
+			// Don't throw the exception, just log it and continue
+			// The application should still work even if the constraint update fails
 		}
 	}
 

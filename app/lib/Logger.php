@@ -123,32 +123,7 @@ class Logger {
 		$ipAddress = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
 		$userAgent = $_SERVER['HTTP_USER_AGENT'] ?? 'unknown';
 
-		// Write to database
-		try {
-			$stmt = DB::pdo()->prepare('
-				INSERT INTO activity_logs (id, user_id, user_name, user_role, action, resource_type, resource_id, details, ip_address, user_agent, log_level, created_at)
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-			');
-			$stmt->execute([
-				uuid(),
-				$userId,
-				$userName,
-				$userRole,
-				$action,
-				$resourceType,
-				$resourceId,
-				$details,
-				$ipAddress,
-				$userAgent,
-				$level,
-				date('c')
-			]);
-		} catch (\Exception $e) {
-			// If database logging fails, still try to log to file
-			error_log('Database logging failed: ' . $e->getMessage());
-		}
-
-		// Write to file
+		// Write to file first (more reliable)
 		$logMessage = sprintf(
 			'User: %s (%s) | Action: %s | Resource: %s%s | Details: %s | IP: %s',
 			$userName,
@@ -161,6 +136,33 @@ class Logger {
 		);
 		
 		self::writeToFile($level, $logMessage);
+
+		// Write to database with retry mechanism (less critical)
+		try {
+			DB::safeExecute(function() use ($userId, $userName, $userRole, $action, $resourceType, $resourceId, $details, $ipAddress, $userAgent, $level) {
+				$stmt = DB::pdo()->prepare('
+					INSERT INTO activity_logs (id, user_id, user_name, user_role, action, resource_type, resource_id, details, ip_address, user_agent, log_level, created_at)
+					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				');
+				$stmt->execute([
+					uuid(),
+					$userId,
+					$userName,
+					$userRole,
+					$action,
+					$resourceType,
+					$resourceId,
+					$details,
+					$ipAddress,
+					$userAgent,
+					$level,
+					date('c')
+				]);
+			}, 'activity_logging');
+		} catch (\Exception $e) {
+			// If database logging fails, it's already logged to file, so we can continue
+			error_log('Database logging failed: ' . $e->getMessage());
+		}
 	}
 
 	public static function debug(string $action, string $resourceType = null, string $resourceId = null, string $details = null): void {
