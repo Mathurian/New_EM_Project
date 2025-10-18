@@ -2,6 +2,12 @@
 <h2>Judgy Time!</h2>
 <p>Select a subcategory to begin scoring contestants.</p>
 
+<div class="dashboard-actions">
+	<a href="<?= url('judge/contestants') ?>" class="btn btn-outline">
+		👥 View Contestant Bios
+	</a>
+</div>
+
 <?php if (empty($subcategories)): ?>
 	<div class="alert alert-info">
 		<p>You haven't been assigned to any categories yet. Please contact an organizer.</p>
@@ -28,6 +34,31 @@
 <?php endif; ?>
 
 <style>
+.dashboard-actions {
+	margin: 20px 0;
+	text-align: center;
+}
+
+.dashboard-actions .btn {
+	display: inline-block;
+	padding: 12px 24px;
+	background: #f8f9fa;
+	color: #495057;
+	border: 2px solid #dee2e6;
+	border-radius: 6px;
+	text-decoration: none;
+	font-weight: bold;
+	transition: all 0.2s;
+}
+
+.dashboard-actions .btn:hover {
+	background: #e9ecef;
+	border-color: #adb5bd;
+	color: #495057;
+	text-decoration: none;
+	transform: translateY(-1px);
+}
+
 .categories-grid {
 	display: grid;
 	grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
