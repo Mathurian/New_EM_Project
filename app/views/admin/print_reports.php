@@ -216,7 +216,7 @@
 			<label for="category_id">Select Category:</label>
 			<select id="category_id" class="form-control" onchange="updateCategoryEmailId()">
 				<option value="">Choose a category...</option>
-				<?php foreach ($categories as $category): ?>
+				<?php foreach ($summaryCategories as $category): ?>
 					<option value="<?= $category['id'] ?>"><?= htmlspecialchars($category['name']) ?></option>
 				<?php endforeach; ?>
 			</select>

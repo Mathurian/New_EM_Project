@@ -5232,9 +5232,9 @@ class AdminController {
 		
 		// Get contests and categories for summary reports (Board functionality)
 		$contests = DB::pdo()->query('SELECT id, name FROM contests ORDER BY name')->fetchAll(\PDO::FETCH_ASSOC);
-		$categories = DB::pdo()->query('SELECT id, name FROM categories ORDER BY name')->fetchAll(\PDO::FETCH_ASSOC);
+		$summaryCategories = DB::pdo()->query('SELECT id, name FROM categories ORDER BY name')->fetchAll(\PDO::FETCH_ASSOC);
 		
-		view('admin/print_reports', compact('contestants', 'judges', 'structure', 'usersWithEmail', 'contests', 'categories'));
+		view('admin/print_reports', compact('contestants', 'judges', 'structure', 'usersWithEmail', 'contests', 'summaryCategories'));
 	}
 
 	public function emailReport(): void {
