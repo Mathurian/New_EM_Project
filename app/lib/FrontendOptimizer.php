@@ -14,8 +14,8 @@ class FrontendOptimizer
 
     public static function init(): void
     {
-        self::$assetsDir = __DIR__ . '/../../public/assets/';
-        self::$cacheDir = __DIR__ . '/../../storage/cache/assets/';
+        self::$assetsDir = __DIR__ . '/public/assets/';
+        self::$cacheDir = __DIR__ . '/storage/cache/assets/';
         
         if (!is_dir(self::$cacheDir)) {
             if (!mkdir(self::$cacheDir, 0755, true)) {
