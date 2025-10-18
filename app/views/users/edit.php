@@ -1,4 +1,4 @@
-<?php use function App\{url}; ?>
+<?php use function App\{url, get_user_types}; ?>
 <h2>Edit User: <?= htmlspecialchars($user['name']) ?></h2>
 <p><a href="<?= url('admin/users') ?>">Back to User Management</a></p>
 
@@ -59,11 +59,11 @@
 				<label class="form-label">Role</label>
 				<div class="form-input">
 					<select name="role" required>
-						<option value="organizer" <?= $user['role'] === 'organizer' ? 'selected' : '' ?>>Organizer</option>
-						<option value="judge" <?= $user['role'] === 'judge' ? 'selected' : '' ?>>Judge</option>
-						<option value="emcee" <?= $user['role'] === 'emcee' ? 'selected' : '' ?>>Emcee</option>
-						<option value="tally_master" <?= $user['role'] === 'tally_master' ? 'selected' : '' ?>>Tally Master</option>
-						<option value="contestant" <?= $user['role'] === 'contestant' ? 'selected' : '' ?>>Contestant</option>
+						<?php foreach (get_user_types() as $role_key => $role_config): ?>
+							<option value="<?= htmlspecialchars($role_key) ?>" <?= $user['role'] === $role_key ? 'selected' : '' ?>>
+								<?= htmlspecialchars($role_config['label']) ?>
+							</option>
+						<?php endforeach; ?>
 					</select>
 				</div>
 			</div>

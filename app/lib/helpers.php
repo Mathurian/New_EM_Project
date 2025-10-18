@@ -376,10 +376,10 @@ function get_user_validation_rules(): array {
 			'max_length' => 255,
 			'pattern' => '/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/'
 		],
-		'role' => [
-			'required' => true,
-			'in' => ['organizer', 'judge', 'contestant', 'emcee', 'tally_master', 'auditor']
-		],
+            'role' => [
+                'required' => true,
+                'in' => get_available_user_roles()
+            ],
 		'preferred_name' => [
 			'max_length' => 100
 		],

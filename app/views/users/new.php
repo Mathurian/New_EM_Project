@@ -1,4 +1,4 @@
-<?php use function App\{url, hierarchical_back_url, home_url}; ?>
+<?php use function App\{url, hierarchical_back_url, home_url, get_user_types}; ?>
 <h2>Create New User</h2>
 <div class="navigation-buttons">
 	<a href="<?= hierarchical_back_url() ?>" class="btn btn-secondary">← Back</a>
@@ -110,11 +110,11 @@
 					<div class="form-input">
 						<select name="role" required id="roleSelect">
 							<option value="">Select a role</option>
-							<option value="organizer">Organizer</option>
-							<option value="judge">Judge</option>
-							<option value="emcee">Emcee</option>
-							<option value="tally_master">Tally Master</option>
-							<option value="contestant">Contestant</option>
+							<?php foreach (get_user_types() as $role_key => $role_config): ?>
+								<option value="<?= htmlspecialchars($role_key) ?>">
+									<?= htmlspecialchars($role_config['label']) ?>
+								</option>
+							<?php endforeach; ?>
 						</select>
 					</div>
 				</div>

@@ -1,4 +1,4 @@
-<?php use function App\{url, hierarchical_back_url, home_url, csrf_field}; use App\DB; ?>
+<?php use function App\{url, hierarchical_back_url, home_url, csrf_field, get_user_types}; use App\DB; ?>
 <!-- User Creation Modal/Drawer -->
 <div id="user-creation-modal" class="modal-overlay" style="display: none;" role="dialog" aria-labelledby="modal-title" aria-hidden="true">
 	<div class="modal-content">
@@ -93,11 +93,11 @@
 							<div class="form-input">
 								<select name="role" required id="modalRoleSelect">
 									<option value="">Select a role</option>
-									<option value="organizer">Organizer</option>
-									<option value="judge">Judge</option>
-									<option value="emcee">Emcee</option>
-									<option value="tally_master">Tally Master</option>
-									<option value="contestant">Contestant</option>
+									<?php foreach (get_user_types() as $role_key => $role_config): ?>
+										<option value="<?= htmlspecialchars($role_key) ?>">
+											<?= htmlspecialchars($role_config['label']) ?>
+										</option>
+									<?php endforeach; ?>
 								</select>
 							</div>
 						</div>
