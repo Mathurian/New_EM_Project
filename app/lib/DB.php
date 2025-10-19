@@ -4,9 +4,84 @@ namespace App;
 use PDO;
 use function App\uuid;
 
+/**
+ * Enhanced Database class with PostgreSQL support
+ */
 class DB {
 	private static ?PDO $pdo = null;
+	private static ?DatabaseInterface $dbInterface = null;
+	private static string $currentType = 'sqlite';
+	private static array $config = [];
 
+	public static function initialize(array $config = []): void {
+		self::$config = $config;
+		self::$currentType = $config['type'] ?? 'sqlite';
+		
+		// Create database interface
+		self::$dbInterface = DatabaseFactory::createFromConfig($config);
+		
+		// Initialize legacy PDO for backward compatibility
+		self::initializeLegacyPDO();
+	}
+
+	/**
+	 * Initialize legacy PDO for backward compatibility
+	 */
+	private static function initializeLegacyPDO(): void {
+		if (self::$currentType === 'sqlite') {
+			self::$pdo = self::createSQLitePDO();
+		} else {
+			self::$pdo = self::createPostgreSQLPDO();
+		}
+	}
+
+	/**
+	 * Create SQLite PDO connection
+	 */
+	private static function createSQLitePDO(): PDO {
+		$dbDir = dirname(__DIR__) . '/db';
+		if (!is_dir($dbDir)) {
+			@mkdir($dbDir, 0775, true);
+		}
+		if (!is_dir($dbDir) || !is_writable($dbDir)) {
+			throw new \RuntimeException('Database directory not writable: ' . $dbDir);
+		}
+		
+		$path = $dbDir . '/contest.sqlite';
+		$pdo = new PDO('sqlite:' . $path);
+		$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+		
+		// Configure SQLite for better concurrency and reduced locking
+		$pdo->exec('PRAGMA foreign_keys = ON');
+		$pdo->exec('PRAGMA journal_mode = WAL');
+		$pdo->exec('PRAGMA synchronous = NORMAL');
+		$pdo->exec('PRAGMA cache_size = 10000');
+		$pdo->exec('PRAGMA temp_store = MEMORY');
+		$pdo->exec('PRAGMA busy_timeout = 30000');
+		$pdo->exec('PRAGMA wal_autocheckpoint = 1000');
+		
+		return $pdo;
+	}
+
+	/**
+	 * Create PostgreSQL PDO connection
+	 */
+	private static function createPostgreSQLPDO(): PDO {
+		$config = self::$config;
+		$dsn = "pgsql:host={$config['host']};port={$config['port']};dbname={$config['dbname']}";
+		$pdo = new PDO($dsn, $config['username'], $config['password']);
+		$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+		
+		// PostgreSQL-specific settings
+		$pdo->exec('SET timezone = UTC');
+		$pdo->exec('SET standard_conforming_strings = on');
+		
+		return $pdo;
+	}
+
+	/**
+	 * Get database path (SQLite only)
+	 */
 	public static function getDatabasePath(): string {
 		$dbDir = dirname(__DIR__) . '/db';
 		$dbPath = $dbDir . '/contest.sqlite';
@@ -19,35 +94,187 @@ class DB {
 		return $dbPath;
 	}
 	
+	/**
+	 * Get PDO instance (legacy compatibility)
+	 */
 	public static function pdo(): PDO {
 		if (!self::$pdo) {
-			// Build absolute path to DB directory and file
-			$dbDir = dirname(__DIR__) . '/db';
-			if (!is_dir($dbDir)) {
-				// Attempt to create the directory (web server user must have rights)
-				@mkdir($dbDir, 0775, true);
-			}
-			if (!is_dir($dbDir) || !is_writable($dbDir)) {
-				throw new \RuntimeException('Database directory not writable: ' . $dbDir);
-			}
-			$path = $dbDir . '/contest.sqlite';
-			self::$pdo = new PDO('sqlite:' . $path);
-			self::$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-			
-			// Configure SQLite for better concurrency and reduced locking
-			self::$pdo->exec('PRAGMA foreign_keys = ON');
-			self::$pdo->exec('PRAGMA journal_mode = WAL');
-			self::$pdo->exec('PRAGMA synchronous = NORMAL');
-			self::$pdo->exec('PRAGMA cache_size = 10000');
-			self::$pdo->exec('PRAGMA temp_store = MEMORY');
-			self::$pdo->exec('PRAGMA busy_timeout = 30000');
-			self::$pdo->exec('PRAGMA wal_autocheckpoint = 1000');
+			self::initialize();
 		}
 		return self::$pdo;
 	}
-	
-	
+
+	/**
+	 * Get database interface
+	 */
+	public static function getInterface(): DatabaseInterface {
+		if (!self::$dbInterface) {
+			self::initialize();
+		}
+		return self::$dbInterface;
+	}
+
+	/**
+	 * Get current database type
+	 */
+	public static function getCurrentType(): string {
+		return self::$currentType;
+	}
+
+	/**
+	 * Check if using PostgreSQL
+	 */
+	public static function isPostgreSQL(): bool {
+		return self::$currentType === 'postgresql';
+	}
+
+	/**
+	 * Check if using SQLite
+	 */
+	public static function isSQLite(): bool {
+		return self::$currentType === 'sqlite';
+	}
+
+	/**
+	 * Switch database type
+	 */
+	public static function switchDatabase(string $type, array $config = []): void {
+		self::$currentType = $type;
+		self::$config = array_merge(self::$config, $config);
+		self::$dbInterface = DatabaseFactory::createFromConfig(self::$config);
+		self::initializeLegacyPDO();
+	}
+
+	/**
+	 * Enhanced query method with database abstraction
+	 */
+	public static function query(string $sql, array $params = []): array {
+		// Convert SQLite-specific queries to PostgreSQL
+		if (self::isPostgreSQL()) {
+			$sql = self::convertSQLiteToPostgreSQL($sql);
+		}
+		
+		return self::getInterface()->query($sql, $params);
+	}
+
+	/**
+	 * Enhanced execute method with database abstraction
+	 */
+	public static function execute(string $sql, array $params = []): bool {
+		// Convert SQLite-specific queries to PostgreSQL
+		if (self::isPostgreSQL()) {
+			$sql = self::convertSQLiteToPostgreSQL($sql);
+		}
+		
+		return self::getInterface()->execute($sql, $params);
+	}
+
+	/**
+	 * Enhanced fetchOne method
+	 */
+	public static function fetchOne(string $sql, array $params = []): ?array {
+		if (self::isPostgreSQL()) {
+			$sql = self::convertSQLiteToPostgreSQL($sql);
+		}
+		
+		return self::getInterface()->fetchOne($sql, $params);
+	}
+
+	/**
+	 * Enhanced fetchColumn method
+	 */
+	public static function fetchColumn(string $sql, array $params = []): mixed {
+		if (self::isPostgreSQL()) {
+			$sql = self::convertSQLiteToPostgreSQL($sql);
+		}
+		
+		return self::getInterface()->fetchColumn($sql, $params);
+	}
+
+	/**
+	 * Convert SQLite-specific SQL to PostgreSQL
+	 */
+	private static function convertSQLiteToPostgreSQL(string $sql): string {
+		// Convert PRAGMA statements
+		if (preg_match('/PRAGMA\s+table_info\(`?(\w+)`?\)/i', $sql, $matches)) {
+			$tableName = $matches[1];
+			return "
+				SELECT 
+					column_name as name,
+					data_type as type,
+					is_nullable as notnull,
+					column_default as dflt_value,
+					character_maximum_length as length
+				FROM information_schema.columns 
+				WHERE table_name = '{$tableName}' 
+				ORDER BY ordinal_position
+			";
+		}
+
+		// Convert sqlite_master queries
+		if (strpos($sql, 'sqlite_master') !== false) {
+			$sql = str_replace('sqlite_master', 'information_schema.tables', $sql);
+			$sql = str_replace("type='table'", "table_schema='public'", $sql);
+			$sql = str_replace("name NOT LIKE 'sqlite_%'", "table_name NOT LIKE 'pg_%'", $sql);
+		}
+
+		// Convert LIMIT/OFFSET syntax (PostgreSQL uses same syntax)
+		// Convert string concatenation
+		$sql = preg_replace('/(\w+)\s*\|\|\s*(\w+)/', 'CONCAT($1, $2)', $sql);
+
+		// Convert CURRENT_TIMESTAMP
+		$sql = str_replace('CURRENT_TIMESTAMP', 'CURRENT_TIMESTAMP', $sql);
+
+		// Convert boolean handling
+		$sql = preg_replace('/\bTRUE\b/', 'TRUE', $sql);
+		$sql = preg_replace('/\bFALSE\b/', 'FALSE', $sql);
+
+		return $sql;
+	}
+
+	/**
+	 * Get table information (database-agnostic)
+	 */
+	public static function getTableInfo(string $tableName): array {
+		return self::getInterface()->getTableInfo($tableName);
+	}
+
+	/**
+	 * Get all tables (database-agnostic)
+	 */
+	public static function getTables(): array {
+		return self::getInterface()->getTables();
+	}
+
+	/**
+	 * Generate UUID (database-agnostic)
+	 */
+	public static function generateUUID(): string {
+		if (self::isPostgreSQL()) {
+			// Use PostgreSQL's native UUID generation
+			$result = self::fetchColumn("SELECT uuid_generate_v4()");
+			return $result;
+		} else {
+			// Use custom UUID generation for SQLite
+			return uuid();
+		}
+	}
+
+	/**
+	 * Enhanced migrate method with PostgreSQL support
+	 */
 	public static function migrate(): void {
+		if (self::isPostgreSQL()) {
+			self::migratePostgreSQL();
+		} else {
+			self::migrateSQLite();
+		}
+	}
+
+	/**
+	 * Migrate SQLite schema
+	 */
+	private static function migrateSQLite(): void {
 		$sql = <<<'SQL'
 CREATE TABLE IF NOT EXISTS contests (
 	id TEXT PRIMARY KEY,
@@ -129,12 +356,15 @@ CREATE TABLE IF NOT EXISTS users (
 	preferred_name TEXT,
 	email TEXT UNIQUE,
 	password_hash TEXT,
-	role TEXT NOT NULL CHECK (role IN ('organizer','judge','emcee','contestant','tally_master')),
+	role TEXT NOT NULL CHECK (role IN ('organizer','judge','emcee','contestant','tally_master','auditor','board')),
 	judge_id TEXT,
+	contestant_id TEXT,
 	gender TEXT,
 	pronouns TEXT,
 	session_version INTEGER NOT NULL DEFAULT 1,
-	FOREIGN KEY (judge_id) REFERENCES judges(id) ON DELETE SET NULL
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY (judge_id) REFERENCES judges(id) ON DELETE SET NULL,
+	FOREIGN KEY (contestant_id) REFERENCES contestants(id) ON DELETE SET NULL
 );
 -- Optional comments per judge per contestant per subcategory
 CREATE TABLE IF NOT EXISTS judge_comments (
@@ -242,7 +472,8 @@ CREATE TABLE IF NOT EXISTS archived_scores (
 	archived_contestant_id TEXT NOT NULL,
 	archived_judge_id TEXT NOT NULL,
 	archived_criterion_id TEXT NOT NULL,
-	score INTEGER NOT NULL,
+	score REAL NOT NULL,
+	created_at TEXT NOT NULL,
 	FOREIGN KEY (archived_subcategory_id) REFERENCES archived_subcategories(id) ON DELETE CASCADE,
 	FOREIGN KEY (archived_contestant_id) REFERENCES archived_contestants(id) ON DELETE CASCADE,
 	FOREIGN KEY (archived_judge_id) REFERENCES archived_judges(id) ON DELETE CASCADE,
@@ -253,61 +484,18 @@ CREATE TABLE IF NOT EXISTS archived_judge_comments (
 	archived_subcategory_id TEXT NOT NULL,
 	archived_contestant_id TEXT NOT NULL,
 	archived_judge_id TEXT NOT NULL,
-	comment TEXT NOT NULL,
+	comment TEXT,
+	created_at TEXT NOT NULL,
 	FOREIGN KEY (archived_subcategory_id) REFERENCES archived_subcategories(id) ON DELETE CASCADE,
 	FOREIGN KEY (archived_contestant_id) REFERENCES archived_contestants(id) ON DELETE CASCADE,
 	FOREIGN KEY (archived_judge_id) REFERENCES archived_judges(id) ON DELETE CASCADE
 );
-CREATE TABLE IF NOT EXISTS archived_judge_certifications (
+CREATE TABLE IF NOT EXISTS archived_tally_master_certifications (
 	id TEXT PRIMARY KEY,
 	archived_subcategory_id TEXT NOT NULL,
-	archived_judge_id TEXT NOT NULL,
 	signature_name TEXT NOT NULL,
 	certified_at TEXT NOT NULL,
-	UNIQUE (archived_subcategory_id, archived_judge_id),
-	FOREIGN KEY (archived_subcategory_id) REFERENCES archived_subcategories(id) ON DELETE CASCADE,
-	FOREIGN KEY (archived_judge_id) REFERENCES archived_judges(id) ON DELETE CASCADE
-);
-CREATE TABLE IF NOT EXISTS archived_subcategory_contestants (
-	archived_subcategory_id TEXT NOT NULL,
-	archived_contestant_id TEXT NOT NULL,
-	PRIMARY KEY (archived_subcategory_id, archived_contestant_id),
-	FOREIGN KEY (archived_subcategory_id) REFERENCES archived_subcategories(id) ON DELETE CASCADE,
-	FOREIGN KEY (archived_contestant_id) REFERENCES archived_contestants(id) ON DELETE CASCADE
-);
-CREATE TABLE IF NOT EXISTS archived_subcategory_judges (
-	archived_subcategory_id TEXT NOT NULL,
-	archived_judge_id TEXT NOT NULL,
-	PRIMARY KEY (archived_subcategory_id, archived_judge_id),
-	FOREIGN KEY (archived_subcategory_id) REFERENCES archived_subcategories(id) ON DELETE CASCADE,
-	FOREIGN KEY (archived_judge_id) REFERENCES archived_judges(id) ON DELETE CASCADE
-);
-CREATE TABLE IF NOT EXISTS archived_category_contestants (
-	archived_category_id TEXT NOT NULL,
-	archived_contestant_id TEXT NOT NULL,
-	PRIMARY KEY (archived_category_id, archived_contestant_id),
-	FOREIGN KEY (archived_category_id) REFERENCES archived_categories(id) ON DELETE CASCADE,
-	FOREIGN KEY (archived_contestant_id) REFERENCES archived_contestants(id) ON DELETE CASCADE
-);
-CREATE TABLE IF NOT EXISTS archived_category_judges (
-	archived_category_id TEXT NOT NULL,
-	archived_judge_id TEXT NOT NULL,
-	PRIMARY KEY (archived_category_id, archived_judge_id),
-	FOREIGN KEY (archived_category_id) REFERENCES archived_categories(id) ON DELETE CASCADE,
-	FOREIGN KEY (archived_judge_id) REFERENCES archived_judges(id) ON DELETE CASCADE
-);
-CREATE TABLE IF NOT EXISTS archived_overall_deductions (
-	id TEXT PRIMARY KEY,
-	archived_subcategory_id TEXT NOT NULL,
-	archived_contestant_id TEXT NOT NULL,
-	amount REAL NOT NULL,
-	comment TEXT NOT NULL,
-	created_by TEXT NOT NULL,
-	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	signature_name TEXT NOT NULL,
-	signed_at TEXT NOT NULL,
-	FOREIGN KEY (archived_subcategory_id) REFERENCES archived_subcategories(id) ON DELETE CASCADE,
-	FOREIGN KEY (archived_contestant_id) REFERENCES archived_contestants(id) ON DELETE CASCADE
+	FOREIGN KEY (archived_subcategory_id) REFERENCES archived_subcategories(id) ON DELETE CASCADE
 );
 -- Activity logging system
 CREATE TABLE IF NOT EXISTS activity_logs (
@@ -383,10 +571,38 @@ CREATE TABLE IF NOT EXISTS emcee_scripts (
 	is_active BOOLEAN DEFAULT 1,
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Auditor certifications
+CREATE TABLE IF NOT EXISTS auditor_certifications (
+	id TEXT PRIMARY KEY,
+	subcategory_id TEXT NOT NULL,
+	signature_name TEXT NOT NULL,
+	certified_at TEXT NOT NULL,
+	FOREIGN KEY (subcategory_id) REFERENCES subcategories(id) ON DELETE CASCADE
+);
+
+-- Judge score removal requests
+CREATE TABLE IF NOT EXISTS judge_score_removal_requests (
+	id TEXT PRIMARY KEY,
+	subcategory_id TEXT NOT NULL,
+	contestant_id TEXT NOT NULL,
+	judge_id TEXT NOT NULL,
+	reason TEXT NOT NULL,
+	requested_by TEXT NOT NULL,
+	requested_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+	approved_by TEXT,
+	approved_at TEXT,
+	FOREIGN KEY (subcategory_id) REFERENCES subcategories(id) ON DELETE CASCADE,
+	FOREIGN KEY (contestant_id) REFERENCES contestants(id) ON DELETE CASCADE,
+	FOREIGN KEY (judge_id) REFERENCES judges(id) ON DELETE CASCADE,
+	FOREIGN KEY (requested_by) REFERENCES users(id) ON DELETE CASCADE,
+	FOREIGN KEY (approved_by) REFERENCES users(id) ON DELETE SET NULL
+);
 SQL;
 		self::pdo()->exec($sql);
 
-		// Post-creation migrations: add gender columns if missing
+		// Post-creation migrations: add columns if missing
 		self::addColumnIfMissing('contestants', 'gender', 'TEXT');
 		self::addColumnIfMissing('contestants', 'pronouns', 'TEXT');
 		self::addColumnIfMissing('judges', 'gender', 'TEXT');
@@ -407,168 +623,54 @@ SQL;
 		self::addColumnIfMissing('judges', 'is_head_judge', 'INTEGER NOT NULL DEFAULT 0');
 		self::addColumnIfMissing('users', 'preferred_name', 'TEXT');
 		self::addColumnIfMissing('users', 'pronouns', 'TEXT');
-		self::addColumnIfMissing('users', 'session_version', 'INTEGER NOT NULL DEFAULT 1');
-		self::addColumnIfMissing('users', 'last_login', 'TEXT');
-		self::addColumnIfMissing('activity_logs', 'log_level', 'TEXT DEFAULT "info"');
-		// overall_deductions new fields
-		self::addColumnIfMissing('overall_deductions', 'signature_name', 'TEXT');
-		self::addColumnIfMissing('overall_deductions', 'signed_at', 'TEXT');
-		
-		// users table new fields
 		self::addColumnIfMissing('users', 'contestant_id', 'TEXT');
-		
-		// emcee_scripts new fields - ensure all required columns exist
-		self::addColumnIfMissing('emcee_scripts', 'filename', 'TEXT');
-		self::addColumnIfMissing('emcee_scripts', 'file_path', 'TEXT');
-		self::addColumnIfMissing('emcee_scripts', 'is_active', 'INTEGER DEFAULT 1');
-		self::addColumnIfMissing('emcee_scripts', 'created_at', 'TEXT');
-		self::addColumnIfMissing('emcee_scripts', 'uploaded_by', 'TEXT');
-		self::addColumnIfMissing('emcee_scripts', 'title', 'TEXT');
-		self::addColumnIfMissing('emcee_scripts', 'description', 'TEXT');
-		self::addColumnIfMissing('emcee_scripts', 'file_name', 'TEXT');
-		self::addColumnIfMissing('emcee_scripts', 'file_size', 'INTEGER');
-		self::addColumnIfMissing('emcee_scripts', 'uploaded_at', 'TEXT');
-		
-		// Add foreign key constraint for uploaded_by if it doesn't exist
-		try {
-			DB::pdo()->exec("PRAGMA foreign_keys=ON");
-			// Check if foreign key constraint already exists
-			$fkInfo = DB::pdo()->query("PRAGMA foreign_key_list(emcee_scripts)")->fetchAll(\PDO::FETCH_ASSOC);
-			$hasUploadedByFK = false;
-			foreach ($fkInfo as $fk) {
-				if ($fk['table'] === 'users' && $fk['from'] === 'uploaded_by') {
-					$hasUploadedByFK = true;
-					break;
-				}
-			}
-			if (!$hasUploadedByFK) {
-				// SQLite doesn't support adding foreign key constraints to existing tables easily
-				// We'll rely on application-level integrity for now
-				\App\Logger::info('database_migration', 'system', null, 'emcee_scripts table: uploaded_by field added (FK constraint handled at application level)');
-			}
-		} catch (\Exception $e) {
-			\App\Logger::warn('database_migration', 'system', null, 'Could not add foreign key constraint for emcee_scripts.uploaded_by: ' . $e->getMessage());
-		}
-		
-		// Ensure emcee_scripts table has all required columns
-		self::ensureEmceeScriptsTable();
-		
-		// Migrate judge_certifications to include contestant_id
-		self::migrateJudgeCertifications();
-		
-		// Update role constraint to include emcee
-		self::updateRoleConstraint();
-
-		// Seed a default organizer if none exist
-		self::seedDefaultAdmin();
-		self::seedDefaultSettings();
+		self::addColumnIfMissing('users', 'created_at', 'TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP');
 	}
-	
-	private static function ensureEmceeScriptsTable(): void {
-		try {
-			// Check if table exists and has required columns
-			$tableInfo = self::pdo()->query("PRAGMA table_info(emcee_scripts)")->fetchAll(\PDO::FETCH_ASSOC);
-			$requiredColumns = ['id', 'filename', 'file_path', 'is_active', 'created_at', 'uploaded_by', 'title', 'description', 'file_name', 'file_size', 'uploaded_at'];
-			$existingColumns = array_column($tableInfo, 'name');
-			
-			$missingColumns = array_diff($requiredColumns, $existingColumns);
-			if (!empty($missingColumns)) {
-				\App\Logger::warn('database_migration', 'system', null, 
-					"emcee_scripts table missing columns: " . implode(', ', $missingColumns) . ". Attempting to recreate table.");
-				
-				// Backup existing data
-				$existingData = [];
-				try {
-					$existingData = self::pdo()->query("SELECT * FROM emcee_scripts")->fetchAll(\PDO::FETCH_ASSOC);
-				} catch (\Exception $e) {
-					// Table might be corrupted, ignore
-				}
-				
-				// Drop and recreate table
-				self::pdo()->exec("DROP TABLE IF EXISTS emcee_scripts");
-				self::pdo()->exec("
-					CREATE TABLE emcee_scripts (
-						id TEXT PRIMARY KEY,
-						filename TEXT NOT NULL,
-						file_path TEXT NOT NULL,
-						is_active INTEGER DEFAULT 1,
-						created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-						uploaded_by TEXT,
-						title TEXT,
-						description TEXT,
-						file_name TEXT,
-						file_size INTEGER,
-						uploaded_at TEXT
-					)
-				");
-				
-				// Restore data if possible
-				if (!empty($existingData)) {
-					$stmt = self::pdo()->prepare("
-						INSERT INTO emcee_scripts (id, filename, file_path, is_active, created_at, uploaded_by, title, description, file_name, file_size, uploaded_at) 
-						VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-					");
-					foreach ($existingData as $row) {
-						$stmt->execute([
-							$row['id'] ?? uuid(),
-							$row['filename'] ?? '',
-							$row['file_path'] ?? $row['filepath'] ?? '',
-							$row['is_active'] ?? 1,
-							$row['created_at'] ?? date('Y-m-d H:i:s'),
-							$row['uploaded_by'] ?? null,
-							$row['title'] ?? null,
-							$row['description'] ?? null,
-							$row['file_name'] ?? null,
-							$row['file_size'] ?? null,
-							$row['uploaded_at'] ?? null
-						]);
+
+	/**
+	 * Migrate PostgreSQL schema
+	 */
+	private static function migratePostgreSQL(): void {
+		// Enable UUID extension
+		self::execute("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\"");
+		
+		// Use SchemaMigrator for PostgreSQL schema creation
+		$schemaMigrator = new SchemaMigrator(
+			DatabaseFactory::createSQLite(self::getDatabasePath()),
+			self::getInterface()
+		);
+		
+		$schemaMigrator->migrateSchema();
+	}
+
+	/**
+	 * Add column if missing (SQLite only)
+	 */
+	private static function addColumnIfMissing(string $table, string $column, string $definition): void {
+		if (self::isSQLite()) {
+			try {
+				$columns = self::pdo()->query("PRAGMA table_info(`{$table}`)")->fetchAll(\PDO::FETCH_ASSOC);
+				$columnExists = false;
+				foreach ($columns as $col) {
+					if ($col['name'] === $column) {
+						$columnExists = true;
+						break;
 					}
 				}
 				
-				\App\Logger::info('database_migration', 'system', null, 'emcee_scripts table recreated successfully');
-			}
-		} catch (\Exception $e) {
-			\App\Logger::error('database_migration', 'system', null, 'Failed to ensure emcee_scripts table: ' . $e->getMessage());
-		}
-	}
-	
-	private static function seedDefaultSettings(): void {
-		$pdo = self::pdo();
-		
-		// Check if system settings already exist
-		$stmt = $pdo->query('SELECT COUNT(*) FROM system_settings');
-		if ($stmt->fetchColumn() == 0) {
-			// Insert default session timeout (30 minutes)
-			$stmt = $pdo->prepare('INSERT INTO system_settings (id, setting_key, setting_value, description) VALUES (?, ?, ?, ?)');
-			$stmt->execute([uuid(), 'session_timeout', '1800', 'Session timeout in seconds (default: 30 minutes)']);
-			
-			// Insert default log level
-			$stmt = $pdo->prepare('INSERT INTO system_settings (id, setting_key, setting_value, description) VALUES (?, ?, ?, ?)');
-			$stmt->execute([uuid(), 'log_level', 'info', 'Logging level: debug, info, warn, error (default: info)']);
-		}
-		
-		// Check if backup settings already exist
-		$stmt = $pdo->query('SELECT COUNT(*) FROM backup_settings');
-		if ($stmt->fetchColumn() == 0) {
-			// Seed default backup settings
-			$stmt = $pdo->prepare('INSERT INTO backup_settings (id, backup_type, enabled, frequency, frequency_value, retention_days) VALUES (?, ?, ?, ?, ?, ?)');
-			$stmt->execute([uuid(), 'schema', 0, 'daily', 1, 30]);
-			$stmt->execute([uuid(), 'full', 0, 'weekly', 1, 30]);
-		} else {
-			// Migrate existing backup settings to include frequency_value
-			self::addColumnIfMissing('backup_settings', 'frequency_value', 'INTEGER NOT NULL DEFAULT 1');
-			
-			// Update frequency constraint to allow minutes and hours
-			// This may fail due to database locking, but the app will still work
-			try {
-				self::updateBackupSettingsConstraint();
+				if (!$columnExists) {
+					self::pdo()->exec("ALTER TABLE `{$table}` ADD COLUMN `{$column}` {$definition}");
+				}
 			} catch (\Exception $e) {
-				// Log the error but don't fail the entire migration
-				error_log('Warning: Could not update backup_settings constraint during migration: ' . $e->getMessage());
+				// Column might already exist or table might not exist
+				error_log("Failed to add column {$column} to {$table}: " . $e->getMessage());
 			}
 		}
 	}
 
+	/**
+	 * Execute with retry and error handling
+	 */
 	public static function executeWithRetry(callable $operation, int $maxRetries = 3): mixed {
 		$attempt = 0;
 		$lastException = null;
@@ -630,318 +732,13 @@ SQL;
 	 * Check database health and optimize if needed
 	 */
 	public static function optimizeDatabase(): void {
-		try {
-			$pdo = self::pdo();
-			
-			// Run VACUUM to optimize database
-			$pdo->exec('VACUUM');
-			
-			// Analyze tables for better query planning
-			$pdo->exec('ANALYZE');
-			
-			// Set optimal pragmas
-			$pdo->exec('PRAGMA optimize');
-			
-		} catch (\Exception $e) {
-			error_log('Database optimization failed: ' . $e->getMessage());
+		if (self::isSQLite()) {
+			// SQLite optimization
+			self::pdo()->exec('PRAGMA optimize');
+			self::pdo()->exec('PRAGMA vacuum');
+		} else {
+			// PostgreSQL optimization
+			self::execute('VACUUM ANALYZE');
 		}
-	}
-
-	/**
-	 * Check if database is accessible and not locked
-	 */
-	public static function isHealthy(): bool {
-		try {
-			$pdo = self::pdo();
-			$stmt = $pdo->query('SELECT 1');
-			return $stmt !== false;
-		} catch (\Exception $e) {
-			return false;
-		}
-	}
-	
-	private static function updateBackupSettingsConstraint(): void {
-		$pdo = self::pdo();
-		
-		try {
-			// Check if the constraint needs updating by trying to insert a test value
-			$testId = uuid();
-			$testStmt = $pdo->prepare('INSERT INTO backup_settings (id, backup_type, enabled, frequency, frequency_value, retention_days) VALUES (?, ?, ?, ?, ?, ?)');
-			$testStmt->execute([$testId, 'schema', 0, 'minutes', 1, 30]);
-			
-			// If successful, delete ONLY the test record by ID
-			$pdo->prepare('DELETE FROM backup_settings WHERE id = ?')->execute([$testId]);
-			
-		} catch (\PDOException $e) {
-			// Constraint needs updating - use retry mechanism
-			try {
-				// Ensure we're not in a transaction before setting WAL mode
-				if ($pdo->inTransaction()) {
-					$pdo->rollBack();
-				}
-				
-				// Set WAL mode to reduce locking issues (outside transaction)
-				$pdo->exec('PRAGMA journal_mode=WAL');
-				$pdo->exec('PRAGMA busy_timeout=30000');
-				
-				self::executeWithRetry(function() use ($pdo) {
-					// Check if we can get an exclusive lock
-					$pdo->beginTransaction();
-					
-					// Create new table with updated constraint
-					$pdo->exec('CREATE TABLE backup_settings_new (
-						id TEXT PRIMARY KEY,
-						backup_type TEXT NOT NULL CHECK (backup_type IN (\'schema\', \'full\')),
-						enabled BOOLEAN NOT NULL DEFAULT 0,
-						frequency TEXT NOT NULL CHECK (frequency IN (\'minutes\', \'hours\', \'daily\', \'weekly\', \'monthly\')),
-						frequency_value INTEGER NOT NULL DEFAULT 1,
-						retention_days INTEGER NOT NULL DEFAULT 30,
-						last_run TEXT,
-						next_run TEXT,
-						created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-						updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-					)');
-					
-					// Copy data from old table
-					$pdo->exec('INSERT INTO backup_settings_new SELECT * FROM backup_settings');
-					
-					// Drop old table and rename new one
-					$pdo->exec('DROP TABLE backup_settings');
-					$pdo->exec('ALTER TABLE backup_settings_new RENAME TO backup_settings');
-					
-					$pdo->commit();
-					
-					return true;
-				});
-				
-			} catch (\Exception $e2) {
-				// If we still can't update the constraint, log it and continue
-				// The application will still work, just with limited frequency options
-				error_log('Warning: Could not update backup_settings constraint: ' . $e2->getMessage());
-				
-				// Try a simpler approach - just add the column if it doesn't exist
-				try {
-					self::addColumnIfMissing('backup_settings', 'frequency_value', 'INTEGER NOT NULL DEFAULT 1');
-				} catch (\Exception $e3) {
-					error_log('Warning: Could not add frequency_value column: ' . $e3->getMessage());
-				}
-			}
-		}
-	}
-	
-	private static function updateRoleConstraint(): void {
-		$pdo = self::pdo();
-		
-		// Check if the constraint needs updating by trying to insert a test emcee role
-		try {
-			$pdo->exec("INSERT INTO users (id, name, email, password_hash, role) VALUES ('test_constraint', 'test', 'test@test.com', 'test', 'emcee')");
-			$pdo->exec("DELETE FROM users WHERE id = 'test_constraint'");
-			// If we get here, the constraint already allows emcee
-			return;
-		} catch (\PDOException $e) {
-			// Constraint doesn't allow emcee, need to recreate table
-			error_log('Role constraint update needed: ' . $e->getMessage());
-		}
-		
-		// Use safe execution with retry for the constraint update
-		try {
-			self::safeExecute(function() use ($pdo) {
-				// Ensure we're not in a transaction before setting WAL mode
-				if ($pdo->inTransaction()) {
-					$pdo->rollBack();
-				}
-				
-				// Set WAL mode to reduce locking issues (outside transaction)
-				$pdo->exec('PRAGMA journal_mode=WAL');
-				$pdo->exec('PRAGMA busy_timeout=30000');
-				
-				// Clean up any existing users_new table from previous failed attempts
-				$pdo->exec('DROP TABLE IF EXISTS users_new');
-				
-				// Create new users table with updated constraint
-				$pdo->exec('CREATE TABLE users_new (
-					id TEXT PRIMARY KEY,
-					name TEXT NOT NULL,
-					preferred_name TEXT,
-					email TEXT UNIQUE,
-					password_hash TEXT,
-					role TEXT NOT NULL CHECK (role IN (\'organizer\',\'judge\',\'emcee\',\'contestant\')),
-					judge_id TEXT,
-					gender TEXT,
-					pronouns TEXT,
-					session_version INTEGER NOT NULL DEFAULT 1,
-					last_login TEXT,
-					contestant_id TEXT,
-					emcee_id TEXT,
-					FOREIGN KEY (judge_id) REFERENCES judges(id) ON DELETE SET NULL
-				)');
-				
-				// Copy data from old table with explicit column mapping
-				$pdo->exec('INSERT INTO users_new (id, name, preferred_name, email, password_hash, role, judge_id, gender, pronouns, session_version, last_login, contestant_id, emcee_id) 
-							SELECT id, name, preferred_name, email, password_hash, role, judge_id, gender, pronouns, session_version, last_login, contestant_id, emcee_id FROM users');
-				
-				// Drop old table and rename new one
-				$pdo->exec('DROP TABLE users');
-				$pdo->exec('ALTER TABLE users_new RENAME TO users');
-				
-				return true;
-			}, 'role_constraint_update');
-			
-			error_log('Role constraint updated successfully');
-		} catch (\PDOException $e) {
-			error_log('Failed to update role constraint: ' . $e->getMessage());
-			// Try to clean up and restore if possible
-			try {
-				$pdo->exec('DROP TABLE IF EXISTS users_new');
-			} catch (\PDOException $cleanupError) {
-				error_log('Failed to cleanup users_new table: ' . $cleanupError->getMessage());
-			}
-			// Don't throw the exception, just log it and continue
-			// The application should still work even if the constraint update fails
-		}
-	}
-
-	private static function addColumnIfMissing(string $table, string $column, string $type): void {
-		$pdo = self::pdo();
-		$exists = false;
-		$stmt = $pdo->prepare('PRAGMA table_info(' . $table . ')');
-		$stmt->execute();
-		$cols = $stmt->fetchAll(PDO::FETCH_ASSOC);
-		foreach ($cols as $col) {
-			if (($col['name'] ?? '') === $column) { $exists = true; break; }
-		}
-		if (!$exists) {
-			$pdo->exec('ALTER TABLE ' . $table . ' ADD COLUMN ' . $column . ' ' . $type);
-		}
-	}
-
-	private static function migrateJudgeCertifications(): void {
-		$pdo = self::pdo();
-		
-		// Check if contestant_id column exists
-		$stmt = $pdo->prepare('PRAGMA table_info(judge_certifications)');
-		$stmt->execute();
-		$cols = $stmt->fetchAll(PDO::FETCH_ASSOC);
-		$hasContestantId = false;
-		foreach ($cols as $col) {
-			if ($col['name'] === 'contestant_id') {
-				$hasContestantId = true;
-				break;
-			}
-		}
-		
-		if (!$hasContestantId) {
-			// Add contestant_id column
-			$pdo->exec('ALTER TABLE judge_certifications ADD COLUMN contestant_id TEXT');
-			
-			// For existing certifications, we need to create one per contestant in the subcategory
-			$stmt = $pdo->prepare('SELECT * FROM judge_certifications WHERE contestant_id IS NULL');
-			$stmt->execute();
-			$oldCertifications = $stmt->fetchAll(PDO::FETCH_ASSOC);
-			
-			foreach ($oldCertifications as $cert) {
-				// Get all contestants for this subcategory
-				$stmt = $pdo->prepare('SELECT contestant_id FROM subcategory_contestants WHERE subcategory_id = ?');
-				$stmt->execute([$cert['subcategory_id']]);
-				$contestants = $stmt->fetchAll(PDO::FETCH_COLUMN);
-				
-				// Create a certification for each contestant
-				foreach ($contestants as $contestantId) {
-					$stmt = $pdo->prepare('INSERT INTO judge_certifications (id, subcategory_id, contestant_id, judge_id, signature_name, certified_at) VALUES (?, ?, ?, ?, ?, ?)');
-					$stmt->execute([uuid(), $cert['subcategory_id'], $contestantId, $cert['judge_id'], $cert['signature_name'], $cert['certified_at']]);
-				}
-				
-				// Delete the old certification
-				$stmt = $pdo->prepare('DELETE FROM judge_certifications WHERE id = ?');
-				$stmt->execute([$cert['id']]);
-			}
-			
-			// Update the unique constraint
-			$pdo->exec('DROP INDEX IF EXISTS sqlite_autoindex_judge_certifications_1');
-			$pdo->exec('CREATE UNIQUE INDEX IF NOT EXISTS judge_certifications_unique ON judge_certifications (subcategory_id, contestant_id, judge_id)');
-		}
-		
-		// Add performance indexes
-		self::addPerformanceIndexes();
-	}
-	
-	private static function addPerformanceIndexes(): void {
-		$pdo = self::pdo();
-		
-		// Indexes for frequently queried columns
-		$indexes = [
-			// User-related indexes
-			'CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)',
-			'CREATE INDEX IF NOT EXISTS idx_users_preferred_name ON users(preferred_name)',
-			'CREATE INDEX IF NOT EXISTS idx_users_role ON users(role)',
-			'CREATE INDEX IF NOT EXISTS idx_users_last_login ON users(last_login)',
-			
-			// Contest-related indexes
-			'CREATE INDEX IF NOT EXISTS idx_categories_contest_id ON categories(contest_id)',
-			'CREATE INDEX IF NOT EXISTS idx_subcategories_category_id ON subcategories(category_id)',
-			
-			// Contestant-related indexes
-			'CREATE INDEX IF NOT EXISTS idx_contestants_contestant_number ON contestants(contestant_number)',
-			'CREATE INDEX IF NOT EXISTS idx_contestants_name ON contestants(name)',
-			'CREATE INDEX IF NOT EXISTS idx_subcategory_contestants_subcategory_id ON subcategory_contestants(subcategory_id)',
-			'CREATE INDEX IF NOT EXISTS idx_subcategory_contestants_contestant_id ON subcategory_contestants(contestant_id)',
-			
-			// Judge-related indexes
-			'CREATE INDEX IF NOT EXISTS idx_judges_name ON judges(name)',
-			'CREATE INDEX IF NOT EXISTS idx_judges_is_head_judge ON judges(is_head_judge)',
-			'CREATE INDEX IF NOT EXISTS idx_subcategory_judges_subcategory_id ON subcategory_judges(subcategory_id)',
-			'CREATE INDEX IF NOT EXISTS idx_subcategory_judges_judge_id ON subcategory_judges(judge_id)',
-			
-			// Scoring-related indexes
-			'CREATE INDEX IF NOT EXISTS idx_scores_subcategory_id ON scores(subcategory_id)',
-			'CREATE INDEX IF NOT EXISTS idx_scores_contestant_id ON scores(contestant_id)',
-			'CREATE INDEX IF NOT EXISTS idx_scores_judge_id ON scores(judge_id)',
-			'CREATE INDEX IF NOT EXISTS idx_scores_criterion_id ON scores(criterion_id)',
-			'CREATE INDEX IF NOT EXISTS idx_scores_created_at ON scores(created_at)',
-			
-			// Criteria-related indexes
-			'CREATE INDEX IF NOT EXISTS idx_criteria_subcategory_id ON criteria(subcategory_id)',
-			
-			// Activity logs indexes
-			'CREATE INDEX IF NOT EXISTS idx_activity_logs_user_id ON activity_logs(user_id)',
-			'CREATE INDEX IF NOT EXISTS idx_activity_logs_created_at ON activity_logs(created_at)',
-			'CREATE INDEX IF NOT EXISTS idx_activity_logs_action ON activity_logs(action)',
-			
-			// Judge certifications indexes
-			'CREATE INDEX IF NOT EXISTS idx_judge_certifications_judge_id ON judge_certifications(judge_id)',
-			'CREATE INDEX IF NOT EXISTS idx_judge_certifications_contestant_id ON judge_certifications(contestant_id)',
-			'CREATE INDEX IF NOT EXISTS idx_judge_certifications_certified_at ON judge_certifications(certified_at)',
-			
-			// Emcee scripts indexes
-			'CREATE INDEX IF NOT EXISTS idx_emcee_scripts_is_active ON emcee_scripts(is_active)',
-			'CREATE INDEX IF NOT EXISTS idx_emcee_scripts_uploaded_by ON emcee_scripts(uploaded_by)',
-			'CREATE INDEX IF NOT EXISTS idx_emcee_scripts_created_at ON emcee_scripts(created_at)',
-		];
-		
-		foreach ($indexes as $indexSql) {
-			try {
-				$pdo->exec($indexSql);
-			} catch (\PDOException $e) {
-				// Log index creation errors but don't fail the migration
-				error_log("Failed to create index: " . $e->getMessage());
-			}
-		}
-	}
-
-	private static function seedDefaultAdmin(): void {
-		$pdo = self::pdo();
-		$count = (int)$pdo->query("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='users'")->fetchColumn();
-		if ($count === 0) { return; }
-		$hasOrganizer = (int)$pdo->query("SELECT COUNT(*) FROM users WHERE role='organizer'")->fetchColumn();
-		if ($hasOrganizer > 0) { return; }
-		$defaultEmail = 'admin@example.com';
-		$defaultName = 'Admin';
-		$defaultGender = null;
-		$defaultPassword = 'ChangeMe123!';
-		$hash = password_hash($defaultPassword, PASSWORD_BCRYPT);
-		$pdo->prepare('INSERT INTO users (id,name,email,password_hash,role,gender) VALUES (?,?,?,?,?,?)')
-			->execute([bin2hex(random_bytes(16)), $defaultName, $defaultEmail, $hash, 'organizer', $defaultGender]);
 	}
 }
-
-

@@ -3,6 +3,11 @@ declare(strict_types=1);
 // Sessions will be handled by SecurityService::startSecureSession()
 
 require __DIR__ . '/lib/helpers.php';
+require __DIR__ . '/lib/Config.php';
+require __DIR__ . '/lib/DatabaseInterface.php';
+require __DIR__ . '/lib/SchemaMigrator.php';
+require __DIR__ . '/lib/DataMigrator.php';
+require __DIR__ . '/lib/MigrationController.php';
 require __DIR__ . '/lib/Router.php';
 require __DIR__ . '/lib/DB.php';
 require __DIR__ . '/lib/Logger.php';
@@ -20,6 +25,13 @@ require __DIR__ . '/controllers/AdminController.php';
 require __DIR__ . '/routes/controllers.php';
 require __DIR__ . '/routes/AuditorController.php';
 require __DIR__ . '/routes/BoardController.php';
+
+// Initialize configuration
+App\Config::init();
+
+// Initialize database with configuration
+$dbConfig = App\Config::getDatabaseConfig();
+App\DB::initialize($dbConfig);
 
 // Initialize services
 App\Cache::init();
