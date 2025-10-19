@@ -53,7 +53,12 @@ class SchemaMigrator {
         $this->log("Creating PostgreSQL schema...");
         
         // Enable UUID extension
-        $this->targetDb->execute("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\"");
+        try {
+            $this->targetDb->execute("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\"");
+            $this->log("UUID extension enabled");
+        } catch (\Exception $e) {
+            $this->log("UUID extension warning: " . $e->getMessage(), 'warning');
+        }
         
         // Create tables in dependency order
         $tables = $this->getTableCreationOrder();
@@ -110,10 +115,15 @@ class SchemaMigrator {
     private function createTable(string $tableName): void {
         $this->log("Creating table: {$tableName}");
         
-        $sql = $this->getPostgreSQLTableSQL($tableName);
-        $this->targetDb->execute($sql);
-        
-        $this->log("Table {$tableName} created successfully");
+        try {
+            $sql = $this->getPostgreSQLTableSQL($tableName);
+            $this->targetDb->execute($sql);
+            $this->log("Table {$tableName} created successfully");
+        } catch (\Exception $e) {
+            $this->log("Failed to create table {$tableName}: " . $e->getMessage(), 'error');
+            $this->errors[] = "Table {$tableName}: " . $e->getMessage();
+            throw $e;
+        }
     }
 
     /**
