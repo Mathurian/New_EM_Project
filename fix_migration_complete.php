@@ -80,16 +80,39 @@ try {
     // Step 1: Drop and recreate database
     logHeader("Step 1: Recreating PostgreSQL Database");
     
-    logMessage("Dropping existing database...", 'info');
-    $pgsql->exec("DROP DATABASE IF EXISTS $pgsqlDb");
+    // First, connect to a different database (postgres) to drop the target database
+    logMessage("Connecting to postgres database to drop target database...", 'info');
+    $postgresPdo = new PDO("pgsql:host=$pgsqlHost;port=$pgsqlPort;dbname=postgres", $pgsqlUser, $pgsqlPass);
+    $postgresPdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    logMessage("Connected to postgres database", 'success');
     
+    // Terminate active connections to the target database
+    logMessage("Terminating active connections to target database...", 'info');
+    $terminateSql = "
+        SELECT pg_terminate_backend(pg_stat_activity.pid)
+        FROM pg_stat_activity
+        WHERE pg_stat_activity.datname = :targetDb
+        AND pid <> pg_backend_pid();
+    ";
+    $stmt = $postgresPdo->prepare($terminateSql);
+    $stmt->execute([':targetDb' => $pgsqlDb]);
+    logMessage("Active connections terminated", 'success');
+    
+    // Drop the target database
+    logMessage("Dropping existing database...", 'info');
+    $postgresPdo->exec("DROP DATABASE IF EXISTS $pgsqlDb");
+    logMessage("Database dropped successfully", 'success');
+    
+    // Create fresh database
     logMessage("Creating fresh database...", 'info');
-    $pgsql->exec("CREATE DATABASE $pgsqlDb OWNER $pgsqlUser");
+    $postgresPdo->exec("CREATE DATABASE $pgsqlDb OWNER $pgsqlUser");
+    logMessage("Fresh database created", 'success');
     
     // Reconnect to the new database
+    logMessage("Reconnecting to new database...", 'info');
     $pgsql = new PDO("pgsql:host=$pgsqlHost;port=$pgsqlPort;dbname=$pgsqlDb", $pgsqlUser, $pgsqlPass);
     $pgsql->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    logMessage("Fresh database created and connected", 'success');
+    logMessage("Connected to fresh database", 'success');
 
     // Step 2: Enable UUID extension
     logHeader("Step 2: Enabling UUID Extension");
