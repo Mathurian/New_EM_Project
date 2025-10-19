@@ -1,24 +1,23 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from 'react-query'
-import { Link } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { api } from '../lib/api'
 import { 
   Plus, 
   Search, 
-  Filter, 
-  MoreVertical, 
-  Edit, 
+  Calendar, 
+  Trophy, 
+  Archive, 
   Trash2, 
-  Archive,
-  Calendar,
-  Users,
-  Trophy
+  Eye,
+  ArrowLeft,
+  Target
 } from 'lucide-react'
 import { formatDate } from '../lib/utils'
 import { LoadingSpinner } from '../components/ui/LoadingSpinner'
 import toast from 'react-hot-toast'
 
-interface Event {
+interface Contest {
   id: string
   name: string
   description?: string
@@ -26,6 +25,7 @@ interface Event {
   end_date: string
   status: 'draft' | 'active' | 'completed' | 'archived'
   created_at: string
+  event_id: string
   categories?: Array<{
     id: string
     name: string
@@ -36,63 +36,74 @@ interface Event {
   }>
 }
 
-export function EventsPage() {
+export function ContestsPage() {
+  const { eventId } = useParams<{ eventId: string }>()
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [showCreateModal, setShowCreateModal] = useState(false)
   const queryClient = useQueryClient()
 
-  const { data: eventsData, isLoading } = useQuery(
-    ['events', searchTerm, statusFilter],
+  const { data: contestsData, isLoading } = useQuery(
+    ['contests', eventId, searchTerm, statusFilter],
     async () => {
       const params = new URLSearchParams()
       if (searchTerm) params.append('search', searchTerm)
       if (statusFilter !== 'all') params.append('status', statusFilter)
       
-      const response = await api.get(`/events?${params.toString()}`)
+      const response = await api.get(`/contests/event/${eventId}?${params.toString()}`)
       return response.data
-    }
+    },
+    { enabled: !!eventId }
   )
 
-  const deleteEventMutation = useMutation(
-    async (eventId: string) => {
-      await api.delete(`/events/${eventId}`)
+  const { data: event } = useQuery(
+    ['event', eventId],
+    async () => {
+      const response = await api.get(`/events/${eventId}`)
+      return response.data
+    },
+    { enabled: !!eventId }
+  )
+
+  const deleteContestMutation = useMutation(
+    async (contestId: string) => {
+      await api.delete(`/contests/${contestId}`)
     },
     {
       onSuccess: () => {
-        queryClient.invalidateQueries('events')
-        toast.success('Event deleted successfully')
+        queryClient.invalidateQueries(['contests', eventId])
+        toast.success('Contest deleted successfully')
       },
       onError: (error: any) => {
-        toast.error(error.response?.data?.error || 'Failed to delete event')
+        toast.error(error.response?.data?.error || 'Failed to delete contest')
       }
     }
   )
 
-  const archiveEventMutation = useMutation(
-    async (eventId: string) => {
-      await api.post(`/events/${eventId}/archive`)
+  const archiveContestMutation = useMutation(
+    async (contestId: string) => {
+      await api.post(`/contests/${contestId}/archive`)
     },
     {
       onSuccess: () => {
-        queryClient.invalidateQueries('events')
-        toast.success('Event archived successfully')
+        queryClient.invalidateQueries(['contests', eventId])
+        toast.success('Contest archived successfully')
       },
       onError: (error: any) => {
-        toast.error(error.response?.data?.error || 'Failed to archive event')
+        toast.error(error.response?.data?.error || 'Failed to archive contest')
       }
     }
   )
 
-  const handleDelete = (eventId: string) => {
-    if (window.confirm('Are you sure you want to delete this event?')) {
-      deleteEventMutation.mutate(eventId)
+  const handleDelete = (contestId: string) => {
+    if (window.confirm('Are you sure you want to delete this contest?')) {
+      deleteContestMutation.mutate(contestId)
     }
   }
 
-  const handleArchive = (eventId: string) => {
-    if (window.confirm('Are you sure you want to archive this event?')) {
-      archiveEventMutation.mutate(eventId)
+  const handleArchive = (contestId: string) => {
+    if (window.confirm('Are you sure you want to archive this contest?')) {
+      archiveContestMutation.mutate(contestId)
     }
   }
 
@@ -119,20 +130,46 @@ export function EventsPage() {
     )
   }
 
+  if (!eventId) {
+    return (
+      <div className="bg-white rounded-lg shadow p-12 text-center">
+        <Trophy className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+        <h3 className="text-lg font-medium text-gray-900 mb-2">Event not found</h3>
+        <p className="text-gray-500 mb-6">Please select an event to view its contests.</p>
+        <Link
+          to="/events"
+          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          Back to Events
+        </Link>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Events</h1>
-          <p className="text-gray-600">Manage and organize your events</p>
+        <div className="flex items-center space-x-4">
+          <Link
+            to="/events"
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <ArrowLeft className="h-5 w-5 text-gray-600" />
+          </Link>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">
+              {event?.name || 'Contests'}
+            </h1>
+            <p className="text-gray-600">Manage contests for this event</p>
+          </div>
         </div>
         <button
           onClick={() => setShowCreateModal(true)}
           className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
         >
           <Plus className="h-4 w-4" />
-          <span>Create Event</span>
+          <span>Create Contest</span>
         </button>
       </div>
 
@@ -141,10 +178,10 @@ export function EventsPage() {
         <div className="flex flex-col sm:flex-row gap-4">
           <div className="flex-1">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search events..."
+                placeholder="Search contests..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -167,79 +204,69 @@ export function EventsPage() {
         </div>
       </div>
 
-      {/* Events Grid */}
-      {eventsData?.data && eventsData.data.length > 0 ? (
+      {/* Contests Grid */}
+      {contestsData?.data && contestsData.data.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {eventsData.data.map((event: Event) => (
-            <div key={event.id} className="bg-white rounded-lg shadow hover:shadow-md transition-shadow">
+          {contestsData.data.map((contest: Contest) => (
+            <div key={contest.id} className="bg-white rounded-lg shadow hover:shadow-md transition-shadow">
               <div className="p-6">
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex-1">
                     <h3 className="text-lg font-semibold text-gray-900 mb-1">
-                      {event.name}
+                      {contest.name}
                     </h3>
-                    {event.description && (
+                    {contest.description && (
                       <p className="text-sm text-gray-600 line-clamp-2">
-                        {event.description}
+                        {contest.description}
                       </p>
                     )}
                   </div>
-                  <div className="relative">
-                    <button className="p-1 hover:bg-gray-100 rounded">
-                      <MoreVertical className="h-4 w-4 text-gray-400" />
-                    </button>
-                    {/* Dropdown menu would go here */}
-                  </div>
+                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(contest.status)}`}>
+                    {contest.status}
+                  </span>
                 </div>
 
                 <div className="space-y-2 mb-4">
                   <div className="flex items-center text-sm text-gray-600">
                     <Calendar className="h-4 w-4 mr-2" />
-                    <span>{formatDate(event.start_date)} - {formatDate(event.end_date)}</span>
+                    <span>{formatDate(contest.start_date)} - {formatDate(contest.end_date)}</span>
                   </div>
-                  {event.categories && (
+                  {contest.categories && (
                     <div className="flex items-center text-sm text-gray-600">
                       <Trophy className="h-4 w-4 mr-2" />
-                      <span>{event.categories.length} categories</span>
+                      <span>{contest.categories.length} categories</span>
                     </div>
                   )}
                 </div>
 
                 <div className="flex items-center justify-between">
-                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(event.status)}`}>
-                    {event.status}
-                  </span>
-                  <div className="flex space-x-2">
-                    <Link
-                      to={`/events/${event.id}`}
-                      className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                  <Link
+                    to={`/contests/${contest.id}`}
+                    className="text-blue-600 hover:text-blue-500 text-sm font-medium flex items-center"
+                  >
+                    <Eye className="h-4 w-4 mr-1" />
+                    View Details
+                  </Link>
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={() => handleArchive(contest.id)}
+                      className="p-2 text-gray-400 hover:text-yellow-600 transition-colors"
+                      title="Archive contest"
                     >
-                      View Details
-                    </Link>
+                      <Archive className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(contest.id)}
+                      className="p-2 text-gray-400 hover:text-red-600 transition-colors"
+                      title="Delete contest"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
                   </div>
                 </div>
               </div>
-
-              <div className="px-6 py-3 bg-gray-50 rounded-b-lg flex items-center justify-between">
-                <div className="flex space-x-2">
-                  <button
-                    onClick={() => handleArchive(event.id)}
-                    className="text-gray-400 hover:text-gray-600 p-1"
-                    title="Archive"
-                  >
-                    <Archive className="h-4 w-4" />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(event.id)}
-                    className="text-gray-400 hover:text-red-600 p-1"
-                    title="Delete"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-                <span className="text-xs text-gray-500">
-                  Created {formatDate(event.created_at)}
-                </span>
+              <div className="px-6 py-3 bg-gray-50 rounded-b-lg flex items-center justify-between text-sm text-gray-500">
+                <span>Created {formatDate(contest.created_at)}</span>
               </div>
             </div>
           ))}
@@ -247,39 +274,39 @@ export function EventsPage() {
       ) : (
         <div className="bg-white rounded-lg shadow p-12 text-center">
           <Trophy className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No events found</h3>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">No contests found</h3>
           <p className="text-gray-500 mb-6">
             {searchTerm || statusFilter !== 'all' 
               ? 'Try adjusting your search or filter criteria.'
-              : 'Get started by creating your first event.'
+              : 'Get started by creating your first contest for this event.'
             }
           </p>
           <button
             onClick={() => setShowCreateModal(true)}
             className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
           >
-            Create Event
+            Create Contest
           </button>
         </div>
       )}
 
       {/* Pagination */}
-      {eventsData?.pagination && eventsData.pagination.pages > 1 && (
+      {contestsData?.pagination && contestsData.pagination.pages > 1 && (
         <div className="flex items-center justify-between bg-white rounded-lg shadow p-4">
           <div className="text-sm text-gray-700">
-            Showing {((eventsData.pagination.page - 1) * eventsData.pagination.limit) + 1} to{' '}
-            {Math.min(eventsData.pagination.page * eventsData.pagination.limit, eventsData.pagination.total)} of{' '}
-            {eventsData.pagination.total} results
+            Showing {((contestsData.pagination.page - 1) * contestsData.pagination.limit) + 1} to{' '}
+            {Math.min(contestsData.pagination.page * contestsData.pagination.limit, contestsData.pagination.total)} of{' '}
+            {contestsData.pagination.total} results
           </div>
           <div className="flex space-x-2">
             <button
-              disabled={eventsData.pagination.page === 1}
+              disabled={contestsData.pagination.page === 1}
               className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Previous
             </button>
             <button
-              disabled={eventsData.pagination.page === eventsData.pagination.pages}
+              disabled={contestsData.pagination.page === contestsData.pagination.pages}
               className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Next

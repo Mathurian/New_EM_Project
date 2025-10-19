@@ -9,6 +9,7 @@ import { LoginPage } from './pages/LoginPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { EventsPage } from './pages/EventsPage'
 import { EventDetailPage } from './pages/EventDetailPage'
+import { ContestsPage } from './pages/ContestsPage'
 import { ScoringPage } from './pages/ScoringPage'
 import { ResultsPage } from './pages/ResultsPage'
 import { UsersPage } from './pages/UsersPage'
@@ -46,6 +47,8 @@ function App() {
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/events" element={<EventsPage />} />
         <Route path="/events/:id" element={<EventDetailPage />} />
+        <Route path="/events/:eventId/contests" element={<ContestsPage />} />
+        <Route path="/contests/:id" element={<ContestDetailPage />} />
         <Route path="/scoring" element={<ScoringPage />} />
         <Route path="/results" element={<ResultsPage />} />
         <Route path="/users" element={<UsersPage />} />

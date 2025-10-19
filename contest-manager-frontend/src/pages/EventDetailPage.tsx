@@ -140,24 +140,37 @@ export function EventDetailPage() {
         </div>
       </div>
 
-      {/* Categories and Subcategories */}
-      {event.categories && event.categories.length > 0 && (
+      {/* Contests */}
+      {event.contests && event.contests.length > 0 && (
         <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Categories & Subcategories</h2>
-          <div className="space-y-6">
-            {event.categories.map((category) => (
-              <div key={category.id} className="border border-gray-200 rounded-lg p-4">
-                <h3 className="font-medium text-gray-900 mb-3">{category.name}</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {category.subcategories.map((subcategory) => (
-                    <div key={subcategory.id} className="bg-gray-50 rounded-lg p-3">
-                      <h4 className="font-medium text-gray-800 mb-2">{subcategory.name}</h4>
-                      <div className="flex items-center text-sm text-gray-600">
-                        <Users className="h-4 w-4 mr-1" />
-                        <span>{subcategory.contestants.length} contestants</span>
-                      </div>
-                    </div>
-                  ))}
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Contests</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {event.contests.map((contest) => (
+              <div key={contest.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                <h3 className="font-medium text-gray-900 mb-2">{contest.name}</h3>
+                {contest.description && (
+                  <p className="text-sm text-gray-600 mb-3 line-clamp-2">{contest.description}</p>
+                )}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center text-sm text-gray-600">
+                    <Calendar className="h-4 w-4 mr-1" />
+                    <span>{formatDate(contest.start_date)} - {formatDate(contest.end_date)}</span>
+                  </div>
+                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                    contest.status === 'active' 
+                      ? 'bg-green-100 text-green-800' 
+                      : 'bg-gray-100 text-gray-800'
+                  }`}>
+                    {contest.status}
+                  </span>
+                </div>
+                <div className="mt-3">
+                  <Link
+                    to={`/contests/${contest.id}`}
+                    className="text-blue-600 hover:text-blue-500 text-sm font-medium"
+                  >
+                    View Contest Details →
+                  </Link>
                 </div>
               </div>
             ))}
