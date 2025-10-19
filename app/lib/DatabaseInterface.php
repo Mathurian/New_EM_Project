@@ -100,6 +100,18 @@ class SQLiteDatabase implements DatabaseInterface {
     public function getDatabaseType(): string {
         return 'sqlite';
     }
+
+    public function fetch(string $sql, array $params = []): ?array {
+        $stmt = $this->getPdo()->prepare($sql);
+        $stmt->execute($params);
+        $result = $stmt->fetch(\PDO::FETCH_ASSOC);
+        return $result ?: null;
+    }
+
+    public function getRowCount(string $tableName): int {
+        $result = $this->fetch("SELECT COUNT(*) as count FROM {$tableName}");
+        return (int) ($result['count'] ?? 0);
+    }
 }
 
 /**
@@ -201,6 +213,11 @@ class PostgreSQLDatabase implements DatabaseInterface {
 
     public function getDatabaseType(): string {
         return 'postgresql';
+    }
+
+    public function getRowCount(string $tableName): int {
+        $result = $this->fetchOne("SELECT COUNT(*) as count FROM {$tableName}");
+        return (int) ($result['count'] ?? 0);
     }
 }
 
