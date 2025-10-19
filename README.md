@@ -373,17 +373,242 @@ src/
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Node.js 18+ 
+- Node.js 18+ (compatible with Node.js 16.x - 21.x)
 - PostgreSQL 12+
 - Redis 6+
 - npm or yarn
+
+### System Dependencies and Required Packages
+
+Before installing and running this application, ensure that the following system dependencies and packages are installed on your Ubuntu 24.04 system:
+
+#### 1. **Node.js and npm** (Critical Version Requirement)
+**⚠️ IMPORTANT**: This application requires Node.js version 16.x to 21.x. Node.js 25.x is NOT supported due to package compatibility issues.
+
+**Install Node.js 20.x (Recommended):**
+```bash
+# Remove any existing Node.js installations
+sudo apt remove nodejs npm -y
+
+# Install Node.js 20.x using NodeSource repository
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install -y nodejs
+
+# Verify installation
+node --version  # Should be v20.x.x
+npm --version   # Should be 10.x.x
+```
+
+**Alternative: Install Node.js 18.x:**
+```bash
+curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+sudo apt-get install -y nodejs
+```
+
+#### 2. **Build Essentials** (Required for Native Modules)
+Required for compiling native modules like `sharp`, `pg`, and `bcryptjs`:
+```bash
+sudo apt update
+sudo apt install -y build-essential python3-dev make g++ pkg-config
+```
+
+#### 3. **Image Processing Libraries** (Required for `sharp` package)
+The `sharp` package requires specific image processing libraries:
+```bash
+sudo apt install -y \
+    libvips-dev \
+    libcairo2-dev \
+    libpango1.0-dev \
+    libjpeg-dev \
+    libgif-dev \
+    librsvg2-dev \
+    libpng-dev \
+    libwebp-dev \
+    libtiff-dev
+```
+
+#### 4. **PostgreSQL** (Database)
+```bash
+sudo apt install -y postgresql postgresql-contrib
+sudo systemctl start postgresql
+sudo systemctl enable postgresql
+```
+
+#### 5. **Redis** (Caching and Session Management)
+```bash
+sudo apt install -y redis-server
+sudo systemctl start redis-server
+sudo systemctl enable redis-server
+```
+
+#### 6. **Additional System Dependencies**
+```bash
+sudo apt install -y \
+    curl \
+    wget \
+    git \
+    software-properties-common \
+    ca-certificates \
+    gnupg \
+    lsb-release
+```
+
+### Installation Error Resolution
+
+#### **Error: `npm warn EBADENGINE Unsupported engine`**
+**Cause**: The `fast-jwt@3.3.3` package requires Node.js version `>=16 <22`, but Node.js 25.x is installed.
+
+**Solution**: Downgrade to Node.js 20.x or 18.x:
+```bash
+# Remove current Node.js
+sudo apt remove nodejs npm -y
+
+# Install Node.js 20.x
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install -y nodejs
+
+# Verify version
+node --version  # Should be v20.x.x
+```
+
+#### **Error: `npm warn config production Use '--omit=dev' instead`**
+**Cause**: The `--production` flag is deprecated in newer npm versions.
+
+**Solution**: Use the updated flag:
+```bash
+# Instead of: npm install --production
+npm install --omit=dev
+```
+
+#### **Error: Deprecated Packages Warnings**
+**Cause**: Several packages have known vulnerabilities or are deprecated.
+
+**Solution**: Update package.json dependencies:
+```json
+{
+  "dependencies": {
+    "multer": "^2.0.2",
+    "glob": "^9.0.0"
+  }
+}
+```
+
+Then run:
+```bash
+npm install
+```
+
+#### **Error: Native Module Compilation Failures**
+**Cause**: Missing build tools or system libraries.
+
+**Solution**: Install all required dependencies:
+```bash
+# Install build tools
+sudo apt install -y build-essential python3-dev make g++ pkg-config
+
+# Install image processing libraries
+sudo apt install -y libvips-dev libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev
+
+# Install PostgreSQL development headers
+sudo apt install -y postgresql-server-dev-all
+
+# Install Redis development headers
+sudo apt install -y libhiredis-dev
+```
+
+### Complete Installation Script for Ubuntu 24.04
+
+**🚀 Quick Installation (Recommended):**
+```bash
+# Download and run the automated installation script
+curl -fsSL https://raw.githubusercontent.com/your-username/New_EM_Project/main/install-ubuntu-24.04.sh | bash
+```
+
+**📁 Or run the local script:**
+```bash
+# Make the script executable and run it
+chmod +x install-ubuntu-24.04.sh
+./install-ubuntu-24.04.sh
+```
+
+**🔧 Manual Installation Steps:**
+```bash
+#!/bin/bash
+# Complete installation script for Event Manager on Ubuntu 24.04
+
+# Update system
+sudo apt update && sudo apt upgrade -y
+
+# Install system dependencies
+sudo apt install -y \
+    curl \
+    wget \
+    git \
+    build-essential \
+    python3-dev \
+    make \
+    g++ \
+    pkg-config \
+    software-properties-common \
+    ca-certificates \
+    gnupg \
+    lsb-release
+
+# Install image processing libraries
+sudo apt install -y \
+    libvips-dev \
+    libcairo2-dev \
+    libpango1.0-dev \
+    libjpeg-dev \
+    libgif-dev \
+    librsvg2-dev \
+    libpng-dev \
+    libwebp-dev \
+    libtiff-dev
+
+# Install PostgreSQL
+sudo apt install -y postgresql postgresql-contrib postgresql-server-dev-all
+sudo systemctl start postgresql
+sudo systemctl enable postgresql
+
+# Install Redis
+sudo apt install -y redis-server libhiredis-dev
+sudo systemctl start redis-server
+sudo systemctl enable redis-server
+
+# Install Node.js 20.x (compatible version)
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install -y nodejs
+
+# Verify installations
+echo "Node.js version: $(node --version)"
+echo "npm version: $(npm --version)"
+echo "PostgreSQL version: $(sudo -u postgres psql -c 'SELECT version();' | head -3)"
+echo "Redis version: $(redis-server --version | head -1)"
+
+# Set up database
+sudo -u postgres psql << EOF
+CREATE DATABASE event_manager;
+CREATE USER event_manager WITH PASSWORD 'your_secure_password_here';
+GRANT ALL PRIVILEGES ON DATABASE event_manager TO event_manager;
+ALTER USER event_manager CREATEDB;
+\q
+EOF
+
+echo "✅ All system dependencies installed successfully!"
+echo "📝 Next steps:"
+echo "1. Clone your repository"
+echo "2. Run: npm install --omit=dev"
+echo "3. Configure your .env file"
+echo "4. Run database migrations"
+```
 
 ### Backend Setup
 
 1. **Clone and install dependencies**
 ```bash
 cd event-manager-api
-npm install
+npm install --omit=dev
 ```
 
 2. **Configure environment**
@@ -450,8 +675,8 @@ sudo apt update && sudo apt upgrade -y
 # Install essential packages
 sudo apt install -y curl wget git build-essential software-properties-common
 
-# Install Node.js 18.x
-curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+# Install Node.js 20.x (compatible with all packages)
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt install -y nodejs
 
 # Install PostgreSQL
@@ -520,7 +745,7 @@ git clone https://github.com/your-username/New_EM_Project.git .
 cd event-manager-api
 
 # Install dependencies
-npm install --production
+npm install --omit=dev
 
 # Create environment file
 cp .env.example .env
@@ -802,7 +1027,7 @@ sudo systemctl status nginx
 cd /opt/event-manager
 git pull origin main
 cd event-manager-api
-npm install --production
+npm install --omit=dev
 pm2 reload event-manager-api
 
 # Update frontend
@@ -993,6 +1218,76 @@ sudo systemctl reload nginx
 - Conventional commits
 
 ## 🔧 Troubleshooting
+
+### Installation Errors on Ubuntu 24.04
+
+#### **Node.js Version Compatibility Issues**
+```bash
+# Error: npm warn EBADENGINE Unsupported engine
+# Package: 'fast-jwt@3.3.3', required: { node: '>=16 <22' }, current: { node: 'v25.0.0' }
+
+# Solution: Install compatible Node.js version
+sudo apt remove nodejs npm -y
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install -y nodejs
+node --version  # Should be v20.x.x
+```
+
+#### **Deprecated npm Flags**
+```bash
+# Error: npm warn config production Use '--omit=dev' instead
+
+# Solution: Use updated flag
+npm install --omit=dev  # Instead of: npm install --production
+```
+
+#### **Deprecated Package Warnings**
+```bash
+# Error: npm warn deprecated inflight@1.0.6, glob@8.1.0, multer@1.4.5-lts.2
+
+# Solution: Update package.json dependencies
+# Update these packages to their latest versions:
+# - multer: ^2.0.2 (from ^1.4.5-lts.2)
+# - glob: ^9.0.0 (from ^8.1.0)
+# - Replace inflight with lru-cache: ^6.0.0
+```
+
+#### **Native Module Compilation Failures**
+```bash
+# Error: gyp ERR! build error, sharp compilation failed
+
+# Solution: Install all required system dependencies
+sudo apt install -y \
+    build-essential \
+    python3-dev \
+    make \
+    g++ \
+    pkg-config \
+    libvips-dev \
+    libcairo2-dev \
+    libpango1.0-dev \
+    libjpeg-dev \
+    libgif-dev \
+    librsvg2-dev \
+    postgresql-server-dev-all \
+    libhiredis-dev
+
+# Then retry installation
+npm install --omit=dev
+```
+
+#### **Permission Errors**
+```bash
+# Error: EACCES: permission denied, mkdir '/usr/local/lib/node_modules'
+
+# Solution: Fix npm permissions
+sudo chown -R $(whoami) ~/.npm
+# OR use NVM for Node.js management
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.2/install.sh | bash
+source ~/.bashrc
+nvm install 20
+nvm use 20
+```
 
 ### Common Issues
 
