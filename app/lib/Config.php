@@ -18,23 +18,43 @@ class Config {
             return;
         }
 
+        // Debug logging
+        error_log("Config::init() - Starting initialization");
+
         // Load configuration from file
         $configFile = __DIR__ . '/../config/app.php';
+        error_log("Config::init() - Loading config file: " . $configFile);
+        
         if (file_exists($configFile)) {
             self::$config = include $configFile;
+            error_log("Config::init() - Main config loaded");
+        } else {
+            error_log("Config::init() - Main config file not found");
         }
 
         // Load environment-specific configuration
-        $envConfigFile = __DIR__ . '/../config/' . (self::get('app.env', 'production')) . '.php';
+        // Get environment from config array directly to avoid circular dependency
+        $env = self::$config['app']['env'] ?? 'production';
+        error_log("Config::init() - Environment: " . $env);
+        
+        $envConfigFile = __DIR__ . '/../config/' . $env . '.php';
+        error_log("Config::init() - Loading env config file: " . $envConfigFile);
+        
         if (file_exists($envConfigFile)) {
             $envConfig = include $envConfigFile;
             self::$config = array_merge_recursive(self::$config, $envConfig);
+            error_log("Config::init() - Environment config loaded");
+        } else {
+            error_log("Config::init() - Environment config file not found");
         }
 
         // Override with environment variables
+        error_log("Config::init() - Loading environment variables");
         self::loadFromEnvironment();
+        error_log("Config::init() - Environment variables loaded");
 
         self::$initialized = true;
+        error_log("Config::init() - Initialization completed");
     }
 
     /**
