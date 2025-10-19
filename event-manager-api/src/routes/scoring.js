@@ -251,4 +251,183 @@ export const scoringRoutes = async (fastify) => {
       return reply.status(500).send({ error: 'Failed to fetch scoring interface' })
     }
   })
+
+  // CERTIFICATION WORKFLOW ENDPOINTS
+
+  // Judge certifies scores for subcategory
+  fastify.post('/certify/:subcategoryId', {
+    schema: {
+      params: Joi.object({
+        subcategoryId: Joi.string().uuid().required()
+      })
+    },
+    preHandler: [fastify.authenticate, fastify.requireRole(['judge'])]
+  }, async (request, reply) => {
+    try {
+      const result = await scoringService.certifyJudgeScores(
+        request.user.id, 
+        request.params.subcategoryId
+      )
+      return reply.send(result)
+    } catch (error) {
+      fastify.log.error(error)
+      return reply.status(500).send({ error: error.message || 'Failed to certify scores' })
+    }
+  })
+
+  // Tally Master verifies scores
+  fastify.post('/verify/:subcategoryId', {
+    schema: {
+      params: Joi.object({
+        subcategoryId: Joi.string().uuid().required()
+      })
+    },
+    preHandler: [fastify.authenticate, fastify.requireRole(['tally_master'])]
+  }, async (request, reply) => {
+    try {
+      const result = await scoringService.verifyTallyMasterScores(
+        request.user.id, 
+        request.params.subcategoryId
+      )
+      return reply.send(result)
+    } catch (error) {
+      fastify.log.error(error)
+      return reply.status(500).send({ error: error.message || 'Failed to verify scores' })
+    }
+  })
+
+  // Auditor certifies scores
+  fastify.post('/audit-certify/:subcategoryId', {
+    schema: {
+      params: Joi.object({
+        subcategoryId: Joi.string().uuid().required()
+      })
+    },
+    preHandler: [fastify.authenticate, fastify.requireRole(['auditor'])]
+  }, async (request, reply) => {
+    try {
+      const result = await scoringService.certifyAuditorScores(
+        request.user.id, 
+        request.params.subcategoryId
+      )
+      return reply.send(result)
+    } catch (error) {
+      fastify.log.error(error)
+      return reply.status(500).send({ error: error.message || 'Failed to audit certify scores' })
+    }
+  })
+
+  // Update comments for certified scores
+  fastify.put('/:id/comments', {
+    schema: {
+      params: Joi.object({
+        id: Joi.string().uuid().required()
+      }),
+      body: Joi.object({
+        comments: Joi.string().max(500).required()
+      })
+    },
+    preHandler: [fastify.authenticate, fastify.requireRole(['judge'])]
+  }, async (request, reply) => {
+    try {
+      const result = await scoringService.updateScoreComments(
+        request.params.id,
+        request.user.id,
+        request.body.comments
+      )
+      return reply.send(result)
+    } catch (error) {
+      fastify.log.error(error)
+      return reply.status(500).send({ error: error.message || 'Failed to update comments' })
+    }
+  })
+
+  // Create discrepancy
+  fastify.post('/:id/discrepancy', {
+    schema: {
+      params: Joi.object({
+        id: Joi.string().uuid().required()
+      }),
+      body: Joi.object({
+        reason: Joi.string().min(10).max(500).required(),
+        new_score: Joi.number().min(0).required()
+      })
+    },
+    preHandler: [fastify.authenticate, fastify.requireRole(['tally_master', 'auditor', 'board', 'organizer'])]
+  }, async (request, reply) => {
+    try {
+      const result = await scoringService.createDiscrepancy(
+        request.params.id,
+        request.user.id,
+        request.user.role,
+        request.body.reason,
+        request.body.new_score
+      )
+      return reply.send(result)
+    } catch (error) {
+      fastify.log.error(error)
+      return reply.status(500).send({ error: error.message || 'Failed to create discrepancy' })
+    }
+  })
+
+  // Approve discrepancy
+  fastify.post('/:id/discrepancy/approve', {
+    schema: {
+      params: Joi.object({
+        id: Joi.string().uuid().required()
+      })
+    },
+    preHandler: [fastify.authenticate, fastify.requireRole(['tally_master', 'auditor', 'board', 'organizer'])]
+  }, async (request, reply) => {
+    try {
+      const result = await scoringService.approveDiscrepancy(
+        request.params.id,
+        request.user.id,
+        request.user.role
+      )
+      return reply.send(result)
+    } catch (error) {
+      fastify.log.error(error)
+      return reply.status(500).send({ error: error.message || 'Failed to approve discrepancy' })
+    }
+  })
+
+  // Check certification status
+  fastify.get('/certification-status/:subcategoryId', {
+    schema: {
+      params: Joi.object({
+        subcategoryId: Joi.string().uuid().required()
+      })
+    },
+    preHandler: [fastify.authenticate, fastify.requireRole(['organizer', 'tally_master', 'auditor', 'board'])]
+  }, async (request, reply) => {
+    try {
+      const result = await scoringService.checkCertificationComplete(request.params.subcategoryId)
+      return reply.send(result)
+    } catch (error) {
+      fastify.log.error(error)
+      return reply.status(500).send({ error: error.message || 'Failed to check certification status' })
+    }
+  })
+
+  // Get final results
+  fastify.get('/final-results/:subcategoryId', {
+    schema: {
+      params: Joi.object({
+        subcategoryId: Joi.string().uuid().required()
+      })
+    },
+    preHandler: [fastify.authenticate, fastify.requireRole(['organizer', 'tally_master', 'auditor', 'board', 'emcee'])]
+  }, async (request, reply) => {
+    try {
+      const result = await scoringService.getFinalResults(
+        request.params.subcategoryId,
+        request.user.role
+      )
+      return reply.send(result)
+    } catch (error) {
+      fastify.log.error(error)
+      return reply.status(500).send({ error: error.message || 'Failed to get final results' })
+    }
+  })
 }

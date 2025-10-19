@@ -14,20 +14,25 @@ export const resultsRoutes = async (fastify) => {
       querystring: Joi.object({
         format: Joi.string().valid('summary', 'detailed', 'leaderboard').default('summary'),
         categoryId: Joi.string().uuid().optional(),
-        subcategoryId: Joi.string().uuid().optional()
+        subcategoryId: Joi.string().uuid().optional(),
+        require_certification: Joi.boolean().default(false)
       })
     },
     preHandler: [fastify.authenticate]
   }, async (request, reply) => {
     try {
       const { eventId } = request.params
-      const { format, categoryId, subcategoryId } = request.query
+      const { format, categoryId, subcategoryId, require_certification } = request.query
 
       // Get event details
       const event = await fastify.db('events').where('id', eventId).first()
       if (!event) {
         return reply.status(404).send({ error: 'Event not found' })
       }
+
+      // Check if user can view uncertified results
+      const canViewUncertified = ['organizer', 'tally_master', 'auditor', 'board'].includes(request.user.role)
+      const shouldRequireCertification = require_certification || !canViewUncertified
 
       // Get contests for the event
       const contests = await fastify.db('contests')
@@ -64,6 +69,15 @@ export const resultsRoutes = async (fastify) => {
           for (const subcategory of subcategories) {
             // Filter by subcategory if specified
             if (subcategoryId && subcategory.id !== subcategoryId) continue
+
+            // Check certification status if required
+            if (shouldRequireCertification) {
+              const certificationStatus = await scoringService.checkCertificationComplete(subcategory.id)
+              if (!certificationStatus.is_complete) {
+                // Skip this subcategory if not fully certified
+                continue
+              }
+            }
 
             // Get contestants for this subcategory
             const contestants = await fastify.db('subcategory_contestants')

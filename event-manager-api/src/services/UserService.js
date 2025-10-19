@@ -180,16 +180,26 @@ export class UserService extends BaseService {
   getUserPermissions(role) {
     const permissions = {
       organizer: [
+        // Full system control - all CRUD operations
         'events:create', 'events:read', 'events:update', 'events:delete', 'events:archive',
         'contests:create', 'contests:read', 'contests:update', 'contests:delete', 'contests:archive',
         'categories:create', 'categories:read', 'categories:update', 'categories:delete',
         'users:create', 'users:read', 'users:update', 'users:delete',
-        'scoring:read', 'results:read', 'settings:read', 'settings:update'
+        'scoring:create', 'scoring:read', 'scoring:update', 'scoring:delete',
+        'results:create', 'results:read', 'results:update', 'results:delete',
+        'settings:read', 'settings:update',
+        // Certification workflow permissions
+        'scoring:certify', 'scoring:verify', 'scoring:audit_certify',
+        'discrepancy:create', 'discrepancy:approve', 'discrepancy:reject',
+        'final_results:view', 'final_results:print'
       ],
       judge: [
+        // Existing permissions
         'events:read', 'contests:read', 'categories:read',
         'scoring:create', 'scoring:read', 'scoring:update',
-        'results:read'
+        'results:read',
+        // New certification permissions
+        'scoring:certify', 'scoring:update_comments'
       ],
       contestant: [
         'events:read', 'contests:read', 'categories:read',
@@ -200,16 +210,30 @@ export class UserService extends BaseService {
         'results:read'
       ],
       tally_master: [
+        // Existing permissions
         'events:read', 'contests:read', 'categories:read',
-        'scoring:read', 'results:read', 'results:update'
+        'scoring:read', 'results:read', 'results:update',
+        // New verification permissions
+        'scoring:verify', 'scoring:verify_all_judges',
+        'discrepancy:create', 'discrepancy:approve',
+        'final_results:view', 'final_results:print'
       ],
       auditor: [
+        // Completely restructured - certification workflow focus
         'events:read', 'contests:read', 'categories:read',
-        'scoring:read', 'results:read', 'audit:read'
+        'scoring:read', 'results:read',
+        // New certification permissions (after tally master verification)
+        'scoring:audit_certify', 'scoring:verify_all_tally',
+        'discrepancy:approve',
+        'final_results:view', 'final_results:print'
       ],
       board: [
+        // Existing permissions
         'events:read', 'contests:read', 'categories:read',
-        'results:read', 'reports:read'
+        'results:read', 'reports:read',
+        // New final approval permissions
+        'discrepancy:approve', 'discrepancy:final_approval',
+        'final_results:view', 'final_results:print'
       ]
     }
 

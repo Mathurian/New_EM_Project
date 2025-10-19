@@ -48,16 +48,21 @@ The Event Manager system implements a comprehensive role-based access control (R
 - `events:read`, `contests:read`, `categories:read`
 - `scoring:create`, `scoring:read`, `scoring:update`
 - `results:read`
+- **NEW:** `scoring:certify`, `scoring:update_comments`
 
 **Responsibilities:**
 - Score contestants in assigned subcategories
+- **Certify scores** per contestant per subcategory
+- **Update comments** on certified scores (cannot edit scores after certification)
 - View contestant information and criteria
-- Submit and modify scores
+- Submit and modify scores (before certification)
 - View results for their assigned categories
 - Access scoring interface and tools
 
 **API Access:** 
 - `/api/scoring/*` - All scoring endpoints
+- `/api/scoring/certify/:subcategoryId` - Certify scores
+- `/api/scoring/:id/comments` - Update comments on certified scores
 - `/api/results/*` - Read-only results access
 - `/api/events/*`, `/api/contests/*`, `/api/categories/*` - Read-only access
 
@@ -65,6 +70,7 @@ The Event Manager system implements a comprehensive role-based access control (R
 - Cannot create or modify events/contests
 - Cannot access user management
 - Cannot view system settings
+- **Cannot edit scores after certification** (comments only)
 - Limited to assigned subcategories only
 
 ---
@@ -128,16 +134,26 @@ The Event Manager system implements a comprehensive role-based access control (R
 **Permissions:**
 - `events:read`, `contests:read`, `categories:read`
 - `scoring:read`, `results:read`, `results:update`
+- **NEW:** `scoring:verify`, `scoring:verify_all_judges`
+- **NEW:** `discrepancy:create`, `discrepancy:approve`
+- **NEW:** `final_results:view`, `final_results:print`
 
 **Responsibilities:**
-- Verify and validate all scores
+- **Verify all judges have certified** their respective scores
+- **Verify and validate all scores** after judge certification
 - Generate official reports and certificates
 - Manage final score calculations
+- **Create discrepancies** for score modifications
+- **Approve discrepancies** (multi-signature required)
 - Handle score disputes and corrections
 - Ensure scoring accuracy and integrity
 
 **API Access:**
 - `/api/tally-master/*` - All tally master endpoints
+- `/api/scoring/verify/:subcategoryId` - Verify all judge certifications
+- `/api/scoring/:id/discrepancy` - Create score discrepancies
+- `/api/scoring/:id/discrepancy/approve` - Approve discrepancies
+- `/api/scoring/final-results/:subcategoryId` - View final results
 - `/api/scoring/*` - Read-only scoring access
 - `/api/results/*` - Full results access (read/update)
 - `/api/events/*`, `/api/contests/*`, `/api/categories/*` - Read-only access
@@ -146,35 +162,44 @@ The Event Manager system implements a comprehensive role-based access control (R
 - Cannot create or modify events/contests
 - Cannot access user management
 - Cannot modify system settings
+- **Cannot verify until all judges have certified**
 - Limited to scoring and results functions
 
 ---
 
 ### **6. Auditor** 🔍
-**Compliance and audit specialist**
+**Final certification specialist - COMPLETELY RESTRUCTURED**
 
 **Permissions:**
 - `events:read`, `contests:read`, `categories:read`
-- `scoring:read`, `results:read`, `audit:read`
+- `scoring:read`, `results:read`
+- **NEW:** `scoring:audit_certify`, `scoring:verify_all_tally`
+- **NEW:** `discrepancy:approve`
+- **NEW:** `final_results:view`, `final_results:print`
 
 **Responsibilities:**
-- Review all system activities and changes
-- Verify data integrity and compliance
-- Generate audit reports and logs
-- Monitor system usage and access
-- Ensure regulatory compliance
+- **Double-check Tally Master role** - Final certification authority
+- **Certify scores ONLY after** Judges AND Tally Master have certified
+- **Same visibility as Tally Master** - Can view all verification stages
+- **Approve discrepancies** (multi-signature required)
+- **View final results** after complete certification
+- Ensure final scoring accuracy and compliance
 
 **API Access:**
-- `/api/auditor/*` - All auditor endpoints
+- `/api/scoring/audit-certify/:subcategoryId` - Final certification
+- `/api/scoring/:id/discrepancy/approve` - Approve discrepancies
+- `/api/scoring/final-results/:subcategoryId` - View final results
+- `/api/scoring/certification-status/:subcategoryId` - Check certification status
 - `/api/results/*` - Read-only results access
 - `/api/scoring/*` - Read-only scoring access
 - `/api/events/*`, `/api/contests/*`, `/api/categories/*` - Read-only access
 
 **Restrictions:**
-- Cannot modify any data
+- **Cannot certify until Tally Master has verified**
+- Cannot create or modify events/contests
 - Cannot access user management
 - Cannot modify system settings
-- Read-only access to all data
+- **Cannot modify scores** (approval only)
 
 ---
 
@@ -184,8 +209,12 @@ The Event Manager system implements a comprehensive role-based access control (R
 **Permissions:**
 - `events:read`, `contests:read`, `categories:read`
 - `results:read`, `reports:read`
+- **NEW:** `discrepancy:approve`, `discrepancy:final_approval`
+- **NEW:** `final_results:view`, `final_results:print`
 
 **Responsibilities:**
+- **Final approval authority** for score discrepancies (equal to Organizer)
+- **View final results** after complete certification
 - Access high-level reports and analytics
 - View system performance metrics
 - Generate executive summaries
@@ -194,6 +223,8 @@ The Event Manager system implements a comprehensive role-based access control (R
 
 **API Access:**
 - `/api/board/*` - All board endpoints
+- `/api/scoring/:id/discrepancy/approve` - Approve discrepancies
+- `/api/scoring/final-results/:subcategoryId` - View final results
 - `/api/results/*` - Read-only results access
 - `/api/print/*` - Print and report generation
 - `/api/events/*`, `/api/contests/*`, `/api/categories/*` - Read-only access
@@ -202,6 +233,7 @@ The Event Manager system implements a comprehensive role-based access control (R
 - Cannot modify data or settings
 - Cannot access user management
 - Cannot access administrative functions
+- **Cannot view uncertified results** (final results only)
 - Limited to reporting and analytics
 
 ---
@@ -214,15 +246,22 @@ The Event Manager system implements a comprehensive role-based access control (R
 | **Contests** | CRUD+A | R | R | R | R | R | R |
 | **Categories** | CRUD | R | R | R | R | R | R |
 | **Users** | CRUD | - | - | - | - | - | - |
-| **Scoring** | R | CRU | - | - | R | R | - |
-| **Results** | R | R | R | R | RU | R | R |
+| **Scoring** | CRUD | CRU | - | - | R | R | - |
+| **Results** | CRUD | R | R | R | RU | R | R |
 | **Settings** | RU | - | - | - | - | - | - |
 | **Templates** | CRUD | - | - | - | - | - | - |
 | **Backups** | CRUD | - | - | - | - | - | - |
-| **Audit Logs** | R | - | - | - | - | R | - |
+| **Audit Logs** | R | - | - | - | - | - | - |
 | **Reports** | R | - | - | - | R | R | R |
+| **CERTIFICATION WORKFLOW** | | | | | | | |
+| **Score Certification** | ✓ | ✓ | - | - | - | - | - |
+| **Score Verification** | ✓ | - | - | - | ✓ | - | - |
+| **Audit Certification** | ✓ | - | - | - | - | ✓ | - |
+| **Discrepancy Creation** | ✓ | - | - | - | ✓ | ✓ | ✓ |
+| **Discrepancy Approval** | ✓ | - | - | - | ✓ | ✓ | ✓ |
+| **Final Results** | ✓ | - | - | ✓ | ✓ | ✓ | ✓ |
 
-**Legend:** C=Create, R=Read, U=Update, D=Delete, A=Archive
+**Legend:** C=Create, R=Read, U=Update, D=Delete, A=Archive, ✓=Full Access
 
 ---
 
@@ -253,6 +292,45 @@ The Event Manager system implements a comprehensive role-based access control (R
 - Data change auditing
 - Compliance reporting
 - Security event monitoring
+
+## 🔄 Certification Workflow
+
+### **4-Stage Certification Process:**
+
+#### **Stage 1: Judge Certification** ⚖️
+- Judges score contestants in assigned subcategories
+- **Must certify scores** per contestant per subcategory
+- **Cannot edit scores** after certification (comments only)
+- Status: `draft` → `judge_certified`
+
+#### **Stage 2: Tally Master Verification** 📊
+- Tally Master **verifies all judges have certified** their scores
+- **Cannot verify** until all judges have certified
+- Ensures complete judge certification before proceeding
+- Status: `judge_certified` → `tally_verified`
+
+#### **Stage 3: Auditor Certification** 🔍
+- Auditor **double-checks Tally Master verification**
+- **Cannot certify** until Tally Master has verified
+- Final certification authority
+- Status: `tally_verified` → `auditor_certified`
+
+#### **Stage 4: Final Results** 🏆
+- **Final results available** only after all certifications complete
+- **Multi-signature discrepancy resolution** required for changes
+- **Board/Organizer approval** required for score modifications
+
+### **Discrepancy Resolution Process:**
+1. **Tally Master** creates discrepancy with reason and proposed score
+2. **Tally Master** approves their own discrepancy
+3. **Auditor** approves the discrepancy
+4. **Board OR Organizer** provides final approval
+5. **Score is updated** only after all three signatures
+
+### **Final Results Access:**
+- **Available to:** Organizer, Tally Master, Auditor, Board, Emcee
+- **Requires:** Complete certification by all user types
+- **Cannot be viewed** until all stages are complete
 
 ### Technical Highlights
 - **High Performance**: Built with Fastify for maximum speed
