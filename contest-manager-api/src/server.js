@@ -212,6 +212,7 @@ async function registerRoutes() {
 
   // API routes
   await fastify.register(import('./routes/auth.js'), { prefix: '/api/auth' })
+  await fastify.register(import('./routes/events.js'), { prefix: '/api/events' })
   await fastify.register(import('./routes/contests.js'), { prefix: '/api/contests' })
   await fastify.register(import('./routes/scoring.js'), { prefix: '/api/scoring' })
   await fastify.register(import('./routes/users.js'), { prefix: '/api/users' })

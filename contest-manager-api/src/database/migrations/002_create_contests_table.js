@@ -3,8 +3,9 @@
  * @returns { Promise<void> }
  */
 export async function up(knex) {
-  await knex.schema.createTable('events', (table) => {
+  await knex.schema.createTable('contests', (table) => {
     table.uuid('id').primary().defaultTo(knex.raw('gen_random_uuid()'))
+    table.uuid('event_id').references('id').inTable('events').onDelete('CASCADE')
     table.string('name').notNullable()
     table.text('description')
     table.date('start_date').notNullable()
@@ -15,6 +16,7 @@ export async function up(knex) {
     table.timestamps(true, true)
     
     // Indexes
+    table.index(['event_id'])
     table.index(['status'])
     table.index(['start_date', 'end_date'])
     table.index(['created_by'])
@@ -27,5 +29,5 @@ export async function up(knex) {
  * @returns { Promise<void> }
  */
 export async function down(knex) {
-  await knex.schema.dropTable('events')
+  await knex.schema.dropTable('contests')
 }

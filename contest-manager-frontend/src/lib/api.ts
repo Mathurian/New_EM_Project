@@ -67,6 +67,18 @@ export const endpoints = {
     reactivate: (id: string) => `/events/${id}/reactivate`,
     stats: (id: string) => `/events/${id}/stats`,
   },
+
+  // Contests
+  contests: {
+    list: (eventId: string) => `/contests/event/${eventId}`,
+    create: '/contests',
+    get: (id: string) => `/contests/${id}`,
+    update: (id: string) => `/contests/${id}`,
+    delete: (id: string) => `/contests/${id}`,
+    archive: (id: string) => `/contests/${id}/archive`,
+    reactivate: (id: string) => `/contests/${id}/reactivate`,
+    stats: (id: string) => `/contests/${id}/stats`,
+  },
   
   // Scoring
   scoring: {

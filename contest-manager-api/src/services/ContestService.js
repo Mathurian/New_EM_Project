@@ -1,219 +1,214 @@
 import { BaseService } from './BaseService.js'
 
-/**
- * Contest management service
- */
 export class ContestService extends BaseService {
   constructor() {
     super('contests')
   }
 
   /**
-   * Get contest with all related data
+   * Get all contests for an event
    */
-  async getContestWithDetails(contestId) {
-    const contest = await this.db('contests')
-      .where('id', contestId)
-      .first()
+  async getContestsByEvent(eventId, options = {}) {
+    const {
+      page = 1,
+      limit = 10,
+      search = '',
+      status = 'all',
+      sortBy = 'created_at',
+      sortOrder = 'desc'
+    } = options
 
-    if (!contest) {
-      return null
+    let query = this.db(this.tableName)
+      .where('event_id', eventId)
+      .select('*')
+      .orderBy(sortBy, sortOrder)
+
+    // Apply search filter
+    if (search) {
+      query = query.where(function() {
+        this.where('name', 'ilike', `%${search}%`)
+          .orWhere('description', 'ilike', `%${search}%`)
+      })
     }
 
-    // Get categories with subcategories and criteria
-    const categories = await this.db('categories')
-      .where('contest_id', contestId)
-      .where('is_active', true)
-      .orderBy('order_index', 'asc')
-      .orderBy('name', 'asc')
+    // Apply status filter
+    if (status !== 'all') {
+      query = query.where('status', status)
+    }
 
-    for (const category of categories) {
-      // Get subcategories
-      category.subcategories = await this.db('subcategories')
-        .where('category_id', category.id)
-        .where('is_active', true)
-        .orderBy('order_index', 'asc')
-        .orderBy('name', 'asc')
+    // Get total count for pagination
+    const totalQuery = query.clone()
+    const [{ count }] = await totalQuery.count('* as count')
+    const total = parseInt(count)
 
-      // Get criteria for each subcategory
-      for (const subcategory of category.subcategories) {
-        subcategory.criteria = await this.db('criteria')
-          .where('subcategory_id', subcategory.id)
-          .where('is_active', true)
-          .orderBy('order_index', 'asc')
-          .orderBy('name', 'asc')
+    // Apply pagination
+    const offset = (page - 1) * limit
+    const contests = await query.offset(offset).limit(limit)
+
+    return {
+      data: contests,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit)
       }
     }
+  }
 
+  /**
+   * Get contest with categories and subcategories
+   */
+  async getContestWithDetails(contestId) {
+    const contest = await this.getById(contestId)
+    if (!contest) return null
+
+    // Get event details
+    const event = await this.db('events')
+      .where('id', contest.event_id)
+      .first()
+
+    // Get categories for this contest
+    const categories = await this.db('categories')
+      .where('contest_id', contestId)
+      .orderBy('order_index', 'asc')
+
+    // Get subcategories for each category
+    for (const category of categories) {
+      const subcategories = await this.db('subcategories')
+        .where('category_id', category.id)
+        .orderBy('order_index', 'asc')
+
+      // Get contestants for each subcategory
+      for (const subcategory of subcategories) {
+        const contestants = await this.db('subcategory_contestants')
+          .join('contestants', 'subcategory_contestants.contestant_id', 'contestants.id')
+          .where('subcategory_contestants.subcategory_id', subcategory.id)
+          .select('contestants.*')
+
+        subcategory.contestants = contestants
+      }
+
+      category.subcategories = subcategories
+    }
+
+    contest.event = event
     contest.categories = categories
     return contest
+  }
+
+  /**
+   * Create contest with categories
+   */
+  async createContestWithCategories(contestData, categoriesData = [], userId) {
+    const trx = await this.db.transaction()
+
+    try {
+      // Create contest
+      const contest = await trx(this.tableName)
+        .insert({
+          ...contestData,
+          created_by: userId
+        })
+        .returning('*')
+
+      // Create categories if provided
+      if (categoriesData.length > 0) {
+        const categories = await trx('categories')
+          .insert(
+            categoriesData.map(category => ({
+              ...category,
+              contest_id: contest[0].id
+            }))
+          )
+          .returning('*')
+
+        contest[0].categories = categories
+      }
+
+      await trx.commit()
+      return contest[0]
+    } catch (error) {
+      await trx.rollback()
+      throw error
+    }
   }
 
   /**
    * Get contest statistics
    */
   async getContestStats(contestId) {
-    const stats = await this.db('contests')
-      .leftJoin('categories', 'contests.id', 'categories.contest_id')
-      .leftJoin('subcategories', 'categories.id', 'subcategories.category_id')
-      .leftJoin('subcategory_contestants', 'subcategories.id', 'subcategory_contestants.subcategory_id')
-      .leftJoin('subcategory_judges', 'subcategories.id', 'subcategory_judges.subcategory_id')
-      .leftJoin('scores', 'subcategories.id', 'scores.subcategory_id')
-      .where('contests.id', contestId)
-      .select(
-        this.db.raw('COUNT(DISTINCT categories.id) as category_count'),
-        this.db.raw('COUNT(DISTINCT subcategories.id) as subcategory_count'),
-        this.db.raw('COUNT(DISTINCT subcategory_contestants.contestant_id) as contestant_count'),
-        this.db.raw('COUNT(DISTINCT subcategory_judges.judge_id) as judge_count'),
-        this.db.raw('COUNT(DISTINCT scores.id) as score_count')
-      )
-      .first()
+    const contest = await this.getById(contestId)
+    if (!contest) return null
 
-    return stats
-  }
-
-  /**
-   * Archive contest and all related data
-   */
-  async archiveContest(contestId, userId) {
-    return await this.transaction(async (trx) => {
-      // Update contest status
-      await trx('contests')
-        .where('id', contestId)
-        .update({ 
-          status: 'archived',
-          updated_at: new Date()
-        })
-
-      // Archive related data
-      await trx('categories')
-        .where('contest_id', contestId)
-        .update({ is_active: false })
-
-      await trx('subcategories')
-        .whereIn('category_id', 
-          trx('categories').select('id').where('contest_id', contestId)
-        )
-        .update({ is_active: false })
-
-      await trx('criteria')
-        .whereIn('subcategory_id',
-          trx('subcategories')
-            .select('id')
-            .whereIn('category_id',
-              trx('categories').select('id').where('contest_id', contestId)
-            )
-        )
-        .update({ is_active: false })
-
-      // Log audit trail
-      await this.audit.log({
-        userId,
-        action: 'contest_archived',
-        entityType: 'contest',
-        entityId: contestId
-      })
-
-      return true
-    })
-  }
-
-  /**
-   * Reactivate archived contest
-   */
-  async reactivateContest(contestId, userId) {
-    return await this.transaction(async (trx) => {
-      // Update contest status
-      await trx('contests')
-        .where('id', contestId)
-        .update({ 
-          status: 'active',
-          updated_at: new Date()
-        })
-
-      // Reactivate related data
-      await trx('categories')
-        .where('contest_id', contestId)
-        .update({ is_active: true })
-
-      await trx('subcategories')
-        .whereIn('category_id', 
-          trx('categories').select('id').where('contest_id', contestId)
-        )
-        .update({ is_active: true })
-
-      await trx('criteria')
-        .whereIn('subcategory_id',
-          trx('subcategories')
-            .select('id')
-            .whereIn('category_id',
-              trx('categories').select('id').where('contest_id', contestId)
-            )
-        )
-        .update({ is_active: true })
-
-      // Log audit trail
-      await this.audit.log({
-        userId,
-        action: 'contest_reactivated',
-        entityType: 'contest',
-        entityId: contestId
-      })
-
-      return true
-    })
-  }
-
-  /**
-   * Apply include relations for contests
-   */
-  applyInclude(query, relation) {
-    switch (relation) {
-      case 'categories':
-        return query.leftJoin('categories', 'contests.id', 'categories.contest_id')
-      case 'createdBy':
-        return query.leftJoin('users', 'contests.created_by', 'users.id')
-      default:
-        return query
-    }
-  }
-
-  /**
-   * Validate contest data
-   */
-  validate(data, isUpdate = false) {
-    const errors = []
-
-    if (!isUpdate || data.name !== undefined) {
-      if (!data.name || data.name.trim().length === 0) {
-        errors.push('Contest name is required')
-      }
-    }
-
-    if (!isUpdate || data.start_date !== undefined) {
-      if (!data.start_date) {
-        errors.push('Start date is required')
-      }
-    }
-
-    if (!isUpdate || data.end_date !== undefined) {
-      if (!data.end_date) {
-        errors.push('End date is required')
-      }
-    }
-
-    if (data.start_date && data.end_date) {
-      const startDate = new Date(data.start_date)
-      const endDate = new Date(data.end_date)
-      
-      if (startDate >= endDate) {
-        errors.push('End date must be after start date')
-      }
-    }
+    const [
+      categoryCount,
+      subcategoryCount,
+      contestantCount,
+      scoreCount
+    ] = await Promise.all([
+      this.db('categories').where('contest_id', contestId).count('* as count').first(),
+      this.db('subcategories')
+        .join('categories', 'subcategories.category_id', 'categories.id')
+        .where('categories.contest_id', contestId)
+        .count('* as count')
+        .first(),
+      this.db('subcategory_contestants')
+        .join('subcategories', 'subcategory_contestants.subcategory_id', 'subcategories.id')
+        .join('categories', 'subcategories.category_id', 'categories.id')
+        .where('categories.contest_id', contestId)
+        .count('* as count')
+        .first(),
+      this.db('scores')
+        .join('criteria', 'scores.criterion_id', 'criteria.id')
+        .join('subcategories', 'criteria.subcategory_id', 'subcategories.id')
+        .join('categories', 'subcategories.category_id', 'categories.id')
+        .where('categories.contest_id', contestId)
+        .count('* as count')
+        .first()
+    ])
 
     return {
-      isValid: errors.length === 0,
-      errors
+      contest_id: contestId,
+      category_count: parseInt(categoryCount.count),
+      subcategory_count: parseInt(subcategoryCount.count),
+      contestant_count: parseInt(contestantCount.count),
+      score_count: parseInt(scoreCount.count)
     }
+  }
+
+  /**
+   * Archive contest and all related categories
+   */
+  async archiveContest(contestId, userId) {
+    const trx = await this.db.transaction()
+
+    try {
+      // Archive contest
+      await trx(this.tableName)
+        .where('id', contestId)
+        .update({ status: 'archived' })
+
+      // Archive all categories
+      await trx('categories')
+        .where('contest_id', contestId)
+        .update({ is_active: false })
+
+      await trx.commit()
+      return true
+    } catch (error) {
+      await trx.rollback()
+      throw error
+    }
+  }
+
+  /**
+   * Get contests by event with basic info
+   */
+  async getContestsByEventBasic(eventId) {
+    return this.db(this.tableName)
+      .where('event_id', eventId)
+      .select('id', 'name', 'description', 'status', 'start_date', 'end_date')
+      .orderBy('created_at', 'desc')
   }
 }
