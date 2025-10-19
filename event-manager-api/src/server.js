@@ -205,6 +205,14 @@ async function registerRoutes() {
   await fastify.register(import('./routes/results.js'), { prefix: '/api/results' })
   await fastify.register(import('./routes/files.js'), { prefix: '/api/files' })
   await fastify.register(import('./routes/settings.js'), { prefix: '/api/settings' })
+  await fastify.register(import('./routes/backup.js'), { prefix: '/api/backup' })
+  await fastify.register(import('./routes/print.js'), { prefix: '/api/print' })
+  await fastify.register(import('./routes/templates.js'), { prefix: '/api/templates' })
+  await fastify.register(import('./routes/tally-master.js'), { prefix: '/api/tally-master' })
+  await fastify.register(import('./routes/emcee.js'), { prefix: '/api/emcee' })
+  await fastify.register(import('./routes/auditor.js'), { prefix: '/api/auditor' })
+  await fastify.register(import('./routes/board.js'), { prefix: '/api/board' })
+  await fastify.register(import('./routes/database-browser.js'), { prefix: '/api/database' })
 
   // WebSocket routes for real-time features
   if (config.features.realTimeScoring) {
