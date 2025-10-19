@@ -1,7 +1,7 @@
 {
-  "name": "contest-manager-api",
+  "name": "event-manager-api",
   "version": "1.0.0",
-  "description": "High-performance contest management system built with Node.js and Fastify",
+  "description": "High-performance event management system built with Node.js and Fastify",
   "main": "src/server.js",
   "type": "module",
   "scripts": {
@@ -18,14 +18,14 @@
     "build:frontend": "cd frontend && npm run build"
   },
   "keywords": [
-    "contest",
+    "event",
     "management",
     "scoring",
     "judging",
     "fastify",
     "nodejs"
   ],
-  "author": "Contest Manager Team",
+  "author": "Event Manager Team",
   "license": "MIT",
   "dependencies": {
     "@fastify/autoload": "^8.0.0",

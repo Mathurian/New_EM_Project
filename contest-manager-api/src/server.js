@@ -87,8 +87,8 @@ async function registerPlugins() {
     await fastify.register(import('@fastify/swagger'), {
       swagger: {
         info: {
-          title: 'Contest Manager API',
-          description: 'High-performance contest management system API',
+          title: 'Event Manager API',
+          description: 'High-performance event management system API',
           version: config.app.version
         },
         host: config.app.url.replace(/^https?:\/\//, ''),

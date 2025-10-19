@@ -1,7 +1,7 @@
 {
-  "name": "contest-manager-frontend",
+  "name": "event-manager-frontend",
   "version": "1.0.0",
-  "description": "Modern responsive frontend for Contest Manager",
+  "description": "Modern responsive frontend for Event Manager",
   "type": "module",
   "scripts": {
     "dev": "vite",

@@ -3,7 +3,7 @@
  * @returns { Promise<void> }
  */
 export async function up(knex) {
-  await knex.schema.createTable('contests', (table) => {
+  await knex.schema.createTable('events', (table) => {
     table.uuid('id').primary().defaultTo(knex.raw('gen_random_uuid()'))
     table.string('name').notNullable()
     table.text('description')
@@ -27,5 +27,5 @@ export async function up(knex) {
  * @returns { Promise<void> }
  */
 export async function down(knex) {
-  await knex.schema.dropTable('contests')
+  await knex.schema.dropTable('events')
 }

@@ -13,7 +13,7 @@ dotenv.config({ path: join(__dirname, '../../.env') })
  */
 export const config = {
   app: {
-    name: process.env.APP_NAME || 'Contest Manager',
+    name: process.env.APP_NAME || 'Event Manager',
     version: process.env.APP_VERSION || '1.0.0',
     env: process.env.NODE_ENV || 'development',
     port: parseInt(process.env.PORT) || 3000,
@@ -26,8 +26,8 @@ export const config = {
   database: {
     host: process.env.DB_HOST || 'localhost',
     port: parseInt(process.env.DB_PORT) || 5432,
-    name: process.env.DB_NAME || 'contest_manager',
-    user: process.env.DB_USER || 'contest_manager',
+    name: process.env.DB_NAME || 'event_manager',
+    user: process.env.DB_USER || 'event_manager',
     password: process.env.DB_PASSWORD || 'password',
     ssl: process.env.DB_SSL === 'true',
     maxConnections: parseInt(process.env.DB_MAX_CONNECTIONS) || 20,
@@ -39,7 +39,7 @@ export const config = {
     port: parseInt(process.env.REDIS_PORT) || 6379,
     password: process.env.REDIS_PASSWORD || null,
     db: parseInt(process.env.REDIS_DB) || 0,
-    keyPrefix: process.env.REDIS_KEY_PREFIX || 'contest_manager:',
+    keyPrefix: process.env.REDIS_KEY_PREFIX || 'event_manager:',
     ttl: parseInt(process.env.REDIS_TTL) || 3600
   },
 
@@ -47,8 +47,8 @@ export const config = {
     secret: process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production',
     expiresIn: process.env.JWT_EXPIRES_IN || '24h',
     refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
-    issuer: process.env.JWT_ISSUER || 'contest-manager',
-    audience: process.env.JWT_AUDIENCE || 'contest-manager-users'
+    issuer: process.env.JWT_ISSUER || 'event-manager',
+    audience: process.env.JWT_AUDIENCE || 'event-manager-users'
   },
 
   security: {
@@ -69,7 +69,7 @@ export const config = {
       user: process.env.EMAIL_USER || '',
       pass: process.env.EMAIL_PASS || ''
     },
-    from: process.env.EMAIL_FROM || 'noreply@contestmanager.com'
+    from: process.env.EMAIL_FROM || 'noreply@eventmanager.com'
   },
 
   logging: {
