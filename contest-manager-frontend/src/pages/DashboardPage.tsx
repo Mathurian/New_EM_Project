@@ -14,8 +14,8 @@ import {
 import { formatDate } from '../lib/utils'
 
 interface DashboardStats {
-  total_contests: number
-  active_contests: number
+  total_events: number
+  active_events: number
   total_users: number
   total_scores: number
   recent_activity: Array<{
@@ -32,11 +32,11 @@ export function DashboardPage() {
   const { data: stats, isLoading } = useQuery<DashboardStats>(
     'dashboard-stats',
     async () => {
-      const response = await api.get('/contests')
+      const response = await api.get('/events')
       // This would be a dedicated dashboard endpoint in a real app
       return {
-        total_contests: response.data.pagination?.total || 0,
-        active_contests: 0,
+        total_events: response.data.pagination?.total || 0,
+        active_events: 0,
         total_users: 0,
         total_scores: 0,
         recent_activity: []
@@ -44,26 +44,26 @@ export function DashboardPage() {
     }
   )
 
-  const { data: contests } = useQuery(
-    'recent-contests',
+  const { data: events } = useQuery(
+    'recent-events',
     async () => {
-      const response = await api.get('/contests?limit=5')
+      const response = await api.get('/events?limit=5')
       return response.data.data
     }
   )
 
   const statCards = [
     {
-      title: 'Total Contests',
-      value: stats?.total_contests || 0,
+      title: 'Total Events',
+      value: stats?.total_events || 0,
       icon: Trophy,
       color: 'bg-blue-500',
       change: '+12%',
       changeType: 'positive' as const
     },
     {
-      title: 'Active Contests',
-      value: stats?.active_contests || 0,
+      title: 'Active Events',
+      value: stats?.active_events || 0,
       icon: Calendar,
       color: 'bg-green-500',
       change: '+5%',
@@ -89,10 +89,10 @@ export function DashboardPage() {
 
   const quickActions = [
     {
-      title: 'Create Contest',
-      description: 'Start a new contest',
+      title: 'Create Event',
+      description: 'Start a new event',
       icon: Trophy,
-      href: '/contests',
+      href: '/events',
       color: 'bg-blue-50 text-blue-600 hover:bg-blue-100'
     },
     {
@@ -104,7 +104,7 @@ export function DashboardPage() {
     },
     {
       title: 'View Results',
-      description: 'Check contest results',
+      description: 'Check event results',
       icon: BarChart3,
       href: '/results',
       color: 'bg-purple-50 text-purple-600 hover:bg-purple-100'
@@ -134,7 +134,7 @@ export function DashboardPage() {
           Welcome back, {user?.preferred_name || user?.first_name}!
         </h1>
         <p className="text-blue-100 mt-1">
-          Here's what's happening with your contests today.
+          Here's what's happening with your events today.
         </p>
       </div>
 
@@ -179,26 +179,26 @@ export function DashboardPage() {
           </div>
         </div>
 
-        {/* Recent Contests */}
+        {/* Recent Events */}
         <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Recent Contests</h2>
-          {contests && contests.length > 0 ? (
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Recent Events</h2>
+          {events && events.length > 0 ? (
             <div className="space-y-3">
-              {contests.map((contest: any) => (
-                <div key={contest.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+              {events.map((event: any) => (
+                <div key={event.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                   <div>
-                    <h3 className="font-medium text-gray-900">{contest.name}</h3>
+                    <h3 className="font-medium text-gray-900">{event.name}</h3>
                     <p className="text-sm text-gray-500">
-                      {formatDate(contest.start_date)} - {formatDate(contest.end_date)}
+                      {formatDate(event.start_date)} - {formatDate(event.end_date)}
                     </p>
                   </div>
                   <div className="flex items-center space-x-2">
                     <span className={`px-2 py-1 text-xs rounded-full ${
-                      contest.status === 'active' 
+                      event.status === 'active' 
                         ? 'bg-green-100 text-green-800' 
                         : 'bg-gray-100 text-gray-800'
                     }`}>
-                      {contest.status}
+                      {event.status}
                     </span>
                     <Award className="h-4 w-4 text-gray-400" />
                   </div>
@@ -208,12 +208,12 @@ export function DashboardPage() {
           ) : (
             <div className="text-center py-8">
               <Trophy className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-500">No contests yet</p>
+              <p className="text-gray-500">No events yet</p>
               <a
-                href="/contests"
+                href="/events"
                 className="text-blue-600 hover:text-blue-500 text-sm font-medium"
               >
-                Create your first contest
+                Create your first event
               </a>
             </div>
           )}

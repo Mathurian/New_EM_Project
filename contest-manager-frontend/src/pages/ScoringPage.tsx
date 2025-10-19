@@ -50,31 +50,31 @@ interface Score {
 
 export function ScoringPage() {
   const { user } = useAuthStore()
-  const [selectedContest, setSelectedContest] = useState<string>('')
+  const [selectedEvent, setSelectedEvent] = useState<string>('')
   const [selectedSubcategory, setSelectedSubcategory] = useState<string>('')
   const [selectedContestant, setSelectedContestant] = useState<string>('')
   const [scores, setScores] = useState<Record<string, Score>>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
   const queryClient = useQueryClient()
 
-  // Fetch contests for the judge
-  const { data: contests } = useQuery(
-    'judge-contests',
+  // Fetch events for the judge
+  const { data: events } = useQuery(
+    'judge-events',
     async () => {
-      const response = await api.get('/contests?status=active')
+      const response = await api.get('/events?status=active')
       return response.data.data
     }
   )
 
-  // Fetch subcategories for selected contest
+  // Fetch subcategories for selected event
   const { data: subcategories } = useQuery(
-    ['subcategories', selectedContest],
+    ['subcategories', selectedEvent],
     async () => {
-      if (!selectedContest) return []
-      const response = await api.get(`/contests/${selectedContest}`)
+      if (!selectedEvent) return []
+      const response = await api.get(`/events/${selectedEvent}`)
       return response.data.categories?.flatMap((cat: any) => cat.subcategories) || []
     },
-    { enabled: !!selectedContest }
+    { enabled: !!selectedEvent }
   )
 
   // Fetch contestant details for selected subcategory
@@ -234,19 +234,19 @@ export function ScoringPage() {
               Select Contest
             </label>
             <select
-              value={selectedContest}
+              value={selectedEvent}
               onChange={(e) => {
-                setSelectedContest(e.target.value)
+                setSelectedEvent(e.target.value)
                 setSelectedSubcategory('')
                 setSelectedContestant('')
                 setScores({})
               }}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
-              <option value="">Choose a contest...</option>
-              {contests?.map((contest: any) => (
-                <option key={contest.id} value={contest.id}>
-                  {contest.name}
+              <option value="">Choose an event...</option>
+              {events?.map((event: any) => (
+                <option key={event.id} value={event.id}>
+                  {event.name}
                 </option>
               ))}
             </select>
@@ -263,7 +263,7 @@ export function ScoringPage() {
                 setSelectedContestant('')
                 setScores({})
               }}
-              disabled={!selectedContest}
+              disabled={!selectedEvent}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
             >
               <option value="">Choose a subcategory...</option>
@@ -413,7 +413,7 @@ export function ScoringPage() {
           <Target className="h-12 w-12 text-gray-300 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-900 mb-2">Ready to Score</h3>
           <p className="text-gray-500">
-            Select a contest, subcategory, and contestant to begin scoring.
+            Select an event, subcategory, and contestant to begin scoring.
           </p>
         </div>
       )}

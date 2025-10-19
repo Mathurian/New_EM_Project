@@ -56,16 +56,16 @@ export const endpoints = {
     refresh: '/auth/refresh',
   },
   
-  // Contests
-  contests: {
-    list: '/contests',
-    create: '/contests',
-    get: (id: string) => `/contests/${id}`,
-    update: (id: string) => `/contests/${id}`,
-    delete: (id: string) => `/contests/${id}`,
-    archive: (id: string) => `/contests/${id}/archive`,
-    reactivate: (id: string) => `/contests/${id}/reactivate`,
-    stats: (id: string) => `/contests/${id}/stats`,
+  // Events
+  events: {
+    list: '/events',
+    create: '/events',
+    get: (id: string) => `/events/${id}`,
+    update: (id: string) => `/events/${id}`,
+    delete: (id: string) => `/events/${id}`,
+    archive: (id: string) => `/events/${id}/archive`,
+    reactivate: (id: string) => `/events/${id}/reactivate`,
+    stats: (id: string) => `/events/${id}/stats`,
   },
   
   // Scoring
@@ -94,15 +94,15 @@ export const endpoints = {
   
   // Results
   results: {
-    contest: (id: string) => `/results/contest/${id}`,
+    event: (id: string) => `/results/event/${id}`,
     subcategory: (id: string) => `/results/subcategory/${id}`,
     contestant: (id: string) => `/results/contestant/${id}`,
     judge: (id: string) => `/results/judge/${id}`,
     leaderboard: '/results/leaderboard',
     scoringStats: '/results/stats/scoring',
     export: '/results/export',
-    pdfReport: (id: string) => `/results/contest/${id}/report/pdf`,
-    excelReport: (id: string) => `/results/contest/${id}/report/excel`,
+    pdfReport: (id: string) => `/results/event/${id}/report/pdf`,
+    excelReport: (id: string) => `/results/event/${id}/report/excel`,
   },
   
   // Files

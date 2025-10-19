@@ -15,7 +15,7 @@ import { cn } from '../lib/utils'
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['organizer', 'emcee', 'judge', 'tally_master', 'auditor', 'board'] },
-  { name: 'Contests', href: '/contests', icon: Trophy, roles: ['organizer', 'emcee', 'judge', 'tally_master', 'auditor', 'board'] },
+  { name: 'Events', href: '/events', icon: Trophy, roles: ['organizer', 'emcee', 'judge', 'tally_master', 'auditor', 'board'] },
   { name: 'Scoring', href: '/scoring', icon: Target, roles: ['judge', 'organizer'] },
   { name: 'Results', href: '/results', icon: BarChart3, roles: ['organizer', 'tally_master', 'auditor', 'board'] },
   { name: 'Users', href: '/users', icon: Users, roles: ['organizer', 'board'] },

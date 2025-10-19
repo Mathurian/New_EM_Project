@@ -18,7 +18,7 @@ import { formatDate } from '../lib/utils'
 import { LoadingSpinner } from '../components/ui/LoadingSpinner'
 import toast from 'react-hot-toast'
 
-interface Contest {
+interface Event {
   id: string
   name: string
   description?: string
@@ -36,63 +36,63 @@ interface Contest {
   }>
 }
 
-export function ContestsPage() {
+export function EventsPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [showCreateModal, setShowCreateModal] = useState(false)
   const queryClient = useQueryClient()
 
-  const { data: contestsData, isLoading } = useQuery(
-    ['contests', searchTerm, statusFilter],
+  const { data: eventsData, isLoading } = useQuery(
+    ['events', searchTerm, statusFilter],
     async () => {
       const params = new URLSearchParams()
       if (searchTerm) params.append('search', searchTerm)
       if (statusFilter !== 'all') params.append('status', statusFilter)
       
-      const response = await api.get(`/contests?${params.toString()}`)
+      const response = await api.get(`/events?${params.toString()}`)
       return response.data
     }
   )
 
-  const deleteContestMutation = useMutation(
-    async (contestId: string) => {
-      await api.delete(`/contests/${contestId}`)
+  const deleteEventMutation = useMutation(
+    async (eventId: string) => {
+      await api.delete(`/events/${eventId}`)
     },
     {
       onSuccess: () => {
-        queryClient.invalidateQueries('contests')
-        toast.success('Contest deleted successfully')
+        queryClient.invalidateQueries('events')
+        toast.success('Event deleted successfully')
       },
       onError: (error: any) => {
-        toast.error(error.response?.data?.error || 'Failed to delete contest')
+        toast.error(error.response?.data?.error || 'Failed to delete event')
       }
     }
   )
 
-  const archiveContestMutation = useMutation(
-    async (contestId: string) => {
-      await api.post(`/contests/${contestId}/archive`)
+  const archiveEventMutation = useMutation(
+    async (eventId: string) => {
+      await api.post(`/events/${eventId}/archive`)
     },
     {
       onSuccess: () => {
-        queryClient.invalidateQueries('contests')
-        toast.success('Contest archived successfully')
+        queryClient.invalidateQueries('events')
+        toast.success('Event archived successfully')
       },
       onError: (error: any) => {
-        toast.error(error.response?.data?.error || 'Failed to archive contest')
+        toast.error(error.response?.data?.error || 'Failed to archive event')
       }
     }
   )
 
-  const handleDelete = (contestId: string) => {
-    if (window.confirm('Are you sure you want to delete this contest?')) {
-      deleteContestMutation.mutate(contestId)
+  const handleDelete = (eventId: string) => {
+    if (window.confirm('Are you sure you want to delete this event?')) {
+      deleteEventMutation.mutate(eventId)
     }
   }
 
-  const handleArchive = (contestId: string) => {
-    if (window.confirm('Are you sure you want to archive this contest?')) {
-      archiveContestMutation.mutate(contestId)
+  const handleArchive = (eventId: string) => {
+    if (window.confirm('Are you sure you want to archive this event?')) {
+      archiveEventMutation.mutate(eventId)
     }
   }
 
@@ -124,15 +124,15 @@ export function ContestsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Contests</h1>
-          <p className="text-gray-600">Manage and organize your contests</p>
+          <h1 className="text-2xl font-bold text-gray-900">Events</h1>
+          <p className="text-gray-600">Manage and organize your events</p>
         </div>
         <button
           onClick={() => setShowCreateModal(true)}
           className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
         >
           <Plus className="h-4 w-4" />
-          <span>Create Contest</span>
+          <span>Create Event</span>
         </button>
       </div>
 
@@ -144,7 +144,7 @@ export function ContestsPage() {
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
               <input
                 type="text"
-                placeholder="Search contests..."
+                placeholder="Search events..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -167,20 +167,20 @@ export function ContestsPage() {
         </div>
       </div>
 
-      {/* Contests Grid */}
-      {contestsData?.data && contestsData.data.length > 0 ? (
+      {/* Events Grid */}
+      {eventsData?.data && eventsData.data.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {contestsData.data.map((contest: Contest) => (
-            <div key={contest.id} className="bg-white rounded-lg shadow hover:shadow-md transition-shadow">
+          {eventsData.data.map((event: Event) => (
+            <div key={event.id} className="bg-white rounded-lg shadow hover:shadow-md transition-shadow">
               <div className="p-6">
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex-1">
                     <h3 className="text-lg font-semibold text-gray-900 mb-1">
-                      {contest.name}
+                      {event.name}
                     </h3>
-                    {contest.description && (
+                    {event.description && (
                       <p className="text-sm text-gray-600 line-clamp-2">
-                        {contest.description}
+                        {event.description}
                       </p>
                     )}
                   </div>
@@ -195,23 +195,23 @@ export function ContestsPage() {
                 <div className="space-y-2 mb-4">
                   <div className="flex items-center text-sm text-gray-600">
                     <Calendar className="h-4 w-4 mr-2" />
-                    <span>{formatDate(contest.start_date)} - {formatDate(contest.end_date)}</span>
+                    <span>{formatDate(event.start_date)} - {formatDate(event.end_date)}</span>
                   </div>
-                  {contest.categories && (
+                  {event.categories && (
                     <div className="flex items-center text-sm text-gray-600">
                       <Trophy className="h-4 w-4 mr-2" />
-                      <span>{contest.categories.length} categories</span>
+                      <span>{event.categories.length} categories</span>
                     </div>
                   )}
                 </div>
 
                 <div className="flex items-center justify-between">
-                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(contest.status)}`}>
-                    {contest.status}
+                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(event.status)}`}>
+                    {event.status}
                   </span>
                   <div className="flex space-x-2">
                     <Link
-                      to={`/contests/${contest.id}`}
+                      to={`/events/${event.id}`}
                       className="text-blue-600 hover:text-blue-700 text-sm font-medium"
                     >
                       View Details
@@ -223,14 +223,14 @@ export function ContestsPage() {
               <div className="px-6 py-3 bg-gray-50 rounded-b-lg flex items-center justify-between">
                 <div className="flex space-x-2">
                   <button
-                    onClick={() => handleArchive(contest.id)}
+                    onClick={() => handleArchive(event.id)}
                     className="text-gray-400 hover:text-gray-600 p-1"
                     title="Archive"
                   >
                     <Archive className="h-4 w-4" />
                   </button>
                   <button
-                    onClick={() => handleDelete(contest.id)}
+                    onClick={() => handleDelete(event.id)}
                     className="text-gray-400 hover:text-red-600 p-1"
                     title="Delete"
                   >
@@ -238,7 +238,7 @@ export function ContestsPage() {
                   </button>
                 </div>
                 <span className="text-xs text-gray-500">
-                  Created {formatDate(contest.created_at)}
+                  Created {formatDate(event.created_at)}
                 </span>
               </div>
             </div>
@@ -247,39 +247,39 @@ export function ContestsPage() {
       ) : (
         <div className="bg-white rounded-lg shadow p-12 text-center">
           <Trophy className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No contests found</h3>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">No events found</h3>
           <p className="text-gray-500 mb-6">
             {searchTerm || statusFilter !== 'all' 
               ? 'Try adjusting your search or filter criteria.'
-              : 'Get started by creating your first contest.'
+              : 'Get started by creating your first event.'
             }
           </p>
           <button
             onClick={() => setShowCreateModal(true)}
             className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
           >
-            Create Contest
+            Create Event
           </button>
         </div>
       )}
 
       {/* Pagination */}
-      {contestsData?.pagination && contestsData.pagination.pages > 1 && (
+      {eventsData?.pagination && eventsData.pagination.pages > 1 && (
         <div className="flex items-center justify-between bg-white rounded-lg shadow p-4">
           <div className="text-sm text-gray-700">
-            Showing {((contestsData.pagination.page - 1) * contestsData.pagination.limit) + 1} to{' '}
-            {Math.min(contestsData.pagination.page * contestsData.pagination.limit, contestsData.pagination.total)} of{' '}
-            {contestsData.pagination.total} results
+            Showing {((eventsData.pagination.page - 1) * eventsData.pagination.limit) + 1} to{' '}
+            {Math.min(eventsData.pagination.page * eventsData.pagination.limit, eventsData.pagination.total)} of{' '}
+            {eventsData.pagination.total} results
           </div>
           <div className="flex space-x-2">
             <button
-              disabled={contestsData.pagination.page === 1}
+              disabled={eventsData.pagination.page === 1}
               className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Previous
             </button>
             <button
-              disabled={contestsData.pagination.page === contestsData.pagination.pages}
+              disabled={eventsData.pagination.page === eventsData.pagination.pages}
               className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Next

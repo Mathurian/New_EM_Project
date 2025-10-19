@@ -7,8 +7,8 @@ import { LoadingSpinner } from './components/ui/LoadingSpinner'
 // Pages
 import { LoginPage } from './pages/LoginPage'
 import { DashboardPage } from './pages/DashboardPage'
-import { ContestsPage } from './pages/ContestsPage'
-import { ContestDetailPage } from './pages/ContestDetailPage'
+import { EventsPage } from './pages/EventsPage'
+import { EventDetailPage } from './pages/EventDetailPage'
 import { ScoringPage } from './pages/ScoringPage'
 import { ResultsPage } from './pages/ResultsPage'
 import { UsersPage } from './pages/UsersPage'
@@ -44,8 +44,8 @@ function App() {
       <Routes>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<DashboardPage />} />
-        <Route path="/contests" element={<ContestsPage />} />
-        <Route path="/contests/:id" element={<ContestDetailPage />} />
+        <Route path="/events" element={<EventsPage />} />
+        <Route path="/events/:id" element={<EventDetailPage />} />
         <Route path="/scoring" element={<ScoringPage />} />
         <Route path="/results" element={<ResultsPage />} />
         <Route path="/users" element={<UsersPage />} />

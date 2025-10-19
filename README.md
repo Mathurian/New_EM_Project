@@ -1,11 +1,11 @@
-# Contest Manager - High-Performance Contest Management System
+# Event Manager - High-Performance Event Management System
 
-A modern, scalable contest management system built with Node.js Fastify and React, designed to handle complex scoring systems with real-time updates and comprehensive reporting.
+A modern, scalable event management system built with Node.js Fastify and React, designed to handle complex scoring systems with real-time updates and comprehensive reporting.
 
 ## 🚀 Features
 
 ### Core Functionality
-- **Multi-Contest Management**: Create and manage multiple contests with categories and subcategories
+- **Multi-Event Management**: Create and manage multiple events with categories and subcategories
 - **Advanced Scoring System**: Real-time scoring with complex criteria and tabulation
 - **User Role Management**: 6 distinct user roles (Organizer, Judge, Emcee, Tally Master, Auditor, Board)
 - **Real-Time Updates**: WebSocket-powered live scoring and notifications
@@ -112,9 +112,9 @@ npm run dev
 
 ### Core Tables
 1. **users** - User accounts and profiles
-2. **contests** - Contest information and settings
-3. **categories** - Contest categories
-4. **subcategories** - Contest subcategories
+2. **events** - Event information and settings
+3. **categories** - Event categories
+4. **subcategories** - Event subcategories
 5. **contestants** - Contestant information
 6. **criteria** - Scoring criteria
 7. **scores** - Individual scores
@@ -137,12 +137,12 @@ npm run dev
 - `POST /api/auth/refresh` - Token refresh
 - `GET /api/auth/me` - Current user info
 
-### Contests
-- `GET /api/contests` - List contests
-- `POST /api/contests` - Create contest
-- `GET /api/contests/:id` - Get contest details
-- `PUT /api/contests/:id` - Update contest
-- `DELETE /api/contests/:id` - Delete contest
+### Events
+- `GET /api/events` - List events
+- `POST /api/events` - Create event
+- `GET /api/events/:id` - Get event details
+- `PUT /api/events/:id` - Update event
+- `DELETE /api/events/:id` - Delete event
 
 ### Scoring
 - `POST /api/scoring/submit` - Submit score
@@ -151,9 +151,9 @@ npm run dev
 - `GET /api/scoring/contestant/:id/tabulation` - Get contestant tabulation
 
 ### Results & Reporting
-- `GET /api/results/contest/:id` - Contest results
-- `GET /api/results/contest/:id/report/pdf` - PDF report
-- `GET /api/results/contest/:id/report/excel` - Excel report
+- `GET /api/results/event/:id` - Event results
+- `GET /api/results/event/:id/report/pdf` - PDF report
+- `GET /api/results/event/:id/report/excel` - Excel report
 - `GET /api/results/leaderboard` - Leaderboard
 
 ### File Management
@@ -166,7 +166,7 @@ npm run dev
 
 ### Organizer
 - Full system access
-- Create and manage contests
+- Create and manage events
 - Manage users and assignments
 - Access all reports and settings
 
@@ -176,7 +176,7 @@ npm run dev
 - Access own scoring history
 
 ### Emcee
-- View contest information
+- View event information
 - Access contestant and judge lists
 - View basic results
 
@@ -193,7 +193,7 @@ npm run dev
 ### Board Member
 - View high-level reports
 - Access system statistics
-- Monitor contest progress
+- Monitor event progress
 
 ## 🔄 Real-Time Features
 
@@ -207,7 +207,7 @@ npm run dev
 - `score_submitted` - New score submitted
 - `score_updated` - Score modified
 - `score_deleted` - Score removed
-- `contest_update` - Contest changes
+- `event_update` - Event changes
 - `user_update` - User profile changes
 
 ## 📱 Responsive Design
@@ -357,4 +357,4 @@ MIT License - see LICENSE file for details
 
 ---
 
-**Built with ❤️ for the contest management community**
+**Built with ❤️ for the event management community**
