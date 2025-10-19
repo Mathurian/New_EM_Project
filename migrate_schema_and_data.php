@@ -214,7 +214,7 @@ try {
                     foreach ($rows as $row) {
                         // Handle UUID format conversion
                         foreach ($row as $key => $value) {
-                            if (strpos($key, '_id') !== false && strlen($value) === 32) {
+                            if (strpos($key, '_id') !== false && $value !== null && strlen($value) === 32) {
                                 // Convert SQLite UUID format to PostgreSQL format
                                 $row[$key] = formatUUID($value);
                             }
@@ -303,7 +303,7 @@ try {
 
 function formatUUID($uuid) {
     // Convert SQLite UUID format (32 chars) to PostgreSQL format (with hyphens)
-    if (strlen($uuid) === 32) {
+    if ($uuid !== null && strlen($uuid) === 32) {
         return substr($uuid, 0, 8) . '-' . 
                substr($uuid, 8, 4) . '-' . 
                substr($uuid, 12, 4) . '-' . 
