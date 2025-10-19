@@ -31,8 +31,9 @@ class StandaloneEnhancedMigrationCLI {
     public function __construct() {
         echo "🚀 Starting Standalone Enhanced Migration Tool...\n\n";
         
-        // Check for cleanup flag
-        $this->cleanupEnabled = in_array('--cleanup', $GLOBALS['argv']);
+        // Check for cleanup flag in any command
+        $args = $GLOBALS['argv'];
+        $this->cleanupEnabled = in_array('--cleanup-test', $args) || in_array('--cleanup-migrate', $args);
         
         if ($this->cleanupEnabled) {
             echo "🧹 Schema cleanup enabled!\n";
@@ -43,7 +44,7 @@ class StandaloneEnhancedMigrationCLI {
             echo "   - Backward compatibility views\n\n";
         } else {
             echo "📋 Standard migration (no cleanup)\n";
-            echo "   Use --cleanup flag to enable schema improvements\n\n";
+            echo "   Use --cleanup-test or --cleanup-migrate to enable schema improvements\n\n";
         }
         
         $this->loadConfig();
@@ -243,7 +244,8 @@ class StandaloneEnhancedMigrationCLI {
         $totalRows = 0;
         
         foreach ($tables as $table) {
-            $tableName = $table['name'];
+            // Handle both array and string table formats
+            $tableName = is_array($table) ? $table['name'] : $table;
             $rowCount = $this->sourceDb->getRowCount($tableName);
             $tableBreakdown[$tableName] = $rowCount;
             $totalRows += $rowCount;
@@ -345,6 +347,9 @@ class StandaloneSchemaMigrator {
         $this->targetDb->execute("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\"");
         $this->log("UUID extension enabled");
 
+        // Drop existing tables if they exist (for testing)
+        $this->dropExistingTables();
+
         // Create tables in dependency order with cleanup
         $this->createEventsTable();
         $this->createContestGroupsTable();
@@ -352,6 +357,41 @@ class StandaloneSchemaMigrator {
         $this->createUnifiedUsersTable();
         $this->createOtherTables();
         $this->createBackwardCompatibilityViews();
+    }
+
+    private function dropExistingTables(): void {
+        $this->log("Dropping existing tables for clean test...");
+        
+        // Drop tables in reverse dependency order
+        $tablesToDrop = [
+            'old_contestants', 'old_judges', 'contests', 'old_subcategories', 'old_categories',
+            'judge_comments', 'scores', 'criteria', 'categories', 'contest_groups', 'events',
+            'activity_logs', 'system_settings', 'users'
+        ];
+        
+        foreach ($tablesToDrop as $table) {
+            try {
+                $this->targetDb->execute("DROP TABLE IF EXISTS {$table} CASCADE");
+                $this->log("Dropped table: {$table}");
+            } catch (Exception $e) {
+                // Ignore errors for tables that don't exist
+                $this->log("Table {$table} did not exist (ignoring)", 'info');
+            }
+        }
+        
+        // Drop views
+        $viewsToDrop = ['contests', 'old_categories', 'old_subcategories', 'old_judges', 'old_contestants'];
+        foreach ($viewsToDrop as $view) {
+            try {
+                $this->targetDb->execute("DROP VIEW IF EXISTS {$view} CASCADE");
+                $this->log("Dropped view: {$view}");
+            } catch (Exception $e) {
+                // Ignore errors for views that don't exist
+                $this->log("View {$view} did not exist (ignoring)", 'info');
+            }
+        }
+        
+        $this->log("Existing tables dropped successfully");
     }
 
     private function createStandardSchema(): void {
