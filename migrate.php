@@ -13,7 +13,29 @@ declare(strict_types=1);
  *   php migrate.php --rollback
  */
 
-require_once __DIR__ . '/app/bootstrap.php';
+// Enable error reporting and output buffering control
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+ini_set('log_errors', 1);
+ini_set('error_log', '/tmp/migrate_errors.log');
+
+// Disable output buffering
+if (ob_get_level()) {
+    ob_end_flush();
+}
+
+echo "🚀 Starting Migration Tool...\n";
+flush();
+
+try {
+    require_once __DIR__ . '/app/bootstrap.php';
+    echo "✅ Bootstrap loaded successfully\n";
+    flush();
+} catch (\Exception $e) {
+    echo "❌ Bootstrap failed: " . $e->getMessage() . "\n";
+    echo "Stack trace:\n" . $e->getTraceAsString() . "\n";
+    exit(1);
+}
 
 use App\MigrationController;
 
@@ -22,8 +44,22 @@ class MigrationCLI {
     private MigrationController $controller;
 
     public function __construct() {
-        $this->config = $this->loadConfig();
-        $this->controller = new MigrationController($this->config);
+        echo "🔧 Initializing MigrationCLI...\n";
+        flush();
+        
+        try {
+            $this->config = $this->loadConfig();
+            echo "✅ Configuration loaded\n";
+            flush();
+            
+            $this->controller = new MigrationController($this->config);
+            echo "✅ MigrationController initialized\n";
+            flush();
+        } catch (\Exception $e) {
+            echo "❌ MigrationCLI initialization failed: " . $e->getMessage() . "\n";
+            echo "Stack trace:\n" . $e->getTraceAsString() . "\n";
+            exit(1);
+        }
     }
 
     /**
@@ -78,7 +114,12 @@ class MigrationCLI {
      * Main CLI entry point
      */
     public function run(array $argv): void {
+        echo "🎯 Processing command line arguments...\n";
+        flush();
+        
         $command = $argv[1] ?? '--help';
+        echo "📝 Command: {$command}\n";
+        flush();
         
         switch ($command) {
             case '--help':
@@ -166,7 +207,20 @@ HELP;
         echo "🧪 Testing migration process...\n\n";
         $this->flushOutput();
         
-        $results = $this->controller->testMigration();
+        try {
+            echo "📞 Calling controller->testMigration()...\n";
+            $this->flushOutput();
+            
+            $results = $this->controller->testMigration();
+            
+            echo "✅ Controller test completed\n";
+            $this->flushOutput();
+        } catch (\Exception $e) {
+            echo "❌ Test migration failed: " . $e->getMessage() . "\n";
+            echo "Stack trace:\n" . $e->getTraceAsString() . "\n";
+            $this->flushOutput();
+            exit(1);
+        }
         
         if (isset($results['error'])) {
             echo "❌ Test failed: " . $results['error'] . "\n";
@@ -408,6 +462,29 @@ PHP;
 
 // Run CLI if called directly
 if (php_sapi_name() === 'cli') {
-    $cli = new MigrationCLI();
-    $cli->run($argv);
+    echo "🖥️  Running in CLI mode\n";
+    flush();
+    
+    try {
+        echo "🏗️  Creating MigrationCLI instance...\n";
+        flush();
+        
+        $cli = new MigrationCLI();
+        
+        echo "🚀 Starting CLI execution...\n";
+        flush();
+        
+        $cli->run($argv);
+        
+        echo "✅ CLI execution completed\n";
+        flush();
+        
+    } catch (\Exception $e) {
+        echo "❌ CLI execution failed: " . $e->getMessage() . "\n";
+        echo "Stack trace:\n" . $e->getTraceAsString() . "\n";
+        exit(1);
+    }
+} else {
+    echo "❌ This script must be run from the command line\n";
+    exit(1);
 }
