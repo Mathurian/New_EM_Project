@@ -164,6 +164,7 @@ HELP;
      */
     private function testMigration(): void {
         echo "🧪 Testing migration process...\n\n";
+        $this->flushOutput();
         
         $results = $this->controller->testMigration();
         
@@ -173,25 +174,30 @@ HELP;
         }
         
         echo "✅ Schema migration test: " . ($results['schema_migration'] ? 'PASSED' : 'FAILED') . "\n";
+        $this->flushOutput();
         
         if (!empty($results['schema_errors'])) {
             echo "⚠️  Schema errors:\n";
             foreach ($results['schema_errors'] as $error) {
                 echo "   - " . $error . "\n";
             }
+            $this->flushOutput();
         }
         
         echo "\n📊 Source database statistics:\n";
         echo "   Tables: " . count($results['source_tables']) . "\n";
         echo "   Total rows: " . array_sum($results['source_row_counts']) . "\n";
+        $this->flushOutput();
         
         echo "\n📋 Table breakdown:\n";
         foreach ($results['source_row_counts'] as $table => $count) {
             echo "   {$table}: {$count} rows\n";
+            $this->flushOutput();
         }
         
         echo "\n✅ Migration test completed successfully!\n";
         echo "💡 Run 'php migrate.php --migrate' to perform the actual migration.\n";
+        $this->flushOutput();
     }
 
     /**
@@ -387,6 +393,16 @@ PHP;
         echo "{$message} (y/N): ";
         $response = trim(fgets(STDIN));
         return strtolower($response) === 'y' || strtolower($response) === 'yes';
+    }
+
+    /**
+     * Flush output to ensure real-time display
+     */
+    private function flushOutput(): void {
+        if (ob_get_level()) {
+            ob_flush();
+        }
+        flush();
     }
 }
 

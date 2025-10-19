@@ -290,17 +290,23 @@ PHP;
         $this->log("Testing migration process...");
         
         try {
+            $this->log("Step 1/5: Initializing database connections...");
             $this->initializeDatabases();
+            
+            $this->log("Step 2/5: Running pre-migration checks...");
             $this->preMigrationChecks();
             
+            $this->log("Step 3/5: Testing schema migration...");
             // Test schema migration
             $schemaMigrator = new SchemaMigrator($this->sourceDb, $this->targetDb);
             $schemaSuccess = $schemaMigrator->migrateSchema();
             
+            $this->log("Step 4/5: Testing data migration...");
             // Test data migration (dry run)
             $dataMigrator = new DataMigrator($this->sourceDb, $this->targetDb);
             $dataMigrator->setBatchSize(10); // Small batch for testing
             
+            $this->log("Step 5/5: Gathering test results...");
             $testResults = [
                 'schema_migration' => $schemaSuccess,
                 'schema_errors' => $schemaMigrator->getErrors(),
@@ -311,7 +317,7 @@ PHP;
                 'config' => $this->config
             ];
             
-            $this->log("Migration test completed");
+            $this->log("✅ Migration test completed successfully!");
             return $testResults;
             
         } catch (\Exception $e) {
