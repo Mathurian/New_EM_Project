@@ -42,7 +42,7 @@ class MigrationController {
             ]
         ];
 
-        return array_merge_recursive($defaults, $config);
+        return array_replace_recursive($defaults, $config);
     }
 
     /**
@@ -50,6 +50,10 @@ class MigrationController {
      */
     private function initializeDatabases(): void {
         $this->log("Initializing database connections...");
+        
+        // Debug: Log the configuration
+        $this->log("Source config: " . print_r($this->config['source'], true));
+        $this->log("Target config: " . print_r($this->config['target'], true));
         
         // Initialize source database
         $this->sourceDb = DatabaseFactory::createFromConfig($this->config['source']);
