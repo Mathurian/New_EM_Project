@@ -1570,9 +1570,10 @@ EOF
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"]
-    }
+    },
+    "types": ["vite/client"]
   },
-  "include": ["src"]
+  "include": ["src", "src/vite-env.d.ts"]
 }
 EOF
 
@@ -1720,6 +1721,20 @@ body {
 code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
+}
+EOF
+
+    # Vite environment type definitions
+    sudo -u "$SERVICE_USER" tee "$INSTALL_DIR/event-manager-frontend/src/vite-env.d.ts" > /dev/null << 'EOF'
+/// <reference types="vite/client" />
+
+interface ImportMetaEnv {
+  readonly VITE_API_URL: string
+  // Add other environment variables here as needed
+}
+
+interface ImportMeta {
+  readonly env: ImportMetaEnv
 }
 EOF
 
