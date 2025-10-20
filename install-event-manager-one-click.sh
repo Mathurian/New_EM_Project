@@ -530,8 +530,7 @@ const io = new Server(server, {
 })
 
 // Redis store for sessions
-const RedisStore = connectRedis(session)
-const redisStore = new RedisStore({ client: redisClient })
+const redisStore = new connectRedis({ client: redisClient, session: session })
 
 // Trust proxy for Apache
 app.set('trust proxy', 1)

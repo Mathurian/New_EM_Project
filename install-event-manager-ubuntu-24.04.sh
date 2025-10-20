@@ -116,10 +116,7 @@ install_system_dependencies() {
     # Apache
     sudo apt install -y \
         apache2 \
-        apache2-utils \
-        libapache2-mod-proxy-html \
-        libapache2-mod-proxy-http \
-        libapache2-mod-proxy-wstunnel
+        apache2-utils
     
     # Node.js (using NodeSource repository for LTS version)
     curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -

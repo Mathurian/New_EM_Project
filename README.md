@@ -412,9 +412,8 @@ sudo systemctl status event-manager
 # Check logs
 sudo journalctl -u event-manager -f
 
-# Check PM2 logs
-sudo su - eventmanager
-pm2 logs event-manager-api
+# Check for port conflicts
+sudo lsof -i :3000
 ```
 
 #### Database Connection Issues
@@ -439,6 +438,23 @@ redis-cli ping
 
 # Check Redis logs
 sudo tail -f /var/log/redis/redis-server.log
+```
+
+#### Port Conflicts (EADDRINUSE)
+```bash
+# Find what's using port 3000
+sudo lsof -i :3000
+
+# Stop conflicting processes
+sudo systemctl stop event-manager
+sudo pkill -f "node.*server.js"
+
+# Check for PM2 processes (from old installations)
+sudo -u eventmanager pm2 stop all
+sudo -u eventmanager pm2 delete all
+
+# Restart service
+sudo systemctl restart event-manager
 ```
 
 #### Frontend Not Loading
