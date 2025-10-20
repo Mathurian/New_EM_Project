@@ -1168,48 +1168,56 @@ generate_database_files() {
     # Users table migration
     sudo -u "$SERVICE_USER" tee "$INSTALL_DIR/event-manager-api/src/database/migrations/001_create_users_table.js" > /dev/null << 'EOF'
 export function up(knex) {
-  return knex.schema.createTable('users', function (table) {
-    table.uuid('id').primary().defaultTo(knex.raw('gen_random_uuid()'))
-    table.string('email').unique().notNullable()
-    table.string('password_hash').notNullable()
-    table.string('first_name').notNullable()
-    table.string('last_name').notNullable()
-    table.string('preferred_name')
-    table.string('role').notNullable().defaultTo('contestant')
-    table.string('phone')
-    table.text('bio')
-    table.string('image_url')
-    table.string('pronouns')
-    table.string('gender')
-    table.boolean('is_active').defaultTo(true)
-    table.timestamp('last_login')
-    table.timestamps(true, true)
+  return knex.schema.hasTable('users').then(function(exists) {
+    if (!exists) {
+      return knex.schema.createTable('users', function (table) {
+        table.uuid('id').primary().defaultTo(knex.raw('gen_random_uuid()'))
+        table.string('email').unique().notNullable()
+        table.string('password_hash').notNullable()
+        table.string('first_name').notNullable()
+        table.string('last_name').notNullable()
+        table.string('preferred_name')
+        table.string('role').notNullable().defaultTo('contestant')
+        table.string('phone')
+        table.text('bio')
+        table.string('image_url')
+        table.string('pronouns')
+        table.string('gender')
+        table.boolean('is_active').defaultTo(true)
+        table.timestamp('last_login')
+        table.timestamps(true, true)
+      })
+    }
   })
 }
 
 export function down(knex) {
-  return knex.schema.dropTable('users')
+  return knex.schema.dropTableIfExists('users')
 }
 EOF
 
     # Events table migration
     sudo -u "$SERVICE_USER" tee "$INSTALL_DIR/event-manager-api/src/database/migrations/002_create_events_table.js" > /dev/null << 'EOF'
 export function up(knex) {
-  return knex.schema.createTable('events', function (table) {
-    table.uuid('id').primary().defaultTo(knex.raw('gen_random_uuid()'))
-    table.string('name').notNullable()
-    table.text('description')
-    table.date('start_date').notNullable()
-    table.date('end_date').notNullable()
-    table.string('location')
-    table.string('status').defaultTo('active')
-    table.uuid('created_by').references('id').inTable('users')
-    table.timestamps(true, true)
+  return knex.schema.hasTable('events').then(function(exists) {
+    if (!exists) {
+      return knex.schema.createTable('events', function (table) {
+        table.uuid('id').primary().defaultTo(knex.raw('gen_random_uuid()'))
+        table.string('name').notNullable()
+        table.text('description')
+        table.date('start_date').notNullable()
+        table.date('end_date').notNullable()
+        table.string('location')
+        table.string('status').defaultTo('active')
+        table.uuid('created_by').references('id').inTable('users')
+        table.timestamps(true, true)
+      })
+    }
   })
 }
 
 export function down(knex) {
-  return knex.schema.dropTable('events')
+  return knex.schema.dropTableIfExists('events')
 }
 EOF
 
