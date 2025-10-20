@@ -27,14 +27,28 @@ A comprehensive, production-ready event management system built with Node.js, Ex
 
 ### Quick Start Guide
 
-#### One-Command Installation
+#### One-Click Installation (Recommended)
 
 ```bash
-# Download and run the installation script
-curl -fsSL https://raw.githubusercontent.com/your-repo/event-manager/main/install-event-manager-ubuntu-24.04.sh | bash
+# Download and run the one-click installation script
+curl -fsSL https://raw.githubusercontent.com/your-repo/event-manager/main/install-event-manager-one-click.sh | bash
 ```
 
-#### Manual Installation
+**OR** if you have the files locally:
+
+```bash
+chmod +x install-event-manager-one-click.sh
+./install-event-manager-one-click.sh
+```
+
+The one-click script will:
+- Prompt you for all necessary configuration options
+- Generate the complete application codebase
+- Install all dependencies automatically
+- Set up the database, Redis, and Apache
+- Create a fully functional Event Manager system
+
+#### Manual Installation (Legacy)
 
 1. **Clone the repository:**
    ```bash
@@ -47,6 +61,8 @@ curl -fsSL https://raw.githubusercontent.com/your-repo/event-manager/main/instal
    chmod +x install-event-manager-ubuntu-24.04.sh
    ./install-event-manager-ubuntu-24.04.sh
    ```
+
+**Note:** The manual installation requires the `event-manager-api` and `event-manager-frontend` directories to already exist in the project root.
 
 3. **Access the application:**
    - Open your browser and navigate to `http://localhost`
@@ -233,9 +249,13 @@ You can choose to preserve database and Redis data during uninstallation.
 
 ## Project Structure
 
+### One-Click Installation Structure
+
+The one-click installation script generates the complete application structure at `/opt/event-manager/`:
+
 ```
-event-manager/
-├── event-manager-api/           # Backend API
+/opt/event-manager/
+├── event-manager-api/           # Backend API (generated)
 │   ├── src/
 │   │   ├── config/             # Configuration files
 │   │   ├── database/           # Database migrations and seeds
@@ -245,18 +265,33 @@ event-manager/
 │   │   └── server.js           # Main server file
 │   ├── scripts/                # Database scripts
 │   └── package.json            # Backend dependencies
-├── event-manager-frontend/     # Frontend React app
+├── event-manager-frontend/     # Frontend React app (generated)
 │   ├── src/
 │   │   ├── components/         # React components
 │   │   ├── pages/              # Page components
 │   │   ├── stores/             # State management
 │   │   ├── lib/                # Utility libraries
 │   │   └── hooks/              # Custom React hooks
+│   ├── dist/                   # Built frontend assets
 │   └── package.json            # Frontend dependencies
-├── install-event-manager-ubuntu-24.04.sh
-├── uninstall-event-manager-ubuntu-24.04.sh
+├── logs/                       # Application logs
+├── uploads/                    # File uploads directory
+├── .env                        # Environment configuration
+├── ecosystem.config.js         # PM2 configuration
+└── install-event-manager-one-click.sh
+```
+
+### Repository Structure (for development)
+
+```
+event-manager/
+├── install-event-manager-one-click.sh    # One-click installation script
+├── install-event-manager-ubuntu-24.04.sh # Manual installation script
+├── uninstall-event-manager-ubuntu-24.04.sh # Uninstallation script
 └── README.md
 ```
+
+**Note:** The application code is generated during installation, so the repository only contains the installation scripts and documentation.
 
 ## Security Features
 
