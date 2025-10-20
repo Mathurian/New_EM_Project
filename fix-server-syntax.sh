@@ -27,6 +27,14 @@ sed -i 's/logger\.info(\\`📚 API Documentation: http:\/\/\\${config\.app\.host
 sed -i 's/logger\.info(\\`🏥 Health Check: http:\/\/\\${config\.app\.host}:\\${config\.app\.port}\/api\/health\\`)/logger.info("🏥 Health Check: http:\/\/" + config.app.host + ":" + config.app.port + "\/api\/health")/g' "$SERVER_FILE"
 sed -i 's/logger\.info(\\`🔌 WebSocket: ws:\/\/\\${config\.app\.host}:\\${config\.app\.port}\\`)/logger.info("🔌 WebSocket: ws:\/\/" + config.app.host + ":" + config.app.port)/g' "$SERVER_FILE"
 
+# Fix logger path issues
+LOGGER_FILE="$INSTALL_DIR/event-manager-api/src/utils/logger.js"
+if [[ -f "$LOGGER_FILE" ]]; then
+    echo "Fixing logger path configuration..."
+    sed -i "s|filename: '../../logs/|filename: '/opt/event-manager/logs/|g" "$LOGGER_FILE"
+    echo "Logger paths fixed!"
+fi
+
 echo "Server.js syntax fixed!"
 
 # Restart the service

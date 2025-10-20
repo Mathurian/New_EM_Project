@@ -953,11 +953,11 @@ export const logger = winston.createLogger({
   defaultMeta: { service: 'event-manager-api' },
   transports: [
     new winston.transports.File({ 
-      filename: '../../logs/error.log', 
+      filename: '/opt/event-manager/logs/error.log', 
       level: 'error' 
     }),
     new winston.transports.File({ 
-      filename: '../../logs/combined.log' 
+      filename: '/opt/event-manager/logs/combined.log' 
     })
   ]
 })
