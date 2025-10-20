@@ -24,7 +24,7 @@ export const LoginPage = () => {
   const onSubmit = async (data: LoginForm) => {
     setIsSubmitting(true)
     try {
-      await login(data.email, data.password)
+      await login(data)
       toast.success('Login successful!')
     } catch (error) {
       toast.error('Login failed. Please check your credentials.')

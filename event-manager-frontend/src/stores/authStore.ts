@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { api } from '../lib/api'
 
 interface User {
   id: string
@@ -10,6 +11,11 @@ interface User {
   is_active: boolean
   created_at: string
   updated_at: string
+}
+
+interface LoginCredentials {
+  email: string
+  password: string
 }
 
 interface AuthState {
@@ -24,10 +30,11 @@ interface AuthActions {
   setUser: (user: User | null) => void
   setLoading: (loading: boolean) => void
   setError: (error: string | null) => void
-  login: (user: User) => void
+  login: (credentials: LoginCredentials) => Promise<void>
   logout: () => void
   clearError: () => void
   checkAuth: () => Promise<void>
+  updateProfile: (data: Partial<User> & Record<string, any>) => Promise<void>
 }
 
 type AuthStore = AuthState & AuthActions
@@ -55,14 +62,25 @@ export const useAuthStore = create<AuthStore>()(
         set({ error })
       },
 
-      login: (user) => {
-        set({ 
-          user, 
-          isAuthenticated: true, 
-          isLoading: false, 
-          error: null,
-          token: 'session-token' // For session-based auth
-        })
+      login: async (credentials) => {
+        set({ isLoading: true, error: null })
+        try {
+          const response = await api.post('/auth/login', credentials)
+          const { user, token } = response.data
+          set({ 
+            user, 
+            isAuthenticated: true, 
+            isLoading: false, 
+            error: null,
+            token: token || 'session-token' // For session-based auth
+          })
+        } catch (err: any) {
+          set({ 
+            error: err.response?.data?.message || 'Login failed', 
+            isLoading: false 
+          })
+          throw err // Re-throw to allow LoginPage to catch and show toast
+        }
       },
 
       logout: () => {
@@ -80,18 +98,36 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       checkAuth: async () => {
-        set({ isLoading: true })
+        set({ isLoading: true, error: null })
         try {
-          // Check if user is authenticated via session
-          // This would typically make an API call to verify the session
-          const user = get().user
+          const response = await api.get('/auth/me')
+          const user = response.data?.user ?? response.data
           if (user) {
-            set({ isAuthenticated: true, isLoading: false })
+            set({ user, isAuthenticated: true, isLoading: false })
           } else {
             set({ isAuthenticated: false, isLoading: false })
           }
         } catch (error) {
-          set({ error: 'Authentication check failed', isLoading: false })
+          set({ isAuthenticated: false, isLoading: false })
+        }
+      },
+      
+      updateProfile: async (data) => {
+        set({ isLoading: true, error: null })
+        try {
+          const response = await api.put('/auth/profile', data)
+          const updatedUser = response.data?.user ?? response.data
+          if (updatedUser) {
+            set({ user: updatedUser, isLoading: false })
+          } else {
+            set({ isLoading: false })
+          }
+        } catch (err: any) {
+          set({ 
+            error: err.response?.data?.message || 'Profile update failed', 
+            isLoading: false 
+          })
+          throw err
         }
       },
     }),

@@ -1,11 +1,15 @@
 import axios from 'axios'
 
+// Ensure all requests include credentials (session cookies)
+axios.defaults.withCredentials = true
+
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
 
 // Create axios instance
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
   timeout: 10000,
+  withCredentials: true, // ensure session cookies are sent/received
   headers: {
     'Content-Type': 'application/json',
   },
