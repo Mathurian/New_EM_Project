@@ -1,176 +1,282 @@
-import { FastifyPluginAsync } from 'fastify'
-import Joi from 'joi'
+import express from 'express'
+import { body, validationResult } from 'express-validator'
+import bcrypt from 'bcryptjs'
 import { UserService } from '../services/UserService.js'
+import { logger } from '../utils/logger.js'
 
-export const authRoutes = async (fastify) => {
-  const userService = new UserService()
+const router = express.Router()
+const userService = new UserService()
 
-  // Login
-  fastify.post('/login', {
-    schema: {
-      body: Joi.object({
-        email: Joi.string().email().required(),
-        password: Joi.string().min(6).required()
-      })
+// Login
+router.post('/login', [
+  body('email').isEmail().normalizeEmail(),
+  body('password').isLength({ min: 6 })
+], async (req, res) => {
+  try {
+    const errors = validationResult(req)
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ error: 'Invalid input', details: errors.array() })
     }
-  }, async (request, reply) => {
-    try {
-      const { email, password } = request.body
 
-      const user = await userService.authenticateUser(email, password)
-      if (!user) {
-        return reply.status(401).send({ error: 'Invalid credentials' })
+    const { email, password } = req.body
+
+    const user = await userService.authenticateUser(email, password)
+    if (!user) {
+      req.flash('error', 'Invalid credentials')
+      return res.status(401).json({ error: 'Invalid credentials' })
+    }
+
+    // Create session
+    req.login(user, (err) => {
+      if (err) {
+        logger.error('Login session error:', err)
+        return res.status(500).json({ error: 'Login failed' })
       }
 
-      const token = fastify.jwt.sign({ 
-        userId: user.id,
-        role: user.role 
-      })
+      // Update last login
+      userService.updateLastLogin(user.id)
 
-      return reply.send({
-        user,
-        accessToken: token,
-        tokenType: 'Bearer'
+      res.json({
+        message: 'Login successful',
+        user: {
+          id: user.id,
+          email: user.email,
+          first_name: user.first_name,
+          last_name: user.last_name,
+          preferred_name: user.preferred_name,
+          role: user.role,
+          phone: user.phone,
+          bio: user.bio,
+          image_url: user.image_url,
+          pronouns: user.pronouns,
+          gender: user.gender,
+          is_active: user.is_active,
+          last_login: user.last_login
+        }
       })
-    } catch (error) {
-      fastify.log.error(error)
-      return reply.status(500).send({ error: 'Login failed' })
+    })
+  } catch (error) {
+    logger.error('Login error:', error)
+    res.status(500).json({ error: 'Login failed' })
+  }
+})
+
+// Register (Organizer only)
+router.post('/register', [
+  body('email').isEmail().normalizeEmail(),
+  body('password').isLength({ min: 6 }),
+  body('first_name').isLength({ min: 1, max: 100 }),
+  body('last_name').isLength({ min: 1, max: 100 }),
+  body('role').isIn(['organizer', 'judge', 'contestant', 'emcee', 'tally_master', 'auditor', 'board'])
+], async (req, res) => {
+  try {
+    // Check if user is authenticated and has organizer role
+    if (!req.isAuthenticated() || req.session.userRole !== 'organizer') {
+      return res.status(403).json({ error: 'Access denied. Organizer role required.' })
     }
-  })
 
-  // Register
-  fastify.post('/register', {
-    schema: {
-      body: Joi.object({
-        email: Joi.string().email().required(),
-        password: Joi.string().min(6).required(),
-        first_name: Joi.string().min(1).max(100).required(),
-        last_name: Joi.string().min(1).max(100).required(),
-        preferred_name: Joi.string().max(100).optional(),
-        role: Joi.string().valid('organizer', 'judge', 'contestant', 'emcee', 'tally_master', 'auditor', 'board').required(),
-        phone: Joi.string().max(20).optional(),
-        bio: Joi.string().max(1000).optional(),
-        pronouns: Joi.string().max(50).optional(),
-        gender: Joi.string().valid('male', 'female', 'non-binary', 'prefer-not-to-say', 'other').optional()
-      })
-    },
-    preHandler: [fastify.authenticate, fastify.requireRole(['organizer'])]
-  }, async (request, reply) => {
-    try {
-      const { password, ...userData } = request.body
+    const errors = validationResult(req)
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ error: 'Invalid input', details: errors.array() })
+    }
 
-      // Check if user already exists
-      const existingUser = await fastify.db('users').where('email', userData.email).first()
-      if (existingUser) {
-        return reply.status(409).send({ error: 'User already exists' })
+    const { password, ...userData } = req.body
+
+    // Check if user already exists
+    const existingUser = await userService.getUserByEmail(userData.email)
+    if (existingUser) {
+      return res.status(409).json({ error: 'User already exists' })
+    }
+
+    const user = await userService.createUser(userData, password, req.session.userId)
+    
+    res.status(201).json({
+      message: 'User created successfully',
+      user: {
+        id: user.id,
+        email: user.email,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        preferred_name: user.preferred_name,
+        role: user.role,
+        phone: user.phone,
+        bio: user.bio,
+        image_url: user.image_url,
+        pronouns: user.pronouns,
+        gender: user.gender,
+        is_active: user.is_active
       }
+    })
+  } catch (error) {
+    logger.error('Registration error:', error)
+    res.status(500).json({ error: 'Registration failed' })
+  }
+})
 
-      const user = await userService.createUser(userData, password, request.user.id)
-      
-      return reply.status(201).send(user)
-    } catch (error) {
-      fastify.log.error(error)
-      return reply.status(500).send({ error: 'Registration failed' })
+// Get current user
+router.get('/me', async (req, res) => {
+  try {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ error: 'Not authenticated' })
     }
-  })
 
-  // Get current user
-  fastify.get('/me', {
-    preHandler: [fastify.authenticate]
-  }, async (request, reply) => {
-    try {
-      return reply.send(request.user)
-    } catch (error) {
-      fastify.log.error(error)
-      return reply.status(500).send({ error: 'Failed to get user' })
+    const user = await userService.getUserById(req.session.userId)
+    if (!user) {
+      req.logout()
+      return res.status(401).json({ error: 'User not found' })
     }
-  })
 
-  // Update profile
-  fastify.put('/profile', {
-    schema: {
-      body: Joi.object({
-        first_name: Joi.string().min(1).max(100).optional(),
-        last_name: Joi.string().min(1).max(100).optional(),
-        preferred_name: Joi.string().max(100).optional(),
-        phone: Joi.string().max(20).optional(),
-        bio: Joi.string().max(1000).optional(),
-        pronouns: Joi.string().max(50).optional(),
-        gender: Joi.string().valid('male', 'female', 'non-binary', 'prefer-not-to-say', 'other').optional()
-      })
-    },
-    preHandler: [fastify.authenticate]
-  }, async (request, reply) => {
-    try {
-      const user = await userService.updateProfile(request.user.id, request.body, request.user.id)
-      return reply.send(user)
-    } catch (error) {
-      fastify.log.error(error)
-      return reply.status(500).send({ error: 'Failed to update profile' })
+    res.json({
+      id: user.id,
+      email: user.email,
+      first_name: user.first_name,
+      last_name: user.last_name,
+      preferred_name: user.preferred_name,
+      role: user.role,
+      phone: user.phone,
+      bio: user.bio,
+      image_url: user.image_url,
+      pronouns: user.pronouns,
+      gender: user.gender,
+      is_active: user.is_active,
+      last_login: user.last_login,
+      created_at: user.created_at,
+      updated_at: user.updated_at
+    })
+  } catch (error) {
+    logger.error('Get user error:', error)
+    res.status(500).json({ error: 'Failed to get user' })
+  }
+})
+
+// Update profile
+router.put('/profile', [
+  body('first_name').optional().isLength({ min: 1, max: 100 }),
+  body('last_name').optional().isLength({ min: 1, max: 100 }),
+  body('preferred_name').optional().isLength({ max: 100 }),
+  body('phone').optional().isLength({ max: 20 }),
+  body('bio').optional().isLength({ max: 1000 }),
+  body('pronouns').optional().isLength({ max: 50 }),
+  body('gender').optional().isIn(['male', 'female', 'non-binary', 'prefer-not-to-say', 'other'])
+], async (req, res) => {
+  try {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ error: 'Not authenticated' })
     }
-  })
 
-  // Change password
-  fastify.put('/password', {
-    schema: {
-      body: Joi.object({
-        current_password: Joi.string().required(),
-        new_password: Joi.string().min(6).required()
-      })
-    },
-    preHandler: [fastify.authenticate]
-  }, async (request, reply) => {
-    try {
-      const { current_password, new_password } = request.body
+    const errors = validationResult(req)
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ error: 'Invalid input', details: errors.array() })
+    }
 
-      // Verify current password
-      const user = await fastify.db('users').where('id', request.user.id).first()
-      const isValidPassword = await bcrypt.compare(current_password, user.password_hash)
-      
-      if (!isValidPassword) {
-        return reply.status(400).send({ error: 'Current password is incorrect' })
+    const user = await userService.updateProfile(req.session.userId, req.body, req.session.userId)
+    res.json({
+      message: 'Profile updated successfully',
+      user: {
+        id: user.id,
+        email: user.email,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        preferred_name: user.preferred_name,
+        role: user.role,
+        phone: user.phone,
+        bio: user.bio,
+        image_url: user.image_url,
+        pronouns: user.pronouns,
+        gender: user.gender,
+        is_active: user.is_active,
+        updated_at: user.updated_at
       }
+    })
+  } catch (error) {
+    logger.error('Update profile error:', error)
+    res.status(500).json({ error: 'Failed to update profile' })
+  }
+})
 
-      await userService.updatePassword(request.user.id, new_password, request.user.id)
-      
-      return reply.send({ message: 'Password updated successfully' })
-    } catch (error) {
-      fastify.log.error(error)
-      return reply.status(500).send({ error: 'Failed to update password' })
+// Change password
+router.put('/password', [
+  body('current_password').notEmpty(),
+  body('new_password').isLength({ min: 6 })
+], async (req, res) => {
+  try {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ error: 'Not authenticated' })
     }
-  })
 
-  // Logout (client-side token removal)
-  fastify.post('/logout', {
-    preHandler: [fastify.authenticate]
-  }, async (request, reply) => {
-    try {
-      // In a stateless JWT system, logout is handled client-side
-      // You could implement a token blacklist here if needed
-      return reply.send({ message: 'Logged out successfully' })
-    } catch (error) {
-      fastify.log.error(error)
-      return reply.status(500).send({ error: 'Logout failed' })
+    const errors = validationResult(req)
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ error: 'Invalid input', details: errors.array() })
     }
-  })
 
-  // Refresh token
-  fastify.post('/refresh', {
-    preHandler: [fastify.authenticate]
-  }, async (request, reply) => {
-    try {
-      const token = fastify.jwt.sign({ 
-        userId: request.user.id,
-        role: request.user.role 
+    const { current_password, new_password } = req.body
+
+    // Verify current password
+    const user = await userService.getUserById(req.session.userId)
+    const isValidPassword = await bcrypt.compare(current_password, user.password_hash)
+    
+    if (!isValidPassword) {
+      return res.status(400).json({ error: 'Current password is incorrect' })
+    }
+
+    await userService.updatePassword(req.session.userId, new_password, req.session.userId)
+    
+    res.json({ message: 'Password updated successfully' })
+  } catch (error) {
+    logger.error('Change password error:', error)
+    res.status(500).json({ error: 'Failed to update password' })
+  }
+})
+
+// Logout
+router.post('/logout', async (req, res) => {
+  try {
+    if (req.isAuthenticated()) {
+      req.logout((err) => {
+        if (err) {
+          logger.error('Logout error:', err)
+          return res.status(500).json({ error: 'Logout failed' })
+        }
+        res.json({ message: 'Logged out successfully' })
       })
-
-      return reply.send({
-        accessToken: token,
-        tokenType: 'Bearer'
-      })
-    } catch (error) {
-      fastify.log.error(error)
-      return reply.status(500).send({ error: 'Token refresh failed' })
+    } else {
+      res.json({ message: 'Not logged in' })
     }
-  })
-}
+  } catch (error) {
+    logger.error('Logout error:', error)
+    res.status(500).json({ error: 'Logout failed' })
+  }
+})
+
+// Check authentication status
+router.get('/status', async (req, res) => {
+  try {
+    if (req.isAuthenticated()) {
+      const user = await userService.getUserById(req.session.userId)
+      if (user) {
+        res.json({
+          authenticated: true,
+          user: {
+            id: user.id,
+            email: user.email,
+            first_name: user.first_name,
+            last_name: user.last_name,
+            preferred_name: user.preferred_name,
+            role: user.role,
+            is_active: user.is_active
+          }
+        })
+      } else {
+        req.logout()
+        res.json({ authenticated: false })
+      }
+    } else {
+      res.json({ authenticated: false })
+    }
+  } catch (error) {
+    logger.error('Auth status error:', error)
+    res.json({ authenticated: false })
+  }
+})
+
+export default router

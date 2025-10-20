@@ -1,331 +1,291 @@
-import Fastify from 'fastify'
+import express from 'express'
+import session from 'express-session'
+import connectRedis from 'connect-redis'
+import cors from 'cors'
+import helmet from 'helmet'
+import compression from 'compression'
+import morgan from 'morgan'
+import cookieParser from 'cookie-parser'
+import flash from 'express-flash'
+import rateLimit from 'express-rate-limit'
+import { createServer } from 'http'
+import { Server } from 'socket.io'
 import { config } from './config/index.js'
 import { testConnection, closeConnection } from './database/connection.js'
 import { logger } from './utils/logger.js'
+import { redisClient } from './utils/redis.js'
 
-const fastify = Fastify({
-  logger: {
-    level: config.logging.level,
-    transport: config.app.env === 'development' ? {
-      target: 'pino-pretty',
-      options: {
-        colorize: true,
-        translateTime: 'HH:MM:ss Z',
-        ignore: 'pid,hostname'
-      }
-    } : undefined
-  },
-  trustProxy: true,
-  bodyLimit: 10485760 // 10MB
+const app = express()
+const server = createServer(app)
+const io = new Server(server, {
+  cors: {
+    origin: config.cors.origin,
+    methods: ['GET', 'POST']
+  }
 })
 
-/**
- * Register plugins
- */
-async function registerPlugins() {
-  // CORS
-  await fastify.register(import('@fastify/cors'), config.cors)
+// Redis store for sessions
+const RedisStore = connectRedis(session)
 
-  // Security headers
-  await fastify.register(import('@fastify/helmet'), {
-    contentSecurityPolicy: false // We'll handle this in our security middleware
-  })
+// Trust proxy for Apache
+app.set('trust proxy', 1)
 
-  // Rate limiting
-  await fastify.register(import('@fastify/rate-limit'), {
-    max: config.security.rateLimitMax,
-    timeWindow: config.security.rateLimitWindowMs
-  })
+// Security middleware
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false
+}))
 
-  // JWT
-  await fastify.register(import('@fastify/jwt'), {
-    secret: config.jwt.secret,
-    sign: {
-      expiresIn: config.jwt.expiresIn,
-      issuer: config.jwt.issuer,
-      audience: config.jwt.audience
-    },
-    verify: {
-      issuer: config.jwt.issuer,
-      audience: config.jwt.audience
-    }
-  })
+// Compression
+app.use(compression())
 
-  // Redis
-  await fastify.register(import('@fastify/redis'), {
-    host: config.redis.host,
-    port: config.redis.port,
-    password: config.redis.password,
-    db: config.redis.db,
-    keyPrefix: config.redis.keyPrefix
-  })
-
-  // Multipart for file uploads
-  await fastify.register(import('@fastify/multipart'), {
-    limits: {
-      fileSize: config.security.maxFileSize
-    }
-  })
-
-  // Static files
-  await fastify.register(import('@fastify/static'), {
-    root: './uploads',
-    prefix: '/uploads/'
-  })
-
-  // API documentation
-  if (config.features.apiDocumentation) {
-    await fastify.register(import('@fastify/swagger'), {
-      swagger: {
-        info: {
-          title: 'Event Manager API',
-          description: 'High-performance event management system API',
-          version: config.app.version
-        },
-        host: config.app.url.replace(/^https?:\/\//, ''),
-        schemes: [config.app.url.startsWith('https') ? 'https' : 'http'],
-        consumes: ['application/json', 'multipart/form-data'],
-        produces: ['application/json'],
-        securityDefinitions: {
-          bearer: {
-            type: 'apiKey',
-            name: 'Authorization',
-            in: 'header'
-          }
-        }
-      }
-    })
-
-    await fastify.register(import('@fastify/swagger-ui'), {
-      routePrefix: '/docs',
-      uiConfig: {
-        docExpansion: 'list',
-        deepLinking: false
-      },
-      uiHooks: {
-        onRequest: function (request, reply, next) { next() },
-        preHandler: function (request, reply, next) { next() }
-      },
-      staticCSP: true,
-      transformStaticCSP: (header) => header,
-      transformSpecification: (swaggerObject, request, reply) => {
-        return swaggerObject
-      },
-      transformSpecificationClone: true
-    })
-  }
-
-  // WebSocket for real-time features
-  if (config.features.realTimeScoring) {
-    await fastify.register(import('@fastify/websocket'))
-  }
+// Logging
+if (config.app.env === 'development') {
+  app.use(morgan('dev'))
+} else {
+  app.use(morgan('combined'))
 }
 
-/**
- * Register authentication decorators
- */
-async function registerAuthDecorators() {
-  // Authentication decorator
-  fastify.decorate('authenticate', async function (request, reply) {
-    try {
-      const token = request.headers.authorization?.replace('Bearer ', '')
-      if (!token) {
-        return reply.status(401).send({ error: 'No token provided' })
-      }
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: config.security.rateLimitWindowMs,
+  max: config.security.rateLimitMax,
+  message: { error: 'Too many requests from this IP' },
+  standardHeaders: true,
+  legacyHeaders: false
+})
+app.use('/api/', limiter)
 
-      const decoded = fastify.jwt.verify(token)
-      const user = await fastify.db('users').where('id', decoded.userId).first()
-      
-      if (!user || !user.is_active) {
-        return reply.status(401).send({ error: 'Invalid token' })
-      }
+// CORS
+app.use(cors({
+  origin: config.cors.origin,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token']
+}))
 
-      request.user = user
-    } catch (error) {
-      return reply.status(401).send({ error: 'Invalid token' })
-    }
-  })
+// Body parsing
+app.use(express.json({ limit: '10mb' }))
+app.use(express.urlencoded({ extended: true, limit: '10mb' }))
+app.use(cookieParser())
 
-  // Role-based access control decorator
-  fastify.decorate('requireRole', function (roles) {
-    return async function (request, reply) {
-      if (!request.user) {
-        return reply.status(401).send({ error: 'Authentication required' })
-      }
+// Session configuration
+app.use(session({
+  store: new RedisStore({ client: redisClient }),
+  secret: config.session.secret,
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: config.app.env === 'production',
+    httpOnly: true,
+    maxAge: config.session.maxAge,
+    sameSite: 'lax'
+  },
+  name: 'event-manager-session'
+}))
 
-      if (!roles.includes(request.user.role)) {
-        return reply.status(403).send({ error: 'Insufficient permissions' })
-      }
-    }
-  })
+// Flash messages
+app.use(flash())
 
-  // Permission-based access control decorator
-  fastify.decorate('requirePermission', function (permission) {
-    return async function (request, reply) {
-      if (!request.user) {
-        return reply.status(401).send({ error: 'Authentication required' })
-      }
+// Static files
+app.use('/uploads', express.static('uploads'))
 
-      // This would need to be implemented with a proper permission system
-      // For now, we'll use role-based checks
-      const hasPermission = checkUserPermission(request.user.role, permission)
-      
-      if (!hasPermission) {
-        return reply.status(403).send({ error: 'Insufficient permissions' })
-      }
-    }
+// Make io available to routes
+app.use((req, res, next) => {
+  req.io = io
+  next()
+})
+
+// Authentication middleware
+app.use((req, res, next) => {
+  // Make user available to all routes
+  req.isAuthenticated = () => {
+    return !!req.session.userId
+  }
+  
+  req.login = (user) => {
+    req.session.userId = user.id
+    req.session.userRole = user.role
+    req.session.userEmail = user.email
+  }
+  
+  req.logout = (callback) => {
+    req.session.destroy(callback)
+  }
+  
+  next()
+})
+
+// API Documentation (simple HTML)
+if (config.features.apiDocumentation) {
+  app.get('/docs', (req, res) => {
+    res.send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Event Manager API Documentation</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 40px; }
+          .endpoint { background: #f5f5f5; padding: 10px; margin: 10px 0; border-radius: 5px; }
+          .method { font-weight: bold; color: #007bff; }
+        </style>
+      </head>
+      <body>
+        <h1>Event Manager API Documentation</h1>
+        <h2>Authentication Endpoints</h2>
+        <div class="endpoint">
+          <span class="method">POST</span> /api/auth/login - User login
+        </div>
+        <div class="endpoint">
+          <span class="method">POST</span> /api/auth/logout - User logout
+        </div>
+        <div class="endpoint">
+          <span class="method">GET</span> /api/auth/me - Get current user
+        </div>
+        <h2>Event Endpoints</h2>
+        <div class="endpoint">
+          <span class="method">GET</span> /api/events - List events
+        </div>
+        <div class="endpoint">
+          <span class="method">POST</span> /api/events - Create event
+        </div>
+        <div class="endpoint">
+          <span class="method">GET</span> /api/events/:id - Get event details
+        </div>
+        <div class="endpoint">
+          <span class="method">PUT</span> /api/events/:id - Update event
+        </div>
+        <div class="endpoint">
+          <span class="method">DELETE</span> /api/events/:id - Delete event
+        </div>
+        <h2>Health Check</h2>
+        <div class="endpoint">
+          <span class="method">GET</span> /api/health - Application health
+        </div>
+      </body>
+      </html>
+    `)
   })
 }
 
-/**
- * Register routes
- */
-async function registerRoutes() {
-  // Health check
-  fastify.get('/health', async (request, reply) => {
+// Health check endpoint
+app.get('/api/health', async (req, res) => {
+  try {
     const dbHealth = await checkDatabaseHealth()
     
-    return {
+    res.json({
       status: 'ok',
       timestamp: new Date().toISOString(),
       version: config.app.version,
       environment: config.app.env,
       database: dbHealth.status,
       uptime: process.uptime()
-    }
-  })
-
-  // API routes
-  await fastify.register(import('./routes/auth.js'), { prefix: '/api/auth' })
-  await fastify.register(import('./routes/events.js'), { prefix: '/api/events' })
-  await fastify.register(import('./routes/contests.js'), { prefix: '/api/contests' })
-  await fastify.register(import('./routes/categories.js'), { prefix: '/api/categories' })
-  await fastify.register(import('./routes/scoring.js'), { prefix: '/api/scoring' })
-  await fastify.register(import('./routes/users.js'), { prefix: '/api/users' })
-  await fastify.register(import('./routes/results.js'), { prefix: '/api/results' })
-  await fastify.register(import('./routes/files.js'), { prefix: '/api/files' })
-  await fastify.register(import('./routes/settings.js'), { prefix: '/api/settings' })
-  await fastify.register(import('./routes/backup.js'), { prefix: '/api/backup' })
-  await fastify.register(import('./routes/print.js'), { prefix: '/api/print' })
-  await fastify.register(import('./routes/templates.js'), { prefix: '/api/templates' })
-  await fastify.register(import('./routes/tally-master.js'), { prefix: '/api/tally-master' })
-  await fastify.register(import('./routes/emcee.js'), { prefix: '/api/emcee' })
-  await fastify.register(import('./routes/auditor.js'), { prefix: '/api/auditor' })
-  await fastify.register(import('./routes/board.js'), { prefix: '/api/board' })
-  await fastify.register(import('./routes/database-browser.js'), { prefix: '/api/database' })
-
-  // WebSocket routes for real-time features
-  if (config.features.realTimeScoring) {
-    await fastify.register(import('./routes/websocket.js'), { prefix: '/ws' })
+    })
+  } catch (error) {
+    logger.error('Health check failed:', error)
+    res.status(500).json({ error: 'Health check failed' })
   }
-}
+})
 
-/**
- * Register error handlers
- */
-async function registerErrorHandlers() {
-  // Global error handler
-  fastify.setErrorHandler(async (error, request, reply) => {
-    fastify.log.error(error)
+// API Routes
+app.use('/api/auth', (await import('./routes/auth.js')).default)
+app.use('/api/events', (await import('./routes/events.js')).default)
+app.use('/api/contests', (await import('./routes/contests.js')).default)
+app.use('/api/categories', (await import('./routes/categories.js')).default)
+app.use('/api/scoring', (await import('./routes/scoring.js')).default)
+app.use('/api/users', (await import('./routes/users.js')).default)
+app.use('/api/results', (await import('./routes/results.js')).default)
+app.use('/api/files', (await import('./routes/files.js')).default)
+app.use('/api/settings', (await import('./routes/settings.js')).default)
+app.use('/api/backup', (await import('./routes/backup.js')).default)
+app.use('/api/print', (await import('./routes/print.js')).default)
+app.use('/api/templates', (await import('./routes/templates.js')).default)
+app.use('/api/tally-master', (await import('./routes/tally-master.js')).default)
+app.use('/api/emcee', (await import('./routes/emcee.js')).default)
+app.use('/api/auditor', (await import('./routes/auditor.js')).default)
+app.use('/api/board', (await import('./routes/board.js')).default)
+app.use('/api/database', (await import('./routes/database-browser.js')).default)
 
-    // JWT errors
-    if (error.code === 'FST_JWT_AUTHORIZATION_TOKEN_INVALID') {
-      return reply.status(401).send({ error: 'Invalid token' })
-    }
+// Serve frontend
+app.use(express.static('../event-manager-frontend/dist'))
 
-    if (error.code === 'FST_JWT_AUTHORIZATION_TOKEN_EXPIRED') {
-      return reply.status(401).send({ error: 'Token expired' })
-    }
+// Catch-all handler for SPA
+app.get('*', (req, res) => {
+  res.sendFile('index.html', { root: '../event-manager-frontend/dist' })
+})
 
-    // Validation errors
-    if (error.validation) {
-      return reply.status(400).send({
-        error: 'Validation failed',
-        details: error.validation
-      })
-    }
-
-    // File upload errors
-    if (error.code === 'FST_ERR_REQ_FILE_TOO_LARGE') {
-      return reply.status(413).send({ error: 'File too large' })
-    }
-
-    // Rate limit errors
-    if (error.statusCode === 429) {
-      return reply.status(429).send({ error: 'Too many requests' })
-    }
-
-    // Default error
-    const statusCode = error.statusCode || 500
-    const message = config.app.env === 'production' 
-      ? 'Internal server error' 
-      : error.message
-
-    return reply.status(statusCode).send({ error: message })
-  })
-
-  // 404 handler
-  fastify.setNotFoundHandler(async (request, reply) => {
-    return reply.status(404).send({ error: 'Route not found' })
-  })
-}
-
-/**
- * Register shutdown handlers
- */
-async function registerShutdownHandlers() {
-  const gracefulShutdown = async (signal) => {
-    fastify.log.info(`Received ${signal}, shutting down gracefully...`)
-    
-    try {
-      await fastify.close()
-      await closeConnection()
-      process.exit(0)
-    } catch (error) {
-      fastify.log.error('Error during shutdown:', error)
-      process.exit(1)
-    }
+// Error handling middleware
+app.use((error, req, res, next) => {
+  logger.error('Unhandled error:', error)
+  
+  if (res.headersSent) {
+    return next(error)
   }
+  
+  const statusCode = error.statusCode || 500
+  const message = config.app.env === 'production' 
+    ? 'Internal server error' 
+    : error.message
+  
+  res.status(statusCode).json({ error: message })
+})
 
-  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'))
-  process.on('SIGINT', () => gracefulShutdown('SIGINT'))
-}
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({ error: 'Route not found' })
+})
 
-/**
- * Check database health
- */
+// Socket.IO connection handling
+io.on('connection', (socket) => {
+  logger.info('Client connected:', socket.id)
+  
+  socket.on('disconnect', () => {
+    logger.info('Client disconnected:', socket.id)
+  })
+  
+  // Join room for real-time updates
+  socket.on('join-room', (room) => {
+    socket.join(room)
+    logger.info(`Client ${socket.id} joined room: ${room}`)
+  })
+  
+  socket.on('leave-room', (room) => {
+    socket.leave(room)
+    logger.info(`Client ${socket.id} left room: ${room}`)
+  })
+})
+
+// Database health check
 async function checkDatabaseHealth() {
   try {
-    await fastify.db.raw('SELECT 1')
+    const { db } = await import('./database/connection.js')
+    await db.raw('SELECT 1')
     return { status: 'healthy' }
   } catch (error) {
     return { status: 'unhealthy', error: error.message }
   }
 }
 
-/**
- * Check user permission (simplified)
- */
-function checkUserPermission(role, permission) {
-  // This is a simplified permission check
-  // In a real application, you'd have a more sophisticated permission system
-  const rolePermissions = {
-    organizer: ['*'], // All permissions
-    judge: ['scoring:read', 'scoring:write', 'results:read'],
-    contestant: ['results:read'],
-    emcee: ['results:read'],
-    tally_master: ['scoring:read', 'results:read', 'results:write'],
-    auditor: ['scoring:read', 'results:read', 'audit:read'],
-    board: ['results:read', 'reports:read']
+// Graceful shutdown
+const gracefulShutdown = async (signal) => {
+  logger.info(`Received ${signal}, shutting down gracefully...`)
+  
+  try {
+    server.close(async () => {
+      await closeConnection()
+      await redisClient.quit()
+      process.exit(0)
+    })
+  } catch (error) {
+    logger.error('Error during shutdown:', error)
+    process.exit(1)
   }
-
-  const permissions = rolePermissions[role] || []
-  return permissions.includes('*') || permissions.includes(permission)
 }
 
-/**
- * Start server
- */
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'))
+process.on('SIGINT', () => gracefulShutdown('SIGINT'))
+
+// Start server
 async function startServer() {
   try {
     // Test database connection
@@ -334,40 +294,21 @@ async function startServer() {
       throw new Error('Database connection failed')
     }
 
-    // Register plugins
-    await registerPlugins()
-    
-    // Register authentication decorators
-    await registerAuthDecorators()
-    
-    // Register routes
-    await registerRoutes()
-    
-    // Register error handlers
-    await registerErrorHandlers()
-    
-    // Register shutdown handlers
-    await registerShutdownHandlers()
-
     // Start server
-    const address = await fastify.listen({ 
-      port: config.app.port, 
-      host: config.app.host 
+    server.listen(config.app.port, config.app.host, () => {
+      logger.info(`🚀 Server running at http://${config.app.host}:${config.app.port}`)
+      logger.info(`📚 API Documentation: http://${config.app.host}:${config.app.port}/docs`)
+      logger.info(`🏥 Health Check: http://${config.app.host}:${config.app.port}/api/health`)
+      logger.info(`🔌 WebSocket: ws://${config.app.host}:${config.app.port}`)
     })
 
-    fastify.log.info(`🚀 Server running at ${address}`)
-    fastify.log.info(`📚 API Documentation: ${config.app.url}/docs`)
-    fastify.log.info(`🏥 Health Check: ${config.app.url}/health`)
-    
-    if (config.features.realTimeScoring) {
-      fastify.log.info(`🔌 WebSocket: ${config.app.url.replace('http', 'ws')}/ws`)
-    }
-
   } catch (error) {
-    fastify.log.error('Failed to start server:', error)
+    logger.error('Failed to start server:', error)
     process.exit(1)
   }
 }
 
 // Start the server
 startServer()
+
+export default app

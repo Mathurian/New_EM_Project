@@ -14,7 +14,7 @@ dotenv.config({ path: join(__dirname, '../../.env') })
 export const config = {
   app: {
     name: process.env.APP_NAME || 'Event Manager',
-    version: process.env.APP_VERSION || '1.0.0',
+    version: process.env.APP_VERSION || '2.0.0',
     env: process.env.NODE_ENV || 'development',
     port: parseInt(process.env.PORT) || 3000,
     host: process.env.HOST || '0.0.0.0',
@@ -43,12 +43,12 @@ export const config = {
     ttl: parseInt(process.env.REDIS_TTL) || 3600
   },
 
-  jwt: {
-    secret: process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production',
-    expiresIn: process.env.JWT_EXPIRES_IN || '24h',
-    refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
-    issuer: process.env.JWT_ISSUER || 'event-manager',
-    audience: process.env.JWT_AUDIENCE || 'event-manager-users'
+  session: {
+    secret: process.env.SESSION_SECRET || 'your-super-secret-session-key-change-in-production',
+    maxAge: parseInt(process.env.SESSION_MAX_AGE) || 86400000, // 24 hours
+    secure: process.env.SESSION_SECURE === 'true',
+    httpOnly: true,
+    sameSite: 'lax'
   },
 
   security: {
@@ -94,11 +94,20 @@ export const config = {
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token']
+  },
+
+  apache: {
+    enabled: process.env.APACHE_ENABLED === 'true',
+    documentRoot: process.env.APACHE_DOCUMENT_ROOT || '/var/www/html',
+    configPath: process.env.APACHE_CONFIG_PATH || '/etc/apache2/sites-available/event-manager.conf',
+    sslEnabled: process.env.APACHE_SSL_ENABLED === 'true',
+    sslCertPath: process.env.APACHE_SSL_CERT_PATH || '/etc/ssl/certs/event-manager.crt',
+    sslKeyPath: process.env.APACHE_SSL_KEY_PATH || '/etc/ssl/private/event-manager.key'
   }
 }
 
 // Validation
-const requiredEnvVars = ['JWT_SECRET', 'DB_PASSWORD']
+const requiredEnvVars = ['SESSION_SECRET', 'DB_PASSWORD']
 const missingVars = requiredEnvVars.filter(varName => !process.env[varName])
 
 if (missingVars.length > 0 && config.app.env === 'production') {
