@@ -1,5 +1,5 @@
 #!/bin/bash
-# Ultimate Frontend Fix - Addresses Module Resolution Issues
+# Final Frontend Fix - Addresses Module Resolution Issues
 # This script fixes the root cause by updating TypeScript config and ensuring all files exist
 
 set -e
@@ -27,8 +27,8 @@ print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-echo "🔧 Ultimate Frontend Fix - Module Resolution"
-echo "============================================="
+echo "🔧 Final Frontend Fix - Module Resolution"
+echo "========================================="
 
 # Check if we're in the right directory
 if [ ! -f "package.json" ]; then
@@ -36,15 +36,8 @@ if [ ! -f "package.json" ]; then
     exit 1
 fi
 
-# Step 1: Clear all caches and reinstall
-print_status "Step 1: Clearing all caches and reinstalling dependencies..."
-rm -rf node_modules package-lock.json
-npm cache clean --force
-npm install
-print_success "Dependencies reinstalled"
-
-# Step 2: Update TypeScript configuration to be more permissive
-print_status "Step 2: Updating TypeScript configuration..."
+# Step 1: Update TypeScript configuration to be more permissive
+print_status "Step 1: Updating TypeScript configuration..."
 cat > tsconfig.json << 'EOF'
 {
   "compilerOptions": {
@@ -82,8 +75,8 @@ cat > tsconfig.json << 'EOF'
 EOF
 print_success "TypeScript configuration updated"
 
-# Step 3: Ensure all directories and files exist
-print_status "Step 3: Creating all required files..."
+# Step 2: Ensure all directories and files exist
+print_status "Step 2: Creating all required files..."
 
 # Create directories
 mkdir -p src/lib src/stores src/components/ui src/components/layout
@@ -568,26 +561,26 @@ EOF
 
 print_success "All required files created"
 
-# Step 4: Install missing dependencies
-print_status "Step 4: Installing missing dependencies..."
+# Step 3: Install missing dependencies
+print_status "Step 3: Installing missing dependencies..."
 npm install @radix-ui/react-slot class-variance-authority clsx tailwind-merge date-fns lucide-react
 print_success "Dependencies installed"
 
-# Step 5: Fix LoadingSpinner size issue
-print_status "Step 5: Fixing LoadingSpinner size issue..."
+# Step 4: Fix LoadingSpinner size issue
+print_status "Step 4: Fixing LoadingSpinner size issue..."
 sed -i 's/size="lg"/size="large"/g' src/App.tsx
 print_success "LoadingSpinner size fixed"
 
-# Step 6: Run type check
-print_status "Step 6: Running TypeScript type check..."
+# Step 5: Run type check
+print_status "Step 5: Running TypeScript type check..."
 if npm run type-check; then
     print_success "TypeScript type check passed!"
 else
     print_warning "TypeScript type check still has issues, but continuing..."
 fi
 
-# Step 7: Try building
-print_status "Step 7: Attempting to build..."
+# Step 6: Try building
+print_status "Step 6: Attempting to build..."
 if npm run build; then
     print_success "🎉 Build completed successfully!"
     print_status "📁 Build output is in the 'dist' directory"
