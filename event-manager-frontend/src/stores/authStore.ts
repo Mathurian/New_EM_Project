@@ -17,6 +17,7 @@ interface AuthState {
   isAuthenticated: boolean
   isLoading: boolean
   error: string | null
+  token: string | null
 }
 
 interface AuthActions {
@@ -26,6 +27,7 @@ interface AuthActions {
   login: (user: User) => void
   logout: () => void
   clearError: () => void
+  checkAuth: () => Promise<void>
 }
 
 type AuthStore = AuthState & AuthActions
@@ -38,6 +40,7 @@ export const useAuthStore = create<AuthStore>()(
       isAuthenticated: false,
       isLoading: false,
       error: null,
+      token: null,
 
       // Actions
       setUser: (user) => {
@@ -57,7 +60,8 @@ export const useAuthStore = create<AuthStore>()(
           user, 
           isAuthenticated: true, 
           isLoading: false, 
-          error: null 
+          error: null,
+          token: 'session-token' // For session-based auth
         })
       },
 
@@ -66,12 +70,29 @@ export const useAuthStore = create<AuthStore>()(
           user: null, 
           isAuthenticated: false, 
           isLoading: false, 
-          error: null 
+          error: null,
+          token: null
         })
       },
 
       clearError: () => {
         set({ error: null })
+      },
+
+      checkAuth: async () => {
+        set({ isLoading: true })
+        try {
+          // Check if user is authenticated via session
+          // This would typically make an API call to verify the session
+          const user = get().user
+          if (user) {
+            set({ isAuthenticated: true, isLoading: false })
+          } else {
+            set({ isAuthenticated: false, isLoading: false })
+          }
+        } catch (error) {
+          set({ error: 'Authentication check failed', isLoading: false })
+        }
       },
     }),
     {
@@ -89,3 +110,4 @@ export const useUser = () => useAuthStore((state) => state.user)
 export const useIsAuthenticated = () => useAuthStore((state) => state.isAuthenticated)
 export const useAuthLoading = () => useAuthStore((state) => state.isLoading)
 export const useAuthError = () => useAuthStore((state) => state.error)
+export const useToken = () => useAuthStore((state) => state.token)

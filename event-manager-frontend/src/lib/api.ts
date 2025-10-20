@@ -36,6 +36,19 @@ apiClient.interceptors.response.use(
 
 // API functions
 export const api = {
+  // Generic methods
+  get: (url: string, config?: any) =>
+    apiClient.get(url, config),
+  
+  post: (url: string, data?: any, config?: any) =>
+    apiClient.post(url, data, config),
+  
+  put: (url: string, data?: any, config?: any) =>
+    apiClient.put(url, data, config),
+  
+  delete: (url: string, config?: any) =>
+    apiClient.delete(url, config),
+
   // Auth
   login: (credentials: { email: string; password: string }) =>
     apiClient.post('/auth/login', credentials),
