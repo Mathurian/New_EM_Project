@@ -11,36 +11,32 @@ export async function seed(knex) {
   // Inserts seed entries
   await knex('system_settings').insert([
     {
-      id: 1,
-      key: 'system_name',
-      value: 'Event Manager',
+      setting_key: 'system_name',
+      setting_value: 'Event Manager',
       description: 'The name of the event management system',
-      created_at: knex.fn.now(),
-      updated_at: knex.fn.now()
+      setting_type: 'string',
+      is_public: true
     },
     {
-      id: 2,
-      key: 'default_timezone',
-      value: 'America/New_York',
+      setting_key: 'default_timezone',
+      setting_value: 'America/New_York',
       description: 'Default timezone for events',
-      created_at: knex.fn.now(),
-      updated_at: knex.fn.now()
+      setting_type: 'string',
+      is_public: true
     },
     {
-      id: 3,
-      key: 'max_file_size',
-      value: '10485760',
+      setting_key: 'max_file_size',
+      setting_value: '10485760',
       description: 'Maximum file upload size in bytes (10MB)',
-      created_at: knex.fn.now(),
-      updated_at: knex.fn.now()
+      setting_type: 'number',
+      is_public: false
     },
     {
-      id: 4,
-      key: 'session_timeout',
-      value: '1800',
+      setting_key: 'session_timeout',
+      setting_value: '1800',
       description: 'Session timeout in seconds (30 minutes)',
-      created_at: knex.fn.now(),
-      updated_at: knex.fn.now()
+      setting_type: 'number',
+      is_public: false
     }
   ])
 
@@ -50,15 +46,12 @@ export async function seed(knex) {
 
   await knex('users').insert([
     {
-      id: 1,
       email: 'admin@eventmanager.com',
       password_hash: hashedPassword,
       first_name: 'System',
       last_name: 'Administrator',
       role: 'organizer',
-      is_active: true,
-      created_at: knex.fn.now(),
-      updated_at: knex.fn.now()
+      is_active: true
     }
   ])
 

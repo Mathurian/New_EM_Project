@@ -13,6 +13,7 @@
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
     "db:migrate": "node scripts/migrate.js",
+    "db:migrate:rollback": "node scripts/rollback.js",
     "db:seed": "node scripts/seed.js",
     "build": "npm run build:frontend",
     "build:frontend": "cd ../event-manager-frontend && npm run build"
