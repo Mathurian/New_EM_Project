@@ -427,10 +427,10 @@ generate_frontend_package_json() {
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "npx tsc && vite build",
     "preview": "vite preview",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "type-check": "tsc --noEmit"
+    "type-check": "npx tsc --noEmit"
   },
   "dependencies": {
     "react": "^18.2.0",
@@ -2214,7 +2214,7 @@ install_node_dependencies() {
     
     # Frontend dependencies
     cd "$INSTALL_DIR/event-manager-frontend"
-    sudo -u "$SERVICE_USER" npm install --omit=dev
+    sudo -u "$SERVICE_USER" npm install
     
     log_success "Node.js dependencies installed"
 }
