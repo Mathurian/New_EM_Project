@@ -1,12 +1,24 @@
 #!/bin/bash
 
-# Event Manager Setup Script
-# This script sets up the complete Event Manager application
+# Event Manager Complete Installation Script
+# This script can install ALL prerequisites and set up the complete Event Manager application
 # Compatible with macOS and Ubuntu 24.04+
+# 
+# Usage:
+#   chmod +x setup.sh
+#   ./setup.sh
+#
+# This script will:
+#   1. Detect your operating system
+#   2. Optionally install all prerequisites (Node.js, PostgreSQL, build tools)
+#   3. Set up the backend and frontend applications
+#   4. Configure the database
+#   5. Clean up old PHP files (optional)
 
 set -e
 
-echo "🚀 Setting up Event Manager Contest System..."
+echo "🚀 Event Manager Complete Installation Script"
+echo "=============================================="
 
 # Colors for output
 RED='\033[0;31m'
@@ -326,36 +338,106 @@ cleanup_php() {
     print_success "PHP files cleaned up"
 }
 
-# Check Ubuntu-specific dependencies
-check_ubuntu_deps() {
+# Install all prerequisites automatically
+install_prerequisites() {
     if [[ "$OS" == "ubuntu" ]]; then
-        print_status "Checking Ubuntu-specific dependencies..."
+        print_status "Installing all prerequisites for Ubuntu 24.04..."
         
-        # Check for curl (needed for Node.js installation)
-        if ! command -v curl &> /dev/null; then
-            print_warning "curl is not installed. Installing..."
-            sudo apt update && sudo apt install -y curl
+        # Update package index
+        print_status "Updating package index..."
+        sudo apt update
+        
+        # Install essential build tools and dependencies
+        print_status "Installing essential build tools..."
+        sudo apt install -y \
+            build-essential \
+            curl \
+            wget \
+            git \
+            python3 \
+            python3-pip \
+            python3-dev \
+            libpq-dev \
+            pkg-config \
+            software-properties-common \
+            apt-transport-https \
+            ca-certificates \
+            gnupg \
+            lsb-release
+        
+        # Install Node.js 20 LTS via NodeSource
+        print_status "Installing Node.js 20 LTS..."
+        curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+        sudo apt install -y nodejs
+        
+        # Verify Node.js installation
+        NODE_VERSION=$(node -v | cut -d'v' -f2 | cut -d'.' -f1)
+        if [ "$NODE_VERSION" -lt 18 ]; then
+            print_error "Node.js installation failed or version too old. Current version: $(node -v)"
+            exit 1
+        fi
+        print_success "Node.js $(node -v) installed successfully"
+        
+        # Install PostgreSQL
+        print_status "Installing PostgreSQL..."
+        sudo apt install -y postgresql postgresql-contrib
+        
+        # Start and enable PostgreSQL
+        print_status "Starting PostgreSQL service..."
+        sudo systemctl start postgresql
+        sudo systemctl enable postgresql
+        
+        # Create database and user
+        print_status "Setting up database..."
+        sudo -u postgres psql -c "CREATE USER $DB_USER WITH PASSWORD '$DB_PASSWORD';" 2>/dev/null || true
+        sudo -u postgres psql -c "CREATE DATABASE $DB_NAME OWNER $DB_USER;" 2>/dev/null || true
+        sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE $DB_NAME TO $DB_USER;" 2>/dev/null || true
+        
+        # Install additional useful tools
+        print_status "Installing additional tools..."
+        sudo apt install -y \
+            jq \
+            htop \
+            tree \
+            unzip \
+            zip \
+            vim \
+            nano
+        
+        print_success "All prerequisites installed successfully!"
+        
+    elif [[ "$OS" == "macos" ]]; then
+        print_status "Installing prerequisites for macOS..."
+        
+        # Check if Homebrew is installed
+        if ! command -v brew &> /dev/null; then
+            print_status "Installing Homebrew..."
+            /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
         fi
         
-        # Check for build-essential (needed for native modules)
-        if ! dpkg -l | grep -q build-essential; then
-            print_warning "build-essential is not installed. Installing..."
-            sudo apt update && sudo apt install -y build-essential
-        fi
+        # Install Node.js
+        print_status "Installing Node.js..."
+        brew install node
         
-        # Check for Python (needed for some npm packages)
-        if ! command -v python3 &> /dev/null; then
-            print_warning "Python 3 is not installed. Installing..."
-            sudo apt update && sudo apt install -y python3 python3-pip
-        fi
+        # Install PostgreSQL
+        print_status "Installing PostgreSQL..."
+        brew install postgresql
+        brew services start postgresql
         
-        # Check for git (needed for some npm packages)
-        if ! command -v git &> /dev/null; then
-            print_warning "git is not installed. Installing..."
-            sudo apt update && sudo apt install -y git
-        fi
+        # Create database and user
+        print_status "Setting up database..."
+        createdb $DB_NAME 2>/dev/null || true
         
-        print_success "Ubuntu dependencies checked"
+        print_success "All prerequisites installed successfully!"
+        
+    else
+        print_error "Automatic prerequisite installation not supported for this operating system."
+        print_status "Please install the following manually:"
+        print_status "  - Node.js 18+"
+        print_status "  - PostgreSQL 12+"
+        print_status "  - Git"
+        print_status "  - Build tools (build-essential on Ubuntu/Debian)"
+        exit 1
     fi
 }
 
@@ -390,97 +472,529 @@ show_ubuntu_troubleshooting() {
     fi
 }
 
+# Parse command line arguments
+parse_args() {
+    AUTO_INSTALL_PREREQS=false
+    AUTO_SETUP_DB=false
+    AUTO_CLEANUP_PHP=false
+    AUTO_CREATE_INSTALLER=false
+    AUTO_START_SERVERS=false
+    NON_INTERACTIVE=false
+    SKIP_ENV_CONFIG=false
+    
+    # Default environment values
+    DB_HOST="localhost"
+    DB_PORT="5432"
+    DB_NAME="event_manager"
+    DB_USER="event_manager"
+    DB_PASSWORD="password"
+    JWT_SECRET=""
+    SESSION_SECRET=""
+    APP_ENV="development"
+    APP_URL="http://localhost:3001"
+    SMTP_HOST=""
+    SMTP_PORT="587"
+    SMTP_USER=""
+    SMTP_PASS=""
+    SMTP_FROM="noreply@eventmanager.com"
+    
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --auto-install-prereqs)
+                AUTO_INSTALL_PREREQS=true
+                shift
+                ;;
+            --auto-setup-db)
+                AUTO_SETUP_DB=true
+                shift
+                ;;
+            --auto-cleanup-php)
+                AUTO_CLEANUP_PHP=true
+                shift
+                ;;
+            --auto-create-installer)
+                AUTO_CREATE_INSTALLER=true
+                shift
+                ;;
+            --auto-start-servers)
+                AUTO_START_SERVERS=true
+                shift
+                ;;
+            --non-interactive)
+                NON_INTERACTIVE=true
+                AUTO_INSTALL_PREREQS=true
+                AUTO_SETUP_DB=true
+                AUTO_CLEANUP_PHP=true
+                AUTO_CREATE_INSTALLER=false
+                AUTO_START_SERVERS=false
+                SKIP_ENV_CONFIG=true
+                shift
+                ;;
+            --skip-env-config)
+                SKIP_ENV_CONFIG=true
+                shift
+                ;;
+            --db-host=*)
+                DB_HOST="${1#*=}"
+                shift
+                ;;
+            --db-port=*)
+                DB_PORT="${1#*=}"
+                shift
+                ;;
+            --db-name=*)
+                DB_NAME="${1#*=}"
+                shift
+                ;;
+            --db-user=*)
+                DB_USER="${1#*=}"
+                shift
+                ;;
+            --db-password=*)
+                DB_PASSWORD="${1#*=}"
+                shift
+                ;;
+            --jwt-secret=*)
+                JWT_SECRET="${1#*=}"
+                shift
+                ;;
+            --session-secret=*)
+                SESSION_SECRET="${1#*=}"
+                shift
+                ;;
+            --app-env=*)
+                APP_ENV="${1#*=}"
+                shift
+                ;;
+            --app-url=*)
+                APP_URL="${1#*=}"
+                shift
+                ;;
+            --smtp-host=*)
+                SMTP_HOST="${1#*=}"
+                shift
+                ;;
+            --smtp-port=*)
+                SMTP_PORT="${1#*=}"
+                shift
+                ;;
+            --smtp-user=*)
+                SMTP_USER="${1#*=}"
+                shift
+                ;;
+            --smtp-pass=*)
+                SMTP_PASS="${1#*=}"
+                shift
+                ;;
+            --smtp-from=*)
+                SMTP_FROM="${1#*=}"
+                shift
+                ;;
+            --help)
+                show_help
+                exit 0
+                ;;
+            *)
+                print_error "Unknown option: $1"
+                show_help
+                exit 1
+                ;;
+        esac
+    done
+}
+
+# Show help information
+show_help() {
+    echo "Event Manager Complete Installation Script"
+    echo "=========================================="
+    echo ""
+    echo "Usage: $0 [OPTIONS]"
+    echo ""
+    echo "Installation Options:"
+    echo "  --auto-install-prereqs    Automatically install all prerequisites"
+    echo "  --auto-setup-db           Automatically setup database (migrate + seed)"
+    echo "  --auto-cleanup-php        Automatically remove old PHP files"
+    echo "  --auto-create-installer   Automatically create minimal installer"
+    echo "  --auto-start-servers      Automatically start development servers"
+    echo "  --non-interactive         Run in non-interactive mode (auto-install everything)"
+    echo "  --skip-env-config         Skip environment variable configuration"
+    echo ""
+    echo "Database Configuration:"
+    echo "  --db-host=HOST           Database host (default: localhost)"
+    echo "  --db-port=PORT           Database port (default: 5432)"
+    echo "  --db-name=NAME           Database name (default: event_manager)"
+    echo "  --db-user=USER           Database user (default: event_manager)"
+    echo "  --db-password=PASS       Database password (default: password)"
+    echo ""
+    echo "Application Configuration:"
+    echo "  --jwt-secret=SECRET       JWT secret key (required for production)"
+    echo "  --session-secret=SECRET  Session secret key (required for production)"
+    echo "  --app-env=ENV            Application environment (development/production)"
+    echo "  --app-url=URL            Application URL (default: http://localhost:3001)"
+    echo ""
+    echo "Email Configuration:"
+    echo "  --smtp-host=HOST         SMTP server host"
+    echo "  --smtp-port=PORT         SMTP server port (default: 587)"
+    echo "  --smtp-user=USER         SMTP username"
+    echo "  --smtp-pass=PASS         SMTP password"
+    echo "  --smtp-from=EMAIL        From email address"
+    echo ""
+    echo "General Options:"
+    echo "  --help                   Show this help message"
+    echo ""
+    echo "Examples:"
+    echo "  $0                       # Interactive mode (prompts for each step)"
+    echo "  $0 --non-interactive     # Fully automated installation"
+    echo "  $0 --auto-install-prereqs --auto-setup-db  # Partial automation"
+    echo "  $0 --db-host=db.example.com --db-password=secret123  # Custom database"
+    echo "  $0 --jwt-secret=my-secret --app-env=production  # Production setup"
+    echo ""
+}
+
 # Main setup function
 main() {
     echo "🎯 Event Manager Contest System Setup"
     echo "====================================="
     
+    # Parse command line arguments
+    parse_args "$@"
+    
     # Detect operating system first
     detect_os
     
-    # Check Ubuntu-specific dependencies
-    check_ubuntu_deps
+    # Handle prerequisites installation
+    if [[ "$NON_INTERACTIVE" == "true" || "$AUTO_INSTALL_PREREQS" == "true" ]]; then
+        print_status "Installing prerequisites automatically..."
+        install_prerequisites
+    else
+        echo ""
+        print_status "This script can automatically install all prerequisites."
+        read -p "Do you want to install prerequisites automatically? (y/n): " -n 1 -r
+        echo ""
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            install_prerequisites
+        else
+            print_warning "Skipping automatic prerequisite installation."
+            print_status "Make sure you have the following installed:"
+            print_status "  - Node.js 18+"
+            print_status "  - PostgreSQL 12+"
+            print_status "  - Git"
+            print_status "  - Build tools"
+            echo ""
+        fi
+    fi
     
-    # Check prerequisites
+    # Check prerequisites (will skip if already installed)
     check_node
     check_postgres
+    
+    # Configure environment variables
+    configure_environment
     
     # Setup applications
     setup_backend
     setup_frontend
     
-    # Ask about database setup
-    echo ""
-    read -p "Do you want to setup the database now? (y/n): " -n 1 -r
-    echo ""
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
+    # Handle database setup
+    if [[ "$NON_INTERACTIVE" == "true" || "$AUTO_SETUP_DB" == "true" ]]; then
+        print_status "Setting up database automatically..."
         setup_database
     else
-        print_warning "Skipping database setup. Run 'npm run migrate' and 'npm run seed' when ready."
-        print_status "Make sure your PostgreSQL database is running and accessible."
-        
-        if [[ "$OS" == "ubuntu" ]]; then
-            print_status "Ubuntu PostgreSQL commands:"
-            print_status "  sudo systemctl start postgresql    # Start PostgreSQL"
-            print_status "  sudo systemctl status postgresql   # Check status"
-            print_status "  sudo -u postgres psql              # Connect as postgres user"
-        elif [[ "$OS" == "macos" ]]; then
-            print_status "macOS PostgreSQL commands:"
-            print_status "  brew services start postgresql     # Start PostgreSQL"
-            print_status "  brew services list | grep postgres # Check status"
-            print_status "  psql postgres                       # Connect as postgres user"
+        echo ""
+        read -p "Do you want to setup the database now? (y/n): " -n 1 -r
+        echo ""
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            setup_database
+        else
+            print_warning "Skipping database setup. Run 'npm run migrate' and 'npm run seed' when ready."
+            print_status "Make sure your PostgreSQL database is running and accessible."
+            
+            if [[ "$OS" == "ubuntu" ]]; then
+                print_status "Ubuntu PostgreSQL commands:"
+                print_status "  sudo systemctl start postgresql    # Start PostgreSQL"
+                print_status "  sudo systemctl status postgresql   # Check status"
+                print_status "  sudo -u postgres psql              # Connect as postgres user"
+            elif [[ "$OS" == "macos" ]]; then
+                print_status "macOS PostgreSQL commands:"
+                print_status "  brew services start postgresql     # Start PostgreSQL"
+                print_status "  brew services list | grep postgres # Check status"
+                print_status "  psql postgres                       # Connect as postgres user"
+            fi
         fi
     fi
     
-    # Ask about cleanup
-    echo ""
-    read -p "Do you want to remove the old PHP files? (y/n): " -n 1 -r
-    echo ""
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
+    # Handle PHP cleanup
+    if [[ "$NON_INTERACTIVE" == "true" || "$AUTO_CLEANUP_PHP" == "true" ]]; then
+        print_status "Cleaning up PHP files automatically..."
         cleanup_php
     else
-        print_warning "PHP files kept. You can remove them manually later."
+        echo ""
+        read -p "Do you want to remove the old PHP files? (y/n): " -n 1 -r
+        echo ""
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            cleanup_php
+        else
+            print_warning "PHP files kept. You can remove them manually later."
+        fi
     fi
     
-    # Ask about starting dev servers
-    echo ""
-    read -p "Do you want to start the development servers now? (y/n): " -n 1 -r
-    echo ""
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
+    # Handle minimal installer creation
+    if [[ "$AUTO_CREATE_INSTALLER" == "true" ]]; then
+        print_status "Creating minimal installer automatically..."
+        create_minimal_installer
+    else
+        echo ""
+        read -p "Do you want to create a minimal installer script for distribution? (y/n): " -n 1 -r
+        echo ""
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            create_minimal_installer
+        fi
+    fi
+    
+    # Handle development servers
+    if [[ "$AUTO_START_SERVERS" == "true" ]]; then
+        print_status "Starting development servers automatically..."
         start_dev
     else
-        print_success "Setup complete!"
         echo ""
-        print_status "To start development servers:"
-        print_status "  Backend: npm run dev"
-        print_status "  Frontend: cd frontend && npm run dev"
+        read -p "Do you want to start the development servers now? (y/n): " -n 1 -r
         echo ""
-        print_status "To setup database later:"
-        print_status "  npm run migrate"
-        print_status "  npm run seed"
-        echo ""
-        
-        # OS-specific additional instructions
-        if [[ "$OS" == "ubuntu" ]]; then
-            print_status "Ubuntu-specific notes:"
-            print_status "  - Make sure PostgreSQL is running: sudo systemctl status postgresql"
-            print_status "  - If you encounter permission issues, check your .env DATABASE_URL"
-            print_status "  - For firewall issues, ensure ports 3000 and 3001 are accessible"
-            print_status "  - If npm install fails, try: sudo npm install -g npm@latest"
-        elif [[ "$OS" == "macos" ]]; then
-            print_status "macOS-specific notes:"
-            print_status "  - Make sure PostgreSQL is running: brew services list | grep postgres"
-            print_status "  - If you encounter permission issues, check your .env DATABASE_URL"
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            start_dev
+        else
+            print_success "Setup complete!"
+            echo ""
+            print_status "To start development servers:"
+            print_status "  Backend: npm run dev"
+            print_status "  Frontend: cd frontend && npm run dev"
+            echo ""
+            print_status "To setup database later:"
+            print_status "  npm run migrate"
+            print_status "  npm run seed"
+            echo ""
+            print_status "Application URLs:"
+            print_status "  Frontend: http://localhost:3001"
+            print_status "  Backend API: http://localhost:3000"
+            print_status "  Default login: admin@eventmanager.com / admin123"
+            echo ""
+            
+            # OS-specific additional instructions
+            if [[ "$OS" == "ubuntu" ]]; then
+                print_status "Ubuntu-specific notes:"
+                print_status "  - PostgreSQL service: sudo systemctl start postgresql"
+                print_status "  - Check service status: sudo systemctl status postgresql"
+                print_status "  - Connect to database: sudo -u postgres psql"
+                print_status "  - Database credentials: event_manager / password"
+            elif [[ "$OS" == "macos" ]]; then
+                print_status "macOS-specific notes:"
+                print_status "  - PostgreSQL service: brew services start postgresql"
+                print_status "  - Check service status: brew services list | grep postgres"
+                print_status "  - Connect to database: psql postgres"
+            fi
+            
+            print_status ""
+            print_status "Default login credentials:"
+            print_status "  Email: admin@eventmanager.com"
+            print_status "  Password: admin123"
+            
+            # Show Ubuntu-specific troubleshooting tips
+            show_ubuntu_troubleshooting
         fi
-        
-        print_status ""
-        print_status "Default login credentials:"
-        print_status "  Email: admin@eventmanager.com"
-        print_status "  Password: admin123"
-        
-        # Show Ubuntu-specific troubleshooting tips
-        show_ubuntu_troubleshooting
     fi
+}
+
+# Generate secure secrets
+generate_secret() {
+    if command -v openssl &> /dev/null; then
+        openssl rand -base64 32
+    elif command -v head &> /dev/null && command -v /dev/urandom &> /dev/null; then
+        head -c 32 /dev/urandom | base64
+    else
+        # Fallback to a simple random string
+        echo "$(date +%s)$RANDOM" | sha256sum | cut -c1-32
+    fi
+}
+
+# Configure environment variables
+configure_environment() {
+    if [[ "$SKIP_ENV_CONFIG" == "true" ]]; then
+        print_status "Skipping environment configuration..."
+        return
+    fi
+    
+    print_status "Configuring environment variables..."
+    
+    # Generate secrets if not provided
+    if [[ -z "$JWT_SECRET" ]]; then
+        JWT_SECRET=$(generate_secret)
+        print_status "Generated JWT secret: ${JWT_SECRET:0:8}..."
+    fi
+    
+    if [[ -z "$SESSION_SECRET" ]]; then
+        SESSION_SECRET=$(generate_secret)
+        print_status "Generated session secret: ${SESSION_SECRET:0:8}..."
+    fi
+    
+    # Interactive mode - prompt for configuration
+    if [[ "$NON_INTERACTIVE" != "true" ]]; then
+        echo ""
+        print_status "Environment Configuration"
+        print_status "========================="
+        
+        # Database configuration
+        echo ""
+        print_status "Database Configuration:"
+        read -p "Database host [$DB_HOST]: " input_db_host
+        DB_HOST=${input_db_host:-$DB_HOST}
+        
+        read -p "Database port [$DB_PORT]: " input_db_port
+        DB_PORT=${input_db_port:-$DB_PORT}
+        
+        read -p "Database name [$DB_NAME]: " input_db_name
+        DB_NAME=${input_db_name:-$DB_NAME}
+        
+        read -p "Database user [$DB_USER]: " input_db_user
+        DB_USER=${input_db_user:-$DB_USER}
+        
+        read -p "Database password [$DB_PASSWORD]: " input_db_password
+        DB_PASSWORD=${input_db_password:-$DB_PASSWORD}
+        
+        # Application configuration
+        echo ""
+        print_status "Application Configuration:"
+        read -p "Application environment (development/production) [$APP_ENV]: " input_app_env
+        APP_ENV=${input_app_env:-$APP_ENV}
+        
+        read -p "Application URL [$APP_URL]: " input_app_url
+        APP_URL=${input_app_url:-$APP_URL}
+        
+        # Email configuration (optional)
+        echo ""
+        print_status "Email Configuration (optional):"
+        read -p "SMTP host (leave empty to skip): " input_smtp_host
+        SMTP_HOST=${input_smtp_host:-$SMTP_HOST}
+        
+        if [[ -n "$SMTP_HOST" ]]; then
+            read -p "SMTP port [$SMTP_PORT]: " input_smtp_port
+            SMTP_PORT=${input_smtp_port:-$SMTP_PORT}
+            
+            read -p "SMTP username: " input_smtp_user
+            SMTP_USER=${input_smtp_user:-$SMTP_USER}
+            
+            read -p "SMTP password: " input_smtp_pass
+            SMTP_PASS=${input_smtp_pass:-$SMTP_PASS}
+            
+            read -p "From email address [$SMTP_FROM]: " input_smtp_from
+            SMTP_FROM=${input_smtp_from:-$SMTP_FROM}
+        fi
+    fi
+    
+    # Create .env file
+    print_status "Creating .env file..."
+    cat > .env << EOF
+# Environment Configuration
+NODE_ENV=$APP_ENV
+PORT=3000
+
+# Database Configuration
+DATABASE_URL="postgresql://$DB_USER:$DB_PASSWORD@$DB_HOST:$DB_PORT/$DB_NAME?schema=public"
+
+# JWT Configuration
+JWT_SECRET=$JWT_SECRET
+JWT_EXPIRES_IN=24h
+
+# Redis Configuration
+REDIS_URL=redis://localhost:6379
+
+# File Upload Configuration
+UPLOAD_DIR=uploads
+MAX_FILE_SIZE=10485760
+
+# Security Configuration
+BCRYPT_ROUNDS=12
+RATE_LIMIT_WINDOW_MS=900000
+RATE_LIMIT_MAX_REQUESTS=100
+
+# Logging Configuration
+LOG_LEVEL=info
+LOG_FILE=logs/event-manager.log
+
+# Email Configuration
+SMTP_HOST=$SMTP_HOST
+SMTP_PORT=$SMTP_PORT
+SMTP_USER=$SMTP_USER
+SMTP_PASS=$SMTP_PASS
+SMTP_FROM=$SMTP_FROM
+
+# Session Configuration
+SESSION_SECRET=$SESSION_SECRET
+SESSION_TIMEOUT=1800000
+EOF
+
+    # Create frontend .env file
+    print_status "Creating frontend .env file..."
+    cat > frontend/.env << EOF
+# Environment Configuration for Frontend
+VITE_API_URL=http://localhost:3000
+VITE_APP_NAME=Event Manager
+VITE_APP_VERSION=1.0.0
+VITE_APP_URL=$APP_URL
+EOF
+
+    print_success "Environment configuration complete!"
+    
+    # Show summary
+    echo ""
+    print_status "Configuration Summary:"
+    print_status "  Database: $DB_USER@$DB_HOST:$DB_PORT/$DB_NAME"
+    print_status "  Environment: $APP_ENV"
+    print_status "  Application URL: $APP_URL"
+    if [[ -n "$SMTP_HOST" ]]; then
+        print_status "  Email: $SMTP_USER@$SMTP_HOST:$SMTP_PORT"
+    else
+        print_status "  Email: Not configured"
+    fi
+    echo ""
+}
+
+# Create a minimal installation script for distribution
+create_minimal_installer() {
+    print_status "Creating minimal installer script..."
+    
+    cat > install.sh << 'EOF'
+#!/bin/bash
+
+# Event Manager Minimal Installer
+# Downloads and runs the complete setup script
+
+set -e
+
+echo "🚀 Event Manager Minimal Installer"
+echo "=================================="
+
+# Check if curl is available
+if ! command -v curl &> /dev/null; then
+    echo "❌ curl is required but not installed. Please install curl first."
+    exit 1
+fi
+
+# Download and run the complete setup script
+echo "📥 Downloading complete setup script..."
+curl -fsSL https://raw.githubusercontent.com/your-repo/event-manager/main/setup.sh -o setup.sh
+
+echo "🔧 Making script executable..."
+chmod +x setup.sh
+
+echo "▶️  Running complete setup..."
+./setup.sh
+
+echo "✅ Installation complete!"
+EOF
+
+    chmod +x install.sh
+    print_success "Minimal installer created: install.sh"
+    print_status "You can distribute this minimal installer to users."
+    print_status "It will download and run the complete setup script."
 }
 
 # Run main function
