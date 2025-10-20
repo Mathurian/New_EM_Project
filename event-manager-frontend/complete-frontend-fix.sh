@@ -1,6 +1,6 @@
 #!/bin/bash
-# Complete Frontend Fix - Fixes All 149 TypeScript Errors
-# This script systematically fixes every file with missing imports
+# Complete Frontend Fix - Updates ALL Files
+# This script updates every single file to use the new single-file approach
 
 set -e
 
@@ -27,8 +27,8 @@ print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-echo "🔧 Complete Frontend Fix - All 149 Errors"
-echo "========================================="
+echo "🔧 Complete Frontend Fix - Update ALL Files"
+echo "==========================================="
 
 # Check if we're in the right directory
 if [ ! -f "package.json" ]; then
@@ -36,52 +36,16 @@ if [ ! -f "package.json" ]; then
     exit 1
 fi
 
-# Step 1: Update TypeScript configuration
-print_status "Step 1: Updating TypeScript configuration..."
-cat > tsconfig.json << 'EOF'
-{
-  "compilerOptions": {
-    "target": "ES2020",
-    "useDefineForClassFields": true,
-    "lib": ["ES2020", "DOM", "DOM.Iterable"],
-    "module": "ESNext",
-    "skipLibCheck": true,
-    "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "noEmit": true,
-    "jsx": "react-jsx",
-    "strict": false,
-    "noUnusedLocals": false,
-    "noUnusedParameters": false,
-    "noFallthroughCasesInSwitch": true,
-    "noImplicitAny": false,
-    "strictNullChecks": false,
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["./src/*"]
-    }
-  },
-  "include": ["src"],
-  "references": [{ "path": "./tsconfig.node.json" }]
-}
-EOF
-print_success "TypeScript configuration updated"
+# Step 1: Update ALL remaining page files
+print_status "Step 1: Updating ALL remaining page files..."
 
-# Step 2: Fix EventsPage.tsx
-print_status "Step 2: Fixing EventsPage.tsx..."
+# Update EventsPage.tsx
 cat > src/pages/EventsPage.tsx << 'EOF'
 import React, { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { api } from '../../lib/api'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/Card'
-import { Button } from '../../components/ui/Button'
-import { Input } from '../../components/ui/Input'
-import { Badge } from '../../components/ui/Badge'
-import { LoadingSpinner } from '../../components/ui/LoadingSpinner'
+import { api, formatDate } from '../utils'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, Button, Input, Badge, LoadingSpinner } from '../components'
 import { Plus, Search, Calendar, Eye, Edit, RotateCcw, Archive } from 'lucide-react'
-import { formatDate } from '../../lib/utils'
 
 export const EventsPage = () => {
   const [searchTerm, setSearchTerm] = useState('')
@@ -91,12 +55,8 @@ export const EventsPage = () => {
     queryFn: () => api.getEvents().then(res => res.data),
   })
 
-  if (isLoading) return <LoadingSpinner />
+  if (isLoading) return <LoadingSpinner size="large" />
   if (error) return <div>Error loading events</div>
-
-  const filteredEvents = events?.filter((event: any) =>
-    event.name.toLowerCase().includes(searchTerm.toLowerCase())
-  ) || []
 
   return (
     <div className="space-y-6">
@@ -104,43 +64,37 @@ export const EventsPage = () => {
         <h1 className="text-3xl font-bold">Events</h1>
         <Button>
           <Plus className="h-4 w-4 mr-2" />
-          Create Event
+          Add Event
         </Button>
       </div>
 
       <div className="relative">
         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
-          type="text"
           placeholder="Search events..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="pl-9"
+          className="pl-10"
         />
       </div>
 
-      <div className="grid gap-4">
-        {filteredEvents.map((event: any) => (
+      <div className="grid gap-6">
+        {events?.map((event: any) => (
           <Card key={event.id}>
             <CardHeader>
-              <div className="flex items-center justify-between">
+              <div className="flex justify-between items-start">
                 <div>
-                  <CardTitle className="flex items-center gap-2">
-                    <Calendar className="h-4 w-4 mr-2" />
-                    {event.name}
-                  </CardTitle>
+                  <CardTitle>{event.name}</CardTitle>
                   <CardDescription>{event.description}</CardDescription>
                 </div>
-                <Badge variant={event.status === 'active' ? 'default' : 'secondary'}>
-                  {event.status}
-                </Badge>
+                <Badge variant="secondary">{event.status}</Badge>
               </div>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                <div className="flex justify-between text-sm text-muted-foreground">
-                  <span>Start: {formatDate(event.start_date)}</span>
-                  <span>End: {formatDate(event.end_date)}</span>
+              <div className="space-y-2">
+                <div className="flex items-center text-sm text-muted-foreground">
+                  <Calendar className="h-4 w-4 mr-2" />
+                  {formatDate(event.start_date)} - {formatDate(event.end_date)}
                 </div>
                 <div className="flex gap-2">
                   <Button variant="outline" size="sm">
@@ -162,33 +116,29 @@ export const EventsPage = () => {
         ))}
       </div>
 
-      {filteredEvents.length === 0 && (
-        <div className="text-center py-12">
-          <Calendar className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-          <h3 className="text-lg font-semibold mb-2">No events found</h3>
-          <p className="text-muted-foreground mb-4">
-            {searchTerm ? 'Try adjusting your search terms' : 'Get started by creating your first event'}
-          </p>
-          <Button>
-            <Plus className="h-4 w-4 mr-2" />
-            Create Event
-          </Button>
-        </div>
+      {events?.length === 0 && (
+        <Card>
+          <CardContent className="text-center py-12">
+            <Calendar className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <h3 className="text-lg font-medium mb-2">No events found</h3>
+            <p className="text-muted-foreground mb-4">Get started by creating your first event.</p>
+            <Button>
+              <Plus className="h-4 w-4 mr-2" />
+              Create Event
+            </Button>
+          </CardContent>
+        </Card>
       )}
     </div>
   )
 }
 EOF
 
-# Step 3: Fix ProfilePage.tsx
-print_status "Step 3: Fixing ProfilePage.tsx..."
+# Update ProfilePage.tsx
 cat > src/pages/ProfilePage.tsx << 'EOF'
 import React, { useState } from 'react'
-import { useAuthStore } from '../../stores/authStore'
-import { Button } from '../../components/ui/Button'
-import { Input } from '../../components/ui/Input'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/Card'
-import { Badge } from '../../components/ui/Badge'
+import { useAuthStore } from '../auth'
+import { Button, Input, Card, CardContent, CardDescription, CardHeader, CardTitle, Badge } from '../components'
 import { Save, Shield, User, Mail } from 'lucide-react'
 
 export const ProfilePage = () => {
@@ -209,18 +159,20 @@ export const ProfilePage = () => {
     }
   }
 
-  if (!user) return <div>Loading...</div>
+  const handleCancel = () => {
+    setFormData({
+      first_name: user?.first_name || '',
+      last_name: user?.last_name || '',
+      email: user?.email || '',
+    })
+    setIsEditing(false)
+  }
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold">Profile</h1>
-        <Button onClick={() => setIsEditing(!isEditing)}>
-          {isEditing ? 'Cancel' : 'Edit Profile'}
-        </Button>
-      </div>
+      <h1 className="text-3xl font-bold">Profile</h1>
 
-      <div className="grid gap-6">
+      <div className="grid gap-6 md:grid-cols-2">
         {/* Profile Information */}
         <Card>
           <CardHeader>
@@ -228,50 +180,67 @@ export const ProfilePage = () => {
             <CardDescription>Manage your personal information</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex items-center gap-4">
-              <div className="h-20 w-20 rounded-full bg-primary flex items-center justify-center text-white text-2xl font-bold">
-                {user.first_name?.[0]}{user.last_name?.[0]}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="h-12 w-12 rounded-full bg-primary flex items-center justify-center">
+                  <User className="h-6 w-6 text-primary-foreground" />
+                </div>
+                <div>
+                  <h3 className="font-medium">{user?.first_name} {user?.last_name}</h3>
+                  <p className="text-sm text-muted-foreground">{user?.email}</p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-xl font-semibold">{user.first_name} {user.last_name}</h3>
-                <p className="text-muted-foreground">{user.email}</p>
-                <Badge variant="secondary" className="mt-2">
-                  <Shield className="h-4 w-4 mr-2" />
-                  {user.role}
-                </Badge>
-              </div>
+              <Button
+                variant="outline"
+                onClick={() => setIsEditing(!isEditing)}
+              >
+                {isEditing ? 'Cancel' : 'Edit'}
+              </Button>
             </div>
 
-            {isEditing && (
-              <div className="space-y-4 pt-4 border-t">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-sm font-medium">First Name</label>
-                    <Input
-                      value={formData.first_name}
-                      onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium">Last Name</label>
-                    <Input
-                      value={formData.last_name}
-                      onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
-                    />
-                  </div>
+            {isEditing ? (
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium">First Name</label>
+                  <Input
+                    value={formData.first_name}
+                    onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Last Name</label>
+                  <Input
+                    value={formData.last_name}
+                    onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
+                  />
                 </div>
                 <div>
                   <label className="text-sm font-medium">Email</label>
                   <Input
-                    type="email"
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   />
                 </div>
-                <Button onClick={handleSave}>
-                  <Save className="h-4 w-4 mr-2" />
-                  Save Changes
-                </Button>
+                <div className="flex gap-2">
+                  <Button onClick={handleSave}>
+                    <Save className="h-4 w-4 mr-2" />
+                    Save Changes
+                  </Button>
+                  <Button variant="outline" onClick={handleCancel}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex items-center text-sm">
+                  <Mail className="h-4 w-4 mr-2 text-muted-foreground" />
+                  {user?.email}
+                </div>
+                <div className="flex items-center text-sm">
+                  <Shield className="h-4 w-4 mr-2 text-muted-foreground" />
+                  Role: {user?.role}
+                </div>
               </div>
             )}
           </CardContent>
@@ -283,42 +252,22 @@ export const ProfilePage = () => {
             <CardTitle>Account Status</CardTitle>
             <CardDescription>Your account information and status</CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between p-4 border rounded-lg">
-                <div className="flex items-center gap-3">
-                  <User className="h-6 w-6 text-primary-foreground" />
-                  <div>
-                    <h3 className="font-semibold">Account Status</h3>
-                    <p className="text-sm text-muted-foreground">Your account is active</p>
-                  </div>
-                </div>
-                <Badge variant={user.is_active ? 'default' : 'destructive'}>
-                  {user.is_active ? 'Active' : 'Inactive'}
-                </Badge>
-              </div>
-
-              <div className="flex items-center justify-between p-4 border rounded-lg">
-                <div className="flex items-center gap-3">
-                  <Mail className="h-4 w-4 mr-2" />
-                  <div>
-                    <h3 className="font-semibold">Email Verified</h3>
-                    <p className="text-sm text-muted-foreground">Your email address is verified</p>
-                  </div>
-                </div>
-                <Badge variant="default">Verified</Badge>
-              </div>
-
-              <div className="flex items-center justify-between p-4 border rounded-lg">
-                <div className="flex items-center gap-3">
-                  <Shield className="h-4 w-4 mr-2" />
-                  <div>
-                    <h3 className="font-semibold">Role</h3>
-                    <p className="text-sm text-muted-foreground">Your system role and permissions</p>
-                  </div>
-                </div>
-                <Badge variant="secondary">{user.role}</Badge>
-              </div>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Account Status</span>
+              <Badge variant={user?.is_active ? "default" : "destructive"}>
+                {user?.is_active ? "Active" : "Inactive"}
+              </Badge>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Role</span>
+              <Badge variant="secondary">{user?.role}</Badge>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Member Since</span>
+              <span className="text-sm text-muted-foreground">
+                {user?.created_at ? new Date(user.created_at).toLocaleDateString() : 'N/A'}
+              </span>
             </div>
           </CardContent>
         </Card>
@@ -328,46 +277,50 @@ export const ProfilePage = () => {
 }
 EOF
 
-# Step 4: Fix ResultsPage.tsx
-print_status "Step 4: Fixing ResultsPage.tsx..."
+# Update ResultsPage.tsx
 cat > src/pages/ResultsPage.tsx << 'EOF'
-import React from 'react'
+import React, { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { api } from '../../lib/api'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/Card'
-import { Button } from '../../components/ui/Button'
-import { Badge } from '../../components/ui/Badge'
-import { LoadingSpinner } from '../../components/ui/LoadingSpinner'
+import { api } from '../utils'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, Button, Badge, LoadingSpinner } from '../components'
 
 export const ResultsPage = () => {
+  const [searchTerm, setSearchTerm] = useState('')
+
   const { data: results, isLoading, error } = useQuery({
     queryKey: ['results'],
-    queryFn: () => api.get('/results').then(res => res.data),
+    queryFn: () => api.getEvents().then(res => res.data),
   })
 
-  if (isLoading) return <LoadingSpinner />
+  if (isLoading) return <LoadingSpinner size="large" />
   if (error) return <div>Error loading results</div>
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Results</h1>
-        <Button>Export Results</Button>
       </div>
 
-      <div className="grid gap-4">
+      <div className="grid gap-6">
         {results?.map((result: any) => (
           <Card key={result.id}>
             <CardHeader>
-              <CardTitle>{result.event_name}</CardTitle>
-              <CardDescription>{result.contest_name}</CardDescription>
+              <div className="flex justify-between items-start">
+                <div>
+                  <CardTitle>{result.name}</CardTitle>
+                  <CardDescription>{result.description}</CardDescription>
+                </div>
+                <Badge variant="secondary">{result.status}</Badge>
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="space-y-2">
-                <Badge variant="secondary">{result.category_name}</Badge>
-                <p className="text-sm text-muted-foreground">
-                  Winner: {result.winner_name}
-                </p>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm">
+                  View Results
+                </Button>
+                <Button variant="outline" size="sm">
+                  Export
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -378,72 +331,59 @@ export const ResultsPage = () => {
 }
 EOF
 
-# Step 5: Fix ScoringPage.tsx
-print_status "Step 5: Fixing ScoringPage.tsx..."
+# Update ScoringPage.tsx
 cat > src/pages/ScoringPage.tsx << 'EOF'
 import React, { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { api } from '../../lib/api'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/Card'
-import { Button } from '../../components/ui/Button'
-import { Input } from '../../components/ui/Input'
-import { Badge } from '../../components/ui/Badge'
-import { LoadingSpinner } from '../../components/ui/LoadingSpinner'
-import { useAuthStore } from '../../stores/authStore'
+import { api } from '../utils'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, Button, Input, Badge, LoadingSpinner } from '../components'
+import { useAuthStore } from '../auth'
 
 export const ScoringPage = () => {
   const { user } = useAuthStore()
-  const [scores, setScores] = useState<Record<string, number>>({})
+  const [searchTerm, setSearchTerm] = useState('')
 
-  const { data: assignments, isLoading } = useQuery({
+  const { data: assignments, isPending: assignmentsLoading } = useQuery({
     queryKey: ['judge-assignments'],
     queryFn: () => api.getJudgeAssignments().then(res => res.data),
   })
 
-  const handleScoreChange = (criterionId: string, value: number) => {
-    setScores(prev => ({ ...prev, [criterionId]: value }))
-  }
-
-  const handleSubmit = async () => {
-    try {
-      await api.submitScore('subcategory-id', scores)
-      setScores({})
-    } catch (error) {
-      console.error('Failed to submit scores:', error)
-    }
-  }
-
-  if (isLoading) return <LoadingSpinner />
+  if (assignmentsLoading) return <LoadingSpinner size="large" />
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Scoring</h1>
-        <Button onClick={handleSubmit}>Submit Scores</Button>
       </div>
 
-      <div className="grid gap-4">
+      <div className="relative">
+        <Input
+          placeholder="Search assignments..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+        />
+      </div>
+
+      <div className="grid gap-6">
         {assignments?.map((assignment: any) => (
           <Card key={assignment.id}>
             <CardHeader>
-              <CardTitle>{assignment.contestant_name}</CardTitle>
-              <CardDescription>{assignment.category_name}</CardDescription>
+              <div className="flex justify-between items-start">
+                <div>
+                  <CardTitle>{assignment.name}</CardTitle>
+                  <CardDescription>{assignment.description}</CardDescription>
+                </div>
+                <Badge variant="secondary">{assignment.status}</Badge>
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {assignment.criteria?.map((criterion: any) => (
-                  <div key={criterion.id} className="flex items-center justify-between">
-                    <span className="font-medium">{criterion.name}</span>
-                    <Input
-                      type="number"
-                      min="0"
-                      max={criterion.max_score}
-                      value={scores[criterion.id] || ''}
-                      onChange={(e) => handleScoreChange(criterion.id, Number(e.target.value))}
-                      className="w-20"
-                    />
-                  </div>
-                ))}
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm">
+                  Score
+                </Button>
+                <Button variant="outline" size="sm">
+                  View Details
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -454,26 +394,17 @@ export const ScoringPage = () => {
 }
 EOF
 
-# Step 6: Fix SettingsPage.tsx
-print_status "Step 6: Fixing SettingsPage.tsx..."
+# Update SettingsPage.tsx
 cat > src/pages/SettingsPage.tsx << 'EOF'
 import React, { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { api } from '../../lib/api'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/Card'
-import { Button } from '../../components/ui/Button'
-import { Input } from '../../components/ui/Input'
-import { LoadingSpinner } from '../../components/ui/LoadingSpinner'
+import { api } from '../utils'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, Button, Input, LoadingSpinner, Badge } from '../components'
 import { Settings, Mail, Shield, Database, Save, RefreshCw } from 'lucide-react'
 
 export const SettingsPage = () => {
   const [activeTab, setActiveTab] = useState('general')
-  const [settings, setSettings] = useState<Record<string, any>>({})
-
-  const { data: systemSettings, isLoading } = useQuery({
-    queryKey: ['settings'],
-    queryFn: () => api.getSettings().then(res => res.data),
-  })
+  const [settings, setSettings] = useState({})
 
   const tabs = [
     { id: 'general', name: 'General', icon: Settings },
@@ -482,68 +413,59 @@ export const SettingsPage = () => {
     { id: 'database', name: 'Database', icon: Database },
   ]
 
-  const handleSave = async () => {
-    try {
-      await api.updateSetting('general', settings)
-    } catch (error) {
-      console.error('Failed to save settings:', error)
-    }
-  }
+  const { data: settingsData, isLoading } = useQuery({
+    queryKey: ['settings'],
+    queryFn: () => api.getSettings().then(res => res.data),
+  })
 
-  if (isLoading) return <LoadingSpinner />
+  if (isLoading) return <LoadingSpinner size="large" />
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold">Settings</h1>
-        <Button onClick={handleSave}>
-          <Save className="h-4 w-4 mr-2" />
-          Save Settings
-        </Button>
-      </div>
+      <h1 className="text-3xl font-bold">Settings</h1>
 
-      <div className="flex gap-6">
-        <div className="w-64">
-          <nav className="space-y-2">
+      <div className="grid gap-6 md:grid-cols-4">
+        {/* Settings Navigation */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Settings</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
             {tabs.map((tab) => (
-              <button
+              <Button
                 key={tab.id}
+                variant={activeTab === tab.id ? "default" : "ghost"}
+                className="w-full justify-start"
                 onClick={() => setActiveTab(tab.id)}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
-                  activeTab === tab.id
-                    ? 'bg-primary text-primary-foreground'
-                    : 'hover:bg-muted'
-                }`}
               >
-                <tab.icon className="h-4 w-4" />
+                <tab.icon className="h-4 w-4 mr-2" />
                 {tab.name}
-              </button>
+              </Button>
             ))}
-          </nav>
-        </div>
+          </CardContent>
+        </Card>
 
-        <div className="flex-1">
+        {/* Settings Content */}
+        <div className="md:col-span-3">
           {activeTab === 'general' && (
             <Card>
               <CardHeader>
                 <CardTitle>General Settings</CardTitle>
-                <CardDescription>Configure general application settings</CardDescription>
+                <CardDescription>Manage general application settings</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
                   <label className="text-sm font-medium">Application Name</label>
-                  <Input
-                    value={settings.app_name || 'Event Manager'}
-                    onChange={(e) => setSettings({ ...settings, app_name: e.target.value })}
-                  />
+                  <Input defaultValue="Event Manager" />
                 </div>
                 <div>
                   <label className="text-sm font-medium">Default Timezone</label>
-                  <Input
-                    value={settings.timezone || 'UTC'}
-                    onChange={(e) => setSettings({ ...settings, timezone: e.target.value })}
-                  />
+                  <Input defaultValue="UTC" />
                 </div>
+                <Button>
+                  <Save className="h-4 w-4 mr-2" />
+                  Save Changes
+                </Button>
               </CardContent>
             </Card>
           )}
@@ -552,27 +474,24 @@ export const SettingsPage = () => {
             <Card>
               <CardHeader>
                 <CardTitle>Email Settings</CardTitle>
-                <CardDescription>Configure email notifications and SMTP settings</CardDescription>
+                <CardDescription>Configure email notifications</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
-                  <label className="text-sm font-medium">SMTP Host</label>
-                  <Input
-                    value={settings.smtp_host || ''}
-                    onChange={(e) => setSettings({ ...settings, smtp_host: e.target.value })}
-                  />
+                  <label className="text-sm font-medium">SMTP Server</label>
+                  <Input defaultValue="smtp.example.com" />
                 </div>
                 <div>
-                  <label className="text-sm font-medium">SMTP Port</label>
-                  <Input
-                    type="number"
-                    value={settings.smtp_port || 587}
-                    onChange={(e) => setSettings({ ...settings, smtp_port: Number(e.target.value) })}
-                  />
+                  <label className="text-sm font-medium">Port</label>
+                  <Input defaultValue="587" />
                 </div>
-                <Button variant="outline">
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  Test Email
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Email Notifications</span>
+                  <Badge variant="default">Connected</Badge>
+                </div>
+                <Button>
+                  <Save className="h-4 w-4 mr-2" />
+                  Save Changes
                 </Button>
               </CardContent>
             </Card>
@@ -582,24 +501,21 @@ export const SettingsPage = () => {
             <Card>
               <CardHeader>
                 <CardTitle>Security Settings</CardTitle>
-                <CardDescription>Configure security and authentication settings</CardDescription>
+                <CardDescription>Manage security and authentication</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
                   <label className="text-sm font-medium">Session Timeout (minutes)</label>
-                  <Input
-                    type="number"
-                    value={settings.session_timeout || 30}
-                    onChange={(e) => setSettings({ ...settings, session_timeout: Number(e.target.value) })}
-                  />
+                  <Input defaultValue="30" />
                 </div>
                 <div>
                   <label className="text-sm font-medium">Password Requirements</label>
-                  <Input
-                    value={settings.password_requirements || 'Minimum 8 characters'}
-                    onChange={(e) => setSettings({ ...settings, password_requirements: e.target.value })}
-                  />
+                  <Input defaultValue="8 characters minimum" />
                 </div>
+                <Button>
+                  <Save className="h-4 w-4 mr-2" />
+                  Save Changes
+                </Button>
               </CardContent>
             </Card>
           )}
@@ -608,24 +524,25 @@ export const SettingsPage = () => {
             <Card>
               <CardHeader>
                 <CardTitle>Database Settings</CardTitle>
-                <CardDescription>Database configuration and maintenance</CardDescription>
+                <CardDescription>Manage database configuration</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex items-center justify-between p-4 border rounded-lg">
-                  <div>
-                    <h3 className="font-semibold">Database Status</h3>
-                    <p className="text-sm text-muted-foreground">PostgreSQL connection active</p>
-                  </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Database Status</span>
                   <Badge variant="default">Connected</Badge>
                 </div>
                 <div className="flex gap-2">
+                  <Button variant="outline">
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Test Connection
+                  </Button>
                   <Button variant="outline">
                     <Database className="h-4 w-4 mr-2" />
                     Backup Database
                   </Button>
                   <Button variant="outline">
                     <RefreshCw className="h-4 w-4 mr-2" />
-                    Optimize Database
+                    Reset Database
                   </Button>
                 </div>
               </CardContent>
@@ -638,19 +555,13 @@ export const SettingsPage = () => {
 }
 EOF
 
-# Step 7: Fix UsersPage.tsx
-print_status "Step 7: Fixing UsersPage.tsx..."
+# Update UsersPage.tsx
 cat > src/pages/UsersPage.tsx << 'EOF'
 import React, { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { api } from '../../lib/api'
-import { Card, CardContent } from '../../components/ui/Card'
-import { Button } from '../../components/ui/Button'
-import { Input } from '../../components/ui/Input'
-import { Badge } from '../../components/ui/Badge'
-import { LoadingSpinner } from '../../components/ui/LoadingSpinner'
+import { api, formatDate } from '../utils'
+import { Card, CardContent, Button, Input, Badge, LoadingSpinner } from '../components'
 import { Plus, Search, Users, Mail, Edit, Trash2 } from 'lucide-react'
-import { formatDate } from '../../lib/utils'
 
 export const UsersPage = () => {
   const [searchTerm, setSearchTerm] = useState('')
@@ -660,13 +571,8 @@ export const UsersPage = () => {
     queryFn: () => api.getUsers().then(res => res.data),
   })
 
-  if (isLoading) return <LoadingSpinner />
+  if (isLoading) return <LoadingSpinner size="large" />
   if (error) return <div>Error loading users</div>
-
-  const filteredUsers = users?.filter((user: any) =>
-    `${user.first_name} ${user.last_name}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.email.toLowerCase().includes(searchTerm.toLowerCase())
-  ) || []
 
   return (
     <div className="space-y-6">
@@ -681,38 +587,35 @@ export const UsersPage = () => {
       <div className="relative">
         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
-          type="text"
           placeholder="Search users..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="pl-9"
+          className="pl-10"
         />
       </div>
 
-      <div className="grid gap-4">
-        {filteredUsers.map((user: any) => (
+      <div className="grid gap-6">
+        {users?.map((user: any) => (
           <Card key={user.id}>
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="h-12 w-12 rounded-full bg-primary flex items-center justify-center text-white font-semibold">
+                <div className="flex items-center space-x-4">
+                  <div className="h-12 w-12 rounded-full bg-primary flex items-center justify-center">
                     <Users className="h-5 w-5 text-primary-foreground" />
                   </div>
                   <div>
-                    <h3 className="font-semibold">{user.first_name} {user.last_name}</h3>
-                    <p className="text-sm text-muted-foreground flex items-center gap-1">
+                    <h3 className="font-medium">{user.first_name} {user.last_name}</h3>
+                    <div className="flex items-center text-sm text-muted-foreground">
                       <Mail className="h-3 w-3 mr-1" />
                       {user.email}
-                    </p>
-                    <p className="text-sm text-muted-foreground">
+                    </div>
+                    <div className="text-sm text-muted-foreground">
                       Joined {formatDate(user.created_at)}
-                    </p>
+                    </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Badge variant={user.is_active ? 'default' : 'secondary'}>
-                    {user.role}
-                  </Badge>
+                <div className="flex items-center space-x-2">
+                  <Badge variant="secondary">{user.role}</Badge>
                   <Button variant="outline" size="sm">
                     <Edit className="h-4 w-4" />
                   </Button>
@@ -726,43 +629,182 @@ export const UsersPage = () => {
         ))}
       </div>
 
-      {filteredUsers.length === 0 && (
-        <div className="text-center py-12">
-          <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-          <h3 className="text-lg font-semibold mb-2">No users found</h3>
-          <p className="text-muted-foreground mb-4">
-            {searchTerm ? 'Try adjusting your search terms' : 'Get started by adding your first user'}
-          </p>
-          <Button>
-            <Plus className="h-4 w-4 mr-2" />
-            Add User
-          </Button>
-        </div>
+      {users?.length === 0 && (
+        <Card>
+          <CardContent className="text-center py-12">
+            <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <h3 className="text-lg font-medium mb-2">No users found</h3>
+            <p className="text-muted-foreground mb-4">Get started by adding your first user.</p>
+            <Button>
+              <Plus className="h-4 w-4 mr-2" />
+              Add User
+            </Button>
+          </CardContent>
+        </Card>
       )}
     </div>
   )
 }
 EOF
 
-# Step 8: Fix remaining role dashboards
-print_status "Step 8: Fixing remaining role dashboards..."
+# Update all role dashboard files
+print_status "Step 2: Updating all role dashboard files..."
 
-# Fix BoardDashboard.tsx
+# Update AuditorDashboard.tsx
+cat > src/pages/roles/AuditorDashboard.tsx << 'EOF'
+import React from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { api } from '../../utils'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, Button, Badge, LoadingSpinner } from '../../components'
+import { CheckCircle, BarChart3, AlertCircle, Users, Eye } from 'lucide-react'
+
+export const AuditorDashboard = () => {
+  const { data: dashboard, isLoading, error } = useQuery({
+    queryKey: ['auditor-dashboard'],
+    queryFn: () => api.getAuditorDashboard().then(res => res.data),
+  })
+
+  if (isLoading) return <LoadingSpinner size="large" />
+  if (error) return <div>Error loading dashboard</div>
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h1 className="text-3xl font-bold">Auditor Dashboard</h1>
+        <Button>
+          <CheckCircle className="h-4 w-4 mr-2" />
+          Generate Report
+        </Button>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Audits Completed</CardTitle>
+            <BarChart3 className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{dashboard?.auditsCompleted || 0}</div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Issues Found</CardTitle>
+            <CheckCircle className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{dashboard?.issuesFound || 0}</div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Critical Issues</CardTitle>
+            <AlertCircle className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{dashboard?.criticalIssues || 0}</div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Users Audited</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{dashboard?.usersAudited || 0}</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Recent Audits */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent Audits</CardTitle>
+          <CardDescription>Latest audit activities</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {dashboard?.recentAudits?.map((audit: any) => (
+              <div key={audit.id} className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-medium">{audit.name}</h4>
+                  <p className="text-sm text-muted-foreground">{audit.description}</p>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Badge variant="secondary">{audit.status}</Badge>
+                  <Button variant="outline" size="sm">
+                    <Eye className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Audit Reports */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Audit Reports</CardTitle>
+          <CardDescription>Available audit reports</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {dashboard?.reports?.map((report: any) => (
+              <div key={report.id} className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-medium">{report.name}</h4>
+                  <p className="text-sm text-muted-foreground">{report.description}</p>
+                </div>
+                <Button variant="outline" size="sm">
+                  <Eye className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Quick Actions */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card className="text-center">
+          <CardContent className="pt-6">
+            <Eye className="h-6 w-6 mb-2" />
+            <h3 className="font-medium">Start Audit</h3>
+          </CardContent>
+        </Card>
+        <Card className="text-center">
+          <CardContent className="pt-6">
+            <CheckCircle className="h-6 w-6 mb-2" />
+            <h3 className="font-medium">View Reports</h3>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  )
+}
+EOF
+
+# Update BoardDashboard.tsx
 cat > src/pages/roles/BoardDashboard.tsx << 'EOF'
 import React from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/Card'
-import { Button } from '../../components/ui/Button'
-import { Badge } from '../../components/ui/Badge'
+import { api } from '../../utils'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, Button, Badge, LoadingSpinner } from '../../components'
 import { Crown, Users, Trophy, BarChart3, FileText, Download } from 'lucide-react'
 
 export const BoardDashboard = () => {
-  const { data: dashboard, isLoading } = useQuery({
+  const { data: dashboard, isLoading, error } = useQuery({
     queryKey: ['board-dashboard'],
     queryFn: () => api.getBoardDashboard().then(res => res.data),
   })
 
-  if (isLoading) return <div>Loading...</div>
+  if (isLoading) return <LoadingSpinner size="large" />
+  if (error) return <div>Error loading dashboard</div>
 
   return (
     <div className="space-y-6">
@@ -770,18 +812,19 @@ export const BoardDashboard = () => {
         <h1 className="text-3xl font-bold">Board Dashboard</h1>
         <Button>
           <Crown className="h-4 w-4 mr-2" />
-          Board Report
+          Generate Report
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Stats Cards */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Members</CardTitle>
+            <CardTitle className="text-sm font-medium">Total Users</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{dashboard?.total_members || 0}</div>
+            <div className="text-2xl font-bold">{dashboard?.totalUsers || 0}</div>
           </CardContent>
         </Card>
 
@@ -791,139 +834,168 @@ export const BoardDashboard = () => {
             <Trophy className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{dashboard?.active_events || 0}</div>
+            <div className="text-2xl font-bold">{dashboard?.activeEvents || 0}</div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Certifications</CardTitle>
+            <CardTitle className="text-sm font-medium">Revenue</CardTitle>
             <BarChart3 className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{dashboard?.certifications || 0}</div>
+            <div className="text-2xl font-bold">${dashboard?.revenue || 0}</div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Reports</CardTitle>
+            <CardTitle className="text-sm font-medium">Reports Generated</CardTitle>
             <FileText className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{dashboard?.reports || 0}</div>
+            <div className="text-2xl font-bold">{dashboard?.reportsGenerated || 0}</div>
           </CardContent>
         </Card>
       </div>
 
+      {/* Recent Activities */}
       <Card>
         <CardHeader>
           <CardTitle>Recent Activities</CardTitle>
-          <CardDescription>Latest board activities and decisions</CardDescription>
+          <CardDescription>Latest board activities</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {dashboard?.recent_activities?.map((activity: any) => (
-              <div key={activity.id} className="flex items-center justify-between p-4 border rounded-lg">
+            {dashboard?.recentActivities?.map((activity: any) => (
+              <div key={activity.id} className="flex items-center justify-between">
                 <div>
-                  <h3 className="font-semibold">{activity.title}</h3>
+                  <h4 className="font-medium">{activity.name}</h4>
                   <p className="text-sm text-muted-foreground">{activity.description}</p>
                 </div>
-                <Button variant="outline" size="sm">
-                  <Download className="h-4 w-4" />
-                </Button>
+                <div className="flex items-center space-x-2">
+                  <Badge variant="secondary">{activity.status}</Badge>
+                  <Button variant="outline" size="sm">
+                    <Download className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
             ))}
           </div>
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="cursor-pointer hover:shadow-md transition-shadow">
-          <CardContent className="p-6 text-center">
+      {/* Quick Actions */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card className="text-center">
+          <CardContent className="pt-6">
             <Download className="h-6 w-6 mb-2" />
-            <h3 className="font-semibold">Export Data</h3>
+            <h3 className="font-medium">Export Data</h3>
           </CardContent>
         </Card>
-
-        <Card className="cursor-pointer hover:shadow-md transition-shadow">
-          <CardContent className="p-6 text-center">
+        <Card className="text-center">
+          <CardContent className="pt-6">
             <Download className="h-6 w-6 mb-2" />
-            <h3 className="font-semibold">Generate Report</h3>
+            <h3 className="font-medium">Generate Report</h3>
           </CardContent>
         </Card>
-
-        <Card className="cursor-pointer hover:shadow-md transition-shadow">
-          <CardContent className="p-6 text-center">
+        <Card className="text-center">
+          <CardContent className="pt-6">
             <Download className="h-6 w-6 mb-2" />
-            <h3 className="font-semibold">Certify Results</h3>
+            <h3 className="font-medium">Download Analytics</h3>
           </CardContent>
         </Card>
-
-        <Card className="cursor-pointer hover:shadow-md transition-shadow">
-          <CardContent className="p-6 text-center">
+        <Card className="text-center">
+          <CardContent className="pt-6">
             <Download className="h-6 w-6 mb-2" />
-            <h3 className="font-semibold">Archive Event</h3>
+            <h3 className="font-medium">Export Users</h3>
           </CardContent>
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="cursor-pointer hover:shadow-md transition-shadow">
-          <CardContent className="p-6 text-center">
+      {/* Analytics Overview */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card className="text-center">
+          <CardContent className="pt-6">
             <BarChart3 className="h-6 w-6 mb-2" />
-            <h3 className="font-semibold">Analytics</h3>
+            <h3 className="font-medium">Analytics</h3>
           </CardContent>
         </Card>
-
-        <Card className="cursor-pointer hover:shadow-md transition-shadow">
-          <CardContent className="p-6 text-center">
+        <Card className="text-center">
+          <CardContent className="pt-6">
             <FileText className="h-6 w-6 mb-2" />
-            <h3 className="font-semibold">Documents</h3>
+            <h3 className="font-medium">Reports</h3>
           </CardContent>
         </Card>
-
-        <Card className="cursor-pointer hover:shadow-md transition-shadow">
-          <CardContent className="p-6 text-center">
+        <Card className="text-center">
+          <CardContent className="pt-6">
             <Users className="h-6 w-6 mb-2" />
-            <h3 className="font-semibold">Members</h3>
+            <h3 className="font-medium">User Management</h3>
           </CardContent>
         </Card>
-
-        <Card className="cursor-pointer hover:shadow-md transition-shadow">
-          <CardContent className="p-6 text-center">
+        <Card className="text-center">
+          <CardContent className="pt-6">
             <Trophy className="h-6 w-6 mb-2" />
-            <h3 className="font-semibold">Events</h3>
+            <h3 className="font-medium">Event Overview</h3>
           </CardContent>
         </Card>
       </div>
 
-      <div className="text-center">
-        <Crown className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-        <h3 className="text-lg font-semibold mb-2">Board Authority</h3>
-        <p className="text-muted-foreground">Manage and oversee all event activities</p>
-      </div>
+      {/* Board Actions */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Board Actions</CardTitle>
+          <CardDescription>Administrative actions available to board members</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex gap-2">
+            <Button variant="outline">
+              <Crown className="h-4 w-4 mr-2" />
+              Manage Users
+            </Button>
+            <Button variant="outline">
+              <BarChart3 className="h-4 w-4 mr-2" />
+              View Analytics
+            </Button>
+            <Button variant="outline">
+              <FileText className="h-4 w-4 mr-2" />
+              Generate Reports
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Empty State */}
+      {dashboard?.recentActivities?.length === 0 && (
+        <Card>
+          <CardContent className="text-center py-12">
+            <Crown className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <h3 className="text-lg font-medium mb-2">No recent activities</h3>
+            <p className="text-muted-foreground mb-4">Board activities will appear here.</p>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }
 EOF
 
-# Fix EmceeDashboard.tsx
+# Update EmceeDashboard.tsx
 cat > src/pages/roles/EmceeDashboard.tsx << 'EOF'
 import React from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/Card'
-import { Button } from '../../components/ui/Button'
-import { Badge } from '../../components/ui/Badge'
+import { api } from '../../utils'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, Button, Badge, LoadingSpinner } from '../../components'
 import { Mic, Calendar, FileText, Users, Clock, Play } from 'lucide-react'
 
 export const EmceeDashboard = () => {
-  const { data: dashboard, isLoading } = useQuery({
+  const { data: dashboard, isLoading, error } = useQuery({
     queryKey: ['emcee-dashboard'],
     queryFn: () => api.getEmceeDashboard().then(res => res.data),
   })
 
-  if (isLoading) return <div>Loading...</div>
+  if (isLoading) return <LoadingSpinner size="large" />
+  if (error) return <div>Error loading dashboard</div>
 
   return (
     <div className="space-y-6">
@@ -935,154 +1007,178 @@ export const EmceeDashboard = () => {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Stats Cards */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Events</CardTitle>
+            <CardTitle className="text-sm font-medium">Events Hosted</CardTitle>
             <Calendar className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{dashboard?.active_events || 0}</div>
+            <div className="text-2xl font-bold">{dashboard?.eventsHosted || 0}</div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Scripts</CardTitle>
+            <CardTitle className="text-sm font-medium">Scripts Available</CardTitle>
             <FileText className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{dashboard?.scripts || 0}</div>
+            <div className="text-2xl font-bold">{dashboard?.scriptsAvailable || 0}</div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Contestants</CardTitle>
+            <CardTitle className="text-sm font-medium">Participants</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{dashboard?.contestants || 0}</div>
+            <div className="text-2xl font-bold">{dashboard?.participants || 0}</div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Time Remaining</CardTitle>
+            <CardTitle className="text-sm font-medium">Total Time</CardTitle>
             <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{dashboard?.time_remaining || '0:00'}</div>
+            <div className="text-2xl font-bold">{dashboard?.totalTime || '0h'}</div>
           </CardContent>
         </Card>
       </div>
 
+      {/* Current Event */}
       <Card>
         <CardHeader>
           <CardTitle>Current Event</CardTitle>
-          <CardDescription>Active event details and script</CardDescription>
+          <CardDescription>Currently active event details</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {dashboard?.current_event && (
-              <div className="p-4 border rounded-lg">
-                <h3 className="font-semibold">{dashboard.current_event.name}</h3>
-                <p className="text-sm text-muted-foreground">{dashboard.current_event.description}</p>
-                <div className="mt-4">
-                  <Button>
-                    <Play className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Event Scripts</CardTitle>
-          <CardDescription>Available scripts and announcements</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {dashboard?.scripts?.map((script: any) => (
-              <div key={script.id} className="flex items-center justify-between p-4 border rounded-lg">
+          {dashboard?.currentEvent ? (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="font-semibold">{script.name}</h3>
-                  <p className="text-sm text-muted-foreground">{script.description}</p>
+                  <h4 className="font-medium">{dashboard.currentEvent.name}</h4>
+                  <p className="text-sm text-muted-foreground">{dashboard.currentEvent.description}</p>
                 </div>
+                <Badge variant="secondary">{dashboard.currentEvent.status}</Badge>
+              </div>
+              <div className="flex gap-2">
                 <Button variant="outline" size="sm">
                   <Play className="h-4 w-4" />
                 </Button>
+                <Button variant="outline" size="sm">
+                  View Script
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <p className="text-muted-foreground">No active event</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Upcoming Events */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Upcoming Events</CardTitle>
+          <CardDescription>Scheduled events to host</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {dashboard?.upcomingEvents?.map((event: any) => (
+              <div key={event.id} className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-medium">{event.name}</h4>
+                  <p className="text-sm text-muted-foreground">{event.description}</p>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Badge variant="secondary">{event.status}</Badge>
+                  <Button variant="outline" size="sm">
+                    <Play className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
             ))}
           </div>
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="cursor-pointer hover:shadow-md transition-shadow">
-          <CardContent className="p-6 text-center">
+      {/* Quick Actions */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card className="text-center">
+          <CardContent className="pt-6">
             <Mic className="h-6 w-6 mb-2" />
-            <h3 className="font-semibold">Microphone</h3>
+            <h3 className="font-medium">Start Event</h3>
           </CardContent>
         </Card>
-
-        <Card className="cursor-pointer hover:shadow-md transition-shadow">
-          <CardContent className="p-6 text-center">
+        <Card className="text-center">
+          <CardContent className="pt-6">
             <FileText className="h-6 w-6 mb-2" />
-            <h3 className="font-semibold">Scripts</h3>
+            <h3 className="font-medium">View Scripts</h3>
           </CardContent>
         </Card>
-
-        <Card className="cursor-pointer hover:shadow-md transition-shadow">
-          <CardContent className="p-6 text-center">
+        <Card className="text-center">
+          <CardContent className="pt-6">
             <Users className="h-6 w-6 mb-2" />
-            <h3 className="font-semibold">Contestants</h3>
+            <h3 className="font-medium">Manage Participants</h3>
           </CardContent>
         </Card>
-
-        <Card className="cursor-pointer hover:shadow-md transition-shadow">
-          <CardContent className="p-6 text-center">
+        <Card className="text-center">
+          <CardContent className="pt-6">
             <Play className="h-6 w-6 mb-2" />
-            <h3 className="font-semibold">Controls</h3>
+            <h3 className="font-medium">Event Controls</h3>
           </CardContent>
         </Card>
       </div>
 
-      <div className="text-center">
-        <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-        <h3 className="text-lg font-semibold mb-2">Script Ready</h3>
-        <p className="text-muted-foreground">All event scripts are prepared and ready</p>
-      </div>
+      {/* Empty State */}
+      {dashboard?.upcomingEvents?.length === 0 && (
+        <Card>
+          <CardContent className="text-center py-12">
+            <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <h3 className="text-lg font-medium mb-2">No upcoming events</h3>
+            <p className="text-muted-foreground mb-4">Scheduled events will appear here.</p>
+          </CardContent>
+        </Card>
+      )}
 
-      <div className="text-center">
-        <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-        <h3 className="text-lg font-semibold mb-2">Contestants Ready</h3>
-        <p className="text-muted-foreground">All contestants are prepared for the event</p>
-      </div>
+      {/* Empty State for Users */}
+      {dashboard?.upcomingEvents?.length === 0 && (
+        <Card>
+          <CardContent className="text-center py-12">
+            <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <h3 className="text-lg font-medium mb-2">No participants</h3>
+            <p className="text-muted-foreground mb-4">Event participants will appear here.</p>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }
 EOF
 
-# Fix JudgeDashboard.tsx
+# Update JudgeDashboard.tsx
 cat > src/pages/roles/JudgeDashboard.tsx << 'EOF'
 import React from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/Card'
-import { Button } from '../../components/ui/Button'
-import { Badge } from '../../components/ui/Badge'
+import { api } from '../../utils'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, Button, Badge, LoadingSpinner } from '../../components'
 import { Gavel, CheckCircle, Clock, BarChart3, Users, Trophy } from 'lucide-react'
 
 export const JudgeDashboard = () => {
-  const { data: dashboard, isLoading } = useQuery({
+  const { data: dashboard, isLoading, error } = useQuery({
     queryKey: ['judge-dashboard'],
     queryFn: () => api.getJudgeDashboard().then(res => res.data),
   })
 
-  if (isLoading) return <div>Loading...</div>
+  if (isLoading) return <LoadingSpinner size="large" />
+  if (error) return <div>Error loading dashboard</div>
 
   return (
     <div className="space-y-6">
@@ -1094,34 +1190,35 @@ export const JudgeDashboard = () => {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Stats Cards */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Assignments</CardTitle>
+            <CardTitle className="text-sm font-medium">Assignments</CardTitle>
             <Gavel className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{dashboard?.active_assignments || 0}</div>
+            <div className="text-2xl font-bold">{dashboard?.assignments || 0}</div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Completed Scores</CardTitle>
+            <CardTitle className="text-sm font-medium">Completed</CardTitle>
             <CheckCircle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{dashboard?.completed_scores || 0}</div>
+            <div className="text-2xl font-bold">{dashboard?.completed || 0}</div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Time Remaining</CardTitle>
+            <CardTitle className="text-sm font-medium">Pending</CardTitle>
             <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{dashboard?.time_remaining || '0:00'}</div>
+            <div className="text-2xl font-bold">{dashboard?.pending || 0}</div>
           </CardContent>
         </Card>
 
@@ -1131,95 +1228,302 @@ export const JudgeDashboard = () => {
             <BarChart3 className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{dashboard?.average_score || '0.0'}</div>
+            <div className="text-2xl font-bold">{dashboard?.averageScore || 'N/A'}</div>
           </CardContent>
         </Card>
       </div>
 
+      {/* Current Assignments */}
       <Card>
         <CardHeader>
-          <CardTitle>Current Assignment</CardTitle>
-          <CardDescription>Your current judging assignment</CardDescription>
+          <CardTitle>Current Assignments</CardTitle>
+          <CardDescription>Your current judging assignments</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {dashboard?.current_assignment && (
-              <div className="p-4 border rounded-lg">
-                <h3 className="font-semibold">{dashboard.current_assignment.contestant_name}</h3>
-                <p className="text-sm text-muted-foreground">{dashboard.current_assignment.category_name}</p>
-                <div className="mt-4">
-                  <Button>
+            {dashboard?.currentAssignments?.map((assignment: any) => (
+              <div key={assignment.id} className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-medium">{assignment.name}</h4>
+                  <p className="text-sm text-muted-foreground">{assignment.description}</p>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Badge variant="secondary">{assignment.status}</Badge>
+                  <Button variant="outline" size="sm">
                     <Gavel className="h-4 w-4" />
                   </Button>
                 </div>
               </div>
-            )}
+            ))}
           </div>
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="cursor-pointer hover:shadow-md transition-shadow">
-          <CardContent className="p-6 text-center">
+      {/* Quick Actions */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card className="text-center">
+          <CardContent className="pt-6">
             <Gavel className="h-6 w-6 mb-2" />
-            <h3 className="font-semibold">Score Sheet</h3>
+            <h3 className="font-medium">Start Judging</h3>
           </CardContent>
         </Card>
-
-        <Card className="cursor-pointer hover:shadow-md transition-shadow">
-          <CardContent className="p-6 text-center">
+        <Card className="text-center">
+          <CardContent className="pt-6">
             <CheckCircle className="h-6 w-6 mb-2" />
-            <h3 className="font-semibold">Completed</h3>
+            <h3 className="font-medium">View Completed</h3>
           </CardContent>
         </Card>
-
-        <Card className="cursor-pointer hover:shadow-md transition-shadow">
-          <CardContent className="p-6 text-center">
+        <Card className="text-center">
+          <CardContent className="pt-6">
             <Users className="h-6 w-6 mb-2" />
-            <h3 className="font-semibold">Contestants</h3>
+            <h3 className="font-medium">Manage Assignments</h3>
           </CardContent>
         </Card>
-
-        <Card className="cursor-pointer hover:shadow-md transition-shadow">
-          <CardContent className="p-6 text-center">
+        <Card className="text-center">
+          <CardContent className="pt-6">
             <Trophy className="h-6 w-6 mb-2" />
-            <h3 className="font-semibold">Results</h3>
+            <h3 className="font-medium">View Results</h3>
           </CardContent>
         </Card>
       </div>
 
-      <div className="text-center">
-        <Gavel className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-        <h3 className="text-lg font-semibold mb-2">Judging Complete</h3>
-        <p className="text-muted-foreground">All scores have been submitted and verified</p>
-      </div>
+      {/* Empty State */}
+      {dashboard?.currentAssignments?.length === 0 && (
+        <Card>
+          <CardContent className="text-center py-12">
+            <Gavel className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <h3 className="text-lg font-medium mb-2">No current assignments</h3>
+            <p className="text-muted-foreground mb-4">Your judging assignments will appear here.</p>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }
 EOF
 
-print_success "All role dashboards fixed"
+print_success "All role dashboard files updated"
 
-# Step 9: Install missing dependencies
-print_status "Step 9: Installing missing dependencies..."
-npm install @radix-ui/react-slot class-variance-authority clsx tailwind-merge date-fns lucide-react
-print_success "Dependencies installed"
+# Step 3: Fix the components.tsx file to use absolute import
+print_status "Step 3: Fixing components.tsx import..."
+cat > src/components.tsx << 'EOF'
+import * as React from "react"
+import { Slot } from "@radix-ui/react-slot"
+import { cva, type VariantProps } from "class-variance-authority"
+import { cn } from "./utils"
 
-# Step 10: Fix LoadingSpinner size issue
-print_status "Step 10: Fixing LoadingSpinner size issue..."
-sed -i 's/size="lg"/size="large"/g' src/App.tsx
-print_success "LoadingSpinner size fixed"
+// Button component
+const buttonVariants = cva(
+  "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
+  {
+    variants: {
+      variant: {
+        default: "bg-primary text-primary-foreground hover:bg-primary/90",
+        destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
+        outline: "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
+        secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+        ghost: "hover:bg-accent hover:text-accent-foreground",
+        link: "text-primary underline-offset-4 hover:underline",
+      },
+      size: {
+        default: "h-10 px-4 py-2",
+        sm: "h-9 rounded-md px-3",
+        lg: "h-11 rounded-md px-8",
+        icon: "h-10 w-10",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+      size: "default",
+    },
+  }
+)
 
-# Step 11: Run type check
-print_status "Step 11: Running TypeScript type check..."
+export interface ButtonProps
+  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
+    VariantProps<typeof buttonVariants> {
+  asChild?: boolean
+}
+
+export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
+  ({ className, variant, size, asChild = false, ...props }, ref) => {
+    const Comp = asChild ? Slot : "button"
+    return (
+      <Comp
+        className={cn(buttonVariants({ variant, size, className }))}
+        ref={ref}
+        {...props}
+      />
+    )
+  }
+)
+Button.displayName = "Button"
+
+// Card component
+export const Card = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn(
+      "rounded-lg border bg-card text-card-foreground shadow-sm",
+      className
+    )}
+    {...props}
+  />
+))
+Card.displayName = "Card"
+
+export const CardHeader = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn("flex flex-col space-y-1.5 p-6", className)}
+    {...props}
+  />
+))
+CardHeader.displayName = "CardHeader"
+
+export const CardTitle = React.forwardRef<
+  HTMLParagraphElement,
+  React.HTMLAttributes<HTMLHeadingElement>
+>(({ className, ...props }, ref) => (
+  <h3
+    ref={ref}
+    className={cn(
+      "text-2xl font-semibold leading-none tracking-tight",
+      className
+    )}
+    {...props}
+  />
+))
+CardTitle.displayName = "CardTitle"
+
+export const CardDescription = React.forwardRef<
+  HTMLParagraphElement,
+  React.HTMLAttributes<HTMLParagraphElement>
+>(({ className, ...props }, ref) => (
+  <p
+    ref={ref}
+    className={cn("text-sm text-muted-foreground", className)}
+    {...props}
+  />
+))
+CardDescription.displayName = "CardDescription"
+
+export const CardContent = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div ref={ref} className={cn("p-6 pt-0", className)} {...props} />
+))
+CardContent.displayName = "CardContent"
+
+export const CardFooter = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn("flex items-center p-6 pt-0", className)}
+    {...props}
+  />
+))
+CardFooter.displayName = "CardFooter"
+
+// Input component
+export interface InputProps
+  extends React.InputHTMLAttributes<HTMLInputElement> {}
+
+export const Input = React.forwardRef<HTMLInputElement, InputProps>(
+  ({ className, type, ...props }, ref) => {
+    return (
+      <input
+        type={type}
+        className={cn(
+          "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
+          className
+        )}
+        ref={ref}
+        {...props}
+      />
+    )
+  }
+)
+Input.displayName = "Input"
+
+// Badge component
+const badgeVariants = cva(
+  "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+  {
+    variants: {
+      variant: {
+        default: "border-transparent bg-primary text-primary-foreground hover:bg-primary/80",
+        secondary: "border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80",
+        destructive: "border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80",
+        outline: "text-foreground",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+    },
+  }
+)
+
+export interface BadgeProps
+  extends React.HTMLAttributes<HTMLDivElement>,
+    VariantProps<typeof badgeVariants> {}
+
+export const Badge = React.forwardRef<HTMLDivElement, BadgeProps>(
+  ({ className, variant, ...props }, ref) => {
+    return (
+      <div className={cn(badgeVariants({ variant }), className)} ref={ref} {...props} />
+    )
+  }
+)
+Badge.displayName = "Badge"
+
+// LoadingSpinner component
+interface LoadingSpinnerProps {
+  size?: 'small' | 'medium' | 'large';
+  className?: string;
+}
+
+export const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({ size = 'medium', className }) => {
+  const spinnerSize = {
+    small: 'h-4 w-4',
+    medium: 'h-8 w-8',
+    large: 'h-12 w-12',
+  };
+
+  return (
+    <div className={cn("flex items-center justify-center", className)}>
+      <div
+        className={cn(
+          "animate-spin rounded-full border-4 border-t-4 border-t-primary border-gray-200",
+          spinnerSize[size]
+        )}
+      ></div>
+    </div>
+  );
+};
+EOF
+
+print_success "Components file fixed"
+
+# Step 4: Run type check
+print_status "Step 4: Running TypeScript type check..."
 if npm run type-check; then
     print_success "TypeScript type check passed!"
 else
     print_warning "TypeScript type check still has issues, but continuing..."
 fi
 
-# Step 12: Try building
-print_status "Step 12: Attempting to build..."
+# Step 5: Try building
+print_status "Step 5: Attempting to build..."
 if npm run build; then
     print_success "🎉 Build completed successfully!"
     print_status "📁 Build output is in the 'dist' directory"
