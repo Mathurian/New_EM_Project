@@ -1657,12 +1657,17 @@ import AuthLayout from './components/layout/AuthLayout'
 
 function App() {
   const { checkAuth, isAuthenticated, isLoading } = useAuthStore()
+  const [authChecked, setAuthChecked] = React.useState(false)
 
   useEffect(() => {
-    checkAuth()
-  }, [checkAuth])
+    if (!authChecked) {
+      checkAuth().finally(() => {
+        setAuthChecked(true)
+      })
+    }
+  }, [checkAuth, authChecked])
 
-  if (isLoading) {
+  if (!authChecked || isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
@@ -1850,6 +1855,7 @@ export const useAuthStore = create<AuthStore>()(
             set({ isAuthenticated: false, isLoading: false })
           }
         } catch (error) {
+          // Don't set error for auth check failures - just mark as not authenticated
           set({ isAuthenticated: false, isLoading: false })
         }
       },
@@ -1924,9 +1930,8 @@ apiClient.interceptors.request.use(
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
-      window.location.href = '/login'
-    }
+    // Don't automatically redirect on 401 - let the auth store handle it
+    // This prevents redirect loops during authentication checks
     return Promise.reject(error)
   }
 )
