@@ -1,7 +1,7 @@
 import express from 'express'
 import session from 'express-session'
 import { createClient } from 'redis'
-import { default as connectRedis } from 'connect-redis'
+import connectRedis from 'connect-redis'
 import cors from 'cors'
 import helmet from 'helmet'
 import compression from 'compression'
@@ -15,6 +15,25 @@ import { config } from './config/index.js'
 import { testConnection, closeConnection } from './database/connection.js'
 import { logger } from './utils/logger.js'
 import { redisClient } from './utils/redis.js'
+
+// Import routes synchronously
+import authRoutes from './routes/auth.js'
+import eventsRoutes from './routes/events.js'
+import contestsRoutes from './routes/contests.js'
+import categoriesRoutes from './routes/categories.js'
+import scoringRoutes from './routes/scoring.js'
+import usersRoutes from './routes/users.js'
+import resultsRoutes from './routes/results.js'
+import filesRoutes from './routes/files.js'
+import settingsRoutes from './routes/settings.js'
+import backupRoutes from './routes/backup.js'
+import printRoutes from './routes/print.js'
+import templatesRoutes from './routes/templates.js'
+import tallyMasterRoutes from './routes/tally-master.js'
+import emceeRoutes from './routes/emcee.js'
+import auditorRoutes from './routes/auditor.js'
+import boardRoutes from './routes/board.js'
+import databaseRoutes from './routes/database-browser.js'
 
 const app = express()
 const server = createServer(app)
@@ -189,24 +208,24 @@ app.get('/api/health', async (req, res) => {
   }
 })
 
-// API Routes
-app.use('/api/auth', (await import('./routes/auth.js')).default)
-app.use('/api/events', (await import('./routes/events.js')).default)
-app.use('/api/contests', (await import('./routes/contests.js')).default)
-app.use('/api/categories', (await import('./routes/categories.js')).default)
-app.use('/api/scoring', (await import('./routes/scoring.js')).default)
-app.use('/api/users', (await import('./routes/users.js')).default)
-app.use('/api/results', (await import('./routes/results.js')).default)
-app.use('/api/files', (await import('./routes/files.js')).default)
-app.use('/api/settings', (await import('./routes/settings.js')).default)
-app.use('/api/backup', (await import('./routes/backup.js')).default)
-app.use('/api/print', (await import('./routes/print.js')).default)
-app.use('/api/templates', (await import('./routes/templates.js')).default)
-app.use('/api/tally-master', (await import('./routes/tally-master.js')).default)
-app.use('/api/emcee', (await import('./routes/emcee.js')).default)
-app.use('/api/auditor', (await import('./routes/auditor.js')).default)
-app.use('/api/board', (await import('./routes/board.js')).default)
-app.use('/api/database', (await import('./routes/database-browser.js')).default)
+// API Routes - Synchronous imports
+app.use('/api/auth', authRoutes)
+app.use('/api/events', eventsRoutes)
+app.use('/api/contests', contestsRoutes)
+app.use('/api/categories', categoriesRoutes)
+app.use('/api/scoring', scoringRoutes)
+app.use('/api/users', usersRoutes)
+app.use('/api/results', resultsRoutes)
+app.use('/api/files', filesRoutes)
+app.use('/api/settings', settingsRoutes)
+app.use('/api/backup', backupRoutes)
+app.use('/api/print', printRoutes)
+app.use('/api/templates', templatesRoutes)
+app.use('/api/tally-master', tallyMasterRoutes)
+app.use('/api/emcee', emceeRoutes)
+app.use('/api/auditor', auditorRoutes)
+app.use('/api/board', boardRoutes)
+app.use('/api/database', databaseRoutes)
 
 // Serve frontend
 app.use(express.static('../event-manager-frontend/dist'))

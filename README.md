@@ -1,602 +1,517 @@
-# Event Manager - Stable Ubuntu 24.04 Installation
+# Event Manager - Stable Event Management System
 
-A comprehensive event management system built with Express.js, React, TypeScript, and PostgreSQL, designed for Ubuntu 24.04 with Apache web server.
+A comprehensive, production-ready event management system built with Node.js, Express.js, React, and PostgreSQL. Designed for Ubuntu 24.04 with session-based authentication and real-time capabilities.
 
-## 🚀 Quick Start
+## Table of Contents
+
+- [Installation](#installation)
+- [Quick Start Guide](#quick-start-guide)
+- [Manual Installation](#manual-installation)
+- [Configuration](#configuration)
+- [Usage](#usage)
+- [Uninstallation](#uninstallation)
+- [Project Structure](#project-structure)
+- [Security Features](#security-features)
+- [Development](#development)
+- [Troubleshooting](#troubleshooting)
+- [Deployment](#deployment)
+
+## Installation
 
 ### Prerequisites
 
-- Ubuntu 24.04 LTS
-- Root or sudo access
+- Ubuntu 24.04 LTS (recommended)
 - Internet connection
+- User account with sudo privileges
+- At least 2GB RAM and 10GB disk space
 
-### One-Command Installation
+### Quick Start Guide
+
+#### One-Command Installation
 
 ```bash
 # Download and run the installation script
-curl -fsSL https://raw.githubusercontent.com/your-repo/event-manager/main/install-stable-ubuntu-24.04.sh | bash
+curl -fsSL https://raw.githubusercontent.com/your-repo/event-manager/main/install-event-manager-ubuntu-24.04.sh | bash
 ```
 
-Or manually:
-
-```bash
-# Clone the repository
-git clone https://github.com/your-repo/event-manager.git
-cd event-manager
-
-# Make installation script executable
-chmod +x install-stable-ubuntu-24.04.sh
-
-# Run installation
-sudo ./install-stable-ubuntu-24.04.sh
-```
-
-### Running the Application
-
-After installation, start the application:
-
-```bash
-# Terminal 1 - Start Backend API
-cd /opt/event-manager/event-manager-api
-npm start
-
-# Terminal 2 - Start Frontend (Development)
-cd /opt/event-manager/event-manager-frontend
-npm run dev
-
-# For Production with Apache - Build frontend first
-cd /opt/event-manager/event-manager-frontend
-npm run build
-```
-
-### Apache Configuration (Production)
-
-For production deployment with Apache:
-
-```bash
-# Enable required Apache modules
-sudo a2enmod proxy
-sudo a2enmod proxy_http
-sudo a2enmod proxy_wstunnel
-sudo a2enmod rewrite
-sudo a2enmod ssl
-
-# Create Apache virtual host configuration
-sudo tee /etc/apache2/sites-available/event-manager.conf > /dev/null << 'EOF'
-<VirtualHost *:80>
-    ServerName localhost
-    ServerAlias *
-    DocumentRoot /opt/event-manager/event-manager-frontend/dist
-    
-    # Proxy API requests to backend
-    ProxyPreserveHost On
-    ProxyPass /api/ http://localhost:3000/api/
-    ProxyPassReverse /api/ http://localhost:3000/api/
-    
-    # Proxy WebSocket connections
-    ProxyPass /socket.io/ ws://localhost:3000/socket.io/
-    ProxyPassReverse /socket.io/ ws://localhost:3000/socket.io/
-    
-    # Serve static frontend files
-    <Directory /opt/event-manager/event-manager-frontend/dist>
-        Options -Indexes +FollowSymLinks
-        AllowOverride All
-        Require all granted
-        
-        # Handle client-side routing
-        RewriteEngine On
-        RewriteBase /
-        RewriteRule ^index\.html$ - [L]
-        RewriteCond %{REQUEST_FILENAME} !-f
-        RewriteCond %{REQUEST_FILENAME} !-d
-        RewriteRule . /index.html [L]
-    </Directory>
-    
-    # Security headers
-    Header always set X-Content-Type-Options nosniff
-    Header always set X-Frame-Options DENY
-    Header always set X-XSS-Protection "1; mode=block"
-    
-    ErrorLog ${APACHE_LOG_DIR}/event-manager_error.log
-    CustomLog ${APACHE_LOG_DIR}/event-manager_access.log combined
-</VirtualHost>
-EOF
-
-# Disable default Apache site
-sudo a2dissite 000-default
-
-# Enable the event-manager site
-sudo a2ensite event-manager.conf
-
-# Restart Apache
-sudo systemctl restart apache2
-```
-
-### Troubleshooting Apache Configuration
-
-If you still see the default Apache page:
-
-```bash
-# Check which sites are enabled
-sudo a2ensite --list
-
-# Verify the configuration syntax
-sudo apache2ctl configtest
-
-# Check Apache error logs
-sudo tail -f /var/log/apache2/error.log
-
-# Check if the frontend build exists
-ls -la /opt/event-manager/event-manager-frontend/dist/
-
-# Force disable default site and enable our site
-sudo a2dissite 000-default.conf
-sudo a2ensite event-manager.conf
-sudo systemctl reload apache2
-
-# Alternative: Replace default site configuration
-sudo cp /etc/apache2/sites-available/event-manager.conf /etc/apache2/sites-available/000-default.conf
-sudo systemctl restart apache2
-```
-
-### Access the Application
-
-- **Frontend**: http://localhost:3000 (development) or http://localhost (production)
-- **API**: http://localhost:3000/api
-- **Health Check**: http://localhost:3000/api/health
-- **Apache Production**: http://localhost (port 80) or https://localhost (port 443)
-
-### Default Credentials
-
-- **Admin User**: admin@eventmanager.com / admin123
-- **Database**: event_manager / (password from installation)
-
-### Reset Admin User Data
-
-If you need to reset the admin user data before logging in:
-
-#### Method 1: Database Reset (Recommended)
-```bash
-# Connect to PostgreSQL
-sudo -u postgres psql event_manager
-
-# Reset admin user password
-UPDATE users SET password_hash = '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi' WHERE email = 'admin@eventmanager.com';
-
-# Reset user profile data
-UPDATE users SET 
-    first_name = 'System',
-    last_name = 'Administrator',
-    role = 'organizer',
-    is_active = true,
-    updated_at = CURRENT_TIMESTAMP
-WHERE email = 'admin@eventmanager.com';
-
-# Exit PostgreSQL
-\q
-```
-
-#### Method 2: Full Database Reset
-```bash
-# Stop the application
-sudo systemctl stop event-manager-api
-
-# Reset database completely
-cd /opt/event-manager/event-manager-api
-npm run db:migrate:rollback
-npm run db:migrate
-npm run db:seed
-
-# Restart the application
-sudo systemctl start event-manager-api
-```
-
-#### Method 3: Manual User Creation
-```bash
-# Connect to PostgreSQL
-sudo -u postgres psql event_manager
-
-# Delete existing admin user
-DELETE FROM users WHERE email = 'admin@eventmanager.com';
-
-# Create new admin user
-INSERT INTO users (id, email, password_hash, first_name, last_name, role, is_active, created_at, updated_at) 
-VALUES (
-    gen_random_uuid(),
-    'admin@eventmanager.com',
-    '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
-    'System',
-    'Administrator',
-    'organizer',
-    true,
-    CURRENT_TIMESTAMP,
-    CURRENT_TIMESTAMP
-);
-
-# Exit PostgreSQL
-\q
-```
-
-#### Method 4: Using Reset Script
-```bash
-# Run the database reset script
-cd /opt/event-manager/event-manager-api
-./reset-database.sh
-```
-
-**Note**: The password hash above corresponds to `admin123`. To use a different password, generate a new bcrypt hash.
-
-### Quick Start Checklist
-
-1. ✅ **Ensure database is running**: `sudo systemctl status postgresql`
-2. ✅ **Ensure Redis is running**: `sudo systemctl status redis-server`
-3. ✅ **Ensure Apache is running**: `sudo systemctl status apache2`
-4. ✅ **Start backend**: `cd event-manager-api && npm start`
-5. ✅ **Start frontend**: `cd event-manager-frontend && npm run dev`
-6. ✅ **Access application**: http://localhost:3000 (dev) or http://localhost (production)
-
-## 📋 Installation Process
-
-The installation script will automatically:
-
-1. **Update system packages**
-2. **Install Node.js 20.x LTS** (via NodeSource PPA)
-3. **Install system dependencies**:
-   - Build tools (build-essential, python3, make, g++)
-   - Image processing libraries (libpng-dev, libjpeg-dev, libwebp-dev)
-   - PostgreSQL client libraries
-   - Redis server
-   - Apache web server with SSL support
-4. **Configure PostgreSQL** database
-5. **Install Redis** for session storage
-6. **Configure Apache** with proxy modules
-7. **Install application dependencies**
-8. **Run database migrations and seeds**
-9. **Set up SSL certificates** (optional)
-10. **Configure firewall** (UFW)
-
-### Post-Installation Configuration
-
-#### 1. Firewall Setup
-```bash
-sudo ufw allow OpenSSH
-sudo ufw allow 'Apache Full'
-sudo ufw --force enable
-```
-
-#### 2. SSL Certificate (Optional)
-```bash
-# Install Certbot
-sudo apt install -y certbot python3-certbot-apache
-
-# Get SSL certificate
-sudo certbot --apache -d your-domain.com
-```
-
-#### 3. Backup Setup
-```bash
-# Create backup script
-cat > /opt/event-manager/backup.sh << 'EOF'
-#!/bin/bash
-BACKUP_DIR="/opt/event-manager/backups"
-DATE=$(date +%Y%m%d_%H%M%S)
-
-mkdir -p $BACKUP_DIR
-pg_dump -h localhost -U event_manager event_manager > $BACKUP_DIR/database_$DATE.sql
-tar -czf $BACKUP_DIR/application_$DATE.tar.gz /opt/event-manager --exclude=node_modules --exclude=backups
-find $BACKUP_DIR -type f -mtime +7 -delete
-EOF
-
-chmod +x /opt/event-manager/backup.sh
-
-# Set up automated backups
-(crontab -l 2>/dev/null; echo "0 2 * * * /opt/event-manager/backup.sh") | crontab -
-```
-
-## 🗑️ Uninstallation
-
-### Quick Uninstall
-```bash
-# Download and run the uninstall script
-curl -fsSL https://raw.githubusercontent.com/your-username/New_EM_Project/main/uninstall-stable-ubuntu-24.04.sh | bash
-```
-
-### Local Uninstall
-```bash
-# Make the script executable and run it
-chmod +x uninstall-stable-ubuntu-24.04.sh
-./uninstall-stable-ubuntu-24.04.sh
-```
-
-**⚠️ Note:** The uninstall script preserves PostgreSQL database and data.
-
-## 📋 System Requirements
-
-### Minimum Requirements
-- **OS**: Ubuntu 24.04 LTS
-- **RAM**: 2GB (4GB+ recommended)
-- **Storage**: 20GB+ disk space
-- **CPU**: 2 cores (4+ recommended)
-
-### Software Dependencies
-- **Node.js**: 20.x (LTS)
-- **PostgreSQL**: 15+
-- **Redis**: 7+
-- **Apache**: 2.4+
-- **PM2**: Latest
-
-### Browser Support
-- Chrome 90+
-- Firefox 88+
-- Safari 14+
-- Edge 90+
-
-## 🏗️ Architecture Overview
-
-### Backend (Express.js + PostgreSQL)
-- **Framework**: Express.js with session-based authentication
-- **Database**: PostgreSQL with Knex.js ORM
-- **Validation**: Joi schema validation
-- **Caching**: Redis for session storage
-- **File Uploads**: Multer for handling file uploads
-- **Security**: Helmet, CORS, rate limiting
-
-### Frontend (React + TypeScript)
-- **Framework**: React 18 with TypeScript
-- **Build Tool**: Vite
-- **State Management**: Zustand
-- **Data Fetching**: TanStack React Query v5
-- **UI Components**: Custom components with Tailwind CSS
-- **Icons**: Lucide React
-- **Routing**: React Router v6
-
-### Web Server (Apache)
-- **Proxy Configuration**: Reverse proxy to Node.js backend
-- **WebSocket Support**: Proxy for real-time features
-- **SSL/TLS**: Automatic certificate management with Certbot
-- **Static Files**: Serves React build files
-
-## 🔧 Configuration
+#### Manual Installation
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/your-repo/event-manager.git
+   cd event-manager
+   ```
+
+2. **Run the installation script:**
+   ```bash
+   chmod +x install-event-manager-ubuntu-24.04.sh
+   ./install-event-manager-ubuntu-24.04.sh
+   ```
+
+3. **Access the application:**
+   - Open your browser and navigate to `http://localhost`
+   - Login with the default credentials:
+     - Email: `admin@eventmanager.com`
+     - Password: `admin123`
+
+### What Gets Installed
+
+The installation script automatically installs and configures:
+
+- **System Dependencies:**
+  - Node.js 20.x LTS
+  - PostgreSQL 15+
+  - Redis 7+
+  - Apache 2.4
+  - Build tools and libraries
+
+- **Application Components:**
+  - Event Manager API (Express.js backend)
+  - Event Manager Frontend (React SPA)
+  - Database migrations and seed data
+  - PM2 process management
+  - Apache virtual host configuration
+
+- **Security Features:**
+  - Firewall configuration (UFW)
+  - Rate limiting
+  - Session-based authentication
+  - Security headers
+  - Input validation
+
+## Configuration
 
 ### Environment Variables
 
-The application uses environment variables for configuration. Key variables:
+The application uses environment variables for configuration. The main configuration file is located at `/opt/event-manager/.env`:
 
 ```bash
-# Database
+# Application Configuration
+NODE_ENV=production
+PORT=3000
+HOST=0.0.0.0
+APP_NAME=Event Manager
+APP_VERSION=2.0.0
+
+# Database Configuration
 DB_HOST=localhost
 DB_PORT=5432
 DB_NAME=event_manager
 DB_USER=event_manager
 DB_PASSWORD=your_secure_password
 
-# Redis
+# Redis Configuration
 REDIS_HOST=localhost
 REDIS_PORT=6379
+REDIS_PASSWORD=your_redis_password
+REDIS_DB=0
 
-# Session
-SESSION_SECRET=your_session_secret_key
+# Session Configuration
+SESSION_SECRET=your_session_secret
+SESSION_MAX_AGE=86400000
 
-# API
-API_PORT=3000
-API_URL=http://localhost:3000/api
+# Security Configuration
+BCRYPT_ROUNDS=12
+RATE_LIMIT_MAX=100
+RATE_LIMIT_WINDOW_MS=900000
 
-# Frontend
-VITE_API_URL=http://localhost:3000/api
+# Features
+FEATURE_REALTIME_SCORING=true
+FEATURE_EMAIL_NOTIFICATIONS=false
+FEATURE_FILE_UPLOADS=true
+FEATURE_AUDIT_LOGGING=true
+FEATURE_BACKUP_AUTOMATION=true
+FEATURE_API_DOCS=true
 ```
-
-### Database Setup
-
-The installation script automatically:
-- Creates PostgreSQL database
-- Runs migrations
-- Seeds initial data
-- Sets up user accounts
 
 ### Apache Configuration
 
-Apache is configured with:
-- Reverse proxy to backend API
-- WebSocket proxy for real-time features
-- Static file serving for frontend
-- SSL/TLS termination
+The Apache virtual host is configured at `/etc/apache2/sites-available/event-manager.conf`:
 
-## 🚀 Usage
+- **Document Root:** `/opt/event-manager/event-manager-frontend/dist`
+- **API Proxy:** `/api/` → `http://localhost:3000/api/`
+- **WebSocket Proxy:** `/socket.io/` → `ws://localhost:3000/socket.io/`
+- **Security Headers:** XSS protection, content type options, frame options
+- **CORS Headers:** Configured for API access
 
-### Starting the Application
+### Database Configuration
 
-```bash
-# Start backend API
-cd /opt/event-manager/event-manager-api
-npm start
+PostgreSQL is configured with:
+- **Database:** `event_manager`
+- **User:** `event_manager`
+- **Password:** Generated during installation
+- **Connection Pooling:** Configured for optimal performance
 
-# Start frontend (development)
-cd /opt/event-manager/event-manager-frontend
-npm run dev
+### Redis Configuration
 
-# Build frontend for production
-npm run build
-```
+Redis is configured with:
+- **Password Protection:** Enabled
+- **Memory Management:** 256MB limit with LRU eviction
+- **Persistence:** RDB and AOF enabled
+- **Session Storage:** Used for session management
+
+## Usage
 
 ### Accessing the Application
 
-- **Frontend**: http://localhost (or your domain)
-- **API**: http://localhost:3000/api
-- **Admin Panel**: http://localhost/admin
+- **Frontend:** http://localhost
+- **API:** http://localhost/api
+- **API Documentation:** http://localhost/docs
+- **Health Check:** http://localhost/api/health
 
 ### Default Credentials
 
-- **Admin User**: admin@eventmanager.com / admin123
-- **Database**: event_manager / (password from installation)
+- **Email:** admin@eventmanager.com
+- **Password:** admin123
 
-## 🛠️ Development
+**Important:** Change the default password immediately after first login.
 
-### Backend Development
+### User Roles
 
-```bash
-cd event-manager-api
+The system supports multiple user roles with different permissions:
 
-# Install dependencies
-npm install
+- **Organizer:** Full system access, can manage all events and users
+- **Judge:** Can score contestants and view results
+- **Contestant:** Can view events and results
+- **Emcee:** Can view events and announce results
+- **Tally Master:** Can verify scores and manage discrepancies
+- **Auditor:** Can audit scoring and certify results
+- **Board:** Can approve final results and manage disputes
 
-# Run in development mode
-npm run dev
-
-# Run database migrations
-npm run db:migrate
-
-# Seed database
-npm run db:seed
-
-# Run tests
-npm test
-```
-
-### Frontend Development
+### Service Management
 
 ```bash
-cd event-manager-frontend
+# Start the application
+sudo systemctl start event-manager
 
-# Install dependencies
-npm install
+# Stop the application
+sudo systemctl stop event-manager
 
-# Run development server
-npm run dev
+# Restart the application
+sudo systemctl restart event-manager
 
-# Type checking
-npm run type-check
+# Check status
+sudo systemctl status event-manager
 
-# Build for production
-npm run build
-
-# Preview production build
-npm run preview
+# View logs
+sudo journalctl -u event-manager -f
 ```
 
-## 📁 Project Structure
+### PM2 Management
+
+```bash
+# Switch to the service user
+sudo su - eventmanager
+
+# PM2 commands
+pm2 status
+pm2 restart event-manager-api
+pm2 logs event-manager-api
+pm2 monit
+```
+
+## Uninstallation
+
+To completely remove Event Manager from your system:
+
+```bash
+# Run the uninstallation script
+./uninstall-event-manager-ubuntu-24.04.sh
+```
+
+The uninstallation script will:
+- Stop all services
+- Remove application files
+- Remove database and data (with confirmation)
+- Remove Redis data (with confirmation)
+- Remove Apache configuration
+- Remove systemd services
+- Clean up firewall rules
+- Remove application user
+
+You can choose to preserve database and Redis data during uninstallation.
+
+## Project Structure
 
 ```
 event-manager/
 ├── event-manager-api/           # Backend API
 │   ├── src/
-│   │   ├── config/             # Configuration
-│   │   ├── database/           # Database setup
-│   │   ├── routes/             # API routes
-│   │   ├── services/           # Business logic
-│   │   └── utils/              # Utilities
+│   │   ├── config/             # Configuration files
+│   │   ├── database/           # Database migrations and seeds
+│   │   ├── routes/             # API route handlers
+│   │   ├── services/           # Business logic services
+│   │   ├── utils/              # Utility functions
+│   │   └── server.js           # Main server file
 │   ├── scripts/                # Database scripts
-│   └── package.json
-├── event-manager-frontend/      # Frontend application
+│   └── package.json            # Backend dependencies
+├── event-manager-frontend/     # Frontend React app
 │   ├── src/
 │   │   ├── components/         # React components
 │   │   ├── pages/              # Page components
 │   │   ├── stores/             # State management
-│   │   ├── lib/                # Utilities
-│   │   └── hooks/              # Custom hooks
-│   └── package.json
-├── install-stable-ubuntu-24.04.sh
-├── uninstall-stable-ubuntu-24.04.sh
+│   │   ├── lib/                # Utility libraries
+│   │   └── hooks/              # Custom React hooks
+│   └── package.json            # Frontend dependencies
+├── install-event-manager-ubuntu-24.04.sh
+├── uninstall-event-manager-ubuntu-24.04.sh
 └── README.md
 ```
 
-## 🔒 Security Features
+## Security Features
 
-- **Session-based Authentication**: Secure session management
-- **Input Validation**: Joi schema validation
-- **SQL Injection Protection**: Knex.js ORM
-- **XSS Protection**: Helmet security headers
-- **CORS Configuration**: Controlled cross-origin requests
-- **Rate Limiting**: API request throttling
-- **SSL/TLS**: Encrypted communication
-- **Firewall**: UFW configuration
+### Authentication & Authorization
+- **Session-based authentication** (no JWT complexity)
+- **Role-based access control** with granular permissions
+- **Password hashing** using bcrypt with configurable rounds
+- **Session management** with Redis storage
+- **Automatic session timeout**
 
-## 🐛 Troubleshooting
+### Input Validation
+- **Joi validation** for all API endpoints
+- **SQL injection protection** via parameterized queries
+- **XSS protection** with proper input sanitization
+- **File upload validation** with type and size restrictions
+
+### Security Headers
+- **Helmet.js** for security headers
+- **CORS configuration** with credentials support
+- **Rate limiting** to prevent abuse
+- **Content Security Policy** (configurable)
+
+### Infrastructure Security
+- **Firewall configuration** (UFW)
+- **Service isolation** with dedicated user
+- **Secure file permissions**
+- **Log monitoring** and audit trails
+
+## Development
+
+### Prerequisites for Development
+
+- Node.js 18+ and npm
+- PostgreSQL 12+
+- Redis 6+
+- Git
+
+### Development Setup
+
+1. **Clone and install dependencies:**
+   ```bash
+   git clone https://github.com/your-repo/event-manager.git
+   cd event-manager
+   
+   # Backend
+   cd event-manager-api
+   npm install
+   
+   # Frontend
+   cd ../event-manager-frontend
+   npm install
+   ```
+
+2. **Setup environment:**
+   ```bash
+   # Copy environment template
+   cp event-manager-api/.env.example event-manager-api/.env
+   
+   # Configure database and Redis settings
+   nano event-manager-api/.env
+   ```
+
+3. **Setup database:**
+   ```bash
+   cd event-manager-api
+   npm run db:migrate
+   npm run db:seed
+   ```
+
+4. **Start development servers:**
+   ```bash
+   # Backend (Terminal 1)
+   cd event-manager-api
+   npm run dev
+   
+   # Frontend (Terminal 2)
+   cd event-manager-frontend
+   npm run dev
+   ```
+
+### API Development
+
+The API follows RESTful conventions:
+
+- **Authentication:** `/api/auth/*`
+- **Events:** `/api/events/*`
+- **Contests:** `/api/contests/*`
+- **Categories:** `/api/categories/*`
+- **Scoring:** `/api/scoring/*`
+- **Users:** `/api/users/*`
+- **Results:** `/api/results/*`
+- **Settings:** `/api/settings/*`
+
+### Database Schema
+
+Key tables:
+- **users:** User accounts and profiles
+- **events:** Event information
+- **contests:** Contest details
+- **categories:** Contest categories
+- **scores:** Scoring data
+- **results:** Calculated results
+- **audit_logs:** System audit trail
+
+## Troubleshooting
 
 ### Common Issues
 
-1. **Port Conflicts**: Ensure ports 80, 443, 3000, and 5432 are available
-2. **Permission Issues**: Run installation script with sudo
-3. **Database Connection**: Check PostgreSQL service status
-4. **Build Errors**: Ensure Node.js 20.x is installed
-
-### Logs and Debugging
-
+#### Service Won't Start
 ```bash
-# Check application logs
-sudo journalctl -u event-manager-api
-sudo journalctl -u event-manager-frontend
+# Check service status
+sudo systemctl status event-manager
+
+# Check logs
+sudo journalctl -u event-manager -f
+
+# Check PM2 logs
+sudo su - eventmanager
+pm2 logs event-manager-api
+```
+
+#### Database Connection Issues
+```bash
+# Check PostgreSQL status
+sudo systemctl status postgresql
+
+# Test database connection
+sudo -u postgres psql -c "SELECT 1;"
+
+# Check database exists
+sudo -u postgres psql -l | grep event_manager
+```
+
+#### Redis Connection Issues
+```bash
+# Check Redis status
+sudo systemctl status redis-server
+
+# Test Redis connection
+redis-cli ping
+
+# Check Redis logs
+sudo tail -f /var/log/redis/redis-server.log
+```
+
+#### Frontend Not Loading
+```bash
+# Check Apache status
+sudo systemctl status apache2
+
+# Check Apache configuration
+sudo apache2ctl configtest
 
 # Check Apache logs
 sudo tail -f /var/log/apache2/error.log
-sudo tail -f /var/log/apache2/access.log
-
-# Check PostgreSQL logs
-sudo tail -f /var/log/postgresql/postgresql-*.log
 ```
 
-### Reset and Reinstall
+### Log Locations
 
-```bash
-# Uninstall application
-sudo ./uninstall-stable-ubuntu-24.04.sh
+- **Application Logs:** `/opt/event-manager/logs/`
+- **System Logs:** `sudo journalctl -u event-manager`
+- **Apache Logs:** `/var/log/apache2/`
+- **PostgreSQL Logs:** `/var/log/postgresql/`
+- **Redis Logs:** `/var/log/redis/redis-server.log`
 
-# Clean reinstall
-sudo ./install-stable-ubuntu-24.04.sh
-```
+### Performance Optimization
 
-## 🔄 Updates and Maintenance
+#### Database Optimization
+- **Connection Pooling:** Configured in Knex.js
+- **Indexes:** Added on frequently queried columns
+- **Query Optimization:** Using proper joins and filters
 
-### Updating Dependencies
+#### Redis Optimization
+- **Memory Management:** LRU eviction policy
+- **Persistence:** Balanced RDB and AOF
+- **Connection Pooling:** Reused connections
 
-```bash
-# Backend
-cd event-manager-api
-npm update
+#### Frontend Optimization
+- **Code Splitting:** React lazy loading
+- **Asset Optimization:** Vite build optimization
+- **Caching:** Browser and CDN caching headers
 
-# Frontend
-cd event-manager-frontend
-npm update
-```
+## Deployment
 
-### Database Migrations
+### Production Deployment
 
-```bash
-cd event-manager-api
-npm run db:migrate
-```
+1. **SSL Configuration:**
+   ```bash
+   # Install Certbot
+   sudo apt install certbot python3-certbot-apache
+   
+   # Get SSL certificate
+   sudo certbot --apache -d yourdomain.com
+   ```
 
-### Backup and Restore
+2. **Firewall Configuration:**
+   ```bash
+   # Allow HTTPS
+   sudo ufw allow 443/tcp
+   
+   # Remove HTTP if using HTTPS only
+   sudo ufw delete allow 80/tcp
+   ```
 
-```bash
-# Backup database
-pg_dump event_manager > backup.sql
+3. **Backup Configuration:**
+   ```bash
+   # Create backup script
+   sudo tee /opt/event-manager/backup.sh > /dev/null << 'EOF'
+   #!/bin/bash
+   pg_dump event_manager > /opt/backups/event_manager_$(date +%Y%m%d_%H%M%S).sql
+   redis-cli --rdb /opt/backups/redis_$(date +%Y%m%d_%H%M%S).rdb
+   EOF
+   
+   sudo chmod +x /opt/event-manager/backup.sh
+   
+   # Schedule backups
+   sudo crontab -e
+   # Add: 0 2 * * * /opt/event-manager/backup.sh
+   ```
 
-# Restore database
-psql event_manager < backup.sql
-```
+### Monitoring
 
-## 🌐 Production Deployment
+#### Health Checks
+- **API Health:** `GET /api/health`
+- **Database Health:** Included in API health check
+- **Redis Health:** Included in API health check
 
-### Domain Configuration
+#### Monitoring Tools
+- **PM2 Monitoring:** `pm2 monit`
+- **System Monitoring:** `htop`, `iotop`
+- **Log Monitoring:** `journalctl`, `tail -f`
 
-1. **Update DNS**: Point domain to server IP
-2. **SSL Certificate**: Run Certbot for automatic SSL
-3. **Environment Variables**: Set production values
-4. **Database**: Use production PostgreSQL instance
-5. **Monitoring**: Set up application monitoring
+### Scaling
 
-### Scaling Considerations
+#### Horizontal Scaling
+- **Load Balancer:** Use nginx or Apache as load balancer
+- **Multiple API Instances:** Run multiple PM2 instances
+- **Database Clustering:** PostgreSQL streaming replication
+- **Redis Clustering:** Redis Cluster or Sentinel
 
-- **Load Balancing**: Use multiple Apache instances
-- **Database**: Consider PostgreSQL clustering
-- **Caching**: Redis cluster for high availability
-- **CDN**: Use CDN for static assets
+#### Vertical Scaling
+- **Increase Memory:** For Redis and Node.js
+- **Increase CPU:** For processing-intensive operations
+- **SSD Storage:** For database performance
 
-## 📝 License
+## Support
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+### Getting Help
 
-## 🤝 Contributing
+1. **Check the logs** for error messages
+2. **Review this documentation** for common solutions
+3. **Check the GitHub issues** for known problems
+4. **Create a new issue** with detailed information
+
+### Contributing
 
 1. Fork the repository
 2. Create a feature branch
@@ -604,13 +519,10 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 4. Add tests if applicable
 5. Submit a pull request
 
-## 📞 Support
+### License
 
-For support and questions:
-- **Issues**: GitHub Issues
-- **Documentation**: Project Wiki
-- **Email**: support@example.com
+This project is licensed under the MIT License - see the LICENSE file for details.
 
 ---
 
-**Event Manager** - A modern, scalable event management solution for Ubuntu 24.04
+**Event Manager** - Professional event management made simple.

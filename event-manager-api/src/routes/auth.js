@@ -30,9 +30,6 @@ router.post('/login', validateLogin, async (req, res) => {
         return res.status(500).json({ error: 'Login failed' })
       }
 
-      // Update last login
-      userService.updateLastLogin(user.id)
-
       res.json({
         message: 'Login successful',
         user: {

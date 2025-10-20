@@ -2,11 +2,12 @@ import { createClient } from 'redis'
 import { config } from '../config/index.js'
 import { logger } from './logger.js'
 
-// Create Redis client
+// Create Redis client with stable configuration
 export const redisClient = createClient({
   url: `redis://${config.redis.host}:${config.redis.port}`,
-  password: config.redis.password,
-  database: config.redis.db
+  password: config.redis.password || undefined,
+  database: config.redis.db,
+  legacyMode: false // Use modern Redis client mode
 })
 
 // Redis event handlers
