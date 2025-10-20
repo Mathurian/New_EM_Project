@@ -105,11 +105,11 @@ stop_services() {
         log_info "Event Manager service was not running"
     fi
     
-    # Stop PM2 processes
+    # Stop PM2 processes (if any exist from old installations)
     if command -v pm2 >/dev/null 2>&1; then
         sudo -u "$SERVICE_USER" pm2 stop all 2>/dev/null || true
         sudo -u "$SERVICE_USER" pm2 delete all 2>/dev/null || true
-        log_success "PM2 processes stopped"
+        log_success "PM2 processes stopped (if any existed)"
     fi
     
     # Stop Apache
@@ -241,7 +241,7 @@ remove_node_packages() {
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         log_info "Removing Node.js packages..."
         
-        # Remove PM2 globally
+        # Remove PM2 globally (if it exists)
         if command -v pm2 >/dev/null 2>&1; then
             sudo npm uninstall -g pm2
             log_success "PM2 removed"

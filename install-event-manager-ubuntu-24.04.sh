@@ -125,8 +125,7 @@ install_system_dependencies() {
     curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
     sudo apt install -y nodejs
     
-    # PM2 for process management
-    sudo npm install -g pm2
+    # No PM2 needed - using systemctl directly
     
     log_success "System dependencies installed"
 }
@@ -428,47 +427,58 @@ EOF
     log_success "Apache configured successfully"
 }
 
-# Setup PM2 process management
-setup_pm2() {
-    log_info "Setting up PM2 process management..."
+# Setup systemd service (replaces PM2)
+setup_systemd_service() {
+    log_info "Setting up systemd service..."
     
-    # Create PM2 ecosystem file
-    sudo -u "$SERVICE_USER" tee "$INSTALL_DIR/ecosystem.config.js" > /dev/null << EOF
-module.exports = {
-  apps: [{
-    name: 'event-manager-api',
-    script: 'src/server.js',
-    cwd: '$INSTALL_DIR/event-manager-api',
-    instances: 1,
-    exec_mode: 'fork',
-    env: {
-      NODE_ENV: 'production',
-      PORT: 3000
-    },
-    log_file: '$INSTALL_DIR/logs/combined.log',
-    out_file: '$INSTALL_DIR/logs/out.log',
-    error_file: '$INSTALL_DIR/logs/error.log',
-    log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
-    merge_logs: true,
-    max_memory_restart: '1G',
-    node_args: '--max-old-space-size=1024',
-    restart_delay: 4000,
-    max_restarts: 10,
-    min_uptime: '10s'
-  }]
-};
+    # Create systemd service file
+    sudo tee /etc/systemd/system/event-manager.service > /dev/null << EOF
+[Unit]
+Description=Event Manager API Server
+After=network.target postgresql.service redis.service
+Wants=postgresql.service redis.service
+
+[Service]
+Type=simple
+User=$SERVICE_USER
+Group=$SERVICE_USER
+WorkingDirectory=$INSTALL_DIR/event-manager-api
+ExecStart=/usr/bin/node src/server.js
+ExecReload=/bin/kill -HUP \$MAINPID
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=event-manager
+
+# Environment variables
+Environment=NODE_ENV=production
+Environment=PORT=3000
+EnvironmentFile=$INSTALL_DIR/.env
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=$INSTALL_DIR
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+
+[Install]
+WantedBy=multi-user.target
 EOF
     
-    # Install PM2 globally for the service user
-    sudo -u "$SERVICE_USER" npm install -g pm2
+    # Reload systemd and enable service
+    sudo systemctl daemon-reload
+    sudo systemctl enable event-manager
     
-    # Start application with PM2
-    cd "$INSTALL_DIR"
-    sudo -u "$SERVICE_USER" pm2 start ecosystem.config.js
-    sudo -u "$SERVICE_USER" pm2 save
-    sudo -u "$SERVICE_USER" pm2 startup systemd -u "$SERVICE_USER" --hp "$INSTALL_DIR"
-    
-    log_success "PM2 process management configured"
+    log_success "Systemd service configured"
 }
 
 # Setup firewall
@@ -493,34 +503,16 @@ setup_firewall() {
     log_success "Firewall configured"
 }
 
-# Create systemd service
+# Create systemd service (simplified - no PM2)
 create_systemd_service() {
     log_info "Creating systemd service..."
     
-    sudo tee /etc/systemd/system/event-manager.service > /dev/null << EOF
-[Unit]
-Description=Event Manager API Server
-After=network.target postgresql.service redis.service
-
-[Service]
-Type=forking
-User=$SERVICE_USER
-Group=$SERVICE_USER
-WorkingDirectory=$INSTALL_DIR
-ExecStart=/usr/bin/pm2 start ecosystem.config.js
-ExecReload=/usr/bin/pm2 reload ecosystem.config.js
-ExecStop=/usr/bin/pm2 stop ecosystem.config.js
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-EOF
-    
+    # Service file already created in setup_systemd_service
+    # Just ensure it's enabled and ready
     sudo systemctl daemon-reload
     sudo systemctl enable event-manager
     
-    log_success "Systemd service created"
+    log_success "Systemd service ready"
 }
 
 # Final setup and verification
@@ -540,7 +532,7 @@ final_setup() {
     sudo systemctl start apache2
     
     # Wait for services to start
-    sleep 5
+    sleep 10
     
     # Verify services are running
     if systemctl is-active --quiet event-manager; then
@@ -548,6 +540,7 @@ final_setup() {
     else
         log_error "Event Manager service failed to start"
         sudo systemctl status event-manager
+        sudo journalctl -u event-manager --no-pager -l
     fi
     
     if systemctl is-active --quiet apache2; then
@@ -609,6 +602,7 @@ display_summary() {
     echo "  Stop: sudo systemctl stop event-manager"
     echo "  Restart: sudo systemctl restart event-manager"
     echo "  Status: sudo systemctl status event-manager"
+    echo "  Logs: sudo journalctl -u event-manager -f"
     echo
     echo "Logs:"
     echo "  Application: $INSTALL_DIR/logs/"
@@ -618,7 +612,7 @@ display_summary() {
     echo "Configuration Files:"
     echo "  Environment: $INSTALL_DIR/.env"
     echo "  Apache: /etc/apache2/sites-available/event-manager.conf"
-    echo "  PM2: $INSTALL_DIR/ecosystem.config.js"
+    echo "  Systemd: /etc/systemd/system/event-manager.service"
     echo
     echo "Next Steps:"
     echo "  1. Access the application at http://localhost"
@@ -656,7 +650,7 @@ main() {
     setup_database
     build_frontend
     configure_apache
-    setup_pm2
+    setup_systemd_service
     setup_firewall
     create_systemd_service
     final_setup

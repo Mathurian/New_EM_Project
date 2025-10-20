@@ -85,7 +85,7 @@ The installation script automatically installs and configures:
   - Event Manager API (Express.js backend)
   - Event Manager Frontend (React SPA)
   - Database migrations and seed data
-  - PM2 process management
+  - Systemd service management
   - Apache virtual host configuration
 
 - **Security Features:**
@@ -213,17 +213,21 @@ sudo systemctl status event-manager
 sudo journalctl -u event-manager -f
 ```
 
-### PM2 Management
+### Systemd Service Management
 
 ```bash
-# Switch to the service user
-sudo su - eventmanager
+# Check service status
+sudo systemctl status event-manager
 
-# PM2 commands
-pm2 status
-pm2 restart event-manager-api
-pm2 logs event-manager-api
-pm2 monit
+# View logs
+sudo journalctl -u event-manager -f
+
+# Restart service
+sudo systemctl restart event-manager
+
+# Enable/disable service
+sudo systemctl enable event-manager
+sudo systemctl disable event-manager
 ```
 
 ## Uninstallation
@@ -520,15 +524,15 @@ sudo tail -f /var/log/apache2/error.log
 - **Redis Health:** Included in API health check
 
 #### Monitoring Tools
-- **PM2 Monitoring:** `pm2 monit`
+- **Systemd Monitoring:** `systemctl status event-manager`
 - **System Monitoring:** `htop`, `iotop`
-- **Log Monitoring:** `journalctl`, `tail -f`
+- **Log Monitoring:** `journalctl -u event-manager`, `tail -f`
 
 ### Scaling
 
 #### Horizontal Scaling
 - **Load Balancer:** Use nginx or Apache as load balancer
-- **Multiple API Instances:** Run multiple PM2 instances
+- **Multiple API Instances:** Run multiple systemd service instances
 - **Database Clustering:** PostgreSQL streaming replication
 - **Redis Clustering:** Redis Cluster or Sentinel
 
