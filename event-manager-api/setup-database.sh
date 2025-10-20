@@ -37,8 +37,9 @@ if [ ! -f "package.json" ]; then
 fi
 
 # Check if .env file exists
-if [ ! -f ".env" ]; then
-    print_warning ".env file not found. Please create one with your database configuration."
+if [ ! -f "../.env" ]; then
+    print_warning ".env file not found in parent directory. Please create one with your database configuration."
+    print_status "Expected location: /opt/event-manager/.env"
     print_status "Example .env file:"
     echo "DB_HOST=localhost"
     echo "DB_PORT=5432"
