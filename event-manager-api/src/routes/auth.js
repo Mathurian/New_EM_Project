@@ -1,23 +1,20 @@
 import express from 'express'
-import { body, validationResult } from 'express-validator'
 import bcrypt from 'bcryptjs'
 import { UserService } from '../services/UserService.js'
 import { logger } from '../utils/logger.js'
+import { 
+  validateLogin, 
+  validateRegister, 
+  validateProfileUpdate, 
+  validatePasswordChange 
+} from '../utils/validation.js'
 
 const router = express.Router()
 const userService = new UserService()
 
 // Login
-router.post('/login', [
-  body('email').isEmail().normalizeEmail(),
-  body('password').isLength({ min: 6 })
-], async (req, res) => {
+router.post('/login', validateLogin, async (req, res) => {
   try {
-    const errors = validationResult(req)
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ error: 'Invalid input', details: errors.array() })
-    }
-
     const { email, password } = req.body
 
     const user = await userService.authenticateUser(email, password)
@@ -62,22 +59,11 @@ router.post('/login', [
 })
 
 // Register (Organizer only)
-router.post('/register', [
-  body('email').isEmail().normalizeEmail(),
-  body('password').isLength({ min: 6 }),
-  body('first_name').isLength({ min: 1, max: 100 }),
-  body('last_name').isLength({ min: 1, max: 100 }),
-  body('role').isIn(['organizer', 'judge', 'contestant', 'emcee', 'tally_master', 'auditor', 'board'])
-], async (req, res) => {
+router.post('/register', validateRegister, async (req, res) => {
   try {
     // Check if user is authenticated and has organizer role
     if (!req.isAuthenticated() || req.session.userRole !== 'organizer') {
       return res.status(403).json({ error: 'Access denied. Organizer role required.' })
-    }
-
-    const errors = validationResult(req)
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ error: 'Invalid input', details: errors.array() })
     }
 
     const { password, ...userData } = req.body
@@ -150,23 +136,10 @@ router.get('/me', async (req, res) => {
 })
 
 // Update profile
-router.put('/profile', [
-  body('first_name').optional().isLength({ min: 1, max: 100 }),
-  body('last_name').optional().isLength({ min: 1, max: 100 }),
-  body('preferred_name').optional().isLength({ max: 100 }),
-  body('phone').optional().isLength({ max: 20 }),
-  body('bio').optional().isLength({ max: 1000 }),
-  body('pronouns').optional().isLength({ max: 50 }),
-  body('gender').optional().isIn(['male', 'female', 'non-binary', 'prefer-not-to-say', 'other'])
-], async (req, res) => {
+router.put('/profile', validateProfileUpdate, async (req, res) => {
   try {
     if (!req.isAuthenticated()) {
       return res.status(401).json({ error: 'Not authenticated' })
-    }
-
-    const errors = validationResult(req)
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ error: 'Invalid input', details: errors.array() })
     }
 
     const user = await userService.updateProfile(req.session.userId, req.body, req.session.userId)
@@ -195,18 +168,10 @@ router.put('/profile', [
 })
 
 // Change password
-router.put('/password', [
-  body('current_password').notEmpty(),
-  body('new_password').isLength({ min: 6 })
-], async (req, res) => {
+router.put('/password', validatePasswordChange, async (req, res) => {
   try {
     if (!req.isAuthenticated()) {
       return res.status(401).json({ error: 'Not authenticated' })
-    }
-
-    const errors = validationResult(req)
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ error: 'Invalid input', details: errors.array() })
     }
 
     const { current_password, new_password } = req.body
