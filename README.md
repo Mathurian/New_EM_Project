@@ -148,7 +148,7 @@ sudo systemctl restart apache2
 
 ### Default Credentials
 
-- **Admin User**: admin@example.com / admin123
+- **Admin User**: admin@eventmanager.com / admin123
 - **Database**: event_manager / (password from installation)
 
 ### Reset Admin User Data
@@ -161,16 +161,16 @@ If you need to reset the admin user data before logging in:
 sudo -u postgres psql event_manager
 
 # Reset admin user password
-UPDATE users SET password = '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi' WHERE email = 'admin@example.com';
+UPDATE users SET password_hash = '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi' WHERE email = 'admin@eventmanager.com';
 
 # Reset user profile data
 UPDATE users SET 
-    first_name = 'Admin',
-    last_name = 'User',
-    role = 'admin',
+    first_name = 'System',
+    last_name = 'Administrator',
+    role = 'organizer',
     is_active = true,
     updated_at = CURRENT_TIMESTAMP
-WHERE email = 'admin@example.com';
+WHERE email = 'admin@eventmanager.com';
 
 # Exit PostgreSQL
 \q
@@ -197,17 +197,17 @@ sudo systemctl start event-manager-api
 sudo -u postgres psql event_manager
 
 # Delete existing admin user
-DELETE FROM users WHERE email = 'admin@example.com';
+DELETE FROM users WHERE email = 'admin@eventmanager.com';
 
 # Create new admin user
-INSERT INTO users (id, email, password, first_name, last_name, role, is_active, created_at, updated_at) 
+INSERT INTO users (id, email, password_hash, first_name, last_name, role, is_active, created_at, updated_at) 
 VALUES (
     gen_random_uuid(),
-    'admin@example.com',
+    'admin@eventmanager.com',
     '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
-    'Admin',
-    'User',
-    'admin',
+    'System',
+    'Administrator',
+    'organizer',
     true,
     CURRENT_TIMESTAMP,
     CURRENT_TIMESTAMP
@@ -426,7 +426,7 @@ npm run build
 
 ### Default Credentials
 
-- **Admin User**: admin@example.com / admin123
+- **Admin User**: admin@eventmanager.com / admin123
 - **Database**: event_manager / (password from installation)
 
 ## 🛠️ Development
