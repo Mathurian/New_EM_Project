@@ -151,6 +151,81 @@ sudo systemctl restart apache2
 - **Admin User**: admin@example.com / admin123
 - **Database**: event_manager / (password from installation)
 
+### Reset Admin User Data
+
+If you need to reset the admin user data before logging in:
+
+#### Method 1: Database Reset (Recommended)
+```bash
+# Connect to PostgreSQL
+sudo -u postgres psql event_manager
+
+# Reset admin user password
+UPDATE users SET password = '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi' WHERE email = 'admin@example.com';
+
+# Reset user profile data
+UPDATE users SET 
+    first_name = 'Admin',
+    last_name = 'User',
+    role = 'admin',
+    is_active = true,
+    updated_at = CURRENT_TIMESTAMP
+WHERE email = 'admin@example.com';
+
+# Exit PostgreSQL
+\q
+```
+
+#### Method 2: Full Database Reset
+```bash
+# Stop the application
+sudo systemctl stop event-manager-api
+
+# Reset database completely
+cd /opt/event-manager/event-manager-api
+npm run db:migrate:rollback
+npm run db:migrate
+npm run db:seed
+
+# Restart the application
+sudo systemctl start event-manager-api
+```
+
+#### Method 3: Manual User Creation
+```bash
+# Connect to PostgreSQL
+sudo -u postgres psql event_manager
+
+# Delete existing admin user
+DELETE FROM users WHERE email = 'admin@example.com';
+
+# Create new admin user
+INSERT INTO users (id, email, password, first_name, last_name, role, is_active, created_at, updated_at) 
+VALUES (
+    gen_random_uuid(),
+    'admin@example.com',
+    '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
+    'Admin',
+    'User',
+    'admin',
+    true,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+);
+
+# Exit PostgreSQL
+\q
+```
+
+#### Method 4: Using Reset Script
+```bash
+# Run the database reset script
+cd /opt/event-manager/event-manager-api
+./reset-database.sh
+```
+
+**Note**: The password hash above corresponds to `admin123`. To use a different password, generate a new bcrypt hash.
+
 ### Quick Start Checklist
 
 1. ✅ **Ensure database is running**: `sudo systemctl status postgresql`
