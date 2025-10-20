@@ -2009,6 +2009,9 @@ EOF
 
     # Placeholder pages
     for page in DashboardPage EventsPage ContestsPage CategoriesPage ScoringPage ResultsPage UsersPage SettingsPage ProfilePage; do
+      # Derive a human-readable title by trimming the trailing 'Page'
+      display_title="${page%Page}"
+
       sudo -u "$SERVICE_USER" tee "$INSTALL_DIR/event-manager-frontend/src/pages/$page.tsx" > /dev/null << EOF
 import React from 'react'
 
@@ -2016,11 +2019,11 @@ const $page = () => {
   return (
     <div className="max-w-7xl mx-auto">
       <h1 className="text-2xl font-bold text-gray-900 mb-6">
-        ${page.replace('Page', '')}
+        $display_title
       </h1>
       <div className="bg-white shadow rounded-lg p-6">
         <p className="text-gray-600">
-          Welcome to the ${page.replace('Page', '')} page. This is a placeholder component.
+          Welcome to the $display_title page. This is a placeholder component.
         </p>
       </div>
     </div>
