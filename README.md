@@ -2,7 +2,7 @@
 
 A comprehensive event management system built with Express.js, React, TypeScript, and PostgreSQL, designed for Ubuntu 24.04 with Apache web server.
 
-## 🚀 Quick Installation
+## 🚀 Quick Start
 
 ### Prerequisites
 
@@ -30,6 +30,39 @@ chmod +x install-stable-ubuntu-24.04.sh
 # Run installation
 sudo ./install-stable-ubuntu-24.04.sh
 ```
+
+### Running the Application
+
+After installation, start the application:
+
+```bash
+# Terminal 1 - Start Backend API
+cd /opt/event-manager/event-manager-api
+npm start
+
+# Terminal 2 - Start Frontend (Development)
+cd /opt/event-manager/event-manager-frontend
+npm run dev
+```
+
+### Access the Application
+
+- **Frontend**: http://localhost:3000 (development) or http://localhost (production)
+- **API**: http://localhost:3000/api
+- **Health Check**: http://localhost:3000/api/health
+
+### Default Credentials
+
+- **Admin User**: admin@example.com / admin123
+- **Database**: event_manager / (password from installation)
+
+### Quick Start Checklist
+
+1. ✅ **Ensure database is running**: `sudo systemctl status postgresql`
+2. ✅ **Ensure Redis is running**: `sudo systemctl status redis-server`
+3. ✅ **Start backend**: `cd event-manager-api && npm start`
+4. ✅ **Start frontend**: `cd event-manager-frontend && npm run dev`
+5. ✅ **Access application**: http://localhost:3000
 
 ## 📋 Installation Process
 
