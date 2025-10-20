@@ -1,9 +1,14 @@
+import { ReactNode } from 'react'
 import { Outlet } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { Header } from './Header'
 import { useAuthStore } from '../../stores/authStore'
 
-export const Layout = () => {
+interface LayoutProps {
+  children?: ReactNode
+}
+
+export const Layout = ({ children }: LayoutProps) => {
   const { user } = useAuthStore()
 
   if (!user) return null
@@ -18,7 +23,7 @@ export const Layout = () => {
         <div className="flex-1 flex flex-col">
           <Header />
           <main className="flex-1 p-6">
-            <Outlet />
+            {children || <Outlet />}
           </main>
         </div>
       </div>

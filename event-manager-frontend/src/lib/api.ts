@@ -2,7 +2,8 @@ import axios from 'axios'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
 
-export const api = axios.create({
+// Create axios instance
+const apiClient = axios.create({
   baseURL: API_BASE_URL,
   timeout: 10000,
   headers: {
@@ -10,22 +11,10 @@ export const api = axios.create({
   },
 })
 
-// Request interceptor
-api.interceptors.request.use(
+// Request interceptor to add auth token
+apiClient.interceptors.request.use(
   (config) => {
-    // Add auth token if available
-    const token = localStorage.getItem('auth-storage')
-    if (token) {
-      try {
-        const authData = JSON.parse(token)
-        if (authData.state?.token) {
-          config.headers.Authorization = `Bearer ${authData.state.token}`
-        }
-      } catch (error) {
-        // Invalid token, ignore
-      }
-    }
-    
+    // Add session-based auth if needed
     return config
   },
   (error) => {
@@ -33,111 +22,139 @@ api.interceptors.request.use(
   }
 )
 
-// Response interceptor
-api.interceptors.response.use(
+// Response interceptor for error handling
+apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Token expired or invalid, clear auth state
-      localStorage.removeItem('auth-storage')
+      // Handle unauthorized access
       window.location.href = '/login'
     }
-    
     return Promise.reject(error)
   }
 )
 
-// API endpoints
-export const endpoints = {
+// API functions
+export const api = {
   // Auth
-  auth: {
-    login: '/auth/login',
-    logout: '/auth/logout',
-    me: '/auth/me',
-    profile: '/auth/profile',
-  },
+  login: (credentials: { email: string; password: string }) =>
+    apiClient.post('/auth/login', credentials),
   
+  register: (userData: any) =>
+    apiClient.post('/auth/register', userData),
+  
+  logout: () =>
+    apiClient.post('/auth/logout'),
+  
+  getProfile: () =>
+    apiClient.get('/auth/profile'),
+  
+  updateProfile: (data: any) =>
+    apiClient.put('/auth/profile', data),
+  
+  changePassword: (data: any) =>
+    apiClient.put('/auth/password', data),
+
   // Events
-  events: {
-    list: '/events',
-    create: '/events',
-    get: (id: string) => `/events/${id}`,
-    update: (id: string) => `/events/${id}`,
-    delete: (id: string) => `/events/${id}`,
-    archive: (id: string) => `/events/${id}/archive`,
-    reactivate: (id: string) => `/events/${id}/reactivate`,
-  },
+  getEvents: (params?: any) =>
+    apiClient.get('/events', { params }),
   
+  getEvent: (id: string) =>
+    apiClient.get(`/events/${id}`),
+  
+  createEvent: (data: any) =>
+    apiClient.post('/events', data),
+  
+  updateEvent: (id: string, data: any) =>
+    apiClient.put(`/events/${id}`, data),
+  
+  deleteEvent: (id: string) =>
+    apiClient.delete(`/events/${id}`),
+  
+  archiveEvent: (id: string) =>
+    apiClient.post(`/events/${id}/archive`),
+  
+  reactivateEvent: (id: string) =>
+    apiClient.post(`/events/${id}/reactivate`),
+
   // Contests
-  contests: {
-    list: '/contests',
-    create: '/contests',
-    get: (id: string) => `/contests/${id}`,
-    update: (id: string) => `/contests/${id}`,
-    delete: (id: string) => `/contests/${id}`,
-    byEvent: (eventId: string) => `/events/${eventId}/contests`,
-  },
+  getContests: (eventId: string, params?: any) =>
+    apiClient.get(`/events/${eventId}/contests`, { params }),
   
+  getContest: (eventId: string, contestId: string) =>
+    apiClient.get(`/events/${eventId}/contests/${contestId}`),
+  
+  createContest: (eventId: string, data: any) =>
+    apiClient.post(`/events/${eventId}/contests`, data),
+  
+  updateContest: (eventId: string, contestId: string, data: any) =>
+    apiClient.put(`/events/${eventId}/contests/${contestId}`, data),
+  
+  deleteContest: (eventId: string, contestId: string) =>
+    apiClient.delete(`/events/${eventId}/contests/${contestId}`),
+
   // Categories
-  categories: {
-    list: '/categories',
-    create: '/categories',
-    get: (id: string) => `/categories/${id}`,
-    update: (id: string) => `/categories/${id}`,
-    delete: (id: string) => `/categories/${id}`,
-    byContest: (contestId: string) => `/contests/${contestId}/categories`,
-  },
+  getCategories: (contestId: string) =>
+    apiClient.get(`/contests/${contestId}/categories`),
   
-  // Scoring
-  scoring: {
-    submit: '/scoring/submit',
-    sign: '/scoring/sign',
-    unsign: '/scoring/unsign',
-    get: '/scoring',
-    bySubcategory: (subcategoryId: string) => `/scoring/subcategory/${subcategoryId}`,
-    byContestant: (contestantId: string) => `/scoring/contestant/${contestantId}`,
-    byJudge: (judgeId: string) => `/scoring/judge/${judgeId}`,
-  },
+  getCategory: (contestId: string, categoryId: string) =>
+    apiClient.get(`/contests/${contestId}/categories/${categoryId}`),
   
-  // Results
-  results: {
-    event: (eventId: string) => `/results/event/${eventId}`,
-    contest: (contestId: string) => `/results/contest/${contestId}`,
-    subcategory: (subcategoryId: string) => `/results/subcategory/${subcategoryId}`,
-  },
+  createCategory: (contestId: string, data: any) =>
+    apiClient.post(`/contests/${contestId}/categories`, data),
   
+  updateCategory: (contestId: string, categoryId: string, data: any) =>
+    apiClient.put(`/contests/${contestId}/categories/${categoryId}`, data),
+  
+  deleteCategory: (contestId: string, categoryId: string) =>
+    apiClient.delete(`/contests/${contestId}/categories/${categoryId}`),
+
   // Users
-  users: {
-    list: '/users',
-    create: '/users',
-    get: (id: string) => `/users/${id}`,
-    update: (id: string) => `/users/${id}`,
-    delete: (id: string) => `/users/${id}`,
-    byRole: (role: string) => `/users/role/${role}`,
-  },
+  getUsers: (params?: any) =>
+    apiClient.get('/users', { params }),
   
-  // Files
-  files: {
-    upload: '/files/upload',
-    get: (id: string) => `/files/${id}`,
-    delete: (id: string) => `/files/${id}`,
-    byEntity: (entityType: string, entityId: string) => `/files/${entityType}/${entityId}`,
-  },
+  getUser: (id: string) =>
+    apiClient.get(`/users/${id}`),
   
+  createUser: (data: any) =>
+    apiClient.post('/users', data),
+  
+  updateUser: (id: string, data: any) =>
+    apiClient.put(`/users/${id}`, data),
+  
+  deleteUser: (id: string) =>
+    apiClient.delete(`/users/${id}`),
+
   // Settings
-  settings: {
-    list: '/settings',
-    get: (key: string) => `/settings/${key}`,
-    update: (key: string) => `/settings/${key}`,
-    create: '/settings',
-    delete: (key: string) => `/settings/${key}`,
-  },
+  getSettings: () =>
+    apiClient.get('/settings'),
   
-  // WebSocket
-  websocket: {
-    scoring: '/ws/scoring',
-    event: (eventId: string) => `/ws/event/${eventId}`,
-  }
+  updateSetting: (key: string, value: any) =>
+    apiClient.put('/settings', { key, value }),
+
+  // Dashboard
+  getDashboardStats: () =>
+    apiClient.get('/dashboard/stats'),
+  
+  getDashboardData: (role: string) =>
+    apiClient.get(`/dashboard/${role}`),
+
+  // Results
+  getResults: (eventId?: string, contestId?: string) =>
+    apiClient.get('/results', { params: { eventId, contestId } }),
+
+  // Scoring
+  getSubcategories: (categoryId: string) =>
+    apiClient.get(`/categories/${categoryId}/subcategories`),
+  
+  getContestants: (subcategoryId: string) =>
+    apiClient.get(`/subcategories/${subcategoryId}/contestants`),
+  
+  submitScore: (data: any) =>
+    apiClient.post('/scores', data),
+  
+  signScores: (subcategoryId: string) =>
+    apiClient.post(`/subcategories/${subcategoryId}/sign-scores`),
 }
 
-export default api
+export default apiClient
