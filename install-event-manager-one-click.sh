@@ -1244,17 +1244,25 @@ EOF
     # Migration script
     sudo -u "$SERVICE_USER" tee "$INSTALL_DIR/event-manager-api/scripts/migrate.js" > /dev/null << 'EOF'
 import knex from 'knex'
-import { config } from '../src/config/index.js'
+import dotenv from 'dotenv'
+import path from 'path'
+import { fileURLToPath } from 'url'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+
+// Load environment variables from the .env file
+dotenv.config({ path: path.join(__dirname, '../.env') })
 
 const db = knex({
   client: 'pg',
   connection: {
-    host: config.database.host,
-    port: config.database.port,
-    user: config.database.user,
-    password: config.database.password,
-    database: config.database.name,
-    ssl: config.database.ssl
+    host: process.env.DB_HOST || 'localhost',
+    port: parseInt(process.env.DB_PORT) || 5432,
+    user: process.env.DB_USER || 'event_manager',
+    password: process.env.DB_PASSWORD || '',
+    database: process.env.DB_NAME || 'event_manager',
+    ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false
   },
   migrations: {
     directory: './src/database/migrations'
@@ -1264,6 +1272,13 @@ const db = knex({
 async function migrate() {
   try {
     console.log('Running migrations...')
+    console.log('Database connection details:', {
+      host: process.env.DB_HOST || 'localhost',
+      port: parseInt(process.env.DB_PORT) || 5432,
+      user: process.env.DB_USER || 'event_manager',
+      database: process.env.DB_NAME || 'event_manager',
+      passwordSet: !!process.env.DB_PASSWORD
+    })
     await db.migrate.latest()
     console.log('Migrations completed successfully')
   } catch (error) {
@@ -1280,17 +1295,25 @@ EOF
     # Seed script
     sudo -u "$SERVICE_USER" tee "$INSTALL_DIR/event-manager-api/scripts/seed.js" > /dev/null << 'EOF'
 import knex from 'knex'
-import { config } from '../src/config/index.js'
+import dotenv from 'dotenv'
+import path from 'path'
+import { fileURLToPath } from 'url'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+
+// Load environment variables from the .env file
+dotenv.config({ path: path.join(__dirname, '../.env') })
 
 const db = knex({
   client: 'pg',
   connection: {
-    host: config.database.host,
-    port: config.database.port,
-    user: config.database.user,
-    password: config.database.password,
-    database: config.database.name,
-    ssl: config.database.ssl
+    host: process.env.DB_HOST || 'localhost',
+    port: parseInt(process.env.DB_PORT) || 5432,
+    user: process.env.DB_USER || 'event_manager',
+    password: process.env.DB_PASSWORD || '',
+    database: process.env.DB_NAME || 'event_manager',
+    ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false
   },
   seeds: {
     directory: './src/database/seeds'
@@ -1300,6 +1323,13 @@ const db = knex({
 async function seed() {
   try {
     console.log('Running seeds...')
+    console.log('Database connection details:', {
+      host: process.env.DB_HOST || 'localhost',
+      port: parseInt(process.env.DB_PORT) || 5432,
+      user: process.env.DB_USER || 'event_manager',
+      database: process.env.DB_NAME || 'event_manager',
+      passwordSet: !!process.env.DB_PASSWORD
+    })
     await db.seed.run()
     console.log('Seeds completed successfully')
   } catch (error) {
@@ -1316,17 +1346,25 @@ EOF
     # Rollback script
     sudo -u "$SERVICE_USER" tee "$INSTALL_DIR/event-manager-api/scripts/rollback.js" > /dev/null << 'EOF'
 import knex from 'knex'
-import { config } from '../src/config/index.js'
+import dotenv from 'dotenv'
+import path from 'path'
+import { fileURLToPath } from 'url'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+
+// Load environment variables from the .env file
+dotenv.config({ path: path.join(__dirname, '../.env') })
 
 const db = knex({
   client: 'pg',
   connection: {
-    host: config.database.host,
-    port: config.database.port,
-    user: config.database.user,
-    password: config.database.password,
-    database: config.database.name,
-    ssl: config.database.ssl
+    host: process.env.DB_HOST || 'localhost',
+    port: parseInt(process.env.DB_PORT) || 5432,
+    user: process.env.DB_USER || 'event_manager',
+    password: process.env.DB_PASSWORD || '',
+    database: process.env.DB_NAME || 'event_manager',
+    ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false
   },
   migrations: {
     directory: './src/database/migrations'
