@@ -23,6 +23,10 @@ print_warning() {
     echo -e "${YELLOW}[WARNING]${NC} $1"
 }
 
+print_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
 echo "🔧 Event Manager Quick Database Fix"
 echo "==================================="
 
@@ -35,8 +39,10 @@ fi
 # Switch to simple seed file
 print_status "Switching to simple seed file (no bcrypt import required)..."
 if [ -f "src/database/seeds/001_initial_data_simple.js" ]; then
-    mv src/database/seeds/001_initial_data.js src/database/seeds/001_initial_data_bcrypt.js
-    mv src/database/seeds/001_initial_data_simple.js src/database/seeds/001_initial_data.js
+    # Backup current file
+    cp src/database/seeds/001_initial_data.js src/database/seeds/001_initial_data_bcrypt.js
+    # Replace with simple version
+    cp src/database/seeds/001_initial_data_simple.js src/database/seeds/001_initial_data.js
     print_success "Switched to simple seed file"
 else
     print_warning "Simple seed file not found, using current file"

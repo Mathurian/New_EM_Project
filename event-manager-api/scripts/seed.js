@@ -20,9 +20,18 @@ async function runSeeds() {
 
     // Run seeds
     console.log('📦 Running seeds...')
-    const [batchNo, log] = await db.seed.run()
+    const result = await db.seed.run()
     
-    if (log.length === 0) {
+    // Handle different return formats from Knex
+    let batchNo, log
+    if (Array.isArray(result)) {
+      [batchNo, log] = result
+    } else {
+      batchNo = result
+      log = []
+    }
+    
+    if (!log || log.length === 0) {
       console.log('✅ No seeds to run')
     } else {
       console.log(`✅ Successfully ran ${log.length} seed(s)`)
