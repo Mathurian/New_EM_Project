@@ -128,7 +128,7 @@ print_success "Redis server removed"
 # Step 8: Remove Apache (optional)
 confirm "Do you want to remove Apache? (This will affect other websites if any)"
 if [[ $REPLY =~ ^[Yy]$ ]]; then
-    sudo apt-get remove --purge -y apache2 apache2-utils libapache2-mod-ssl 2>/dev/null || true
+    sudo apt-get remove --purge -y apache2 apache2-utils 2>/dev/null || true
     print_success "Apache removed"
 else
     print_warning "Apache preserved"

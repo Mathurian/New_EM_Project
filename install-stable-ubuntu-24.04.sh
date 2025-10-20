@@ -111,7 +111,7 @@ print_success "Redis installed and started"
 
 # Step 6: Install Apache
 print_status "Installing Apache..."
-sudo apt install -y apache2 apache2-utils libapache2-mod-ssl
+sudo apt install -y apache2 apache2-utils
 sudo systemctl start apache2
 sudo systemctl enable apache2
 print_success "Apache installed and started"
@@ -161,7 +161,8 @@ sudo a2enmod headers
 sudo a2enmod proxy
 sudo a2enmod proxy_http
 sudo a2enmod proxy_wstunnel
-print_success "Apache modules enabled"
+sudo systemctl restart apache2
+print_success "Apache modules enabled and service restarted"
 
 # Step 13: Create application directory
 print_status "Creating application directory..."
