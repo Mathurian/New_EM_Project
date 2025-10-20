@@ -64,8 +64,5 @@
   },
   "engines": {
     "node": ">=18.0.0"
-  },
-  "resolutions": {
-    "validator": "^13.12.0"
   }
 }

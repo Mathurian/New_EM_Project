@@ -1,6 +1,6 @@
 #!/bin/bash
-# Security-focused clean install script for Event Manager API
-# This script removes old node_modules and reinstalls with security fixes
+# Simple security install script for Event Manager API
+# This script handles dependency conflicts gracefully
 
 set -e
 
@@ -27,8 +27,8 @@ print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-echo "🔒 Event Manager Security-Focused Clean Install Script"
-echo "====================================================="
+echo "🔒 Event Manager Simple Security Install Script"
+echo "=============================================="
 
 # Check if we're in the right directory
 if [ ! -f "package.json" ]; then
@@ -42,11 +42,20 @@ rm -rf node_modules
 rm -f package-lock.json
 print_success "Cleaned up node_modules and package-lock.json"
 
-# Install production dependencies only
-print_status "Installing production dependencies with security fixes..."
-npm install --omit=dev --no-audit --no-fund --legacy-peer-deps
+# Clear npm cache
+print_status "Clearing npm cache..."
+npm cache clean --force
+print_success "npm cache cleared"
 
-print_success "Production dependencies installed with security fixes"
+# Install production dependencies with legacy peer deps
+print_status "Installing production dependencies..."
+if npm install --omit=dev --no-audit --no-fund --legacy-peer-deps; then
+    print_success "Production dependencies installed successfully"
+else
+    print_warning "Installation had issues, trying with force flag..."
+    npm install --omit=dev --no-audit --no-fund --legacy-peer-deps --force
+    print_success "Production dependencies installed with force flag"
+fi
 
 # Run security audit
 print_status "Running security audit..."
@@ -54,9 +63,10 @@ if npm audit --audit-level=moderate; then
     print_success "No moderate or high severity vulnerabilities found!"
 else
     print_warning "Some vulnerabilities may remain. Check the audit report above."
+    print_status "You can try running: npm audit fix --force"
 fi
 
-print_success "Security-focused clean install completed!"
+print_success "Security install completed!"
 echo ""
 print_status "Next steps:"
 echo "1. Run: npm run db:migrate"
