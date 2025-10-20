@@ -45,11 +45,34 @@ cd /opt/event-manager/event-manager-frontend
 npm run dev
 ```
 
+### Apache Configuration (Production)
+
+For production deployment with Apache:
+
+```bash
+# Enable required Apache modules
+sudo a2enmod proxy
+sudo a2enmod proxy_http
+sudo a2enmod proxy_wstunnel
+sudo a2enmod rewrite
+sudo a2enmod ssl
+
+# Create Apache virtual host configuration
+sudo nano /etc/apache2/sites-available/event-manager.conf
+
+# Enable the site
+sudo a2ensite event-manager.conf
+
+# Restart Apache
+sudo systemctl restart apache2
+```
+
 ### Access the Application
 
 - **Frontend**: http://localhost:3000 (development) or http://localhost (production)
 - **API**: http://localhost:3000/api
 - **Health Check**: http://localhost:3000/api/health
+- **Apache Production**: http://localhost (port 80) or https://localhost (port 443)
 
 ### Default Credentials
 
@@ -60,9 +83,10 @@ npm run dev
 
 1. ✅ **Ensure database is running**: `sudo systemctl status postgresql`
 2. ✅ **Ensure Redis is running**: `sudo systemctl status redis-server`
-3. ✅ **Start backend**: `cd event-manager-api && npm start`
-4. ✅ **Start frontend**: `cd event-manager-frontend && npm run dev`
-5. ✅ **Access application**: http://localhost:3000
+3. ✅ **Ensure Apache is running**: `sudo systemctl status apache2`
+4. ✅ **Start backend**: `cd event-manager-api && npm start`
+5. ✅ **Start frontend**: `cd event-manager-frontend && npm run dev`
+6. ✅ **Access application**: http://localhost:3000 (dev) or http://localhost (production)
 
 ## 📋 Installation Process
 
