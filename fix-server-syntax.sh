@@ -1,53 +1,72 @@
 #!/bin/bash
 
-# Quick fix for server.js syntax error
-# This script fixes the template literal syntax issues in the generated server.js
+# Fix Server Syntax Issues
+# This script fixes template literal syntax errors and logger path issues
 
 set -e
 
 INSTALL_DIR="/opt/event-manager"
 SERVER_FILE="$INSTALL_DIR/event-manager-api/src/server.js"
+LOGGER_FILE="$INSTALL_DIR/event-manager-api/src/utils/logger.js"
 
-echo "Fixing server.js syntax errors..."
+echo "🔧 Fixing server syntax issues..."
 
+# Check if files exist
 if [[ ! -f "$SERVER_FILE" ]]; then
-    echo "Error: Server file not found at $SERVER_FILE"
+    echo "❌ Server file not found: $SERVER_FILE"
     exit 1
 fi
 
-# Create a backup
-cp "$SERVER_FILE" "$SERVER_FILE.backup"
+if [[ ! -f "$LOGGER_FILE" ]]; then
+    echo "❌ Logger file not found: $LOGGER_FILE"
+    exit 1
+fi
 
-# Fix the template literal syntax issues
-sed -i 's/logger\.info(\\`Client \\${socket\.id} joined room: \\${room}\\`)/logger.info("Client " + socket.id + " joined room: " + room)/g' "$SERVER_FILE"
-sed -i 's/logger\.info(\\`Client \\${socket\.id} left room: \\${room}\\`)/logger.info("Client " + socket.id + " left room: " + room)/g' "$SERVER_FILE"
-sed -i 's/logger\.info(\\`Received \\${signal}, shutting down gracefully\.\.\.\\`)/logger.info("Received " + signal + ", shutting down gracefully...")/g' "$SERVER_FILE"
-sed -i 's/logger\.info(\\`🚀 Server running at http:\/\/\\${config\.app\.host}:\\${config\.app\.port}\\`)/logger.info("🚀 Server running at http:\/\/" + config.app.host + ":" + config.app.port)/g' "$SERVER_FILE"
-sed -i 's/logger\.info(\\`📚 API Documentation: http:\/\/\\${config\.app\.host}:\\${config\.app\.port}\/docs\\`)/logger.info("📚 API Documentation: http:\/\/" + config.app.host + ":" + config.app.port + "\/docs")/g' "$SERVER_FILE"
-sed -i 's/logger\.info(\\`🏥 Health Check: http:\/\/\\${config\.app\.host}:\\${config\.app\.port}\/api\/health\\`)/logger.info("🏥 Health Check: http:\/\/" + config.app.host + ":" + config.app.port + "\/api\/health")/g' "$SERVER_FILE"
-sed -i 's/logger\.info(\\`🔌 WebSocket: ws:\/\/\\${config\.app\.host}:\\${config\.app\.port}\\`)/logger.info("🔌 WebSocket: ws:\/\/" + config.app.host + ":" + config.app.port)/g' "$SERVER_FILE"
+# Create logs directory
+echo "📁 Creating logs directory..."
+sudo mkdir -p "$INSTALL_DIR/logs"
+sudo chown -R eventmanager:eventmanager "$INSTALL_DIR/logs"
+
+# Fix template literal syntax in server.js
+echo "🔨 Fixing template literal syntax in server.js..."
+sed -i 's/logger\.info(`Client \${socket\.id} joined room: \${room}`)/logger.info("Client " + socket.id + " joined room: " + room)/g' "$SERVER_FILE"
+sed -i 's/logger\.info(`Client \${socket\.id} left room: \${room}`)/logger.info("Client " + socket.id + " left room: " + room)/g' "$SERVER_FILE"
+sed -i 's/logger\.info(`Client connected: \${socket\.id}`)/logger.info("Client connected: " + socket.id)/g' "$SERVER_FILE"
+sed -i 's/logger\.info(`Client disconnected: \${socket\.id}`)/logger.info("Client disconnected: " + socket.id)/g' "$SERVER_FILE"
+sed -i 's/logger\.info(`Server running on port \${PORT}`)/logger.info("Server running on port " + PORT)/g' "$SERVER_FILE"
+sed -i 's/logger\.info(`Event Manager API Server started successfully`)/logger.info("Event Manager API Server started successfully")/g' "$SERVER_FILE"
 
 # Fix logger path issues
-LOGGER_FILE="$INSTALL_DIR/event-manager-api/src/utils/logger.js"
-if [[ -f "$LOGGER_FILE" ]]; then
-    echo "Fixing logger path configuration..."
-    sed -i "s|filename: '../../logs/|filename: '/opt/event-manager/logs/|g" "$LOGGER_FILE"
-    echo "Logger paths fixed!"
+echo "🔨 Fixing logger path configuration..."
+sed -i "s|filename: '../../logs/|filename: '/opt/event-manager/logs/|g" "$LOGGER_FILE"
+
+# Verify fixes
+echo "✅ Verifying fixes..."
+if grep -q "logger.info(\`" "$SERVER_FILE"; then
+    echo "⚠️  Warning: Some template literals may still exist"
+else
+    echo "✅ Template literals fixed"
 fi
 
-echo "Server.js syntax fixed!"
+if grep -q "filename: '/opt/event-manager/logs/" "$LOGGER_FILE"; then
+    echo "✅ Logger paths fixed"
+else
+    echo "⚠️  Warning: Logger paths may not be fixed"
+fi
 
-# Restart the service
-echo "Restarting Event Manager service..."
+# Restart service
+echo "🔄 Restarting service..."
 sudo systemctl restart event-manager
 
-# Wait a moment and check status
-sleep 5
-if systemctl is-active --quiet event-manager; then
-    echo "✅ Event Manager service is now running successfully!"
-    echo "You can check the status with: sudo systemctl status event-manager"
-    echo "You can view logs with: sudo journalctl -u event-manager -f"
+# Check service status
+echo "📊 Checking service status..."
+sleep 3
+if sudo systemctl is-active --quiet event-manager; then
+    echo "✅ Service is running successfully"
 else
-    echo "❌ Service still not running. Check logs:"
-    sudo journalctl -u event-manager --no-pager -l
+    echo "❌ Service failed to start"
+    echo "📋 Recent logs:"
+    sudo journalctl -u event-manager --no-pager -l --since "1 minute ago"
 fi
+
+echo "🎉 Fix completed!"
