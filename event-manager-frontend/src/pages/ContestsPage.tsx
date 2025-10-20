@@ -1,13 +1,8 @@
-import { useState } from 'react'
-import { useQuery } from 'react-query'
-import { useParams } from 'react-router-dom'
-import { api } from '../../lib/api'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/Card'
-import { Button } from '../../components/ui/Button'
-import { Badge } from '../../components/ui/Badge'
-import { Plus, Trophy, Calendar, Eye, Edit } from 'lucide-react'
-import { formatDate } from '../../lib/utils'
-import { LoadingSpinner } from '../../components/ui/LoadingSpinner'
+import React, { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { api, formatDate } from '../utils'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, Button, Badge, LoadingSpinner } from '../components'
+import { Plus, Tag, Eye, Edit } from 'lucide-react'
 
 export const ContestsPage = () => {
   const { eventId } = useParams()
