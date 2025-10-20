@@ -2445,14 +2445,24 @@ module.exports = {
 };
 EOF
     
-    # Install PM2 globally for the service user
-    sudo -u "$SERVICE_USER" npm install -g pm2
+    # Install PM2 locally for the service user (avoid global permission issues)
+    cd "$INSTALL_DIR/event-manager-api"
+    sudo -u "$SERVICE_USER" npm install pm2 --save-dev
     
-    # Start application with PM2
+    # Start application with PM2 using npx
     cd "$INSTALL_DIR"
-    sudo -u "$SERVICE_USER" pm2 start ecosystem.config.js
-    sudo -u "$SERVICE_USER" pm2 save
-    sudo -u "$SERVICE_USER" pm2 startup systemd -u "$SERVICE_USER" --hp "$INSTALL_DIR"
+    sudo -u "$SERVICE_USER" npx pm2 start ecosystem.config.js
+    sudo -u "$SERVICE_USER" npx pm2 save
+    
+    # Create PM2 startup script for systemd
+    sudo -u "$SERVICE_USER" tee "$INSTALL_DIR/pm2-startup.sh" > /dev/null << 'EOF'
+#!/bin/bash
+cd /opt/event-manager
+npx pm2 start ecosystem.config.js
+EOF
+    
+    sudo chmod +x "$INSTALL_DIR/pm2-startup.sh"
+    sudo chown "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR/pm2-startup.sh"
     
     log_success "PM2 process management configured"
 }
@@ -2493,9 +2503,9 @@ Type=forking
 User=$SERVICE_USER
 Group=$SERVICE_USER
 WorkingDirectory=$INSTALL_DIR
-ExecStart=/usr/bin/pm2 start ecosystem.config.js
-ExecReload=/usr/bin/pm2 reload ecosystem.config.js
-ExecStop=/usr/bin/pm2 stop ecosystem.config.js
+ExecStart=$INSTALL_DIR/pm2-startup.sh
+ExecReload=/bin/bash -c 'cd $INSTALL_DIR && npx pm2 reload ecosystem.config.js'
+ExecStop=/bin/bash -c 'cd $INSTALL_DIR && npx pm2 stop ecosystem.config.js'
 Restart=always
 RestartSec=10
 
