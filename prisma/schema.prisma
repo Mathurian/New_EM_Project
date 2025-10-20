@@ -1,0 +1,446 @@
+// Prisma Schema for Event Manager Contest System
+// Terminology: Events (was Contests), Contests (was Categories), Categories (was Subcategories)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Events (formerly Contests in PHP)
+model Event {
+  id        String   @id @default(uuid())
+  name      String
+  startDate DateTime
+  endDate   DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  contests Contest[]
+  archivedEvents ArchivedEvent[]
+
+  @@map("events")
+}
+
+// Contests (formerly Categories in PHP)
+model Contest {
+  id          String   @id @default(uuid())
+  eventId     String
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  event       Event      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  categories  Category[]
+  contestants ContestContestant[]
+  judges      ContestJudge[]
+
+  @@map("contests")
+}
+
+// Categories (formerly Subcategories in PHP)
+model Category {
+  id          String   @id @default(uuid())
+  contestId   String
+  name        String
+  description String?
+  scoreCap    Float?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  contest     Contest      @relation(fields: [contestId], references: [id], onDelete: Cascade)
+  contestants CategoryContestant[]
+  judges      CategoryJudge[]
+  criteria    Criterion[]
+  scores      Score[]
+  comments    JudgeComment[]
+  certifications TallyMasterCertification[]
+  auditorCertifications AuditorCertification[]
+
+  @@map("categories")
+}
+
+// Contestants
+model Contestant {
+  id               String   @id @default(uuid())
+  name             String
+  email            String?
+  gender           String?
+  pronouns         String?
+  contestantNumber Int?
+  bio              String?
+  imagePath        String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  // Relations
+  contestContestants ContestContestant[]
+  categoryContestants CategoryContestant[]
+  scores             Score[]
+  comments           JudgeComment[]
+  deductions         OverallDeduction[]
+  users              User[]
+
+  @@map("contestants")
+}
+
+// Judges
+model Judge {
+  id          String   @id @default(uuid())
+  name        String
+  email       String?
+  gender      String?
+  pronouns    String?
+  bio         String?
+  imagePath   String?
+  isHeadJudge Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  contestJudges ContestJudge[]
+  categoryJudges CategoryJudge[]
+  scores        Score[]
+  comments      JudgeComment[]
+  certifications JudgeCertification[]
+  users         User[]
+
+  @@map("judges")
+}
+
+// Criteria for scoring
+model Criterion {
+  id         String   @id @default(uuid())
+  categoryId String
+  name       String
+  maxScore   Float
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Relations
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  scores   Score[]
+
+  @@map("criteria")
+}
+
+// Scores
+model Score {
+  id           String   @id @default(uuid())
+  categoryId   String
+  contestantId String
+  judgeId      String
+  criterionId  String
+  score        Float
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  category   Category   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  contestant Contestant @relation(fields: [contestantId], references: [id], onDelete: Cascade)
+  judge      Judge      @relation(fields: [judgeId], references: [id], onDelete: Cascade)
+  criterion  Criterion  @relation(fields: [criterionId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId, contestantId, judgeId, criterionId])
+  @@map("scores")
+}
+
+// Users (authentication)
+model User {
+  id            String   @id @default(uuid())
+  name          String
+  preferredName String?
+  email         String   @unique
+  passwordHash  String?
+  role          UserRole
+  judgeId       String?
+  contestantId  String?
+  gender        String?
+  pronouns      String?
+  sessionVersion Int     @default(1)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  judge      Judge?      @relation(fields: [judgeId], references: [id], onDelete: SetNull)
+  contestant Contestant? @relation(fields: [contestantId], references: [id], onDelete: SetNull)
+  activityLogs ActivityLog[]
+  systemSettings SystemSetting[]
+
+  @@map("users")
+}
+
+// Judge Comments
+model JudgeComment {
+  id           String   @id @default(uuid())
+  categoryId   String
+  contestantId String
+  judgeId      String
+  comment      String?
+  createdAt    DateTime @default(now())
+
+  // Relations
+  category   Category   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  contestant Contestant @relation(fields: [contestantId], references: [id], onDelete: Cascade)
+  judge      Judge      @relation(fields: [judgeId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId, contestantId, judgeId])
+  @@map("judge_comments")
+}
+
+// Judge Certifications
+model JudgeCertification {
+  id           String   @id @default(uuid())
+  categoryId   String
+  judgeId      String
+  signatureName String
+  certifiedAt  DateTime @default(now())
+
+  // Relations
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  judge    Judge    @relation(fields: [judgeId], references: [id], onDelete: Cascade)
+
+  @@map("judge_certifications")
+}
+
+// Tally Master Certifications
+model TallyMasterCertification {
+  id           String   @id @default(uuid())
+  categoryId   String
+  signatureName String
+  certifiedAt  DateTime @default(now())
+
+  // Relations
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@map("tally_master_certifications")
+}
+
+// Auditor Certifications
+model AuditorCertification {
+  id           String   @id @default(uuid())
+  categoryId   String
+  signatureName String
+  certifiedAt  DateTime @default(now())
+
+  // Relations
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@map("auditor_certifications")
+}
+
+// Overall Deductions
+model OverallDeduction {
+  id           String   @id @default(uuid())
+  categoryId   String
+  contestantId String
+  amount       Float
+  comment      String?
+  signatureName String?
+  signedAt     DateTime?
+  createdById  String?
+  createdAt    DateTime @default(now())
+
+  // Relations
+  category   Category   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  contestant Contestant @relation(fields: [contestantId], references: [id], onDelete: Cascade)
+
+  @@map("overall_deductions")
+}
+
+// Activity Logs
+model ActivityLog {
+  id           String   @id @default(uuid())
+  userId       String?
+  userName     String?
+  userRole     String?
+  action       String
+  resourceType String?
+  resourceId   String?
+  details      String?
+  ipAddress    String?
+  userAgent    String?
+  logLevel     LogLevel @default(INFO)
+  createdAt    DateTime @default(now())
+
+  // Relations
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@map("activity_logs")
+}
+
+// System Settings
+model SystemSetting {
+  id          String   @id @default(uuid())
+  settingKey  String   @unique
+  settingValue String
+  description String?
+  updatedAt   DateTime @updatedAt
+  updatedById String?
+
+  // Relations
+  updatedBy User? @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@map("system_settings")
+}
+
+// Emcee Scripts
+model EmceeScript {
+  id          String   @id @default(uuid())
+  filename    String
+  filePath    String
+  title       String?
+  description String?
+  fileName    String?
+  fileSize    Int?
+  uploadedAt  DateTime?
+  isActive    Boolean  @default(true)
+  uploadedById String?
+  createdAt   DateTime @default(now())
+
+  @@map("emcee_scripts")
+}
+
+// Archived Events
+model ArchivedEvent {
+  id          String   @id @default(uuid())
+  eventId     String
+  name        String
+  description String?
+  startDate   DateTime?
+  endDate     DateTime?
+  archivedAt  DateTime @default(now())
+  archivedById String
+
+  // Relations
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@map("archived_events")
+}
+
+// Category Templates
+model CategoryTemplate {
+  id               String   @id @default(uuid())
+  name             String
+  description      String?
+  categoryNames    String?
+  maxScore         Int      @default(60)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  // Relations
+  templateCriteria TemplateCriterion[]
+
+  @@map("category_templates")
+}
+
+// Template Criteria
+model TemplateCriterion {
+  id         String   @id @default(uuid())
+  templateId String
+  name       String
+  maxScore   Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Relations
+  template CategoryTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@map("template_criteria")
+}
+
+// Judge Score Removal Requests
+model JudgeScoreRemovalRequest {
+  id          String   @id @default(uuid())
+  categoryId  String
+  contestantId String
+  judgeId     String
+  reason      String
+  requestedById String
+  requestedAt DateTime @default(now())
+  status      RequestStatus @default(PENDING)
+  approvedById String?
+  approvedAt  DateTime?
+
+  @@map("judge_score_removal_requests")
+}
+
+// Junction Tables
+model ContestContestant {
+  contestId    String
+  contestantId String
+
+  // Relations
+  contest    Contest    @relation(fields: [contestId], references: [id], onDelete: Cascade)
+  contestant Contestant @relation(fields: [contestantId], references: [id], onDelete: Cascade)
+
+  @@id([contestId, contestantId])
+  @@map("contest_contestants")
+}
+
+model ContestJudge {
+  contestId String
+  judgeId   String
+
+  // Relations
+  contest Contest @relation(fields: [contestId], references: [id], onDelete: Cascade)
+  judge   Judge   @relation(fields: [judgeId], references: [id], onDelete: Cascade)
+
+  @@id([contestId, judgeId])
+  @@map("contest_judges")
+}
+
+model CategoryContestant {
+  categoryId   String
+  contestantId String
+
+  // Relations
+  category   Category   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  contestant Contestant @relation(fields: [contestantId], references: [id], onDelete: Cascade)
+
+  @@id([categoryId, contestantId])
+  @@map("category_contestants")
+}
+
+model CategoryJudge {
+  categoryId String
+  judgeId    String
+
+  // Relations
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  judge    Judge    @relation(fields: [judgeId], references: [id], onDelete: Cascade)
+
+  @@id([categoryId, judgeId])
+  @@map("category_judges")
+}
+
+// Enums
+enum UserRole {
+  ORGANIZER
+  JUDGE
+  CONTESTANT
+  EMCEE
+  TALLY_MASTER
+  AUDITOR
+  BOARD
+}
+
+enum LogLevel {
+  DEBUG
+  INFO
+  WARN
+  ERROR
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
