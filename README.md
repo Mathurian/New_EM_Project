@@ -43,6 +43,10 @@ npm start
 # Terminal 2 - Start Frontend (Development)
 cd /opt/event-manager/event-manager-frontend
 npm run dev
+
+# For Production with Apache - Build frontend first
+cd /opt/event-manager/event-manager-frontend
+npm run build
 ```
 
 ### Apache Configuration (Production)
@@ -58,9 +62,49 @@ sudo a2enmod rewrite
 sudo a2enmod ssl
 
 # Create Apache virtual host configuration
-sudo nano /etc/apache2/sites-available/event-manager.conf
+sudo tee /etc/apache2/sites-available/event-manager.conf > /dev/null << 'EOF'
+<VirtualHost *:80>
+    ServerName localhost
+    DocumentRoot /opt/event-manager/event-manager-frontend/dist
+    
+    # Proxy API requests to backend
+    ProxyPreserveHost On
+    ProxyPass /api/ http://localhost:3000/api/
+    ProxyPassReverse /api/ http://localhost:3000/api/
+    
+    # Proxy WebSocket connections
+    ProxyPass /socket.io/ ws://localhost:3000/socket.io/
+    ProxyPassReverse /socket.io/ ws://localhost:3000/socket.io/
+    
+    # Serve static frontend files
+    <Directory /opt/event-manager/event-manager-frontend/dist>
+        Options -Indexes +FollowSymLinks
+        AllowOverride All
+        Require all granted
+        
+        # Handle client-side routing
+        RewriteEngine On
+        RewriteBase /
+        RewriteRule ^index\.html$ - [L]
+        RewriteCond %{REQUEST_FILENAME} !-f
+        RewriteCond %{REQUEST_FILENAME} !-d
+        RewriteRule . /index.html [L]
+    </Directory>
+    
+    # Security headers
+    Header always set X-Content-Type-Options nosniff
+    Header always set X-Frame-Options DENY
+    Header always set X-XSS-Protection "1; mode=block"
+    
+    ErrorLog ${APACHE_LOG_DIR}/event-manager_error.log
+    CustomLog ${APACHE_LOG_DIR}/event-manager_access.log combined
+</VirtualHost>
+EOF
 
-# Enable the site
+# Disable default Apache site
+sudo a2dissite 000-default
+
+# Enable the event-manager site
 sudo a2ensite event-manager.conf
 
 # Restart Apache
