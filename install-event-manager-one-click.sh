@@ -700,12 +700,12 @@ io.on('connection', (socket) => {
   // Join room for real-time updates
   socket.on('join-room', (room) => {
     socket.join(room)
-    logger.info(\`Client \${socket.id} joined room: \${room}\`)
+    logger.info('Client ' + socket.id + ' joined room: ' + room)
   })
   
   socket.on('leave-room', (room) => {
     socket.leave(room)
-    logger.info(\`Client \${socket.id} left room: \${room}\`)
+    logger.info('Client ' + socket.id + ' left room: ' + room)
   })
 })
 
@@ -722,7 +722,7 @@ async function checkDatabaseHealth() {
 
 // Graceful shutdown
 const gracefulShutdown = async (signal) => {
-  logger.info(\`Received \${signal}, shutting down gracefully...\`)
+  logger.info('Received ' + signal + ', shutting down gracefully...')
   
   try {
     server.close(async () => {
@@ -750,10 +750,10 @@ async function startServer() {
 
     // Start server
     server.listen(config.app.port, config.app.host, () => {
-      logger.info(\`🚀 Server running at http://\${config.app.host}:\${config.app.port}\`)
-      logger.info(\`📚 API Documentation: http://\${config.app.host}:\${config.app.port}/docs\`)
-      logger.info(\`🏥 Health Check: http://\${config.app.host}:\${config.app.port}/api/health\`)
-      logger.info(\`🔌 WebSocket: ws://\${config.app.host}:\${config.app.port}\`)
+      logger.info('🚀 Server running at http://' + config.app.host + ':' + config.app.port)
+      logger.info('📚 API Documentation: http://' + config.app.host + ':' + config.app.port + '/docs')
+      logger.info('🏥 Health Check: http://' + config.app.host + ':' + config.app.port + '/api/health')
+      logger.info('🔌 WebSocket: ws://' + config.app.host + ':' + config.app.port)
     })
 
   } catch (error) {
