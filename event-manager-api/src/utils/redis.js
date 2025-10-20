@@ -4,10 +4,9 @@ import { logger } from './logger.js'
 
 // Create Redis client
 export const redisClient = createClient({
-  host: config.redis.host,
-  port: config.redis.port,
+  url: `redis://${config.redis.host}:${config.redis.port}`,
   password: config.redis.password,
-  db: config.redis.db
+  database: config.redis.db
 })
 
 // Redis event handlers

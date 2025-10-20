@@ -1,6 +1,7 @@
 import express from 'express'
 import session from 'express-session'
-import connectRedis from 'connect-redis'
+import { createClient } from 'redis'
+import RedisStore from 'connect-redis'
 import cors from 'cors'
 import helmet from 'helmet'
 import compression from 'compression'
@@ -25,7 +26,7 @@ const io = new Server(server, {
 })
 
 // Redis store for sessions
-const RedisStore = connectRedis(session)
+const redisStore = new RedisStore({ client: redisClient })
 
 // Trust proxy for Apache
 app.set('trust proxy', 1)
@@ -71,7 +72,7 @@ app.use(cookieParser())
 
 // Session configuration
 app.use(session({
-  store: new RedisStore({ client: redisClient }),
+  store: redisStore,
   secret: config.session.secret,
   resave: false,
   saveUninitialized: false,
