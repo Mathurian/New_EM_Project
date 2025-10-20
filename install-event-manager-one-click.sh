@@ -1306,11 +1306,40 @@ async function migrate() {
       passwordSet: !!process.env.DB_PASSWORD,
       passwordLength: dbPassword.length
     })
+    
+    // Check if knex_migrations table exists and has records
+    const migrationTableExists = await db.schema.hasTable('knex_migrations')
+    if (migrationTableExists) {
+      const existingMigrations = await db('knex_migrations').select('name')
+      console.log(`Found ${existingMigrations.length} existing migration records`)
+      
+      if (existingMigrations.length > 0) {
+        console.log('Clearing existing migration records to start fresh...')
+        await db('knex_migrations').del()
+        console.log('Migration records cleared')
+      }
+    }
+    
     await db.migrate.latest()
     console.log('Migrations completed successfully')
   } catch (error) {
     console.error('Migration failed:', error)
-    process.exit(1)
+    
+    // If migration fails due to missing files, try to reset the migration state
+    if (error.message.includes('files are missing')) {
+      console.log('Attempting to reset migration state...')
+      try {
+        await db('knex_migrations').del()
+        console.log('Migration state reset, retrying...')
+        await db.migrate.latest()
+        console.log('Migrations completed successfully after reset')
+      } catch (resetError) {
+        console.error('Failed to reset migration state:', resetError)
+        process.exit(1)
+      }
+    } else {
+      process.exit(1)
+    }
   } finally {
     await db.destroy()
   }
