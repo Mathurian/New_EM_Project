@@ -278,9 +278,13 @@ RATE_LIMIT_MAX_REQUESTS=100
 # Docker deployment
 docker-compose up -d
 
+# Server deployment with proper permissions
+./setup.sh --non-interactive --auto-setup-permissions
+
 # Custom production setup
 ./setup.sh \
   --non-interactive \
+  --auto-setup-permissions \
   --db-host=prod-db.example.com \
   --db-password=secure-password \
   --jwt-secret=production-jwt-secret \
@@ -556,6 +560,8 @@ cat .env
 ### Comprehensive Guides
 - **[DOCKER.md](DOCKER.md)** - Complete Docker deployment guide with architecture, configuration, and troubleshooting
 - **[SETUP.md](SETUP.md)** - Detailed setup script documentation with all command options and examples
+- **[SERVER_DEPLOYMENT.md](SERVER_DEPLOYMENT.md)** - Remote Linux server deployment with proper permissions and security
+- **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** - Common issues and solutions for installation and setup
 - **[README.md](README.md)** - This main documentation file
 
 ### Quick Reference
@@ -635,7 +641,9 @@ MIT License - see LICENSE file for details.
 - **Documentation**: 
   - [README.md](README.md) - Main documentation
   - [DOCKER.md](DOCKER.md) - Docker deployment guide
+  - [SERVER_DEPLOYMENT.md](SERVER_DEPLOYMENT.md) - Remote Linux server deployment
   - [SETUP.md](SETUP.md) - Setup script documentation
+  - [TROUBLESHOOTING.md](TROUBLESHOOTING.md) - Common issues and solutions
 - **Issues**: GitHub Issues for bug reports and feature requests
 - **Setup Help**: Run `./setup.sh --help` for command options
 - **Docker Help**: Run `docker-compose --help` for Docker commands

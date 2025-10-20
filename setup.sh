@@ -55,6 +55,125 @@ detect_os() {
     fi
 }
 
+# Detect web server user
+detect_web_server() {
+    WEB_SERVER_USER=""
+    WEB_SERVER_GROUP=""
+    
+    if [[ "$OS" == "linux" || "$OS" == "ubuntu" ]]; then
+        # Check for common web server processes
+        if pgrep -f nginx > /dev/null 2>&1; then
+            WEB_SERVER_USER="www-data"
+            WEB_SERVER_GROUP="www-data"
+            print_status "Detected Nginx web server"
+        elif pgrep -f apache2 > /dev/null 2>&1; then
+            WEB_SERVER_USER="www-data"
+            WEB_SERVER_GROUP="www-data"
+            print_status "Detected Apache web server"
+        elif pgrep -f httpd > /dev/null 2>&1; then
+            WEB_SERVER_USER="apache"
+            WEB_SERVER_GROUP="apache"
+            print_status "Detected Apache (httpd) web server"
+        else
+            # Default to www-data for Linux
+            WEB_SERVER_USER="www-data"
+            WEB_SERVER_GROUP="www-data"
+            print_status "No web server detected, using default: www-data"
+        fi
+        
+        # Verify the user exists
+        if ! id "$WEB_SERVER_USER" &> /dev/null; then
+            print_warning "Web server user '$WEB_SERVER_USER' does not exist"
+            WEB_SERVER_USER=""
+            WEB_SERVER_GROUP=""
+        fi
+    fi
+}
+
+# Set up proper permissions for server deployment
+setup_permissions() {
+    if [[ "$OS" != "linux" && "$OS" != "ubuntu" ]]; then
+        print_status "Skipping server permissions setup (not Linux)"
+        return
+    fi
+    
+    print_status "Setting up permissions for server deployment..."
+    
+    # Detect web server if not already done
+    if [[ -z "$WEB_SERVER_USER" ]]; then
+        detect_web_server
+    fi
+    
+    # Get current user
+    CURRENT_USER=$(whoami)
+    CURRENT_GROUP=$(id -gn)
+    
+    print_status "Current user: $CURRENT_USER"
+    print_status "Web server user: $WEB_SERVER_USER"
+    
+    # Set ownership
+    if [[ -n "$WEB_SERVER_USER" ]]; then
+        print_status "Setting ownership to $WEB_SERVER_USER:$WEB_SERVER_GROUP..."
+        
+        # Set ownership of application files
+        sudo chown -R "$WEB_SERVER_USER:$WEB_SERVER_GROUP" . 2>/dev/null || {
+            print_warning "Could not set ownership to web server user. Using current user instead."
+            WEB_SERVER_USER="$CURRENT_USER"
+            WEB_SERVER_GROUP="$CURRENT_GROUP"
+        }
+    else
+        print_status "Using current user for ownership: $CURRENT_USER:$CURRENT_GROUP"
+        WEB_SERVER_USER="$CURRENT_USER"
+        WEB_SERVER_GROUP="$CURRENT_GROUP"
+    fi
+    
+    # Set directory permissions (755)
+    print_status "Setting directory permissions to 755..."
+    sudo find . -type d -exec chmod 755 {} \; 2>/dev/null || find . -type d -exec chmod 755 {} \;
+    
+    # Set file permissions (644)
+    print_status "Setting file permissions to 644..."
+    sudo find . -type f -exec chmod 644 {} \; 2>/dev/null || find . -type f -exec chmod 644 {} \;
+    
+    # Make scripts executable
+    print_status "Making scripts executable..."
+    sudo chmod +x setup.sh 2>/dev/null || chmod +x setup.sh
+    sudo chmod +x install.sh 2>/dev/null || chmod +x install.sh
+    
+    # Secure sensitive files
+    print_status "Securing sensitive configuration files..."
+    if [[ -f ".env" ]]; then
+        sudo chmod 600 .env 2>/dev/null || chmod 600 .env
+    fi
+    if [[ -f "frontend/.env" ]]; then
+        sudo chmod 600 frontend/.env 2>/dev/null || chmod 600 frontend/.env
+    fi
+    
+    # Create and secure upload directories
+    print_status "Setting up upload directories..."
+    sudo mkdir -p uploads logs 2>/dev/null || mkdir -p uploads logs
+    sudo chown -R "$WEB_SERVER_USER:$WEB_SERVER_GROUP" uploads logs 2>/dev/null || chown -R "$WEB_SERVER_USER:$WEB_SERVER_GROUP" uploads logs
+    sudo chmod 755 uploads logs 2>/dev/null || chmod 755 uploads logs
+    
+    # Secure node_modules (if they exist)
+    if [[ -d "node_modules" ]]; then
+        print_status "Securing node_modules directory..."
+        sudo chown -R "$WEB_SERVER_USER:$WEB_SERVER_GROUP" node_modules 2>/dev/null || chown -R "$WEB_SERVER_USER:$WEB_SERVER_GROUP" node_modules
+        sudo find node_modules -type d -exec chmod 755 {} \; 2>/dev/null || find node_modules -type d -exec chmod 755 {} \;
+        sudo find node_modules -type f -exec chmod 644 {} \; 2>/dev/null || find node_modules -type f -exec chmod 644 {} \;
+    fi
+    
+    if [[ -d "frontend/node_modules" ]]; then
+        print_status "Securing frontend node_modules directory..."
+        sudo chown -R "$WEB_SERVER_USER:$WEB_SERVER_GROUP" frontend/node_modules 2>/dev/null || chown -R "$WEB_SERVER_USER:$WEB_SERVER_GROUP" frontend/node_modules
+        sudo find frontend/node_modules -type d -exec chmod 755 {} \; 2>/dev/null || find frontend/node_modules -type d -exec chmod 755 {} \;
+        sudo find frontend/node_modules -type f -exec chmod 644 {} \; 2>/dev/null || find frontend/node_modules -type f -exec chmod 644 {} \;
+    fi
+    
+    print_success "Permissions setup complete!"
+    print_status "Application files owned by: $WEB_SERVER_USER:$WEB_SERVER_GROUP"
+}
+
 # Function to print colored output
 print_status() {
     echo -e "${BLUE}[INFO]${NC} $1"
@@ -111,7 +230,18 @@ check_node() {
         exit 1
     fi
     
-    print_success "Node.js $(node -v) is installed"
+        print_success "Node.js $(node -v) is installed"
+        
+        # Check npm version
+        NPM_VERSION=$(npm -v | cut -d'.' -f1)
+        if [ "$NPM_VERSION" -lt 9 ]; then
+            print_warning "npm version is older than 9. Current version: $(npm -v)"
+            print_status "Updating npm to latest version..."
+            npm install -g npm@latest
+            print_success "npm updated to $(npm -v)"
+        else
+            print_success "npm $(npm -v) is installed"
+        fi
 }
 
 # Check if PostgreSQL is installed
@@ -255,20 +385,32 @@ setup_database() {
     fi
     
     # Extract database info from DATABASE_URL
-    DB_USER=$(echo $DATABASE_URL | sed -n 's/.*:\/\/\([^:]*\):.*/\1/p')
-    DB_PASS=$(echo $DATABASE_URL | sed -n 's/.*:\/\/[^:]*:\([^@]*\)@.*/\1/p')
-    DB_HOST=$(echo $DATABASE_URL | sed -n 's/.*@\([^:]*\):.*/\1/p')
-    DB_PORT=$(echo $DATABASE_URL | sed -n 's/.*:\([0-9]*\)\/.*/\1/p')
-    DB_NAME=$(echo $DATABASE_URL | sed -n 's/.*\/\([^?]*\).*/\1/p')
+    # Use the global variables set earlier in the script
+    # DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME are already set from parse_args
+    DB_PASS=$DB_PASSWORD
     
     print_status "Database: $DB_NAME on $DB_HOST:$DB_PORT"
     
     # Test database connection
     print_status "Testing database connection..."
-    if PGPASSWORD=$DB_PASS psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME -c '\q' 2>/dev/null; then
+    print_status "Connection details: $DB_USER@$DB_HOST:$DB_PORT/$DB_NAME"
+    
+    # Check if psql is available
+    if ! command -v psql &> /dev/null; then
+        print_error "psql command not found. Please install PostgreSQL client tools."
+        exit 1
+    fi
+    
+    # Test database connection with better error reporting
+    if PGPASSWORD="$DB_PASS" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -c '\q' 2>/dev/null; then
         print_success "Database connection successful"
     else
-        print_error "Cannot connect to database. Please check your credentials in .env"
+        print_error "Cannot connect to database. Please check your credentials and ensure PostgreSQL is running."
+        print_status "Troubleshooting steps:"
+        print_status "  1. Check if PostgreSQL is running: sudo systemctl status postgresql"
+        print_status "  2. Verify database exists: sudo -u postgres psql -c '\\l'"
+        print_status "  3. Check user permissions: sudo -u postgres psql -c '\\du'"
+        print_status "  4. Test connection manually: psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME"
         exit 1
     fi
     
@@ -365,10 +507,14 @@ install_prerequisites() {
             gnupg \
             lsb-release
         
-        # Install Node.js 20 LTS via NodeSource
-        print_status "Installing Node.js 20 LTS..."
-        curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-        sudo apt install -y nodejs
+            # Install Node.js 20 LTS via NodeSource
+            print_status "Installing Node.js 20 LTS..."
+            curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+            sudo apt install -y nodejs
+            
+            # Update npm to latest version
+            print_status "Updating npm to latest version..."
+            sudo npm install -g npm@latest
         
         # Verify Node.js installation
         NODE_VERSION=$(node -v | cut -d'v' -f2 | cut -d'.' -f1)
@@ -415,9 +561,13 @@ install_prerequisites() {
             /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
         fi
         
-        # Install Node.js
-        print_status "Installing Node.js..."
-        brew install node
+            # Install Node.js
+            print_status "Installing Node.js..."
+            brew install node
+            
+            # Update npm to latest version
+            print_status "Updating npm to latest version..."
+            npm install -g npm@latest
         
         # Install PostgreSQL
         print_status "Installing PostgreSQL..."
@@ -498,6 +648,10 @@ parse_args() {
     SMTP_PASS=""
     SMTP_FROM="noreply@eventmanager.com"
     
+    # Server deployment options
+    AUTO_SETUP_PERMISSIONS=false
+    WEB_SERVER_USER=""
+    
     while [[ $# -gt 0 ]]; do
         case $1 in
             --auto-install-prereqs)
@@ -532,6 +686,14 @@ parse_args() {
                 ;;
             --skip-env-config)
                 SKIP_ENV_CONFIG=true
+                shift
+                ;;
+            --auto-setup-permissions)
+                AUTO_SETUP_PERMISSIONS=true
+                shift
+                ;;
+            --web-server-user=*)
+                WEB_SERVER_USER="${1#*=}"
                 shift
                 ;;
             --db-host=*)
@@ -619,6 +781,10 @@ show_help() {
     echo "  --non-interactive         Run in non-interactive mode (auto-install everything)"
     echo "  --skip-env-config         Skip environment variable configuration"
     echo ""
+    echo "Server Deployment Options:"
+    echo "  --auto-setup-permissions  Automatically setup proper permissions for web server"
+    echo "  --web-server-user=USER    Specify web server user (www-data, apache, etc.)"
+    echo ""
     echo "Database Configuration:"
     echo "  --db-host=HOST           Database host (default: localhost)"
     echo "  --db-port=PORT           Database port (default: 5432)"
@@ -646,6 +812,8 @@ show_help() {
     echo "  $0                       # Interactive mode (prompts for each step)"
     echo "  $0 --non-interactive     # Fully automated installation"
     echo "  $0 --auto-install-prereqs --auto-setup-db  # Partial automation"
+    echo "  $0 --auto-setup-permissions --web-server-user=www-data  # Server deployment"
+    echo "  $0 --non-interactive --auto-setup-permissions  # Full server automation"
     echo "  $0 --db-host=db.example.com --db-password=secret123  # Custom database"
     echo "  $0 --jwt-secret=my-secret --app-env=production  # Production setup"
     echo ""
@@ -694,6 +862,21 @@ main() {
     # Setup applications
     setup_backend
     setup_frontend
+    
+    # Handle permissions setup for server deployment
+    if [[ "$AUTO_SETUP_PERMISSIONS" == "true" || "$NON_INTERACTIVE" == "true" ]]; then
+        print_status "Setting up permissions automatically..."
+        setup_permissions
+    else
+        echo ""
+        read -p "Do you want to setup proper permissions for server deployment? (y/n): " -n 1 -r
+        echo ""
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            setup_permissions
+        else
+            print_warning "Skipping permissions setup. You may need to configure permissions manually."
+        fi
+    fi
     
     # Handle database setup
     if [[ "$NON_INTERACTIVE" == "true" || "$AUTO_SETUP_DB" == "true" ]]; then
