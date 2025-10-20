@@ -65,6 +65,7 @@ sudo a2enmod ssl
 sudo tee /etc/apache2/sites-available/event-manager.conf > /dev/null << 'EOF'
 <VirtualHost *:80>
     ServerName localhost
+    ServerAlias *
     DocumentRoot /opt/event-manager/event-manager-frontend/dist
     
     # Proxy API requests to backend
@@ -108,6 +109,33 @@ sudo a2dissite 000-default
 sudo a2ensite event-manager.conf
 
 # Restart Apache
+sudo systemctl restart apache2
+```
+
+### Troubleshooting Apache Configuration
+
+If you still see the default Apache page:
+
+```bash
+# Check which sites are enabled
+sudo a2ensite --list
+
+# Verify the configuration syntax
+sudo apache2ctl configtest
+
+# Check Apache error logs
+sudo tail -f /var/log/apache2/error.log
+
+# Check if the frontend build exists
+ls -la /opt/event-manager/event-manager-frontend/dist/
+
+# Force disable default site and enable our site
+sudo a2dissite 000-default.conf
+sudo a2ensite event-manager.conf
+sudo systemctl reload apache2
+
+# Alternative: Replace default site configuration
+sudo cp /etc/apache2/sites-available/event-manager.conf /etc/apache2/sites-available/000-default.conf
 sudo systemctl restart apache2
 ```
 
