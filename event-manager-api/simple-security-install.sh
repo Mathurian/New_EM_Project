@@ -63,7 +63,23 @@ if npm audit --audit-level=moderate; then
     print_success "No moderate or high severity vulnerabilities found!"
 else
     print_warning "Some vulnerabilities may remain. Check the audit report above."
-    print_status "You can try running: npm audit fix --force"
+    print_status "Attempting to fix with npm overrides..."
+    
+    # Check if overrides field exists in package.json
+    if grep -q '"overrides"' package.json; then
+        print_status "Applying npm overrides to fix remaining vulnerabilities..."
+        rm -rf node_modules package-lock.json
+        npm install --omit=dev --no-audit --no-fund --legacy-peer-deps
+        
+        print_status "Re-running security audit after overrides..."
+        if npm audit --audit-level=moderate; then
+            print_success "✅ All vulnerabilities resolved with overrides!"
+        else
+            print_warning "Some vulnerabilities may still remain after overrides."
+        fi
+    else
+        print_status "No overrides configured. You may need to manually update packages."
+    fi
 fi
 
 print_success "Security install completed!"
