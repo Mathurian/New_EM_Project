@@ -1247,12 +1247,38 @@ import knex from 'knex'
 import dotenv from 'dotenv'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import fs from 'fs'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-// Load environment variables from the .env file
-dotenv.config({ path: path.join(__dirname, '../.env') })
+// Try multiple paths for .env file
+const envPaths = [
+  path.join(__dirname, '../.env'),
+  path.join(__dirname, '../../.env'),
+  path.join(__dirname, '../../../.env')
+]
+
+let envLoaded = false
+for (const envPath of envPaths) {
+  if (fs.existsSync(envPath)) {
+    console.log(`Loading environment from: ${envPath}`)
+    dotenv.config({ path: envPath })
+    envLoaded = true
+    break
+  }
+}
+
+if (!envLoaded) {
+  console.log('No .env file found, using default values')
+}
+
+// Ensure password is a string
+const dbPassword = process.env.DB_PASSWORD || ''
+if (typeof dbPassword !== 'string') {
+  console.error('Database password must be a string')
+  process.exit(1)
+}
 
 const db = knex({
   client: 'pg',
@@ -1260,7 +1286,7 @@ const db = knex({
     host: process.env.DB_HOST || 'localhost',
     port: parseInt(process.env.DB_PORT) || 5432,
     user: process.env.DB_USER || 'event_manager',
-    password: process.env.DB_PASSWORD || '',
+    password: dbPassword,
     database: process.env.DB_NAME || 'event_manager',
     ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false
   },
@@ -1277,7 +1303,8 @@ async function migrate() {
       port: parseInt(process.env.DB_PORT) || 5432,
       user: process.env.DB_USER || 'event_manager',
       database: process.env.DB_NAME || 'event_manager',
-      passwordSet: !!process.env.DB_PASSWORD
+      passwordSet: !!process.env.DB_PASSWORD,
+      passwordLength: dbPassword.length
     })
     await db.migrate.latest()
     console.log('Migrations completed successfully')
@@ -1298,12 +1325,38 @@ import knex from 'knex'
 import dotenv from 'dotenv'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import fs from 'fs'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-// Load environment variables from the .env file
-dotenv.config({ path: path.join(__dirname, '../.env') })
+// Try multiple paths for .env file
+const envPaths = [
+  path.join(__dirname, '../.env'),
+  path.join(__dirname, '../../.env'),
+  path.join(__dirname, '../../../.env')
+]
+
+let envLoaded = false
+for (const envPath of envPaths) {
+  if (fs.existsSync(envPath)) {
+    console.log(`Loading environment from: ${envPath}`)
+    dotenv.config({ path: envPath })
+    envLoaded = true
+    break
+  }
+}
+
+if (!envLoaded) {
+  console.log('No .env file found, using default values')
+}
+
+// Ensure password is a string
+const dbPassword = process.env.DB_PASSWORD || ''
+if (typeof dbPassword !== 'string') {
+  console.error('Database password must be a string')
+  process.exit(1)
+}
 
 const db = knex({
   client: 'pg',
@@ -1311,7 +1364,7 @@ const db = knex({
     host: process.env.DB_HOST || 'localhost',
     port: parseInt(process.env.DB_PORT) || 5432,
     user: process.env.DB_USER || 'event_manager',
-    password: process.env.DB_PASSWORD || '',
+    password: dbPassword,
     database: process.env.DB_NAME || 'event_manager',
     ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false
   },
@@ -1328,7 +1381,8 @@ async function seed() {
       port: parseInt(process.env.DB_PORT) || 5432,
       user: process.env.DB_USER || 'event_manager',
       database: process.env.DB_NAME || 'event_manager',
-      passwordSet: !!process.env.DB_PASSWORD
+      passwordSet: !!process.env.DB_PASSWORD,
+      passwordLength: dbPassword.length
     })
     await db.seed.run()
     console.log('Seeds completed successfully')
@@ -1349,12 +1403,38 @@ import knex from 'knex'
 import dotenv from 'dotenv'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import fs from 'fs'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-// Load environment variables from the .env file
-dotenv.config({ path: path.join(__dirname, '../.env') })
+// Try multiple paths for .env file
+const envPaths = [
+  path.join(__dirname, '../.env'),
+  path.join(__dirname, '../../.env'),
+  path.join(__dirname, '../../../.env')
+]
+
+let envLoaded = false
+for (const envPath of envPaths) {
+  if (fs.existsSync(envPath)) {
+    console.log(`Loading environment from: ${envPath}`)
+    dotenv.config({ path: envPath })
+    envLoaded = true
+    break
+  }
+}
+
+if (!envLoaded) {
+  console.log('No .env file found, using default values')
+}
+
+// Ensure password is a string
+const dbPassword = process.env.DB_PASSWORD || ''
+if (typeof dbPassword !== 'string') {
+  console.error('Database password must be a string')
+  process.exit(1)
+}
 
 const db = knex({
   client: 'pg',
@@ -1362,7 +1442,7 @@ const db = knex({
     host: process.env.DB_HOST || 'localhost',
     port: parseInt(process.env.DB_PORT) || 5432,
     user: process.env.DB_USER || 'event_manager',
-    password: process.env.DB_PASSWORD || '',
+    password: dbPassword,
     database: process.env.DB_NAME || 'event_manager',
     ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false
   },
@@ -1374,6 +1454,14 @@ const db = knex({
 async function rollback() {
   try {
     console.log('Rolling back migrations...')
+    console.log('Database connection details:', {
+      host: process.env.DB_HOST || 'localhost',
+      port: parseInt(process.env.DB_PORT) || 5432,
+      user: process.env.DB_USER || 'event_manager',
+      database: process.env.DB_NAME || 'event_manager',
+      passwordSet: !!process.env.DB_PASSWORD,
+      passwordLength: dbPassword.length
+    })
     await db.migrate.rollback()
     console.log('Rollback completed successfully')
   } catch (error) {
