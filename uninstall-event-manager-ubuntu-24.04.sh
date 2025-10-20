@@ -280,10 +280,7 @@ remove_system_packages() {
             redis-server \
             redis-tools \
             apache2 \
-            apache2-utils \
-            libapache2-mod-proxy-html \
-            libapache2-mod-proxy-http \
-            libapache2-mod-proxy-wstunnel
+            apache2-utils
         
         # Remove configuration files
         sudo rm -rf /etc/postgresql

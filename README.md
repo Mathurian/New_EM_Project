@@ -78,7 +78,7 @@ The installation script automatically installs and configures:
   - Node.js 20.x LTS
   - PostgreSQL 15+
   - Redis 7+
-  - Apache 2.4
+  - Apache 2.4 (with proxy modules enabled)
   - Build tools and libraries
 
 - **Application Components:**
