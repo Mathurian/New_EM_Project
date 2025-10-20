@@ -373,19 +373,19 @@ src/
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Node.js 18+ (compatible with Node.js 16.x - 21.x)
+- **Node.js 20.x (LTS)** - Required for compatibility with `@fastify/jwt` and `fast-jwt@3.3.3`
 - PostgreSQL 12+
 - Redis 6+
-- npm or yarn
+- npm (comes with Node.js 20.x)
 
 ### System Dependencies and Required Packages
 
 Before installing and running this application, ensure that the following system dependencies and packages are installed on your Ubuntu 24.04 system:
 
 #### 1. **Node.js and npm** (Critical Version Requirement)
-**⚠️ IMPORTANT**: This application requires Node.js version 16.x to 21.x. Node.js 25.x is NOT supported due to package compatibility issues.
+**⚠️ CRITICAL**: This application requires Node.js version 20.x (LTS). Node.js 25.x is NOT supported due to package compatibility issues with `@fastify/jwt` and `fast-jwt@3.3.3`.
 
-**Install Node.js 20.x (Recommended):**
+**Install Node.js 20.x (Required):**
 ```bash
 # Remove any existing Node.js installations
 sudo apt remove nodejs npm -y
@@ -399,11 +399,11 @@ node --version  # Should be v20.x.x
 npm --version   # Should be 10.x.x
 ```
 
-**Alternative: Install Node.js 18.x:**
-```bash
-curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-sudo apt-get install -y nodejs
-```
+**⚠️ Why Node.js 20.x is Required:**
+- `@fastify/jwt@7.2.4` depends on `fast-jwt@3.3.3`
+- `fast-jwt@3.3.3` only supports Node.js versions `>=16 <22`
+- Node.js 20.x is the latest LTS version in the supported range
+- Node.js 25.x will cause `EBADENGINE` errors during installation
 
 #### 2. **Build Essentials** (Required for Native Modules)
 Required for compiling native modules like `sharp`, `pg`, and `bcryptjs`:
@@ -456,9 +456,18 @@ sudo apt install -y \
 ### Installation Error Resolution
 
 #### **Error: `npm warn EBADENGINE Unsupported engine`**
-**Cause**: The `fast-jwt@3.3.3` package requires Node.js version `>=16 <22`, but Node.js 25.x is installed.
+**Cause**: The `@fastify/jwt@7.2.4` package depends on `fast-jwt@3.3.3`, which only supports Node.js versions `>=16 <22`. Node.js 25.x is not supported.
 
-**Solution**: Downgrade to Node.js 20.x or 18.x:
+**Error Message:**
+```
+npm warn EBADENGINE Unsupported engine {
+npm warn EBADENGINE   package: 'fast-jwt@3.3.3',
+npm warn EBADENGINE   required: { node: '>=16 <22' },
+npm warn EBADENGINE   current: { node: 'v25.0.0', npm: '11.6.2' }
+npm warn EBADENGINE }
+```
+
+**Solution**: Install Node.js 20.x (LTS):
 ```bash
 # Remove current Node.js
 sudo apt remove nodejs npm -y
@@ -469,6 +478,10 @@ sudo apt-get install -y nodejs
 
 # Verify version
 node --version  # Should be v20.x.x
+npm --version   # Should be 10.x.x
+
+# Retry installation
+npm install --omit=dev
 ```
 
 #### **Error: `npm warn config production Use '--omit=dev' instead`**
@@ -529,6 +542,13 @@ curl -fsSL https://raw.githubusercontent.com/your-username/New_EM_Project/main/i
 # Make the script executable and run it
 chmod +x install-ubuntu-24.04.sh
 ./install-ubuntu-24.04.sh
+```
+
+**🗑️ Uninstall Script:**
+```bash
+# To completely remove Event Manager (preserves PostgreSQL)
+chmod +x uninstall-ubuntu-24.04.sh
+./uninstall-ubuntu-24.04.sh
 ```
 
 **🔧 Manual Installation Steps:**
@@ -611,13 +631,25 @@ cd event-manager-api
 npm install --omit=dev
 ```
 
-2. **Configure environment**
+2. **Fix security vulnerabilities**
+```bash
+# Check for vulnerabilities
+npm audit
+
+# Fix vulnerabilities automatically
+npm audit fix
+
+# If needed, force fix (use with caution)
+npm audit fix --force
+```
+
+3. **Configure environment**
 ```bash
 cp .env.example .env
 # Edit .env with your database and Redis credentials
 ```
 
-3. **Set up database**
+4. **Set up database**
 ```bash
 # Create PostgreSQL database
 createdb event_manager
@@ -629,7 +661,7 @@ npm run db:migrate
 npm run db:seed
 ```
 
-4. **Start development server**
+5. **Start development server**
 ```bash
 npm run dev
 ```
