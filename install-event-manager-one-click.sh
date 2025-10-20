@@ -246,20 +246,10 @@ setup_postgresql() {
     sudo systemctl enable postgresql
     
     # Create database and user
-    sudo -u postgres psql << EOF
--- Create database
-CREATE DATABASE $DB_NAME;
-
--- Create user
-CREATE USER $DB_USER WITH PASSWORD '$DB_PASSWORD';
-
--- Grant privileges
-GRANT ALL PRIVILEGES ON DATABASE $DB_NAME TO $DB_USER;
-GRANT ALL PRIVILEGES ON SCHEMA public TO $DB_USER;
-
--- Exit
-\q
-EOF
+    sudo -u postgres psql -c "CREATE DATABASE $DB_NAME;"
+    sudo -u postgres psql -c "CREATE USER $DB_USER WITH PASSWORD '$DB_PASSWORD';"
+    sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE $DB_NAME TO $DB_USER;"
+    sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON SCHEMA public TO $DB_USER;"
     
     log_success "PostgreSQL setup completed"
 }
@@ -382,7 +372,7 @@ generate_backend_package_json() {
     "uuid": "^9.0.1",
     "nodemailer": "^6.9.8",
     "sharp": "^0.32.6",
-    "multer": "^1.4.5-lts.1",
+    "multer": "^2.0.0",
     "winston": "^3.11.0",
     "dotenv": "^16.3.1",
     "node-cron": "^3.0.3",
