@@ -245,9 +245,23 @@ setup_postgresql() {
     sudo systemctl start postgresql
     sudo systemctl enable postgresql
     
-    # Create database and user
-    sudo -u postgres psql -c "CREATE DATABASE $DB_NAME;"
-    sudo -u postgres psql -c "CREATE USER $DB_USER WITH PASSWORD '$DB_PASSWORD';"
+    # Create database and user (with existence checks)
+    if ! sudo -u postgres psql -lqt | cut -d \| -f 1 | grep -qw "$DB_NAME"; then
+        sudo -u postgres psql -c "CREATE DATABASE $DB_NAME;"
+        log_info "Database '$DB_NAME' created"
+    else
+        log_info "Database '$DB_NAME' already exists. Skipping creation."
+    fi
+    
+    if ! sudo -u postgres psql -c "SELECT 1 FROM pg_roles WHERE rolname='$DB_USER';" | grep -q "1 row"; then
+        sudo -u postgres psql -c "CREATE USER $DB_USER WITH PASSWORD '$DB_PASSWORD';"
+        log_info "User '$DB_USER' created"
+    else
+        log_info "User '$DB_USER' already exists. Updating password."
+        sudo -u postgres psql -c "ALTER USER $DB_USER WITH PASSWORD '$DB_PASSWORD';"
+    fi
+    
+    # Grant privileges (these commands are safe to run multiple times)
     sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE $DB_NAME TO $DB_USER;"
     sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON SCHEMA public TO $DB_USER;"
     
