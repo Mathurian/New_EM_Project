@@ -1,9 +1,7 @@
 /**
- * Database Seeds
+ * Database Seeds (Simple Version)
  * Initial data for the Event Manager system
  */
-
-import bcrypt from 'bcryptjs'
 
 export async function seed(knex) {
   // Deletes ALL existing entries
@@ -42,8 +40,9 @@ export async function seed(knex) {
     }
   ])
 
-  // Create default admin user (password: admin123)
-  const hashedPassword = await bcrypt.hash('admin123', 10)
+  // Create default admin user with pre-hashed password (admin123)
+  // This is the bcrypt hash for 'admin123' with 10 rounds
+  const hashedPassword = '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi'
 
   await knex('users').insert([
     {
@@ -57,4 +56,7 @@ export async function seed(knex) {
   ])
 
   console.log('✅ Seed data inserted successfully')
+  console.log('🔐 Default admin user created:')
+  console.log('   Email: admin@eventmanager.com')
+  console.log('   Password: admin123')
 }
