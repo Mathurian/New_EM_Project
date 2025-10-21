@@ -380,9 +380,8 @@ create_backend_files() {
     mkdir -p "$APP_DIR/src/database" "$APP_DIR/src/controllers" "$APP_DIR/src/middleware" \
              "$APP_DIR/src/routes" "$APP_DIR/src/socket" "$APP_DIR/src/utils" "$APP_DIR/prisma"
     
-    # Create Prisma schema if it doesn't exist
-    if [[ ! -f "$APP_DIR/prisma/schema.prisma" ]]; then
-        print_status "Creating Prisma schema..."
+    # Create Prisma schema (overwrite if exists to ensure correct relations)
+    print_status "Creating Prisma schema..."
         cat > "$APP_DIR/prisma/schema.prisma" << 'EOF'
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
@@ -776,13 +775,12 @@ enum LogLevel {
   DEBUG
 }
 
-enum RequestStatus {
-  PENDING
-  APPROVED
-  REJECTED
-}
+    enum RequestStatus {
+      PENDING
+      APPROVED
+      REJECTED
+    }
 EOF
-    fi
     
     # Create migration script if it doesn't exist
     if [[ ! -f "$APP_DIR/src/database/migrate.js" ]]; then
@@ -1340,6 +1338,11 @@ EOF
         chmod +x "$APP_DIR/node_modules/.bin"/*
         print_status "Fixed Node.js binary permissions for migration"
     fi
+    
+    # Clean up any existing Prisma client files
+    print_status "Cleaning up existing Prisma client files..."
+    rm -rf "$APP_DIR/node_modules/.prisma" 2>/dev/null || true
+    rm -rf "$APP_DIR/node_modules/@prisma/client" 2>/dev/null || true
     
     # Validate Prisma schema first
     print_status "Validating Prisma schema..."
