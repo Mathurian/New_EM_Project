@@ -891,10 +891,12 @@ const seed = async () => {
     
     console.log('✅ Sample category created:', sampleCategory.name)
     
-    // Create sample contestants
+    // Create sample contestants (use upsert to avoid duplicates)
     const contestants = await Promise.all([
-      prisma.contestant.create({
-        data: {
+      prisma.contestant.upsert({
+        where: { email: 'john@example.com' },
+        update: {},
+        create: {
           name: 'John Doe',
           email: 'john@example.com',
           gender: 'Male',
@@ -903,8 +905,10 @@ const seed = async () => {
           bio: 'Sample contestant 1'
         }
       }),
-      prisma.contestant.create({
-        data: {
+      prisma.contestant.upsert({
+        where: { email: 'jane@example.com' },
+        update: {},
+        create: {
           name: 'Jane Smith',
           email: 'jane@example.com',
           gender: 'Female',
@@ -917,10 +921,12 @@ const seed = async () => {
     
     console.log('✅ Sample contestants created:', contestants.length)
     
-    // Create sample judges
+    // Create sample judges (use upsert to avoid duplicates)
     const judges = await Promise.all([
-      prisma.judge.create({
-        data: {
+      prisma.judge.upsert({
+        where: { email: 'judge1@example.com' },
+        update: {},
+        create: {
           name: 'Judge Johnson',
           email: 'judge1@example.com',
           gender: 'Male',
@@ -929,8 +935,10 @@ const seed = async () => {
           bio: 'Head judge'
         }
       }),
-      prisma.judge.create({
-        data: {
+      prisma.judge.upsert({
+        where: { email: 'judge2@example.com' },
+        update: {},
+        create: {
           name: 'Judge Williams',
           email: 'judge2@example.com',
           gender: 'Female',
@@ -1002,24 +1010,30 @@ const seed = async () => {
       })
     ])
     
-    // Create system settings
+    // Create system settings (use upsert to avoid duplicates)
     const settings = await Promise.all([
-      prisma.systemSetting.create({
-        data: {
+      prisma.systemSetting.upsert({
+        where: { settingKey: 'app_name' },
+        update: {},
+        create: {
           settingKey: 'app_name',
           settingValue: 'Event Manager',
           description: 'Application name'
         }
       }),
-      prisma.systemSetting.create({
-        data: {
+      prisma.systemSetting.upsert({
+        where: { settingKey: 'app_version' },
+        update: {},
+        create: {
           settingKey: 'app_version',
           settingValue: '1.0.0',
           description: 'Application version'
         }
       }),
-      prisma.systemSetting.create({
-        data: {
+      prisma.systemSetting.upsert({
+        where: { settingKey: 'max_file_size' },
+        update: {},
+        create: {
           settingKey: 'max_file_size',
           settingValue: '10485760',
           description: 'Maximum file upload size in bytes'
