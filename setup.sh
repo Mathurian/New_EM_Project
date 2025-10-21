@@ -1759,7 +1759,24 @@ EOF
         sudo systemctl enable $APP_NAME
         sudo systemctl start $APP_NAME
         
-        print_success "Systemd service configured and started"
+        # Wait for service to start and check status
+        sleep 5
+        if sudo systemctl is-active --quiet $APP_NAME; then
+            print_success "Systemd service configured and started successfully"
+            
+            # Test backend API endpoint
+            print_status "Testing backend API endpoint..."
+            if curl -f http://localhost:3000/health > /dev/null 2>&1; then
+                print_success "Backend API is responding correctly"
+            else
+                print_warning "Backend API health check failed. Service may still be starting..."
+                print_status "You can check service status with: sudo systemctl status $APP_NAME"
+            fi
+        else
+            print_error "Failed to start $APP_NAME service"
+            print_status "Check service status with: sudo systemctl status $APP_NAME"
+            print_status "Check service logs with: sudo journalctl -u $APP_NAME -f"
+        fi
     fi
 }
 
@@ -1777,9 +1794,9 @@ server {
     listen 80;
     server_name ${DOMAIN:-localhost};
     
-    # Backend API
+    # Backend API - Enhanced configuration
     location /api/ {
-        proxy_pass http://localhost:3000;
+        proxy_pass http://127.0.0.1:3000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -1788,6 +1805,33 @@ server {
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_cache_bypass \$http_upgrade;
+        proxy_read_timeout 300s;
+        proxy_connect_timeout 75s;
+        
+        # CORS headers for API
+        add_header Access-Control-Allow-Origin * always;
+        add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS" always;
+        add_header Access-Control-Allow-Headers "Authorization, Content-Type" always;
+        
+        # Handle preflight requests
+        if (\$request_method = 'OPTIONS') {
+            add_header Access-Control-Allow-Origin * always;
+            add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS" always;
+            add_header Access-Control-Allow-Headers "Authorization, Content-Type" always;
+            add_header Access-Control-Max-Age 1728000;
+            add_header Content-Type 'text/plain charset=UTF-8';
+            add_header Content-Length 0;
+            return 204;
+        }
+    }
+    
+    # Health check endpoint
+    location /health {
+        proxy_pass http://127.0.0.1:3000/health;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
     }
     
     # Frontend static files
@@ -2132,18 +2176,8 @@ export default function LoginForm({ onLogin }: LoginFormProps) {
           </form>
 
           <div className="mt-6">
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-300" />
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white text-gray-500">Default Credentials</span>
-              </div>
-            </div>
-
-            <div className="mt-6 text-center text-sm text-gray-600">
-              <p><strong>Email:</strong> admin@eventmanager.com</p>
-              <p><strong>Password:</strong> admin123</p>
+            <div className="text-center text-sm text-gray-600">
+              <p>Contact your administrator for login credentials</p>
             </div>
           </div>
         </div>
