@@ -1862,9 +1862,8 @@ EOF
     "glob": "^10.3.10",
     "rimraf": "^5.0.5",
     "inflight": "npm:lru-cache@^10.0.0",
-    "are-we-there-yet": "npm:@types/are-we-there-yet@^2.0.0",
     "lodash.pick": "npm:lodash@^4.17.21",
-    "gauge": "npm:@types/gauge@^2.7.2",
+    "gauge": "npm:gauge@^4.0.4",
     "npmlog": "^5.0.1"
   }
 }
@@ -2797,6 +2796,76 @@ EOF
     mkdir -p "$APP_DIR/frontend/src/services"
     mkdir -p "$APP_DIR/frontend/src/hooks"
     mkdir -p "$APP_DIR/frontend/src/utils"
+    
+    # Create frontend package.json with React 18 compatible dependencies
+    print_status "Creating frontend package.json with React 18 compatible dependencies..."
+    cat > "$APP_DIR/frontend/package.json" << 'EOF'
+{
+  "name": "event-manager-frontend",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.8.1",
+    "react-query": "^3.39.3",
+    "axios": "^1.6.2",
+    "socket.io-client": "^4.7.4",
+    "@heroicons/react": "^2.0.18",
+    "date-fns": "^2.30.0",
+    "clsx": "^2.0.0",
+    "tailwind-merge": "^2.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.43",
+    "@types/react-dom": "^18.2.17",
+    "@typescript-eslint/eslint-plugin": "^6.14.0",
+    "@typescript-eslint/parser": "^6.14.0",
+    "@vitejs/plugin-react": "^4.2.1",
+    "autoprefixer": "^10.4.16",
+    "eslint": "^8.55.0",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "eslint-plugin-react-refresh": "^0.4.5",
+    "postcss": "^8.4.32",
+    "tailwindcss": "^3.3.6",
+    "typescript": "^5.2.2",
+    "vite": "^5.0.8"
+  }
+}
+EOF
+    
+    # Create Tailwind CSS configuration
+    print_status "Creating Tailwind CSS configuration..."
+    cat > "$APP_DIR/frontend/tailwind.config.js" << 'EOF'
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: [
+    "./index.html",
+    "./src/**/*.{js,ts,jsx,tsx}",
+  ],
+  theme: {
+    extend: {},
+  },
+  plugins: [],
+}
+EOF
+    
+    # Create PostCSS configuration
+    cat > "$APP_DIR/frontend/postcss.config.js" << 'EOF'
+export default {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
+  },
+}
+EOF
     
     cat > "$APP_DIR/frontend/src/main.tsx" << 'EOF'
 import React from 'react'
@@ -16125,6 +16194,27 @@ evaluate_setup_completeness() {
             print_success "✓ Heroicons imports fixed in Layout component"
         else
             print_warning "⚠ Heroicons imports may need fixing"
+            ((issues_found++))
+        fi
+    fi
+    
+    # Check for deprecated package removal
+    if [[ -f "$APP_DIR/package.json" ]]; then
+        if ! grep -q "are-we-there-yet" "$APP_DIR/package.json"; then
+            print_success "✓ Deprecated are-we-there-yet package removed from overrides"
+        else
+            print_warning "⚠ Deprecated are-we-there-yet package still present in overrides"
+            ((issues_found++))
+        fi
+    fi
+    
+    # Check for @heroicons/react version compatibility
+    if [[ -f "$APP_DIR/frontend/node_modules/@heroicons/react/package.json" ]]; then
+        local heroicons_version=$(grep '"version"' "$APP_DIR/frontend/node_modules/@heroicons/react/package.json" | cut -d'"' -f4)
+        if [[ "$heroicons_version" =~ ^2\. ]]; then
+            print_success "✓ @heroicons/react updated to React 18 compatible version $heroicons_version"
+        else
+            print_warning "⚠ @heroicons/react still on version $heroicons_version (may have React compatibility issues)"
             ((issues_found++))
         fi
     fi
