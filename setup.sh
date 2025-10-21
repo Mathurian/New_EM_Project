@@ -3293,6 +3293,265 @@ class ErrorBoundary extends Component<Props, State> {
 
 export default ErrorBoundary
 EOF
+
+    # Add missing components that were causing TypeScript errors
+    cat > "$APP_DIR/frontend/src/components/EmailManager.tsx" << 'EOF'
+import React, { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from 'react-query'
+import { eventsAPI, contestsAPI } from '../services/api'
+import { EnvelopeIcon, PlusIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline'
+
+const EmailManager: React.FC = () => {
+  const [activeTab, setActiveTab] = useState('compose')
+  const queryClient = useQueryClient()
+
+  // Get events and contests for email composition
+  const { data: events } = useQuery('events', () => eventsAPI.getAll().then((res: any) => res.data))
+  const { data: contests } = useQuery('contests', () => contestsAPI.getAll().then((res: any) => res.data))
+
+  const tabs = [
+    { id: 'compose', name: 'Compose', icon: EnvelopeIcon },
+    { id: 'templates', name: 'Templates', icon: PlusIcon },
+    { id: 'campaigns', name: 'Campaigns', icon: PencilIcon },
+    { id: 'logs', name: 'Logs', icon: TrashIcon },
+  ]
+
+  return (
+    <div className="space-y-6">
+      <div className="card">
+        <div className="card-header">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Email Manager</h1>
+          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+            Manage email communications and campaigns
+          </p>
+        </div>
+        <div className="card-body">
+          <div className="border-b border-gray-200 dark:border-gray-700">
+            <nav className="-mb-px flex space-x-8">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`${
+                    activeTab === tab.id
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  } whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm flex items-center`}
+                >
+                  <tab.icon className="h-5 w-5 mr-2" />
+                  {tab.name}
+                </button>
+              ))}
+            </nav>
+          </div>
+
+          <div className="mt-6">
+            {activeTab === 'compose' && (
+              <div className="text-center py-12">
+                <EnvelopeIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Compose Email</h3>
+                <p className="text-gray-600 dark:text-gray-400">Email composition functionality will be implemented here</p>
+              </div>
+            )}
+            {activeTab === 'templates' && (
+              <div className="text-center py-12">
+                <PlusIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Email Templates</h3>
+                <p className="text-gray-600 dark:text-gray-400">Template management functionality will be implemented here</p>
+              </div>
+            )}
+            {activeTab === 'campaigns' && (
+              <div className="text-center py-12">
+                <PencilIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Email Campaigns</h3>
+                <p className="text-gray-600 dark:text-gray-400">Campaign management functionality will be implemented here</p>
+              </div>
+            )}
+            {activeTab === 'logs' && (
+              <div className="text-center py-12">
+                <TrashIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Email Logs</h3>
+                <p className="text-gray-600 dark:text-gray-400">Email logging functionality will be implemented here</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default EmailManager
+EOF
+
+    cat > "$APP_DIR/frontend/src/components/EmceeScripts.tsx" << 'EOF'
+import React, { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from 'react-query'
+import { eventsAPI, contestsAPI } from '../services/api'
+import { DocumentTextIcon, PlusIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline'
+
+const EmceeScripts: React.FC = () => {
+  const [activeTab, setActiveTab] = useState('browse')
+  const queryClient = useQueryClient()
+
+  // Get events and contests for script management
+  const { data: events } = useQuery('events', () => eventsAPI.getAll().then((res: any) => res.data))
+  const { data: contests } = useQuery('contests', () => contestsAPI.getAll().then((res: any) => res.data))
+
+  const tabs = [
+    { id: 'browse', name: 'Browse Scripts', icon: DocumentTextIcon },
+    { id: 'create', name: 'Create Script', icon: PlusIcon },
+    { id: 'manage', name: 'Manage Scripts', icon: PencilIcon },
+    { id: 'practice', name: 'Practice Mode', icon: TrashIcon },
+  ]
+
+  return (
+    <div className="space-y-6">
+      <div className="card">
+        <div className="card-header">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Emcee Scripts</h1>
+          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+            Manage scripts for event announcements and presentations
+          </p>
+        </div>
+        <div className="card-body">
+          <div className="border-b border-gray-200 dark:border-gray-700">
+            <nav className="-mb-px flex space-x-8">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`${
+                    activeTab === tab.id
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  } whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm flex items-center`}
+                >
+                  <tab.icon className="h-5 w-5 mr-2" />
+                  {tab.name}
+                </button>
+              ))}
+            </nav>
+          </div>
+
+          <div className="mt-6">
+            {activeTab === 'browse' && (
+              <div className="text-center py-12">
+                <DocumentTextIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Browse Scripts</h3>
+                <p className="text-gray-600 dark:text-gray-400">Script browsing functionality will be implemented here</p>
+              </div>
+            )}
+            {activeTab === 'create' && (
+              <div className="text-center py-12">
+                <PlusIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Create Script</h3>
+                <p className="text-gray-600 dark:text-gray-400">Script creation functionality will be implemented here</p>
+              </div>
+            )}
+            {activeTab === 'manage' && (
+              <div className="text-center py-12">
+                <PencilIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Manage Scripts</h3>
+                <p className="text-gray-600 dark:text-gray-400">Script management functionality will be implemented here</p>
+              </div>
+            )}
+            {activeTab === 'practice' && (
+              <div className="text-center py-12">
+                <TrashIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Practice Mode</h3>
+                <p className="text-gray-600 dark:text-gray-400">Practice mode functionality will be implemented here</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default EmceeScripts
+EOF
+
+    cat > "$APP_DIR/frontend/src/components/PrintReports.tsx" << 'EOF'
+import React, { useState } from 'react'
+import { useQuery } from 'react-query'
+import { eventsAPI, contestsAPI } from '../services/api'
+import { DocumentIcon, PrinterIcon, DownloadIcon } from '@heroicons/react/24/outline'
+
+const PrintReports: React.FC = () => {
+  const [activeTab, setActiveTab] = useState('generate')
+
+  // Get events and contests for report generation
+  const { data: events } = useQuery('events', () => eventsAPI.getAll().then((res: any) => res.data))
+  const { data: contests } = useQuery('contests', () => contestsAPI.getAll().then((res: any) => res.data))
+
+  const tabs = [
+    { id: 'generate', name: 'Generate Report', icon: DocumentIcon },
+    { id: 'templates', name: 'Templates', icon: PrinterIcon },
+    { id: 'history', name: 'History', icon: DownloadIcon },
+  ]
+
+  return (
+    <div className="space-y-6">
+      <div className="card">
+        <div className="card-header">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Print Reports</h1>
+          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+            Generate and manage printable reports for events and contests
+          </p>
+        </div>
+        <div className="card-body">
+          <div className="border-b border-gray-200 dark:border-gray-700">
+            <nav className="-mb-px flex space-x-8">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`${
+                    activeTab === tab.id
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  } whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm flex items-center`}
+                >
+                  <tab.icon className="h-5 w-5 mr-2" />
+                  {tab.name}
+                </button>
+              ))}
+            </nav>
+          </div>
+
+          <div className="mt-6">
+            {activeTab === 'generate' && (
+              <div className="text-center py-12">
+                <DocumentIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Generate Report</h3>
+                <p className="text-gray-600 dark:text-gray-400">Report generation functionality will be implemented here</p>
+              </div>
+            )}
+            {activeTab === 'templates' && (
+              <div className="text-center py-12">
+                <PrinterIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Report Templates</h3>
+                <p className="text-gray-600 dark:text-gray-400">Template management functionality will be implemented here</p>
+              </div>
+            )}
+            {activeTab === 'history' && (
+              <div className="text-center py-12">
+                <DownloadIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Report History</h3>
+                <p className="text-gray-600 dark:text-gray-400">Report history functionality will be implemented here</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default PrintReports
+EOF
     
     cat > "$APP_DIR/frontend/src/pages/LoginPage.tsx" << 'EOF'
 import React, { useState } from 'react'
