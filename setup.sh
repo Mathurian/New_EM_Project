@@ -1907,7 +1907,7 @@ build_frontend() {
     
     # Create TypeScript configuration (force overwrite to ensure correct content)
     print_status "Creating TypeScript configuration..."
-    cat > "$APP_DIR/frontend/tsconfig.json" << 'EOF'
+        cat > "$APP_DIR/frontend/tsconfig.json" << 'EOF'
 {
   "compilerOptions": {
     "target": "ES2020",
@@ -1924,7 +1924,8 @@ build_frontend() {
     "strict": true,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitAny": false
   },
   "include": ["src"],
   "references": [{ "path": "./tsconfig.node.json" }]
@@ -2103,6 +2104,24 @@ EOF
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react'
 import { io, Socket } from 'socket.io-client'
 import { useAuth } from './AuthContext'
+
+interface ActiveUser {
+  id: string
+  name: string
+  role: string
+  lastSeen: string
+  isOnline: boolean
+}
+
+interface NotificationData {
+  id: string
+  type: 'SCORE_UPDATE' | 'CERTIFICATION' | 'SYSTEM' | 'EVENT'
+  title: string
+  message: string
+  timestamp: string
+  read: boolean
+  userId: string
+}
 
 interface SocketContextType {
   socket: Socket | null
@@ -2441,7 +2460,7 @@ export const uploadAPI = {
       },
     })
   },
-  uploadFileData: (fileData: FormData, type: string) => {
+  uploadFileData: (fileData: FormData, type: string = 'OTHER') => {
     fileData.append('type', type)
     return api.post('/upload', fileData, {
       headers: {
@@ -2482,7 +2501,10 @@ export const backupAPI = {
       },
     })
   },
-  download: (backupId: string) => api.get(`/backup/${backupId}/download`, { responseType: 'blob' }),
+  download: async (backupId: string) => {
+    const response = await api.get(`/backup/${backupId}/download`, { responseType: 'blob' })
+    return response.data
+  },
   delete: (id: string) => api.delete(`/backup/${id}`),
 }
 
