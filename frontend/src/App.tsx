@@ -36,9 +36,9 @@ function App() {
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <ThemeProvider>
-          <AuthProvider>
-            <SocketProvider>
-              <Router>
+          <Router>
+            <AuthProvider>
+              <SocketProvider>
                 <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
                   <Routes>
                     <Route path="/login" element={<LoginPage />} />
@@ -69,9 +69,9 @@ function App() {
                     />
                   </Routes>
                 </div>
-              </Router>
-            </SocketProvider>
-          </AuthProvider>
+              </SocketProvider>
+            </AuthProvider>
+          </Router>
         </ThemeProvider>
       </QueryClientProvider>
     </ErrorBoundary>
