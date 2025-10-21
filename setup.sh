@@ -582,11 +582,51 @@ install_prerequisites() {
     
     # Fix npm permissions for Ubuntu 24.04
     print_status "Fixing npm permissions..."
-    sudo chown -R $USER:$(id -gn $USER) /usr/local/lib/node_modules
-    sudo chown -R $USER:$(id -gn $USER) /usr/local/bin
-    sudo chown -R $USER:$(id -gn $USER) /usr/local/share
+    
+    # Check if npm global directories exist and fix ownership if needed
+    if [[ -d "/usr/local/lib/node_modules" ]]; then
+        if [[ "$(stat -c %U /usr/local/lib/node_modules)" == "root" ]]; then
+            print_status "Fixing npm global directory ownership..."
+            sudo chown -R $USER:$(id -gn $USER) /usr/local/lib/node_modules
+        else
+            print_status "npm global directory already has correct ownership"
+        fi
+    else
+        print_status "npm global directory /usr/local/lib/node_modules does not exist (likely using NVM or user installation)"
+    fi
+    
+    # Fix other npm directories if they exist
+    if [[ -d "/usr/local/bin" ]] && [[ "$(stat -c %U /usr/local/bin)" == "root" ]]; then
+        print_status "Fixing /usr/local/bin ownership..."
+        sudo chown -R $USER:$(id -gn $USER) /usr/local/bin
+    fi
+    
+    if [[ -d "/usr/local/share" ]] && [[ "$(stat -c %U /usr/local/share)" == "root" ]]; then
+        print_status "Fixing /usr/local/share ownership..."
+        sudo chown -R $USER:$(id -gn $USER) /usr/local/share
+    fi
+    
+    # Check npm cache permissions
+    if [[ -d "$HOME/.npm" ]]; then
+        print_status "Fixing npm cache permissions..."
+        chown -R $USER:$(id -gn $USER) $HOME/.npm
+    fi
+    
+    # Set npm prefix to user directory to avoid permission issues
+    print_status "Configuring npm to use user directory..."
+    mkdir -p ~/.npm-global
+    npm config set prefix ~/.npm-global
+    
+    # Add to PATH if not already present
+    if ! grep -q "~/.npm-global/bin" ~/.bashrc; then
+        echo 'export PATH=~/.npm-global/bin:$PATH' >> ~/.bashrc
+        print_success "Added npm global bin to PATH in ~/.bashrc"
+    fi
+    export PATH=~/.npm-global/bin:$PATH
+    
+    print_success "npm permissions fixed!"
         
-        # Verify Node.js installation
+    # Verify Node.js installation
         NODE_VERSION=$(node -v | cut -d'v' -f2 | cut -d'.' -f1)
         if [ "$NODE_VERSION" -lt 18 ]; then
             print_error "Node.js installation failed or version too old. Current version: $(node -v)"
