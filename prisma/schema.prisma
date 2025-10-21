@@ -1,0 +1,395 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Event {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  startDate   DateTime
+  endDate     DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  contests         Contest[]
+  archivedEvents   ArchivedEvent[]
+
+  @@map("events")
+}
+
+model Contest {
+  id          String   @id @default(cuid())
+  eventId     String
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  event      Event      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  categories Category[]
+  contestants ContestContestant[]
+  judges     ContestJudge[]
+
+  @@map("contests")
+}
+
+model Category {
+  id          String   @id @default(cuid())
+  contestId   String
+  name        String
+  description String?
+  scoreCap    Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  contest      Contest      @relation(fields: [contestId], references: [id], onDelete: Cascade)
+  contestants  CategoryContestant[]
+  judges       CategoryJudge[]
+  criteria     Criterion[]
+  scores       Score[]
+  comments     JudgeComment[]
+  certifications TallyMasterCertification[]
+  auditorCertifications AuditorCertification[]
+
+  @@map("categories")
+}
+
+model Contestant {
+  id               String   @id @default(cuid())
+  name             String
+  email            String?  @unique
+  gender           String?
+  pronouns         String?
+  contestantNumber Int?
+  bio              String?
+  imagePath        String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  users              User[]
+  contestContestants ContestContestant[]
+  categoryContestants CategoryContestant[]
+  scores             Score[]
+  comments           JudgeComment[]
+
+  @@map("contestants")
+}
+
+model Judge {
+  id         String   @id @default(cuid())
+  name       String
+  email      String?  @unique
+  gender     String?
+  pronouns   String?
+  bio        String?
+  imagePath  String?
+  isHeadJudge Boolean @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  users            User[]
+  contestJudges    ContestJudge[]
+  categoryJudges   CategoryJudge[]
+  scores           Score[]
+  comments         JudgeComment[]
+  certifications   JudgeCertification[]
+
+  @@map("judges")
+}
+
+model Criterion {
+  id         String   @id @default(cuid())
+  categoryId String
+  name       String
+  maxScore   Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  scores   Score[]
+
+  @@map("criteria")
+}
+
+model Score {
+  id           String   @id @default(cuid())
+  categoryId   String
+  contestantId String
+  judgeId      String
+  criterionId  String
+  score        Int
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  category   Category   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  contestant Contestant @relation(fields: [contestantId], references: [id], onDelete: Cascade)
+  judge      Judge      @relation(fields: [judgeId], references: [id], onDelete: Cascade)
+  criterion  Criterion  @relation(fields: [criterionId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId, contestantId, judgeId, criterionId])
+  @@map("scores")
+}
+
+model User {
+  id             String   @id @default(cuid())
+  name           String
+  preferredName  String?
+  email          String   @unique
+  password       String
+  role           UserRole
+  gender         String?
+  pronouns       String?
+  judgeId        String?
+  contestantId   String?
+  sessionVersion Int      @default(1)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  judge      Judge?      @relation(fields: [judgeId], references: [id])
+  contestant Contestant? @relation(fields: [contestantId], references: [id])
+  logs       ActivityLog[]
+
+  @@map("users")
+}
+
+model JudgeComment {
+  id           String   @id @default(cuid())
+  categoryId   String
+  contestantId String
+  judgeId      String
+  comment      String?
+  createdAt    DateTime @default(now())
+
+  category   Category   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  contestant Contestant @relation(fields: [contestantId], references: [id], onDelete: Cascade)
+  judge      Judge      @relation(fields: [judgeId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId, contestantId, judgeId])
+  @@map("judge_comments")
+}
+
+model JudgeCertification {
+  id            String   @id @default(cuid())
+  categoryId    String
+  judgeId       String
+  signatureName String
+  certifiedAt   DateTime @default(now())
+
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  judge    Judge    @relation(fields: [judgeId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId, judgeId])
+  @@map("judge_certifications")
+}
+
+model TallyMasterCertification {
+  id            String   @id @default(cuid())
+  categoryId    String
+  signatureName String
+  certifiedAt   DateTime @default(now())
+
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId])
+  @@map("tally_master_certifications")
+}
+
+model AuditorCertification {
+  id            String   @id @default(cuid())
+  categoryId    String
+  signatureName String
+  certifiedAt   DateTime @default(now())
+
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId])
+  @@map("auditor_certifications")
+}
+
+model OverallDeduction {
+  id           String   @id @default(cuid())
+  categoryId   String
+  contestantId String
+  deduction    Float
+  reason       String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([categoryId, contestantId])
+  @@map("overall_deductions")
+}
+
+model ActivityLog {
+  id           String   @id @default(cuid())
+  userId       String?
+  userName     String?
+  userRole     String?
+  action       String
+  resourceType String?
+  resourceId   String?
+  details      String?
+  ipAddress    String?
+  userAgent    String?
+  logLevel     LogLevel @default(INFO)
+  createdAt    DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@map("activity_logs")
+}
+
+model SystemSetting {
+  id          String   @id @default(cuid())
+  settingKey  String   @unique
+  settingValue String
+  description String?
+  updatedAt   DateTime @updatedAt
+  updatedById String?
+
+  updatedBy User? @relation(fields: [updatedById], references: [id])
+
+  @@map("system_settings")
+}
+
+model EmceeScript {
+  id          String   @id @default(cuid())
+  eventId     String?
+  contestId   String?
+  categoryId  String?
+  title       String
+  content     String
+  order       Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("emcee_scripts")
+}
+
+model ArchivedEvent {
+  id          String   @id @default(cuid())
+  eventId     String
+  name        String
+  description String?
+  startDate   DateTime?
+  endDate     DateTime?
+  archivedAt  DateTime @default(now())
+  archivedById String
+
+  event Event @relation(fields: [eventId], references: [id])
+
+  @@map("archived_events")
+}
+
+model CategoryTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  criteria TemplateCriterion[]
+
+  @@map("category_templates")
+}
+
+model TemplateCriterion {
+  id         String   @id @default(cuid())
+  templateId String
+  name       String
+  maxScore   Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  template CategoryTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@map("template_criteria")
+}
+
+model JudgeScoreRemovalRequest {
+  id           String        @id @default(cuid())
+  categoryId   String
+  contestantId String
+  judgeId      String
+  reason       String
+  status       RequestStatus @default(PENDING)
+  requestedAt  DateTime      @default(now())
+  reviewedAt   DateTime?
+  reviewedById String?
+
+  @@map("judge_score_removal_requests")
+}
+
+model ContestContestant {
+  contestId    String
+  contestantId String
+
+  contest    Contest    @relation(fields: [contestId], references: [id], onDelete: Cascade)
+  contestant Contestant @relation(fields: [contestantId], references: [id], onDelete: Cascade)
+
+  @@id([contestId, contestantId])
+  @@map("contest_contestants")
+}
+
+model ContestJudge {
+  contestId String
+  judgeId   String
+
+  contest Contest @relation(fields: [contestId], references: [id], onDelete: Cascade)
+  judge   Judge   @relation(fields: [judgeId], references: [id], onDelete: Cascade)
+
+  @@id([contestId, judgeId])
+  @@map("contest_judges")
+}
+
+model CategoryContestant {
+  categoryId   String
+  contestantId String
+
+  category   Category   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  contestant Contestant @relation(fields: [contestantId], references: [id], onDelete: Cascade)
+
+  @@id([categoryId, contestantId])
+  @@map("category_contestants")
+}
+
+model CategoryJudge {
+  categoryId String
+  judgeId    String
+
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  judge    Judge    @relation(fields: [judgeId], references: [id], onDelete: Cascade)
+
+  @@id([categoryId, judgeId])
+  @@map("category_judges")
+}
+
+enum UserRole {
+  ORGANIZER
+  JUDGE
+  CONTESTANT
+  EMCEE
+  TALLY_MASTER
+  AUDITOR
+  BOARD
+}
+
+enum LogLevel {
+  ERROR
+  WARN
+  INFO
+  DEBUG
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}

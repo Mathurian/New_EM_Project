@@ -431,9 +431,809 @@ setup_frontend() {
     print_success "Frontend setup complete"
 }
 
+# Create essential backend files
+create_backend_files() {
+    print_status "Creating essential backend files..."
+    
+    # Create directories
+    mkdir -p src/database src/controllers src/middleware src/routes src/socket src/utils prisma
+    
+    # Create Prisma schema if it doesn't exist
+    if [[ ! -f "prisma/schema.prisma" ]]; then
+        print_status "Creating Prisma schema..."
+        cat > prisma/schema.prisma << 'EOF'
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Event {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  startDate   DateTime
+  endDate     DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  contests         Contest[]
+  archivedEvents   ArchivedEvent[]
+
+  @@map("events")
+}
+
+model Contest {
+  id          String   @id @default(cuid())
+  eventId     String
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  event      Event      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  categories Category[]
+  contestants ContestContestant[]
+  judges     ContestJudge[]
+
+  @@map("contests")
+}
+
+model Category {
+  id          String   @id @default(cuid())
+  contestId   String
+  name        String
+  description String?
+  scoreCap    Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  contest      Contest      @relation(fields: [contestId], references: [id], onDelete: Cascade)
+  contestants  CategoryContestant[]
+  judges       CategoryJudge[]
+  criteria     Criterion[]
+  scores       Score[]
+  comments     JudgeComment[]
+  certifications TallyMasterCertification[]
+  auditorCertifications AuditorCertification[]
+
+  @@map("categories")
+}
+
+model Contestant {
+  id               String   @id @default(cuid())
+  name             String
+  email            String?  @unique
+  gender           String?
+  pronouns         String?
+  contestantNumber Int?
+  bio              String?
+  imagePath        String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  users              User[]
+  contestContestants ContestContestant[]
+  categoryContestants CategoryContestant[]
+  scores             Score[]
+  comments           JudgeComment[]
+
+  @@map("contestants")
+}
+
+model Judge {
+  id         String   @id @default(cuid())
+  name       String
+  email      String?  @unique
+  gender     String?
+  pronouns   String?
+  bio        String?
+  imagePath  String?
+  isHeadJudge Boolean @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  users            User[]
+  contestJudges    ContestJudge[]
+  categoryJudges   CategoryJudge[]
+  scores           Score[]
+  comments         JudgeComment[]
+  certifications   JudgeCertification[]
+
+  @@map("judges")
+}
+
+model Criterion {
+  id         String   @id @default(cuid())
+  categoryId String
+  name       String
+  maxScore   Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  scores   Score[]
+
+  @@map("criteria")
+}
+
+model Score {
+  id           String   @id @default(cuid())
+  categoryId   String
+  contestantId String
+  judgeId      String
+  criterionId  String
+  score        Int
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  category   Category   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  contestant Contestant @relation(fields: [contestantId], references: [id], onDelete: Cascade)
+  judge      Judge      @relation(fields: [judgeId], references: [id], onDelete: Cascade)
+  criterion  Criterion  @relation(fields: [criterionId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId, contestantId, judgeId, criterionId])
+  @@map("scores")
+}
+
+model User {
+  id             String   @id @default(cuid())
+  name           String
+  preferredName  String?
+  email          String   @unique
+  password       String
+  role           UserRole
+  gender         String?
+  pronouns       String?
+  judgeId        String?
+  contestantId   String?
+  sessionVersion Int      @default(1)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  judge      Judge?      @relation(fields: [judgeId], references: [id])
+  contestant Contestant? @relation(fields: [contestantId], references: [id])
+  logs       ActivityLog[]
+
+  @@map("users")
+}
+
+model JudgeComment {
+  id           String   @id @default(cuid())
+  categoryId   String
+  contestantId String
+  judgeId      String
+  comment      String?
+  createdAt    DateTime @default(now())
+
+  category   Category   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  contestant Contestant @relation(fields: [contestantId], references: [id], onDelete: Cascade)
+  judge      Judge      @relation(fields: [judgeId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId, contestantId, judgeId])
+  @@map("judge_comments")
+}
+
+model JudgeCertification {
+  id            String   @id @default(cuid())
+  categoryId    String
+  judgeId       String
+  signatureName String
+  certifiedAt   DateTime @default(now())
+
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  judge    Judge    @relation(fields: [judgeId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId, judgeId])
+  @@map("judge_certifications")
+}
+
+model TallyMasterCertification {
+  id            String   @id @default(cuid())
+  categoryId    String
+  signatureName String
+  certifiedAt   DateTime @default(now())
+
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId])
+  @@map("tally_master_certifications")
+}
+
+model AuditorCertification {
+  id            String   @id @default(cuid())
+  categoryId    String
+  signatureName String
+  certifiedAt   DateTime @default(now())
+
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId])
+  @@map("auditor_certifications")
+}
+
+model OverallDeduction {
+  id           String   @id @default(cuid())
+  categoryId   String
+  contestantId String
+  deduction    Float
+  reason       String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([categoryId, contestantId])
+  @@map("overall_deductions")
+}
+
+model ActivityLog {
+  id           String   @id @default(cuid())
+  userId       String?
+  userName     String?
+  userRole     String?
+  action       String
+  resourceType String?
+  resourceId   String?
+  details      String?
+  ipAddress    String?
+  userAgent    String?
+  logLevel     LogLevel @default(INFO)
+  createdAt    DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@map("activity_logs")
+}
+
+model SystemSetting {
+  id          String   @id @default(cuid())
+  settingKey  String   @unique
+  settingValue String
+  description String?
+  updatedAt   DateTime @updatedAt
+  updatedById String?
+
+  updatedBy User? @relation(fields: [updatedById], references: [id])
+
+  @@map("system_settings")
+}
+
+model EmceeScript {
+  id          String   @id @default(cuid())
+  eventId     String?
+  contestId   String?
+  categoryId  String?
+  title       String
+  content     String
+  order       Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("emcee_scripts")
+}
+
+model ArchivedEvent {
+  id          String   @id @default(cuid())
+  eventId     String
+  name        String
+  description String?
+  startDate   DateTime?
+  endDate     DateTime?
+  archivedAt  DateTime @default(now())
+  archivedById String
+
+  event Event @relation(fields: [eventId], references: [id])
+
+  @@map("archived_events")
+}
+
+model CategoryTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  criteria TemplateCriterion[]
+
+  @@map("category_templates")
+}
+
+model TemplateCriterion {
+  id         String   @id @default(cuid())
+  templateId String
+  name       String
+  maxScore   Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  template CategoryTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@map("template_criteria")
+}
+
+model JudgeScoreRemovalRequest {
+  id           String        @id @default(cuid())
+  categoryId   String
+  contestantId String
+  judgeId      String
+  reason       String
+  status       RequestStatus @default(PENDING)
+  requestedAt  DateTime      @default(now())
+  reviewedAt   DateTime?
+  reviewedById String?
+
+  @@map("judge_score_removal_requests")
+}
+
+model ContestContestant {
+  contestId    String
+  contestantId String
+
+  contest    Contest    @relation(fields: [contestId], references: [id], onDelete: Cascade)
+  contestant Contestant @relation(fields: [contestantId], references: [id], onDelete: Cascade)
+
+  @@id([contestId, contestantId])
+  @@map("contest_contestants")
+}
+
+model ContestJudge {
+  contestId String
+  judgeId   String
+
+  contest Contest @relation(fields: [contestId], references: [id], onDelete: Cascade)
+  judge   Judge   @relation(fields: [judgeId], references: [id], onDelete: Cascade)
+
+  @@id([contestId, judgeId])
+  @@map("contest_judges")
+}
+
+model CategoryContestant {
+  categoryId   String
+  contestantId String
+
+  category   Category   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  contestant Contestant @relation(fields: [contestantId], references: [id], onDelete: Cascade)
+
+  @@id([categoryId, contestantId])
+  @@map("category_contestants")
+}
+
+model CategoryJudge {
+  categoryId String
+  judgeId    String
+
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  judge    Judge    @relation(fields: [judgeId], references: [id], onDelete: Cascade)
+
+  @@id([categoryId, judgeId])
+  @@map("category_judges")
+}
+
+enum UserRole {
+  ORGANIZER
+  JUDGE
+  CONTESTANT
+  EMCEE
+  TALLY_MASTER
+  AUDITOR
+  BOARD
+}
+
+enum LogLevel {
+  ERROR
+  WARN
+  INFO
+  DEBUG
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+EOF
+    fi
+    
+    # Create migration script if it doesn't exist
+    if [[ ! -f "src/database/migrate.js" ]]; then
+        print_status "Creating database migration script..."
+        cat > src/database/migrate.js << 'EOF'
+const migrate = async () => {
+  try {
+    console.log('🔄 Running database migrations...')
+    
+    // Generate Prisma client
+    const { execSync } = require('child_process')
+    console.log('📦 Generating Prisma client...')
+    execSync('npx prisma generate', { stdio: 'inherit' })
+    
+    // Push schema to database
+    console.log('🗄️ Pushing schema to database...')
+    execSync('npx prisma db push', { stdio: 'inherit' })
+    
+    console.log('✅ Database migrations completed successfully!')
+  } catch (error) {
+    console.error('❌ Migration failed:', error)
+    process.exit(1)
+  }
+}
+
+const seed = async () => {
+  try {
+    // Import Prisma client after generation
+    const { PrismaClient } = require('@prisma/client')
+    const bcrypt = require('bcryptjs')
+    
+    const prisma = new PrismaClient()
+    
+    console.log('🌱 Seeding database with initial data...')
+    
+    // Create default admin user
+    const hashedPassword = await bcrypt.hash('admin123', 12)
+    
+    const adminUser = await prisma.user.upsert({
+      where: { email: 'admin@eventmanager.com' },
+      update: {},
+      create: {
+        name: 'System Administrator',
+        preferredName: 'Admin',
+        email: 'admin@eventmanager.com',
+        password: hashedPassword,
+        role: 'ORGANIZER',
+        gender: 'Other',
+        pronouns: 'they/them'
+      }
+    })
+    
+    console.log('✅ Admin user created:', adminUser.email)
+    
+    // Create sample event
+    const sampleEvent = await prisma.event.create({
+      data: {
+        name: 'Sample Event 2024',
+        description: 'A sample event for testing the system',
+        startDate: new Date('2024-01-01'),
+        endDate: new Date('2024-01-02')
+      }
+    })
+    
+    console.log('✅ Sample event created:', sampleEvent.name)
+    
+    // Create sample contest
+    const sampleContest = await prisma.contest.create({
+      data: {
+        eventId: sampleEvent.id,
+        name: 'Sample Contest',
+        description: 'A sample contest for testing'
+      }
+    })
+    
+    console.log('✅ Sample contest created:', sampleContest.name)
+    
+    // Create sample category
+    const sampleCategory = await prisma.category.create({
+      data: {
+        contestId: sampleContest.id,
+        name: 'Sample Category',
+        description: 'A sample category for testing',
+        scoreCap: 100
+      }
+    })
+    
+    console.log('✅ Sample category created:', sampleCategory.name)
+    
+    // Create sample contestants
+    const contestants = await Promise.all([
+      prisma.contestant.create({
+        data: {
+          name: 'John Doe',
+          email: 'john@example.com',
+          gender: 'Male',
+          pronouns: 'he/him',
+          contestantNumber: 1,
+          bio: 'Sample contestant 1'
+        }
+      }),
+      prisma.contestant.create({
+        data: {
+          name: 'Jane Smith',
+          email: 'jane@example.com',
+          gender: 'Female',
+          pronouns: 'she/her',
+          contestantNumber: 2,
+          bio: 'Sample contestant 2'
+        }
+      })
+    ])
+    
+    console.log('✅ Sample contestants created:', contestants.length)
+    
+    // Create sample judges
+    const judges = await Promise.all([
+      prisma.judge.create({
+        data: {
+          name: 'Judge Johnson',
+          email: 'judge1@example.com',
+          gender: 'Male',
+          pronouns: 'he/him',
+          isHeadJudge: true,
+          bio: 'Head judge'
+        }
+      }),
+      prisma.judge.create({
+        data: {
+          name: 'Judge Williams',
+          email: 'judge2@example.com',
+          gender: 'Female',
+          pronouns: 'she/her',
+          isHeadJudge: false,
+          bio: 'Assistant judge'
+        }
+      })
+    ])
+    
+    console.log('✅ Sample judges created:', judges.length)
+    
+    // Create sample criteria
+    const criteria = await Promise.all([
+      prisma.criterion.create({
+        data: {
+          categoryId: sampleCategory.id,
+          name: 'Technical Skill',
+          maxScore: 40
+        }
+      }),
+      prisma.criterion.create({
+        data: {
+          categoryId: sampleCategory.id,
+          name: 'Presentation',
+          maxScore: 30
+        }
+      }),
+      prisma.criterion.create({
+        data: {
+          categoryId: sampleCategory.id,
+          name: 'Creativity',
+          maxScore: 30
+        }
+      })
+    ])
+    
+    console.log('✅ Sample criteria created:', criteria.length)
+    
+    // Add contestants to category
+    await Promise.all([
+      prisma.categoryContestant.create({
+        data: {
+          categoryId: sampleCategory.id,
+          contestantId: contestants[0].id
+        }
+      }),
+      prisma.categoryContestant.create({
+        data: {
+          categoryId: sampleCategory.id,
+          contestantId: contestants[1].id
+        }
+      })
+    ])
+    
+    // Add judges to category
+    await Promise.all([
+      prisma.categoryJudge.create({
+        data: {
+          categoryId: sampleCategory.id,
+          judgeId: judges[0].id
+        }
+      }),
+      prisma.categoryJudge.create({
+        data: {
+          categoryId: sampleCategory.id,
+          judgeId: judges[1].id
+        }
+      })
+    ])
+    
+    // Create system settings
+    const settings = await Promise.all([
+      prisma.systemSetting.create({
+        data: {
+          settingKey: 'app_name',
+          settingValue: 'Event Manager',
+          description: 'Application name'
+        }
+      }),
+      prisma.systemSetting.create({
+        data: {
+          settingKey: 'app_version',
+          settingValue: '1.0.0',
+          description: 'Application version'
+        }
+      }),
+      prisma.systemSetting.create({
+        data: {
+          settingKey: 'max_file_size',
+          settingValue: '10485760',
+          description: 'Maximum file upload size in bytes'
+        }
+      })
+    ])
+    
+    console.log('✅ System settings created:', settings.length)
+    
+    console.log('🎉 Database seeding completed successfully!')
+    console.log('')
+    console.log('📋 Default login credentials:')
+    console.log('   Email: admin@eventmanager.com')
+    console.log('   Password: admin123')
+    
+    await prisma.$disconnect()
+    
+  } catch (error) {
+    console.error('❌ Seeding failed:', error)
+    process.exit(1)
+  }
+}
+
+const main = async () => {
+  try {
+    await migrate()
+    await seed()
+  } catch (error) {
+    console.error('❌ Setup failed:', error)
+    process.exit(1)
+  }
+}
+
+if (require.main === module) {
+  main()
+}
+
+module.exports = { migrate, seed }
+EOF
+    fi
+    
+    # Create seed script if it doesn't exist
+    if [[ ! -f "src/database/seed.js" ]]; then
+        print_status "Creating database seed script..."
+        cat > src/database/seed.js << 'EOF'
+const { seed } = require('./migrate')
+
+const main = async () => {
+  try {
+    await seed()
+  } catch (error) {
+    console.error('❌ Seeding failed:', error)
+    process.exit(1)
+  }
+}
+
+if (require.main === module) {
+  main()
+}
+
+module.exports = { seed }
+EOF
+    fi
+    
+    # Create basic server.js if it doesn't exist
+    if [[ ! -f "src/server.js" ]]; then
+        print_status "Creating basic server.js..."
+        cat > src/server.js << 'EOF'
+const express = require('express')
+const cors = require('cors')
+const helmet = require('helmet')
+const compression = require('compression')
+const morgan = require('morgan')
+const rateLimit = require('express-rate-limit')
+const { PrismaClient } = require('@prisma/client')
+
+const app = express()
+const prisma = new PrismaClient()
+
+// Security middleware
+app.use(helmet())
+app.use(compression())
+
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutes
+  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100, // limit each IP to 100 requests per windowMs
+  message: 'Too many requests from this IP, please try again later.'
+})
+app.use(limiter)
+
+// CORS configuration
+app.use(cors({
+  origin: process.env.FRONTEND_URL || 'http://localhost:3001',
+  credentials: true
+}))
+
+// Body parsing middleware
+app.use(express.json({ limit: '10mb' }))
+app.use(express.urlencoded({ extended: true, limit: '10mb' }))
+
+// Logging middleware
+if (process.env.NODE_ENV !== 'test') {
+  app.use(morgan('combined'))
+}
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'OK', 
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    environment: process.env.NODE_ENV || 'development'
+  })
+})
+
+// Basic API routes
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    status: 'OK', 
+    message: 'Event Manager API is running',
+    timestamp: new Date().toISOString()
+  })
+})
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Error:', err)
+  res.status(500).json({ 
+    error: 'Internal server error',
+    message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong'
+  })
+})
+
+// 404 handler
+app.use('*', (req, res) => {
+  res.status(404).json({ error: 'Route not found' })
+})
+
+const PORT = process.env.PORT || 3000
+
+const server = app.listen(PORT, () => {
+  console.log(`🚀 Event Manager API server running on port ${PORT}`)
+  console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`)
+  console.log(`🔗 Health check: http://localhost:${PORT}/health`)
+})
+
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+  console.log('SIGTERM received, shutting down gracefully')
+  server.close(async () => {
+    await prisma.$disconnect()
+    process.exit(0)
+  })
+})
+
+process.on('SIGINT', async () => {
+  console.log('SIGINT received, shutting down gracefully')
+  server.close(async () => {
+    await prisma.$disconnect()
+    process.exit(0)
+  })
+})
+
+module.exports = app
+EOF
+    fi
+    
+    print_success "Essential backend files created!"
+}
+
 # Setup database
 setup_database() {
     print_status "Setting up database..."
+    
+    # Create essential backend files first
+    create_backend_files
     
     # Check if .env exists
     if [ ! -f .env ]; then
