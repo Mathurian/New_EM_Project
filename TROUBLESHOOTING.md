@@ -180,6 +180,95 @@ cd ..
 
 ## 🔍 **Manual Troubleshooting**
 
+### **Ubuntu 24.04 EACCES Permission Error**
+
+#### **Problem**: npm install fails with EACCES error
+```
+npm error code EACCES
+npm error syscall open
+npm error path /home/user/project/package-lock.json
+npm error errno -13
+npm error Error: EACCES: permission denied, open 'package-lock.json'
+```
+
+#### **Root Cause**
+This occurs when npm tries to write to `package-lock.json` but lacks permissions, typically due to:
+- **Setup script permission management**: The setup script changes file ownership to web server user (`www-data`) BEFORE running `npm install`
+- File owned by root or different user
+- npm global directories owned by root
+- Insufficient directory permissions
+
+#### **Common Scenario**
+```bash
+# Setup script runs this sequence:
+1. setup_permissions() → Changes ownership to www-data:www-data
+2. npm install → Fails because package-lock.json is owned by www-data, not current user
+```
+
+#### **Solution 0: Use Correct Setup Script Options**
+```bash
+# For development (avoids web server permissions)
+./setup.sh --skip-web-server-permissions
+
+# For production (applies permissions AFTER npm install)
+./setup.sh --non-interactive --auto-setup-permissions
+
+# Interactive mode (asks about permissions after npm install)
+./setup.sh
+```
+
+#### **Solution 1: Fix File Ownership**
+```bash
+# Check current ownership
+ls -la package-lock.json
+
+# Fix ownership
+sudo chown $USER:$USER package-lock.json
+
+# Fix directory ownership
+sudo chown -R $USER:$USER /path/to/project/
+```
+
+#### **Solution 2: Fix npm Global Permissions**
+```bash
+# Fix npm global directory ownership
+sudo chown -R $USER:$(id -gn $USER) /usr/local/lib/node_modules
+sudo chown -R $USER:$(id -gn $USER) /usr/local/bin
+sudo chown -R $USER:$(id -gn $USER) /usr/local/share
+
+# Fix npm cache
+chown -R $USER:$(id -gn $USER) ~/.npm
+```
+
+#### **Solution 3: Configure npm User Directory**
+```bash
+# Create npm global directory in user space
+mkdir ~/.npm-global
+
+# Configure npm to use user directory
+npm config set prefix ~/.npm-global
+
+# Add to PATH
+echo 'export PATH=~/.npm-global/bin:$PATH' >> ~/.bashrc
+source ~/.bashrc
+```
+
+#### **Solution 4: Use NVM (Recommended)**
+```bash
+# Install NVM
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+
+# Reload shell
+source ~/.bashrc
+
+# Install Node.js via NVM
+nvm install --lts
+nvm use --lts
+
+# Now npm install should work without permission issues
+npm install
+```
+
 ### **Database Connection Issues**
 ```bash
 # Check PostgreSQL status

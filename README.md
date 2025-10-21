@@ -518,6 +518,18 @@ chmod +x setup.sh
 ./setup.sh --db-host=localhost --db-password=password
 ```
 
+#### npm EACCES Permission Errors:
+```bash
+# For new installations (recommended)
+./setup.sh --skip-web-server-permissions
+
+# For existing broken installations
+./fix-npm-permissions.sh
+
+# Manual fix
+sudo chown $USER:$USER package-lock.json
+```
+
 #### Docker Issues:
 ```bash
 # Container won't start
@@ -563,6 +575,9 @@ cat .env
 - **[SERVER_DEPLOYMENT.md](SERVER_DEPLOYMENT.md)** - Remote Linux server deployment with proper permissions and security
 - **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** - Common issues and solutions for installation and setup
 - **[README.md](README.md)** - This main documentation file
+
+### Emergency Tools
+- **[fix-npm-permissions.sh](fix-npm-permissions.sh)** - Emergency fix for npm EACCES permission errors (for existing broken installations)
 
 ### Quick Reference
 

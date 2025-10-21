@@ -90,6 +90,37 @@ detect_web_server() {
     fi
 }
 
+# Fix npm permission issues
+fix_npm_permissions() {
+    if [[ "$OS" != "linux" && "$OS" != "ubuntu" ]]; then
+        return
+    fi
+    
+    print_status "Checking and fixing npm permissions..."
+    
+    # Check if npm directories are owned by root
+    if [[ -d "/usr/local/lib/node_modules" ]] && [[ "$(stat -c %U /usr/local/lib/node_modules)" == "root" ]]; then
+        print_status "Fixing npm global directory ownership..."
+        sudo chown -R $USER:$(id -gn $USER) /usr/local/lib/node_modules
+        sudo chown -R $USER:$(id -gn $USER) /usr/local/bin
+        sudo chown -R $USER:$(id -gn $USER) /usr/local/share
+    fi
+    
+    # Check npm cache permissions
+    if [[ -d "$HOME/.npm" ]]; then
+        print_status "Fixing npm cache permissions..."
+        chown -R $USER:$(id -gn $USER) $HOME/.npm
+    fi
+    
+    # Set npm prefix to user directory to avoid permission issues
+    print_status "Configuring npm to use user directory..."
+    npm config set prefix ~/.npm-global
+    echo 'export PATH=~/.npm-global/bin:$PATH' >> ~/.bashrc
+    export PATH=~/.npm-global/bin:$PATH
+    
+    print_success "npm permissions fixed!"
+}
+
 # Set up proper permissions for server deployment
 setup_permissions() {
     if [[ "$OS" != "linux" && "$OS" != "ubuntu" ]]; then
@@ -111,20 +142,27 @@ setup_permissions() {
     print_status "Current user: $CURRENT_USER"
     print_status "Web server user: $WEB_SERVER_USER"
     
-    # Set ownership
-    if [[ -n "$WEB_SERVER_USER" ]]; then
-        print_status "Setting ownership to $WEB_SERVER_USER:$WEB_SERVER_GROUP..."
-        
-        # Set ownership of application files
-        sudo chown -R "$WEB_SERVER_USER:$WEB_SERVER_GROUP" . 2>/dev/null || {
-            print_warning "Could not set ownership to web server user. Using current user instead."
-            WEB_SERVER_USER="$CURRENT_USER"
-            WEB_SERVER_GROUP="$CURRENT_GROUP"
-        }
-    else
-        print_status "Using current user for ownership: $CURRENT_USER:$CURRENT_GROUP"
+    # Check if we're in a development environment
+    if [[ "$APP_ENV" == "development" && "$CURRENT_USER" != "root" ]]; then
+        print_status "Development environment detected. Keeping ownership as current user for npm compatibility."
         WEB_SERVER_USER="$CURRENT_USER"
         WEB_SERVER_GROUP="$CURRENT_GROUP"
+    else
+        # Set ownership for production deployment
+        if [[ -n "$WEB_SERVER_USER" ]]; then
+            print_status "Setting ownership to $WEB_SERVER_USER:$WEB_SERVER_GROUP..."
+            
+            # Set ownership of application files
+            sudo chown -R "$WEB_SERVER_USER:$WEB_SERVER_GROUP" . 2>/dev/null || {
+                print_warning "Could not set ownership to web server user. Using current user instead."
+                WEB_SERVER_USER="$CURRENT_USER"
+                WEB_SERVER_GROUP="$CURRENT_GROUP"
+            }
+        else
+            print_status "Using current user for ownership: $CURRENT_USER:$CURRENT_GROUP"
+            WEB_SERVER_USER="$CURRENT_USER"
+            WEB_SERVER_GROUP="$CURRENT_GROUP"
+        fi
     fi
     
     # Set directory permissions (755)
@@ -291,20 +329,25 @@ setup_backend() {
         fi
     fi
     
+    # Fix npm permissions before installing dependencies
+    fix_npm_permissions
+    
     # Install dependencies
     print_status "Installing backend dependencies..."
     if ! npm install; then
         print_error "npm install failed. This might be due to permission issues or missing dependencies."
         
+        print_status "Troubleshooting steps:"
+        print_status "  1. Check file ownership: ls -la package-lock.json"
+        print_status "  2. Fix ownership: sudo chown \$USER:\$USER package-lock.json"
+        print_status "  3. Fix npm permissions: sudo chown -R \$USER:\$(id -gn \$USER) /usr/local/lib/node_modules"
+        print_status "  4. Try using npm ci instead: npm ci"
+        
         if [[ "$OS" == "ubuntu" ]]; then
-            print_status "Troubleshooting steps for Ubuntu:"
-            print_status "  1. Try: sudo npm install"
-            print_status "  2. Or configure npm to use a different directory:"
-            print_status "     mkdir ~/.npm-global"
-            print_status "     npm config set prefix '~/.npm-global'"
-            print_status "     echo 'export PATH=~/.npm-global/bin:\$PATH' >> ~/.bashrc"
+            print_status "Ubuntu-specific solutions:"
+            print_status "  5. Use NVM: curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash"
+            print_status "  6. Configure npm prefix: npm config set prefix ~/.npm-global"
             print_status "     source ~/.bashrc"
-            print_status "  3. Or use NVM: curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash"
         fi
         
         exit 1
@@ -507,14 +550,20 @@ install_prerequisites() {
             gnupg \
             lsb-release
         
-            # Install Node.js 20 LTS via NodeSource
-            print_status "Installing Node.js 20 LTS..."
-            curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-            sudo apt install -y nodejs
-            
-            # Update npm to latest version
-            print_status "Updating npm to latest version..."
-            sudo npm install -g npm@latest
+    # Install Node.js 20 LTS via NodeSource
+    print_status "Installing Node.js 20 LTS..."
+    curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+    sudo apt install -y nodejs
+    
+    # Update npm to latest version
+    print_status "Updating npm to latest version..."
+    sudo npm install -g npm@latest
+    
+    # Fix npm permissions for Ubuntu 24.04
+    print_status "Fixing npm permissions..."
+    sudo chown -R $USER:$(id -gn $USER) /usr/local/lib/node_modules
+    sudo chown -R $USER:$(id -gn $USER) /usr/local/bin
+    sudo chown -R $USER:$(id -gn $USER) /usr/local/share
         
         # Verify Node.js installation
         NODE_VERSION=$(node -v | cut -d'v' -f2 | cut -d'.' -f1)
@@ -651,6 +700,7 @@ parse_args() {
     # Server deployment options
     AUTO_SETUP_PERMISSIONS=false
     WEB_SERVER_USER=""
+    SKIP_WEB_SERVER_PERMISSIONS=false
     
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -694,6 +744,10 @@ parse_args() {
                 ;;
             --web-server-user=*)
                 WEB_SERVER_USER="${1#*=}"
+                shift
+                ;;
+            --skip-web-server-permissions)
+                SKIP_WEB_SERVER_PERMISSIONS=true
                 shift
                 ;;
             --db-host=*)
@@ -782,8 +836,9 @@ show_help() {
     echo "  --skip-env-config         Skip environment variable configuration"
     echo ""
     echo "Server Deployment Options:"
-    echo "  --auto-setup-permissions  Automatically setup proper permissions for web server"
-    echo "  --web-server-user=USER    Specify web server user (www-data, apache, etc.)"
+    echo "  --auto-setup-permissions      Automatically setup proper permissions for web server"
+    echo "  --web-server-user=USER       Specify web server user (www-data, apache, etc.)"
+    echo "  --skip-web-server-permissions Skip web server permissions (keep current user ownership)"
     echo ""
     echo "Database Configuration:"
     echo "  --db-host=HOST           Database host (default: localhost)"
@@ -814,6 +869,7 @@ show_help() {
     echo "  $0 --auto-install-prereqs --auto-setup-db  # Partial automation"
     echo "  $0 --auto-setup-permissions --web-server-user=www-data  # Server deployment"
     echo "  $0 --non-interactive --auto-setup-permissions  # Full server automation"
+    echo "  $0 --skip-web-server-permissions  # Development setup (no web server permissions)"
     echo "  $0 --db-host=db.example.com --db-password=secret123  # Custom database"
     echo "  $0 --jwt-secret=my-secret --app-env=production  # Production setup"
     echo ""
@@ -863,8 +919,10 @@ main() {
     setup_backend
     setup_frontend
     
-    # Handle permissions setup for server deployment
-    if [[ "$AUTO_SETUP_PERMISSIONS" == "true" || "$NON_INTERACTIVE" == "true" ]]; then
+    # Handle permissions setup for server deployment (AFTER npm install)
+    if [[ "$SKIP_WEB_SERVER_PERMISSIONS" == "true" ]]; then
+        print_status "Skipping web server permissions setup (development mode)"
+    elif [[ "$AUTO_SETUP_PERMISSIONS" == "true" || "$NON_INTERACTIVE" == "true" ]]; then
         print_status "Setting up permissions automatically..."
         setup_permissions
     else
