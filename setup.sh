@@ -2021,6 +2021,24 @@ EOF
     print_status "Clearing npm cache..."
     npm cache clean --force
     
+    # Create Vite environment types file
+    print_status "Creating Vite environment types..."
+    cat > "$APP_DIR/frontend/src/vite-env.d.ts" << 'EOF'
+/// <reference types="vite/client" />
+
+interface ImportMetaEnv {
+  readonly VITE_API_URL: string
+  readonly VITE_WS_URL: string
+  readonly VITE_APP_NAME: string
+  readonly VITE_APP_VERSION: string
+  readonly VITE_APP_URL: string
+}
+
+interface ImportMeta {
+  readonly env: ImportMetaEnv
+}
+EOF
+    
     # Create TypeScript configuration (force overwrite to ensure correct content)
     print_status "Creating TypeScript configuration..."
         cat > "$APP_DIR/frontend/tsconfig.json" << 'EOF'
@@ -5437,13 +5455,24 @@ EOF
     print_status "Current VITE_API_URL: $(grep VITE_API_URL .env | cut -d'=' -f2)"
     print_status "Current VITE_WS_URL: $(grep VITE_WS_URL .env | cut -d'=' -f2)"
     
-    # Force rebuild with clean environment
-    VITE_API_URL=$(grep VITE_API_URL .env | cut -d'=' -f2) \
-    VITE_WS_URL=$(grep VITE_WS_URL .env | cut -d'=' -f2) \
-    VITE_APP_NAME="Event Manager" \
-    VITE_APP_VERSION="1.0.0" \
-    VITE_APP_URL="$APP_URL" \
-    npm run build
+    # Check Node.js version and use appropriate build method
+    NODE_VERSION=$(node --version | cut -d'v' -f2 | cut -d'.' -f1)
+    print_status "Node.js version detected: $NODE_VERSION"
+    
+    if [ "$NODE_VERSION" -lt 14 ]; then
+        print_warning "Node.js version $NODE_VERSION is too old. Using legacy build method..."
+        # Use legacy build without modern syntax
+        npm run build --legacy-peer-deps
+    else
+        print_status "Using modern build method..."
+        # Force rebuild with clean environment
+        VITE_API_URL=$(grep VITE_API_URL .env | cut -d'=' -f2) \
+        VITE_WS_URL=$(grep VITE_WS_URL .env | cut -d'=' -f2) \
+        VITE_APP_NAME="Event Manager" \
+        VITE_APP_VERSION="1.0.0" \
+        VITE_APP_URL="$APP_URL" \
+        npm run build
+    fi
     
     # Verify build was successful
     if [ -d "dist" ]; then

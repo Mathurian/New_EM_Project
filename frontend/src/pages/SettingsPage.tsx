@@ -64,7 +64,7 @@ const SettingsPage: React.FC = () => {
 
   const tabs = [
     { id: 'general', name: 'General', icon: CogIcon },
-    { id: 'email', name: 'Email', icon: MailIcon },
+    { id: 'email', name: 'Email', icon: EnvelopeIcon },
     { id: 'security', name: 'Security', icon: ShieldCheckIcon },
     { id: 'database', name: 'Database', icon: DatabaseIcon },
     { id: 'notifications', name: 'Notifications', icon: BellIcon },
@@ -108,7 +108,7 @@ const SettingsPage: React.FC = () => {
             onClick={() => handleTest('email')}
             className="btn btn-outline"
           >
-            <MailIcon className="h-5 w-5 mr-2" />
+            <EnvelopeIcon className="h-5 w-5 mr-2" />
             Test Email
           </button>
         </div>
@@ -189,7 +189,7 @@ const SettingsPage: React.FC = () => {
                   onClick={() => handleTest('email')}
                   className="btn btn-outline btn-sm"
                 >
-                  <MailIcon className="h-4 w-4 mr-2" />
+                  <EnvelopeIcon className="h-4 w-4 mr-2" />
                   Test Email
                 </button>
               </div>
@@ -217,7 +217,7 @@ const SettingsPage: React.FC = () => {
               </div>
               <div className="bg-blue-50 dark:bg-blue-900 p-4 rounded-lg">
                 <div className="flex items-start">
-                  <MailIcon className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5 mr-3" />
+                  <EnvelopeIcon className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5 mr-3" />
                   <div>
                     <h4 className="text-sm font-medium text-blue-800 dark:text-blue-200">Email Testing</h4>
                     <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">

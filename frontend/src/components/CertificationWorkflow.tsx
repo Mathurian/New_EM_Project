@@ -157,10 +157,10 @@ const CertificationWorkflow: React.FC = () => {
   }
 
   const tabs = [
-    { id: 'queue', name: 'Pending Queue', icon: ClockIcon, count: filteredCertifications.filter(c => c.status === 'PENDING').length },
-    { id: 'in-progress', name: 'In Progress', icon: ExclamationTriangleIcon, count: filteredCertifications.filter(c => c.status === 'IN_PROGRESS').length },
-    { id: 'certified', name: 'Certified', icon: CheckCircleIcon, count: filteredCertifications.filter(c => c.status === 'CERTIFIED').length },
-    { id: 'rejected', name: 'Rejected', icon: XCircleIcon, count: filteredCertifications.filter(c => c.status === 'REJECTED').length },
+    { id: 'queue', name: 'Pending Queue', icon: ClockIcon, count: filteredCertifications.filter((c: any) => c.status === 'PENDING').length },
+    { id: 'in-progress', name: 'In Progress', icon: ExclamationTriangleIcon, count: filteredCertifications.filter((c: any) => c.status === 'IN_PROGRESS').length },
+    { id: 'certified', name: 'Certified', icon: CheckCircleIcon, count: filteredCertifications.filter((c: any) => c.status === 'CERTIFIED').length },
+    { id: 'rejected', name: 'Rejected', icon: XCircleIcon, count: filteredCertifications.filter((c: any) => c.status === 'REJECTED').length },
   ]
 
   return (
@@ -267,7 +267,7 @@ const CertificationWorkflow: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredCertifications.map((certification) => (
+                  {filteredCertifications.map((certification: any) => (
                     <tr key={certification.id}>
                       <td>
                         <div className="flex items-center space-x-2">
@@ -293,7 +293,7 @@ const CertificationWorkflow: React.FC = () => {
                       <td>
                         <div className="flex items-center space-x-2">
                           <span className="text-sm text-gray-600 dark:text-gray-400">
-                            {certification.steps.find(s => s.status === 'IN_PROGRESS')?.name || 'Completed'}
+                            {certification.steps.find((s: any) => s.status === 'IN_PROGRESS')?.name || 'Completed'}
                           </span>
                         </div>
                       </td>

@@ -198,7 +198,7 @@ const AuditLog: React.FC = () => {
                 className="input"
               >
                 <option value="">All Users</option>
-                {users?.map((user) => (
+                {users?.map((user: any) => (
                   <option key={user.id} value={user.id}>
                     {user.name}
                   </option>
@@ -306,7 +306,7 @@ const AuditLog: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredLogs.map((log) => (
+                  {filteredLogs.map((log: any) => (
                     <tr key={log.id}>
                       <td className="text-gray-600 dark:text-gray-400">
                         <div className="flex items-center space-x-2">

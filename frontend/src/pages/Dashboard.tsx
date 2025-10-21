@@ -92,7 +92,7 @@ const Dashboard: React.FC = () => {
 
   const { data: judgeScores, isLoading: scoresLoading } = useQuery(
     'judge-scores',
-    () => scoringAPI.getScores('').then(res => res.data),
+    () => scoringAPI.getScores('', '').then(res => res.data),
     {
       enabled: user?.role === 'JUDGE',
       refetchInterval: 30000,
