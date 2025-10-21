@@ -2107,9 +2107,15 @@ import { useAuth } from './AuthContext'
 interface SocketContextType {
   socket: Socket | null
   isConnected: boolean
+  activeUsers: ActiveUser[]
+  notifications: NotificationData[]
   emit: (event: string, data?: any) => void
   on: (event: string, callback: (data: any) => void) => void
   off: (event: string, callback?: (data: any) => void) => void
+  joinRoom: (room: string) => void
+  leaveRoom: (room: string) => void
+  markNotificationRead: (notificationId: string) => void
+  clearNotifications: () => void
 }
 
 const SocketContext = createContext<SocketContextType | undefined>(undefined)
@@ -2129,11 +2135,13 @@ interface SocketProviderProps {
 export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
   const [socket, setSocket] = useState<Socket | null>(null)
   const [isConnected, setIsConnected] = useState(false)
+  const [activeUsers, setActiveUsers] = useState<ActiveUser[]>([])
+  const [notifications, setNotifications] = useState<NotificationData[]>([])
   const { user } = useAuth()
 
   useEffect(() => {
     if (user) {
-      const newSocket = io(process.env.REACT_APP_API_URL || 'http://localhost:3000', {
+      const newSocket = io(import.meta.env.VITE_API_URL || 'http://localhost:3000', {
         auth: {
           token: localStorage.getItem('token')
         }
@@ -2145,6 +2153,14 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
 
       newSocket.on('disconnect', () => {
         setIsConnected(false)
+      })
+
+      newSocket.on('activeUsers', (users: ActiveUser[]) => {
+        setActiveUsers(users)
+      })
+
+      newSocket.on('notification', (notification: NotificationData) => {
+        setNotifications(prev => [notification, ...prev])
       })
 
       setSocket(newSocket)
@@ -2173,12 +2189,44 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
     }
   }
 
+  const joinRoom = (room: string) => {
+    if (socket) {
+      socket.emit('joinRoom', room)
+    }
+  }
+
+  const leaveRoom = (room: string) => {
+    if (socket) {
+      socket.emit('leaveRoom', room)
+    }
+  }
+
+  const markNotificationRead = (notificationId: string) => {
+    setNotifications(prev => 
+      prev.map(notification => 
+        notification.id === notificationId 
+          ? { ...notification, read: true }
+          : notification
+      )
+    )
+  }
+
+  const clearNotifications = () => {
+    setNotifications([])
+  }
+
   const value = {
     socket,
     isConnected,
+    activeUsers,
+    notifications,
     emit,
     on,
-    off
+    off,
+    joinRoom,
+    leaveRoom,
+    markNotificationRead,
+    clearNotifications
   }
 
   return (
@@ -2393,11 +2441,9 @@ export const uploadAPI = {
       },
     })
   },
-  uploadFileData: (file: File, type: string) => {
-    const formData = new FormData()
-    formData.append('file', file)
-    formData.append('type', type)
-    return api.post('/upload', formData, {
+  uploadFileData: (fileData: FormData, type: string) => {
+    fileData.append('type', type)
+    return api.post('/upload', fileData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
@@ -2427,6 +2473,15 @@ export const backupAPI = {
   getAll: () => api.get('/backup'),
   create: (data: any) => api.post('/backup', data),
   restore: (backupId: string) => api.post(`/backup/${backupId}/restore`),
+  restoreFromFile: (file: File) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return api.post('/backup/restore-from-file', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+  },
   download: (backupId: string) => api.get(`/backup/${backupId}/download`, { responseType: 'blob' }),
   delete: (id: string) => api.delete(`/backup/${id}`),
 }
@@ -4457,6 +4512,15 @@ const AssignmentsPage: React.FC = () => {
     () => assignmentsAPI.getAll().then(res => res.data),
     {
       refetchInterval: 30000,
+    }
+  )
+
+  const deleteAssignmentMutation = useMutation(
+    (id: string) => assignmentsAPI.delete(id),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('assignments')
+      },
     }
   )
 
