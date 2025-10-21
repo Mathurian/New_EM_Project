@@ -5465,13 +5465,32 @@ EOF
         npm run build --legacy-peer-deps
     else
         print_status "Using modern build method..."
-        # Force rebuild with clean environment
+        # Force rebuild with clean environment and proper permissions
         VITE_API_URL=$(grep VITE_API_URL .env | cut -d'=' -f2) \
         VITE_WS_URL=$(grep VITE_WS_URL .env | cut -d'=' -f2) \
         VITE_APP_NAME="Event Manager" \
         VITE_APP_VERSION="1.0.0" \
         VITE_APP_URL="$APP_URL" \
-        npm run build
+        npm run build --legacy-peer-deps
+    fi
+    
+    # If build fails, try alternative approach
+    if [ $? -ne 0 ]; then
+        print_warning "Standard build failed, trying alternative approach..."
+        # Remove node_modules and reinstall completely
+        rm -rf node_modules package-lock.json
+        npm install --legacy-peer-deps --force
+        chmod -R 755 node_modules
+        find node_modules -name "esbuild" -type f -exec chmod +x {} \;
+        find node_modules -name "vite" -type f -exec chmod +x {} \;
+        
+        # Try build again
+        VITE_API_URL=$(grep VITE_API_URL .env | cut -d'=' -f2) \
+        VITE_WS_URL=$(grep VITE_WS_URL .env | cut -d'=' -f2) \
+        VITE_APP_NAME="Event Manager" \
+        VITE_APP_VERSION="1.0.0" \
+        VITE_APP_URL="$APP_URL" \
+        npm run build --legacy-peer-deps
     fi
     
     # Verify build was successful
@@ -5525,7 +5544,33 @@ EOF
     rm -rf dist
     rm -rf node_modules/.vite
     rm -rf node_modules/.cache
+    
+    # Fix permissions on node_modules if they exist
+    if [ -d "node_modules" ]; then
+        print_status "Fixing node_modules permissions..."
+        chmod -R 755 node_modules
+        # Make esbuild binary executable
+        if [ -f "node_modules/@esbuild/linux-x64/bin/esbuild" ]; then
+            chmod +x node_modules/@esbuild/linux-x64/bin/esbuild
+        fi
+        if [ -f "node_modules/@esbuild/linux-arm64/bin/esbuild" ]; then
+            chmod +x node_modules/@esbuild/linux-arm64/bin/esbuild
+        fi
+    fi
+    
     npm cache clean --force
+    
+    # Reinstall dependencies with proper permissions
+    print_status "Reinstalling dependencies with proper permissions..."
+    npm install --legacy-peer-deps --force
+    
+    # Fix permissions after npm install
+    print_status "Setting correct permissions on installed packages..."
+    chmod -R 755 node_modules
+    # Make all binary files executable
+    find node_modules -name "*.bin" -type d -exec chmod -R 755 {} \;
+    find node_modules -name "esbuild" -type f -exec chmod +x {} \;
+    find node_modules -name "vite" -type f -exec chmod +x {} \;
     
     # Show current environment
     print_status "Current frontend environment:"
