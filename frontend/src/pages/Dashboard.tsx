@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { useQuery } from 'react-query'
 import { useAuth } from '../contexts/AuthContext'
 import { useSocket } from '../contexts/SocketContext'
-import { adminAPI, eventsAPI, contestsAPI, usersAPI, scoringAPI } from '../services/api'
+import { adminAPI, eventsAPI, contestsAPI, usersAPI, scoringAPI, api } from '../services/api'
 import {
   CalendarIcon,
   TrophyIcon,

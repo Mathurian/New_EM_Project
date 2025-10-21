@@ -1986,6 +1986,19 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   </React.StrictMode>
 )
 EOF
+
+    cat > "$APP_DIR/frontend/src/vite-env.d.ts" << 'EOF'
+/// <reference types="vite/client" />
+
+interface ImportMetaEnv {
+  readonly VITE_API_URL: string
+  readonly VITE_WS_URL: string
+}
+
+interface ImportMeta {
+  readonly env: ImportMetaEnv
+}
+EOF
     
     cat > "$APP_DIR/frontend/src/contexts/AuthContext.tsx" << 'EOF'
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
@@ -2179,7 +2192,7 @@ EOF
     cat > "$APP_DIR/frontend/src/contexts/ThemeContext.tsx" << 'EOF'
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
 
-type Theme = 'light' | 'dark' | 'system'
+export type Theme = 'light' | 'dark' | 'system'
 
 interface ThemeContextType {
   theme: Theme
@@ -2256,7 +2269,7 @@ EOF
 import axios from 'axios'
 
 const api = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || 'http://localhost:3000/api',
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3000/api',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
@@ -2300,6 +2313,7 @@ export const authAPI = {
 
 export const eventsAPI = {
   getAll: () => api.get('/events'),
+  getByEvent: (eventId: string) => api.get(`/events/${eventId}`),
   getById: (id: string) => api.get(`/events/${id}`),
   create: (data: any) => api.post('/events', data),
   update: (id: string, data: any) => api.put(`/events/${id}`, data),
@@ -2308,8 +2322,8 @@ export const eventsAPI = {
 
 export const contestsAPI = {
   getAll: () => api.get('/contests'),
-  getById: (id: string) => api.get(`/contests/${id}`),
   getByEvent: (eventId: string) => api.get(`/events/${eventId}/contests`),
+  getById: (id: string) => api.get(`/contests/${id}`),
   create: (data: any) => api.post('/contests', data),
   update: (id: string, data: any) => api.put(`/contests/${id}`, data),
   delete: (id: string) => api.delete(`/contests/${id}`),
@@ -2317,24 +2331,30 @@ export const contestsAPI = {
 
 export const categoriesAPI = {
   getAll: () => api.get('/categories'),
-  getById: (id: string) => api.get(`/categories/${id}`),
   getByContest: (contestId: string) => api.get(`/contests/${contestId}/categories`),
+  getById: (id: string) => api.get(`/categories/${id}`),
   create: (data: any) => api.post('/categories', data),
   update: (id: string, data: any) => api.put(`/categories/${id}`, data),
   delete: (id: string) => api.delete(`/categories/${id}`),
 }
 
 export const scoringAPI = {
-  getScores: (categoryId: string) => api.get(`/scoring/${categoryId}`),
-  submitScore: (data: any) => api.post('/scoring', data),
+  getScores: (categoryId: string, contestantId?: string) => api.get(`/scoring/${categoryId}${contestantId ? `/${contestantId}` : ''}`),
+  submitScore: (categoryId: string, contestantId: string, data: any) => api.post(`/scoring/${categoryId}/${contestantId}`, data),
   updateScore: (id: string, data: any) => api.put(`/scoring/${id}`, data),
   deleteScore: (id: string) => api.delete(`/scoring/${id}`),
+  certifyScores: (categoryId: string, data: any) => api.post(`/scoring/${categoryId}/certify`, data),
+  certifyTotals: (categoryId: string, data: any) => api.post(`/scoring/${categoryId}/certify-totals`, data),
+  finalCertification: (categoryId: string, data: any) => api.post(`/scoring/${categoryId}/final-certification`, data),
+  getCategories: () => api.get('/scoring/categories'),
+  getCriteria: (categoryId: string) => api.get(`/scoring/${categoryId}/criteria`),
 }
 
 export const resultsAPI = {
   getResults: (categoryId: string) => api.get(`/results/${categoryId}`),
   getContestantResults: (contestantId: string) => api.get(`/results/contestant/${contestantId}`),
   getCategoryResults: (categoryId: string) => api.get(`/results/category/${categoryId}`),
+  getCategories: () => api.get('/results/categories'),
 }
 
 export const usersAPI = {
@@ -2353,12 +2373,27 @@ export const adminAPI = {
   getCategories: () => api.get('/admin/categories'),
   getScores: () => api.get('/admin/scores'),
   getActivityLogs: () => api.get('/admin/activity-logs'),
+  getLogs: (params?: any) => api.get('/admin/logs', { params }),
+  getActiveUsers: () => api.get('/admin/active-users'),
+  getSettings: () => api.get('/admin/settings'),
+  updateSettings: (data: any) => api.put('/admin/settings', data),
   getAuditLogs: (params?: any) => api.get('/admin/audit-logs', { params }),
   exportAuditLogs: (params?: any) => api.post('/admin/export-audit-logs', params),
+  testConnection: (type: 'email' | 'database' | 'backup') => api.post(`/admin/test/${type}`),
 }
 
 export const uploadAPI = {
   uploadFile: (file: File, type: string) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('type', type)
+    return api.post('/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+  },
+  uploadFileData: (file: File, type: string) => {
     const formData = new FormData()
     formData.append('file', file)
     formData.append('type', type)
@@ -2381,20 +2416,25 @@ export const emailAPI = {
 export const archiveAPI = {
   getAll: () => api.get('/archive'),
   getActiveEvents: () => api.get('/archive/active-events'),
-  archiveEvent: (eventId: string) => api.post(`/archive/events/${eventId}`),
+  archive: (eventId: string, reason: string) => api.post(`/archive/events/${eventId}`, { reason }),
+  archiveEvent: (eventId: string, reason: string) => api.post(`/archive/events/${eventId}`, { reason }),
+  restore: (eventId: string) => api.post(`/archive/events/${eventId}/restore`),
   restoreEvent: (eventId: string) => api.post(`/archive/events/${eventId}/restore`),
+  delete: (eventId: string) => api.delete(`/archive/events/${eventId}`),
 }
 
 export const backupAPI = {
   getAll: () => api.get('/backup'),
   create: (data: any) => api.post('/backup', data),
   restore: (backupId: string) => api.post(`/backup/${backupId}/restore`),
-  download: (backupId: string) => api.get(`/backup/${backupId}/download`),
+  download: (backupId: string) => api.get(`/backup/${backupId}/download`, { responseType: 'blob' }),
+  delete: (id: string) => api.delete(`/backup/${id}`),
 }
 
 export const settingsAPI = {
   getAll: () => api.get('/settings'),
   update: (data: any) => api.put('/settings', data),
+  test: (type: 'email' | 'database' | 'backup') => api.post(`/settings/test/${type}`),
 }
 
 export const assignmentsAPI = {
@@ -2402,12 +2442,18 @@ export const assignmentsAPI = {
   create: (data: any) => api.post('/assignments', data),
   update: (id: string, data: any) => api.put(`/assignments/${id}`, data),
   delete: (id: string) => api.delete(`/assignments/${id}`),
+  getJudges: () => api.get('/assignments/judges'),
+  getCategories: () => api.get('/assignments/categories'),
 }
 
 export const auditorAPI = {
   getStats: () => api.get('/auditor/stats'),
   getAuditLogs: (params?: any) => api.get('/auditor/logs', { params }),
   exportAuditLogs: (params?: any) => api.post('/auditor/export', params),
+  getPendingAudits: () => api.get('/auditor/pending'),
+  getCompletedAudits: () => api.get('/auditor/completed'),
+  finalCertification: (categoryId: string, data: any) => api.post(`/auditor/final-certification/${categoryId}`, data),
+  rejectAudit: (categoryId: string, reason: string) => api.post(`/auditor/reject/${categoryId}`, { reason }),
 }
 
 export const boardAPI = {
@@ -2415,12 +2461,17 @@ export const boardAPI = {
   getCertifications: () => api.get('/board/certifications'),
   approveCertification: (id: string) => api.post(`/board/certifications/${id}/approve`),
   rejectCertification: (id: string, reason: string) => api.post(`/board/certifications/${id}/reject`, { reason }),
+  getCertificationStatus: () => api.get('/board/certification-status'),
+  getEmceeScripts: () => api.get('/board/emcee-scripts'),
 }
 
 export const tallyMasterAPI = {
   getStats: () => api.get('/tally-master/stats'),
   getCertifications: () => api.get('/tally-master/certifications'),
   certifyScores: (categoryId: string) => api.post(`/tally-master/certify/${categoryId}`),
+  getCertificationQueue: () => api.get('/tally-master/certification-queue'),
+  getPendingCertifications: () => api.get('/tally-master/pending-certifications'),
+  certifyTotals: (categoryId: string, data: any) => api.post(`/tally-master/certify-totals/${categoryId}`, data),
 }
 
 export default api
@@ -2552,6 +2603,25 @@ export const getTypeColor = (type: string) => {
       return 'badge-gray'
     default:
       return 'badge-secondary'
+  }
+}
+
+export const getTypeText = (type: string) => {
+  switch (type.toLowerCase()) {
+    case 'announcement':
+      return 'Announcement'
+    case 'introduction':
+      return 'Introduction'
+    case 'transition':
+      return 'Transition'
+    case 'closing':
+      return 'Closing'
+    case 'award':
+      return 'Award'
+    case 'break':
+      return 'Break'
+    default:
+      return 'General'
   }
 }
 

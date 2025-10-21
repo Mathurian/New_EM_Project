@@ -1,9 +1,10 @@
 import React, { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from 'react-query'
-import { emailAPI, usersAPI, eventsAPI, contestsAPI } from '../services/api'
+import { emailAPI, usersAPI, eventsAPI, contestsAPI, api } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
+import { getTypeIcon, getStatusColor, getStatusText } from '../utils/helpers'
 import {
-  MailIcon,
+  EnvelopeIcon,
   PaperAirplaneIcon,
   UserGroupIcon,
   DocumentTextIcon,
@@ -256,7 +257,7 @@ const EmailManager: React.FC = () => {
   }
 
   const tabs = [
-    { id: 'compose', name: 'Compose', icon: MailIcon },
+    { id: 'compose', name: 'Compose', icon: EnvelopeIcon },
     { id: 'templates', name: 'Templates', icon: DocumentTextIcon },
     { id: 'campaigns', name: 'Campaigns', icon: PaperAirplaneIcon },
     { id: 'logs', name: 'Email Logs', icon: ClockIcon },
@@ -737,7 +738,7 @@ const TemplatesTab: React.FC<TemplatesTabProps> = ({
               </div>
               <div className="card-content space-y-3">
                 <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
-                  <MailIcon className="h-4 w-4 mr-2" />
+                  <EnvelopeIcon className="h-4 w-4 mr-2" />
                   <span>{template.type}</span>
                 </div>
                 <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-400">

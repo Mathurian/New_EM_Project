@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { useQuery } from 'react-query'
-import { resultsAPI, eventsAPI, contestsAPI, usersAPI } from '../services/api'
+import { resultsAPI, eventsAPI, contestsAPI, usersAPI, api } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 import {
   PrinterIcon,

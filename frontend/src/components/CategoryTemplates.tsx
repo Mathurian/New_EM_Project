@@ -1,14 +1,15 @@
 import React, { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from 'react-query'
-import { contestsAPI, categoriesAPI } from '../services/api'
+import { contestsAPI, categoriesAPI, api } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
+import { getCategoryIcon, getCategoryColor } from '../utils/helpers'
 import {
   DocumentTextIcon,
   PlusIcon,
   PencilIcon,
   TrashIcon,
   EyeIcon,
-  CopyIcon,
+  DocumentDuplicateIcon,
   MagnifyingGlassIcon,
   FunnelIcon,
   CheckCircleIcon,
@@ -396,7 +397,7 @@ const BrowseTemplatesTab: React.FC<BrowseTemplatesTabProps> = ({
                       onClick={() => onDuplicate(template.id)}
                       className="btn btn-outline btn-sm"
                     >
-                      <CopyIcon className="h-4 w-4" />
+                      <DocumentDuplicateIcon className="h-4 w-4" />
                     </button>
                   </div>
                   <button className="btn btn-primary btn-sm">
@@ -858,7 +859,7 @@ const ManageTemplatesTab: React.FC<ManageTemplatesTabProps> = ({
                       onClick={() => onDuplicate(template.id)}
                       className="btn btn-outline btn-sm"
                     >
-                      <CopyIcon className="h-4 w-4" />
+                      <DocumentDuplicateIcon className="h-4 w-4" />
                     </button>
                     <button
                       onClick={() => onDelete(template.id)}

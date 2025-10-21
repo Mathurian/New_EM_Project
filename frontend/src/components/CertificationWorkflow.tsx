@@ -1,7 +1,8 @@
 import React, { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from 'react-query'
-import { scoringAPI, contestsAPI, categoriesAPI } from '../services/api'
+import { scoringAPI, contestsAPI, categoriesAPI, api } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
+import { getStatusColor, getStepIcon } from '../utils/helpers'
 import {
   CheckCircleIcon,
   ClockIcon,

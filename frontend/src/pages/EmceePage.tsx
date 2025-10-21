@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from 'react-query'
 import { useAuth } from '../contexts/AuthContext'
 import { api } from '../services/api'
+import { getTypeIcon, getTypeColor, getTypeText } from '../utils/helpers'
 import {
   MicrophoneIcon,
   PlusIcon,
@@ -14,6 +15,8 @@ import {
   CalendarIcon,
   UserIcon,
   SpeakerWaveIcon,
+  TrophyIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/outline'
 import { format } from 'date-fns'
 

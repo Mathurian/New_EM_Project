@@ -1,7 +1,8 @@
 import React, { useState, useRef, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from 'react-query'
-import { uploadAPI } from '../services/api'
+import { uploadAPI, usersAPI, api } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
+import { getFileIcon, formatFileSize, getCategoryIcon } from '../utils/helpers'
 import {
   CloudArrowUpIcon,
   DocumentIcon,
@@ -75,7 +76,7 @@ const FileUpload: React.FC = () => {
   )
 
   const uploadMutation = useMutation(
-    (fileData: FormData) => uploadAPI.uploadFile(fileData),
+    (fileData: FormData) => uploadAPI.uploadFileData(fileData),
     {
       onSuccess: () => {
         queryClient.invalidateQueries('uploaded-files')

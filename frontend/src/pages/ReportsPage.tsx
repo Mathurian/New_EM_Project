@@ -14,6 +14,7 @@ import {
   ClipboardDocumentListIcon,
   EyeIcon,
   FunnelIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/outline'
 import { format, subDays, subMonths } from 'date-fns'
 

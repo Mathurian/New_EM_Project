@@ -1,14 +1,15 @@
 import React, { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from 'react-query'
-import { eventsAPI, contestsAPI } from '../services/api'
+import { eventsAPI, contestsAPI, api } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
+import { getTypeIcon, getTypeColor } from '../utils/helpers'
 import {
   DocumentTextIcon,
   PlusIcon,
   PencilIcon,
   TrashIcon,
   EyeIcon,
-  CopyIcon,
+  DocumentDuplicateIcon,
   MagnifyingGlassIcon,
   FunnelIcon,
   ClockIcon,
@@ -465,7 +466,7 @@ const BrowseScriptsTab: React.FC<BrowseScriptsTabProps> = ({
                       onClick={() => onDuplicate(script.id)}
                       className="btn btn-outline btn-sm"
                     >
-                      <CopyIcon className="h-4 w-4" />
+                      <DocumentDuplicateIcon className="h-4 w-4" />
                     </button>
                   </div>
                   <button
@@ -820,7 +821,7 @@ const ManageScriptsTab: React.FC<ManageScriptsTabProps> = ({
                       onClick={() => onDuplicate(script.id)}
                       className="btn btn-outline btn-sm"
                     >
-                      <CopyIcon className="h-4 w-4" />
+                      <DocumentDuplicateIcon className="h-4 w-4" />
                     </button>
                     <button
                       onClick={() => onDelete(script.id)}

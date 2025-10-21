@@ -74,7 +74,7 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
 
   useEffect(() => {
     if (user) {
-      const newSocket = io(import.meta.env.VITE_API_URL || 'http://localhost:3000', {
+      const newSocket = io(process.env.REACT_APP_API_URL || 'http://localhost:3000', {
         transports: ['websocket', 'polling'],
         auth: {
           userId: user.id,

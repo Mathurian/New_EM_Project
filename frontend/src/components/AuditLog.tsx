@@ -1,7 +1,8 @@
 import React, { useState } from 'react'
 import { useQuery } from 'react-query'
-import { adminAPI } from '../services/api'
+import { adminAPI, usersAPI, api } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
+import { getSeverityColor } from '../utils/helpers'
 import {
   ClockIcon,
   UserIcon,
