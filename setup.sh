@@ -782,9 +782,8 @@ enum LogLevel {
     }
 EOF
     
-    # Create migration script if it doesn't exist
-    if [[ ! -f "$APP_DIR/src/database/migrate.js" ]]; then
-        print_status "Creating database migration script..."
+    # Create migration script (overwrite if exists to ensure correct operations)
+    print_status "Creating database migration script..."
         cat > "$APP_DIR/src/database/migrate.js" << 'EOF'
 const migrate = async () => {
   try {
@@ -1073,11 +1072,9 @@ if (require.main === module) {
 
 module.exports = { migrate, seed }
 EOF
-    fi
     
-    # Create seed script if it doesn't exist
-    if [[ ! -f "$APP_DIR/src/database/seed.js" ]]; then
-        print_status "Creating database seed script..."
+    # Create seed script (overwrite if exists to ensure correct operations)
+    print_status "Creating database seed script..."
         cat > "$APP_DIR/src/database/seed.js" << 'EOF'
 const { seed } = require('./migrate')
 
@@ -1096,7 +1093,6 @@ if (require.main === module) {
 
 module.exports = { seed }
 EOF
-    fi
     
     # Create basic server.js if it doesn't exist
     if [[ ! -f "$APP_DIR/src/server.js" ]]; then
