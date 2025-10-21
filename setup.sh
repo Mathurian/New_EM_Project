@@ -1118,8 +1118,25 @@ const app = express()
 const server = http.createServer(app)
 const io = new Server(server, {
   cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
+    origin: function (origin, callback) {
+      // Allow requests with no origin
+      if (!origin) return callback(null, true)
+      
+      // Allow localhost for development
+      if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
+        return callback(null, true)
+      }
+      
+      // Allow any IP address (for remote server deployment)
+      if (origin.match(/^https?:\/\/\d+\.\d+\.\d+\.\d+/)) {
+        return callback(null, true)
+      }
+      
+      // Allow any domain (for production with domain names)
+      return callback(null, true)
+    },
+    methods: ["GET", "POST"],
+    credentials: true
   }
 })
 
@@ -1129,7 +1146,31 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
 
 // Middleware
 app.use(helmet())
-app.use(cors())
+// CORS configuration
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true)
+    
+    // Allow localhost for development
+    if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
+      return callback(null, true)
+    }
+    
+    // Allow any IP address (for remote server deployment)
+    if (origin.match(/^https?:\/\/\d+\.\d+\.\d+\.\d+/)) {
+      return callback(null, true)
+    }
+    
+    // Allow any domain (for production with domain names)
+    return callback(null, true)
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+}
+
+app.use(cors(corsOptions))
 app.use(compression())
 app.use(morgan('combined'))
 app.use(express.json({ limit: '10mb' }))
@@ -1548,8 +1589,10 @@ EOF
         WS_URL="${WS_URL/https:/wss:}"
     fi
     
+    print_status "Creating frontend environment with API_URL='$API_URL' and WS_URL='$WS_URL'"
+    
     cat > "$APP_DIR/frontend/.env" << EOF
-# Environment Configuration for Frontend
+# Frontend Environment Configuration
 VITE_API_URL=$API_URL
 VITE_WS_URL=$WS_URL
 VITE_APP_NAME=Event Manager
