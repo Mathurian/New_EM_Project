@@ -1,16 +1,14 @@
 import axios from 'axios'
 
-const API_URL = import.meta.env.VITE_API_URL || '/api'
-
-export const api = axios.create({
-  baseURL: API_URL,
+const api = axios.create({
+  baseURL: import.meta.env.VITE_API_URL || '/api',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
   },
 })
 
-// Request interceptor
+// Request interceptor to add auth token
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token')
@@ -24,7 +22,7 @@ api.interceptors.request.use(
   }
 )
 
-// Response interceptor
+// Response interceptor to handle errors
 api.interceptors.response.use(
   (response) => response,
   (error) => {
@@ -36,15 +34,6 @@ api.interceptors.response.use(
   }
 )
 
-// API endpoints
-export const authAPI = {
-  login: (email: string, password: string) => api.post('/auth/login', { email, password }),
-  getProfile: () => api.get('/auth/profile'),
-  updateProfile: (data: any) => api.put('/auth/profile', data),
-  changePassword: (currentPassword: string, newPassword: string) => 
-    api.put('/auth/change-password', { currentPassword, newPassword }),
-}
-
 export const eventsAPI = {
   getAll: () => api.get('/events'),
   getById: (id: string) => api.get(`/events/${id}`),
@@ -54,9 +43,28 @@ export const eventsAPI = {
 }
 
 export const contestsAPI = {
+  getAll: async (): Promise<{ data: any[] }> => {
+    // Get all events first, then get contests for each event
+    const events = await api.get('/events')
+    const allContests: any[] = []
+    for (const event of events.data) {
+      const contests = await api.get(`/contests/event/${event.id}`)
+      allContests.push(...contests.data)
+    }
+    return { data: allContests }
+  },
   getByEvent: (eventId: string) => api.get(`/contests/event/${eventId}`),
   getById: (id: string) => api.get(`/contests/${id}`),
-  create: (eventId: string, data: any) => api.post(`/contests/event/${eventId}`, data),
+  create: (eventIdOrData: string | any, data?: any) => {
+    if (typeof eventIdOrData === 'string') {
+      // Called with (eventId, data)
+      return api.post(`/contests/event/${eventIdOrData}`, data)
+    } else {
+      // Called with (data) - extract eventId from data
+      const { eventId, ...contestData } = eventIdOrData
+      return api.post(`/contests/event/${eventId}`, contestData)
+    }
+  },
   update: (id: string, data: any) => api.put(`/contests/${id}`, data),
   delete: (id: string) => api.delete(`/contests/${id}`),
 }
@@ -65,39 +73,57 @@ export const categoriesAPI = {
   getAll: () => api.get('/categories'),
   getByContest: (contestId: string) => api.get(`/categories/contest/${contestId}`),
   getById: (id: string) => api.get(`/categories/${id}`),
-  create: (data: any) => api.post('/categories', data),
+  create: (contestIdOrData: string | any, data?: any) => {
+    if (typeof contestIdOrData === 'string') {
+      // Called with (contestId, data)
+      return api.post(`/categories/contest/${contestIdOrData}`, data)
+    } else {
+      // Called with (data) - extract contestId from data
+      const { contestId, ...categoryData } = contestIdOrData
+      return api.post(`/categories/contest/${contestId}`, categoryData)
+    }
+  },
   update: (id: string, data: any) => api.put(`/categories/${id}`, data),
   delete: (id: string) => api.delete(`/categories/${id}`),
 }
 
 export const scoringAPI = {
-  getScores: (categoryId: string, contestantId: string) => 
-    api.get(`/scoring/category/${categoryId}/contestant/${contestantId}`),
-  submitScore: (data: any) => api.post('/scoring/submit', data),
-  updateScore: (id: string, data: any) => api.put(`/scoring/${id}`, data),
-  deleteScore: (id: string) => api.delete(`/scoring/${id}`),
+  getScores: (categoryId: string, contestantId: string) => api.get(`/scoring/category/${categoryId}/contestant/${contestantId}`),
+  submitScore: (categoryIdOrData: string | any, contestantIdOrData?: string, data?: any) => {
+    if (typeof categoryIdOrData === 'string' && typeof contestantIdOrData === 'string') {
+      // Called with (categoryId, contestantId, data)
+      return api.post(`/scoring/category/${categoryIdOrData}/contestant/${contestantIdOrData}`, data)
+    } else {
+      // Called with (scoreData) - extract categoryId and contestantId from data
+      const { categoryId, contestantId, ...scoreData } = categoryIdOrData
+      return api.post(`/scoring/category/${categoryId}/contestant/${contestantId}`, scoreData)
+    }
+  },
+  updateScore: (scoreId: string, data: any) => api.put(`/scoring/${scoreId}`, data),
+  deleteScore: (scoreId: string) => api.delete(`/scoring/${scoreId}`),
+  certifyScores: (categoryId: string) => api.post(`/scoring/category/${categoryId}/certify`),
+  certifyTotals: (categoryId: string) => api.post(`/scoring/category/${categoryId}/certify-totals`),
+  finalCertification: (categoryId: string) => api.post(`/scoring/category/${categoryId}/final-certification`),
   getCategories: () => api.get('/scoring/categories'),
-  getCriteria: (categoryId: string) => api.get(`/scoring/criteria/${categoryId}`),
-  certifyScores: (categoryId: string, data: any) => 
-    api.post(`/scoring/category/${categoryId}/certify`, data),
-  certifyTotals: (categoryId: string, data: any) => 
-    api.post(`/scoring/category/${categoryId}/certify-totals`, data),
-  finalCertification: (categoryId: string, data: any) => 
-    api.post(`/scoring/category/${categoryId}/final-certification`, data),
+  getCriteria: (categoryId: string) => api.get(`/scoring/category/${categoryId}/criteria`),
 }
 
 export const resultsAPI = {
-  getCategoryResults: (categoryId: string) => api.get(`/results/category/${categoryId}`),
+  getAll: () => api.get('/results'),
   getCategories: () => api.get('/results/categories'),
   getContestantResults: (contestantId: string) => api.get(`/results/contestant/${contestantId}`),
+  getCategoryResults: (categoryId: string) => api.get(`/results/category/${categoryId}`),
+  getContestResults: (contestId: string) => api.get(`/results/contest/${contestId}`),
+  getEventResults: (eventId: string) => api.get(`/results/event/${eventId}`),
 }
 
 export const usersAPI = {
-  getAll: (params?: any) => api.get('/users', { params }),
+  getAll: () => api.get('/users'),
   getById: (id: string) => api.get(`/users/${id}`),
   create: (data: any) => api.post('/users', data),
   update: (id: string, data: any) => api.put(`/users/${id}`, data),
   delete: (id: string) => api.delete(`/users/${id}`),
+  resetPassword: (id: string, data: any) => api.post(`/users/${id}/reset-password`, data),
 }
 
 export const adminAPI = {
@@ -118,7 +144,7 @@ export const adminAPI = {
 }
 
 export const uploadAPI = {
-  uploadFile: (file: File, type: string) => {
+  uploadFile: (file: File, type: string = 'OTHER') => {
     const formData = new FormData()
     formData.append('file', file)
     formData.append('type', type)
@@ -136,28 +162,53 @@ export const uploadAPI = {
       },
     })
   },
-  getFiles: () => api.get('/upload/files'),
-  deleteFile: (fileId: string) => api.delete(`/upload/files/${fileId}`),
+  deleteFile: (fileId: string) => api.delete(`/upload/${fileId}`),
+  getFiles: (params?: any) => api.get('/upload/files', { params }),
 }
 
-export const emailAPI = {
-  sendEmail: (data: any) => api.post('/email/send', data),
-}
-
-// Additional API modules
 export const archiveAPI = {
   getAll: () => api.get('/archive'),
-  getActiveEvents: () => api.get('/archive/active-events'),
-  archive: (eventId: string, reason: string) => api.post(`/archive/events/${eventId}`, { reason }),
-  restore: (eventId: string) => api.post(`/archive/events/${eventId}/restore`),
-  delete: (eventId: string) => api.delete(`/archive/events/${eventId}`),
-  archiveEvent: (eventId: string) => api.post(`/archive/events/${eventId}`),
-  restoreEvent: (eventId: string) => api.post(`/archive/events/${eventId}/restore`),
+  getActiveEvents: () => api.get('/archive/events/active'),
+  archive: (typeOrEventId: string, idOrReason?: string, reason?: string) => {
+    if (reason !== undefined) {
+      // Called with (type, id, reason)
+      return api.post(`/archive/${typeOrEventId}/${idOrReason}`, { reason })
+    } else {
+      // Called with (eventId, reason) - treat as event archive
+      return api.post(`/archive/event/${typeOrEventId}`, { reason: idOrReason })
+    }
+  },
+  restore: (typeOrEventId: string, id?: string) => {
+    if (id !== undefined) {
+      // Called with (type, id)
+      return api.post(`/archive/${typeOrEventId}/${id}/restore`)
+    } else {
+      // Called with (eventId) - treat as event restore
+      return api.post(`/archive/event/${typeOrEventId}/restore`)
+    }
+  },
+  delete: (typeOrEventId: string, id?: string) => {
+    if (id !== undefined) {
+      // Called with (type, id)
+      return api.delete(`/archive/${typeOrEventId}/${id}`)
+    } else {
+      // Called with (eventId) - treat as event delete
+      return api.delete(`/archive/event/${typeOrEventId}`)
+    }
+  },
+  archiveEvent: (eventId: string, reason: string) => api.post(`/archive/event/${eventId}`, { reason }),
+  restoreEvent: (eventId: string) => api.post(`/archive/event/${eventId}/restore`),
+  getArchivedEvents: () => api.get('/archive/events'),
 }
 
 export const backupAPI = {
   getAll: () => api.get('/backup'),
-  create: (data: any) => api.post('/backup', data),
+  create: (type: 'FULL' | 'SCHEMA' | 'DATA') => api.post('/backup', { type }),
+  list: () => api.get('/backup'),
+  download: async (backupId: string) => {
+    const response = await api.get(`/backup/${backupId}/download`, { responseType: 'blob' })
+    return response.data
+  },
   restore: (backupIdOrFile: string | File) => {
     if (typeof backupIdOrFile === 'string') {
       return api.post(`/backup/${backupIdOrFile}/restore`)
@@ -171,36 +222,52 @@ export const backupAPI = {
       })
     }
   },
-  download: async (backupId: string) => {
-    const response = await api.get(`/backup/${backupId}/download`, { responseType: 'blob' })
-    return response.data
+  restoreFromFile: (file: File) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return api.post('/backup/restore-from-file', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
   },
-  delete: (id: string) => api.delete(`/backup/${id}`),
+  delete: (backupId: string) => api.delete(`/backup/${backupId}`),
 }
 
 export const settingsAPI = {
   getAll: () => api.get('/settings'),
-  update: (data: any) => api.put('/settings', data),
-  test: (type: string) => api.post(`/settings/test/${type}`),
+  getSettings: () => api.get('/settings'),
+  update: (data: Record<string, any>) => api.put('/settings', data),
+  updateSettings: (data: any) => api.put('/settings', data),
+  test: (type: 'email' | 'database' | 'backup') => api.post(`/settings/test/${type}`),
 }
 
 export const assignmentsAPI = {
   getAll: () => api.get('/assignments'),
+  getJudges: () => api.get('/assignments/judges'),
+  getCategories: () => api.get('/assignments/categories'),
   create: (data: any) => api.post('/assignments', data),
   update: (id: string, data: any) => api.put(`/assignments/${id}`, data),
   delete: (id: string) => api.delete(`/assignments/${id}`),
-  getJudges: () => api.get('/assignments/judges'),
-  getCategories: () => api.get('/assignments/categories'),
+  assignJudge: (judgeId: string, categoryId: string) => api.post('/assignments/judge', { judgeId, categoryId }),
+  removeAssignment: (assignmentId: string) => api.delete(`/assignments/${assignmentId}`),
 }
 
 export const auditorAPI = {
   getStats: () => api.get('/auditor/stats'),
-  getAuditLogs: (params?: any) => api.get('/auditor/logs', { params }),
-  exportAuditLogs: (params?: any) => api.post('/auditor/export', params),
   getPendingAudits: () => api.get('/auditor/pending'),
   getCompletedAudits: () => api.get('/auditor/completed'),
-  finalCertification: (data: any) => api.post('/auditor/final-certification', data),
-  rejectAudit: (auditId: string, reason: string) => api.post(`/auditor/reject/${auditId}`, { reason }),
+  finalCertification: (categoryIdOrData: string | any, data?: any) => {
+    if (typeof categoryIdOrData === 'string') {
+      // Called with (categoryId, data)
+      return api.post(`/auditor/category/${categoryIdOrData}/final-certification`, data)
+    } else {
+      // Called with (data) - extract categoryId from data
+      const { categoryId, ...certificationData } = categoryIdOrData
+      return api.post(`/auditor/category/${categoryId}/final-certification`, certificationData)
+    }
+  },
+  rejectAudit: (categoryId: string, reason: string) => api.post(`/auditor/category/${categoryId}/reject`, { reason }),
 }
 
 export const boardAPI = {
@@ -215,10 +282,31 @@ export const boardAPI = {
 export const tallyMasterAPI = {
   getStats: () => api.get('/tally-master/stats'),
   getCertifications: () => api.get('/tally-master/certifications'),
-  certifyScores: (categoryId: string) => api.post(`/tally-master/certify/${categoryId}`),
-  getCertificationQueue: () => api.get('/tally-master/certification-queue'),
-  getPendingCertifications: () => api.get('/tally-master/pending-certifications'),
-  certifyTotals: (data: any) => api.post('/tally-master/certify-totals', data),
+  getCertificationQueue: () => api.get('/tally-master/queue'),
+  getPendingCertifications: () => api.get('/tally-master/pending'),
+  certifyTotals: (categoryIdOrData: string | any, data?: any) => {
+    if (typeof categoryIdOrData === 'string') {
+      // Called with (categoryId, data)
+      return api.post(`/tally-master/category/${categoryIdOrData}/certify-totals`, data)
+    } else {
+      // Called with (data) - extract categoryId from data
+      const { categoryId, ...totalsData } = categoryIdOrData
+      return api.post(`/tally-master/category/${categoryId}/certify-totals`, totalsData)
+    }
+  },
 }
 
+export const emailAPI = {
+  getAll: () => api.get('/email'),
+  getTemplates: () => api.get('/email/templates'),
+  getCampaigns: () => api.get('/email/campaigns'),
+  getLogs: () => api.get('/email/logs'),
+  sendEmail: (data: any) => api.post('/email/send', data),
+  createTemplate: (data: any) => api.post('/email/templates', data),
+  updateTemplate: (id: string, data: any) => api.put(`/email/templates/${id}`, data),
+  deleteTemplate: (id: string) => api.delete(`/email/templates/${id}`),
+}
+
+// Export the api instance for direct use
+export { api }
 export default api
