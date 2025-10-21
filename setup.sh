@@ -334,7 +334,7 @@ setup_backend() {
 # Setup frontend
 setup_frontend() {
     print_status "Setting up frontend..."
-    
+    cp env.example frontend/.env
     cd frontend
     
     # Install dependencies
@@ -356,7 +356,7 @@ setup_frontend() {
     # Copy environment file
     if [ ! -f .env ]; then
         print_status "Creating frontend environment file..."
-        cp env.example .env
+       # cp env.example .env
     else
         print_status "Frontend environment file already exists"
     fi
