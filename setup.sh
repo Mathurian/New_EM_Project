@@ -1444,7 +1444,6 @@ process.on('SIGINT', async () => {
   process.exit(0)
 })
 EOF
-    fi
     
     print_success "Essential backend files created!"
 }
