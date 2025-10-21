@@ -205,6 +205,15 @@ This occurs when npm tries to write to `package-lock.json` but lacks permissions
 2. npm install → Fails because package-lock.json is owned by www-data, not current user
 ```
 
+#### **Specific Error: Missing npm Global Directory**
+```bash
+# Error message:
+chown: cannot access '/usr/local/lib/node_modules': No such file or directory
+
+# Cause: Node.js installed via NVM or user installation method
+# Solution: The setup script now handles this gracefully
+```
+
 #### **Solution 0: Use Correct Setup Script Options**
 ```bash
 # For development (avoids web server permissions)
@@ -231,10 +240,21 @@ sudo chown -R $USER:$USER /path/to/project/
 
 #### **Solution 2: Fix npm Global Permissions**
 ```bash
-# Fix npm global directory ownership
-sudo chown -R $USER:$(id -gn $USER) /usr/local/lib/node_modules
-sudo chown -R $USER:$(id -gn $USER) /usr/local/bin
-sudo chown -R $USER:$(id -gn $USER) /usr/local/share
+# Check if directories exist first (common with NVM installations)
+if [[ -d "/usr/local/lib/node_modules" ]]; then
+    sudo chown -R $USER:$(id -gn $USER) /usr/local/lib/node_modules
+else
+    echo "Directory /usr/local/lib/node_modules does not exist (likely using NVM)"
+fi
+
+# Fix other directories if they exist
+if [[ -d "/usr/local/bin" ]]; then
+    sudo chown -R $USER:$(id -gn $USER) /usr/local/bin
+fi
+
+if [[ -d "/usr/local/share" ]]; then
+    sudo chown -R $USER:$(id -gn $USER) /usr/local/share
+fi
 
 # Fix npm cache
 chown -R $USER:$(id -gn $USER) ~/.npm

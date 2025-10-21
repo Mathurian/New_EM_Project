@@ -98,11 +98,26 @@ fix_npm_permissions() {
     
     print_status "Checking and fixing npm permissions..."
     
-    # Check if npm directories are owned by root
-    if [[ -d "/usr/local/lib/node_modules" ]] && [[ "$(stat -c %U /usr/local/lib/node_modules)" == "root" ]]; then
-        print_status "Fixing npm global directory ownership..."
-        sudo chown -R $USER:$(id -gn $USER) /usr/local/lib/node_modules
+    # Check if npm global directories exist and fix ownership if needed
+    if [[ -d "/usr/local/lib/node_modules" ]]; then
+        if [[ "$(stat -c %U /usr/local/lib/node_modules)" == "root" ]]; then
+            print_status "Fixing npm global directory ownership..."
+            sudo chown -R $USER:$(id -gn $USER) /usr/local/lib/node_modules
+        else
+            print_status "npm global directory already has correct ownership"
+        fi
+    else
+        print_status "npm global directory /usr/local/lib/node_modules does not exist (likely using NVM or user installation)"
+    fi
+    
+    # Fix other npm directories if they exist
+    if [[ -d "/usr/local/bin" ]] && [[ "$(stat -c %U /usr/local/bin)" == "root" ]]; then
+        print_status "Fixing /usr/local/bin ownership..."
         sudo chown -R $USER:$(id -gn $USER) /usr/local/bin
+    fi
+    
+    if [[ -d "/usr/local/share" ]] && [[ "$(stat -c %U /usr/local/share)" == "root" ]]; then
+        print_status "Fixing /usr/local/share ownership..."
         sudo chown -R $USER:$(id -gn $USER) /usr/local/share
     fi
     
@@ -114,8 +129,14 @@ fix_npm_permissions() {
     
     # Set npm prefix to user directory to avoid permission issues
     print_status "Configuring npm to use user directory..."
+    mkdir -p ~/.npm-global
     npm config set prefix ~/.npm-global
-    echo 'export PATH=~/.npm-global/bin:$PATH' >> ~/.bashrc
+    
+    # Add to PATH if not already present
+    if ! grep -q "~/.npm-global/bin" ~/.bashrc; then
+        echo 'export PATH=~/.npm-global/bin:$PATH' >> ~/.bashrc
+        print_success "Added npm global bin to PATH in ~/.bashrc"
+    fi
     export PATH=~/.npm-global/bin:$PATH
     
     print_success "npm permissions fixed!"

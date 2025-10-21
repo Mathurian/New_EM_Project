@@ -44,19 +44,29 @@ CURRENT_GROUP=$(id -gn)
 print_status "Current user: $CURRENT_USER"
 print_status "Current group: $CURRENT_GROUP"
 
-# Fix npm global directory ownership
-print_status "Fixing npm global directory ownership..."
+# Fix npm global directory ownership (only if directories exist)
+print_status "Checking npm global directory ownership..."
+
 if [[ -d "/usr/local/lib/node_modules" ]]; then
-    sudo chown -R $CURRENT_USER:$CURRENT_GROUP /usr/local/lib/node_modules
-    print_success "Fixed /usr/local/lib/node_modules ownership"
+    if [[ "$(stat -c %U /usr/local/lib/node_modules)" == "root" ]]; then
+        print_status "Fixing /usr/local/lib/node_modules ownership..."
+        sudo chown -R $CURRENT_USER:$CURRENT_GROUP /usr/local/lib/node_modules
+        print_success "Fixed /usr/local/lib/node_modules ownership"
+    else
+        print_status "/usr/local/lib/node_modules already has correct ownership"
+    fi
+else
+    print_status "/usr/local/lib/node_modules does not exist (likely using NVM or user installation)"
 fi
 
-if [[ -d "/usr/local/bin" ]]; then
+if [[ -d "/usr/local/bin" ]] && [[ "$(stat -c %U /usr/local/bin)" == "root" ]]; then
+    print_status "Fixing /usr/local/bin ownership..."
     sudo chown -R $CURRENT_USER:$CURRENT_GROUP /usr/local/bin
     print_success "Fixed /usr/local/bin ownership"
 fi
 
-if [[ -d "/usr/local/share" ]]; then
+if [[ -d "/usr/local/share" ]] && [[ "$(stat -c %U /usr/local/share)" == "root" ]]; then
+    print_status "Fixing /usr/local/share ownership..."
     sudo chown -R $CURRENT_USER:$CURRENT_GROUP /usr/local/share
     print_success "Fixed /usr/local/share ownership"
 fi
