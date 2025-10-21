@@ -1344,6 +1344,13 @@ EOF
     rm -rf "$APP_DIR/node_modules/.prisma" 2>/dev/null || true
     rm -rf "$APP_DIR/node_modules/@prisma/client" 2>/dev/null || true
     
+    # Make Prisma engine binaries executable
+    print_status "Setting Prisma engine binary permissions..."
+    if [[ -d "$APP_DIR/node_modules/@prisma/engines" ]]; then
+        chmod +x "$APP_DIR/node_modules/@prisma/engines"/*
+        print_status "Fixed Prisma engine binary permissions"
+    fi
+    
     # Validate Prisma schema first
     print_status "Validating Prisma schema..."
     if ! npx prisma validate; then
@@ -1389,6 +1396,12 @@ setup_permissions() {
     if [[ -d "$APP_DIR/node_modules/.bin" ]]; then
         sudo chmod +x "$APP_DIR/node_modules/.bin"/*
         print_status "Fixed Node.js binary permissions"
+    fi
+    
+    # Make Prisma engine binaries executable
+    if [[ -d "$APP_DIR/node_modules/@prisma/engines" ]]; then
+        sudo chmod +x "$APP_DIR/node_modules/@prisma/engines"/*
+        print_status "Fixed Prisma engine binary permissions"
     fi
     
     # Secure sensitive files (600)
