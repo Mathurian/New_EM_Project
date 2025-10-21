@@ -1584,7 +1584,7 @@ EOF
             API_URL="https://${DOMAIN}"
             WS_URL="wss://${DOMAIN}"
         else
-            # Fallback to relative URLs (works with both IP and domain)
+            # Use relative URLs (works with both IP and domain)
             API_URL=""
             WS_URL=""
         fi

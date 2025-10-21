@@ -121,15 +121,6 @@ const LoginPage: React.FC = () => {
               <p>Contact your administrator for login credentials</p>
             </div>
           </div>
-
-          <div className="mt-6 border-t border-gray-200 dark:border-gray-700 pt-6">
-            <div className="text-center text-xs text-gray-500 dark:text-gray-400">
-              <p>Default credentials for testing:</p>
-              <p className="mt-1 font-mono">
-                admin@eventmanager.com / admin123
-              </p>
-            </div>
-          </div>
         </div>
       </div>
     </div>
