@@ -1602,6 +1602,154 @@ build_frontend() {
     print_status "Building frontend..."
     
     cd "$APP_DIR/frontend"
+    
+    # Create TypeScript configuration if it doesn't exist
+    if [[ ! -f "$APP_DIR/frontend/tsconfig.json" ]]; then
+        print_status "Creating TypeScript configuration..."
+        cat > "$APP_DIR/frontend/tsconfig.json" << 'EOF'
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["src"],
+  "references": [{ "path": "./tsconfig.node.json" }]
+}
+EOF
+    fi
+    
+    # Create TypeScript node configuration if it doesn't exist
+    if [[ ! -f "$APP_DIR/frontend/tsconfig.node.json" ]]; then
+        print_status "Creating TypeScript node configuration..."
+        cat > "$APP_DIR/frontend/tsconfig.node.json" << 'EOF'
+{
+  "compilerOptions": {
+    "composite": true,
+    "skipLibCheck": true,
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowSyntheticDefaultImports": true
+  },
+  "include": ["vite.config.ts"]
+}
+EOF
+    fi
+    
+    # Create Vite configuration if it doesn't exist
+    if [[ ! -f "$APP_DIR/frontend/vite.config.ts" ]]; then
+        print_status "Creating Vite configuration..."
+        cat > "$APP_DIR/frontend/vite.config.ts" << 'EOF'
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+// https://vitejs.dev/config/
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    port: 3001,
+    host: true
+  },
+  build: {
+    outDir: 'dist',
+    sourcemap: false
+  }
+})
+EOF
+    fi
+    
+    # Create basic React app structure if it doesn't exist
+    if [[ ! -f "$APP_DIR/frontend/src/main.tsx" ]]; then
+        print_status "Creating basic React app structure..."
+        mkdir -p "$APP_DIR/frontend/src"
+        
+        cat > "$APP_DIR/frontend/src/main.tsx" << 'EOF'
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import App from './App'
+import './index.css'
+
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
+)
+EOF
+        
+        cat > "$APP_DIR/frontend/src/App.tsx" << 'EOF'
+import React from 'react'
+
+function App() {
+  return (
+    <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+      <div className="bg-white p-8 rounded-lg shadow-md text-center">
+        <h1 className="text-3xl font-bold text-gray-800 mb-4">
+          Event Manager
+        </h1>
+        <p className="text-gray-600 mb-6">
+          Contest Management System
+        </p>
+        <div className="text-sm text-gray-500">
+          <p>Backend API: Running on port 3000</p>
+          <p>Frontend: Running on port 3001</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default App
+EOF
+        
+        cat > "$APP_DIR/frontend/src/index.css" << 'EOF'
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+EOF
+        
+        cat > "$APP_DIR/frontend/index.html" << 'EOF'
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Event Manager</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+EOF
+    fi
+    
     npm install --no-fund --no-audit
     
     # Fix frontend binary permissions
