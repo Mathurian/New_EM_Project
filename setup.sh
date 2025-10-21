@@ -797,7 +797,7 @@ const migrate = async () => {
     console.log('📦 Generating Prisma client...')
     
     // Set environment to suppress npm warnings
-    const env = { ...process.env, NPM_CONFIG_UNSAFE_PERM: 'true' }
+    const env = { ...process.env }
     
     // Try different approaches for Prisma generation
     try {
@@ -1318,7 +1318,6 @@ EOF
     
     # Create .npmrc to handle permission issues
     cat > "$APP_DIR/.npmrc" << EOF
-unsafe-perm=true
 legacy-peer-deps=true
 audit-level=moderate
 fund=false
@@ -1326,7 +1325,6 @@ EOF
     
     # Also create global .npmrc to suppress warnings
     cat > ~/.npmrc << EOF
-unsafe-perm=true
 legacy-peer-deps=true
 audit-level=moderate
 fund=false
@@ -1345,7 +1343,7 @@ EOF
     
     # Validate Prisma schema first
     print_status "Validating Prisma schema..."
-    if ! npx prisma validate --no-warnings; then
+    if ! npx prisma validate; then
         print_error "Prisma schema validation failed. Please check the schema file."
         exit 1
     fi
