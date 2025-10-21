@@ -1670,12 +1670,11 @@ export default defineConfig({
 EOF
     fi
     
-    # Create basic React app structure if it doesn't exist
-    if [[ ! -f "$APP_DIR/frontend/src/main.tsx" ]]; then
-        print_status "Creating basic React app structure..."
-        mkdir -p "$APP_DIR/frontend/src"
-        
-        cat > "$APP_DIR/frontend/src/main.tsx" << 'EOF'
+    # Create basic React app structure (force overwrite to ensure correct content)
+    print_status "Creating basic React app structure..."
+    mkdir -p "$APP_DIR/frontend/src"
+    
+    cat > "$APP_DIR/frontend/src/main.tsx" << 'EOF'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'
@@ -1687,8 +1686,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   </React.StrictMode>,
 )
 EOF
-        
-        cat > "$APP_DIR/frontend/src/App.tsx" << 'EOF'
+    
+    cat > "$APP_DIR/frontend/src/App.tsx" << 'EOF'
 function App() {
   return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center">
@@ -1710,8 +1709,8 @@ function App() {
 
 export default App
 EOF
-        
-        cat > "$APP_DIR/frontend/src/index.css" << 'EOF'
+    
+    cat > "$APP_DIR/frontend/src/index.css" << 'EOF'
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -1730,8 +1729,8 @@ code {
     monospace;
 }
 EOF
-        
-        cat > "$APP_DIR/frontend/index.html" << 'EOF'
+    
+    cat > "$APP_DIR/frontend/index.html" << 'EOF'
 <!doctype html>
 <html lang="en">
   <head>
@@ -1746,7 +1745,6 @@ EOF
   </body>
 </html>
 EOF
-    fi
     
     npm install --no-fund --no-audit
     
