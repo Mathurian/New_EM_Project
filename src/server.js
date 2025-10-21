@@ -18,7 +18,7 @@ const PDFDocument = require('pdfkit')
 const sharp = require('sharp')
 const puppeteer = require('puppeteer')
 const jsPDF = require('jspdf')
-const htmlPdf = require('html-pdf-node')
+const { chromium } = require('playwright')
 
 const app = express()
 const server = http.createServer(app)

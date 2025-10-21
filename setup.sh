@@ -73,6 +73,107 @@ check_root() {
     fi
 }
 
+# Check Node.js version compatibility
+check_node_version() {
+    local node_version=$(node --version 2>/dev/null | sed 's/v//')
+    local major_version=$(echo "$node_version" | cut -d'.' -f1)
+    
+    if [[ -z "$node_version" ]]; then
+        print_error "Node.js is not installed or not in PATH"
+        return 1
+    fi
+    
+    print_status "Detected Node.js version: $node_version"
+    
+    # Check if version is compatible (Node.js 18+)
+    if [[ "$major_version" -lt 18 ]]; then
+        print_error "Node.js version $node_version is not supported. Please upgrade to Node.js 18 or higher."
+        print_info "Current Node.js versions supported: 18.x, 20.x, 21.x"
+        return 1
+    fi
+    
+    # Check for known problematic versions
+    if [[ "$node_version" =~ ^20\.19\.[0-9]+$ ]]; then
+        print_warning "Node.js $node_version detected - using enhanced compatibility mode"
+        export NODE_OPTIONS="--max-old-space-size=4096"
+    fi
+    
+    return 0
+}
+
+# Enhanced npm install with compatibility fixes
+safe_npm_install() {
+    local install_dir="$1"
+    local install_type="$2"  # "backend" or "frontend"
+    
+    cd "$install_dir" || return 1
+    
+    print_status "Installing $install_type dependencies with enhanced compatibility..."
+    
+    # Clean up any problematic modules first
+    print_status "Cleaning up problematic modules..."
+    rm -rf node_modules package-lock.json 2>/dev/null || true
+    
+    # Set npm configuration for better compatibility
+    npm config set legacy-peer-deps true
+    npm config set fund false
+    npm config set audit-level moderate
+    
+    # Try multiple installation strategies
+    local install_success=false
+    
+    # Strategy 1: Standard install with legacy peer deps
+    if npm install --legacy-peer-deps --force --no-fund --no-audit; then
+        install_success=true
+        print_success "Standard installation successful"
+    else
+        print_warning "Standard install failed, trying alternative strategies..."
+        
+        # Strategy 2: Install without optional dependencies
+        if npm install --legacy-peer-deps --force --no-optional --no-fund --no-audit; then
+            install_success=true
+            print_success "Installation successful (without optional dependencies)"
+        else
+            print_warning "Second strategy failed, trying with ignore-scripts..."
+            
+            # Strategy 3: Install ignoring scripts
+            if npm install --legacy-peer-deps --force --no-optional --ignore-scripts --no-fund --no-audit; then
+                install_success=true
+                print_success "Installation successful (ignoring scripts)"
+            else
+                print_error "All installation strategies failed"
+                return 1
+            fi
+        fi
+    fi
+    
+    # Fix permissions for problematic modules
+    if [[ "$install_type" == "backend" ]]; then
+        # Fix canvas module specifically
+        if [[ -d "node_modules/canvas" ]]; then
+            print_status "Fixing canvas module permissions..."
+            chmod -R 755 node_modules/canvas 2>/dev/null || true
+            rm -rf node_modules/canvas/build/Release 2>/dev/null || true
+        fi
+        
+        # Fix puppeteer/playwright permissions
+        if [[ -d "node_modules/puppeteer" ]]; then
+            chmod -R 755 node_modules/puppeteer 2>/dev/null || true
+        fi
+        if [[ -d "node_modules/playwright" ]]; then
+            chmod -R 755 node_modules/playwright 2>/dev/null || true
+        fi
+    fi
+    
+    # Fix all binary permissions
+    if [[ -d "node_modules/.bin" ]]; then
+        chmod +x node_modules/.bin/* 2>/dev/null || true
+        print_status "Fixed binary permissions"
+    fi
+    
+    return 0
+}
+
 # Detect operating system
 detect_os() {
     if [[ "$OSTYPE" == "linux-gnu"* ]]; then
@@ -1679,10 +1780,15 @@ audit-level=moderate
 fund=false
 EOF
     
-    # Install dependencies
+    # Install dependencies with proper error handling
     print_status "Installing Node.js dependencies..."
     cd "$APP_DIR"
-    npm install --no-fund --no-audit
+    
+    # Use the enhanced npm install function
+    if ! safe_npm_install "$APP_DIR" "backend"; then
+        print_error "Failed to install backend dependencies"
+        exit 1
+    fi
     
     # Make Node.js binaries executable before running migrations
     if [[ -d "$APP_DIR/node_modules/.bin" ]]; then
@@ -15178,7 +15284,14 @@ EOF
   </body>
 </html>
 EOF
-    npm install --no-fund --no-audit
+    # Install dependencies with proper error handling
+    print_status "Installing frontend dependencies..."
+    
+    # Use the enhanced npm install function
+    if ! safe_npm_install "$APP_DIR/frontend" "frontend"; then
+        print_error "Failed to install frontend dependencies"
+        return 1
+    fi
     
     # Fix frontend binary permissions
     if [[ -d "$APP_DIR/frontend/node_modules/.bin" ]]; then
@@ -15242,12 +15355,23 @@ EOF
     # If build fails, try alternative approach
     if [ $? -ne 0 ]; then
         print_warning "Standard build failed, trying alternative approach..."
-        # Remove node_modules and reinstall completely
+        # Remove node_modules and reinstall completely with better error handling
         rm -rf node_modules package-lock.json
-        npm install --legacy-peer-deps --force
-        chmod -R 755 node_modules
-        find node_modules -name "esbuild" -type f -exec chmod +x {} \;
-        find node_modules -name "vite" -type f -exec chmod +x {} \;
+        print_status "Reinstalling with enhanced compatibility fixes..."
+        
+        # Try multiple installation strategies
+        if ! npm install --legacy-peer-deps --force --no-optional; then
+            print_warning "First retry failed, trying without optional dependencies..."
+            npm install --legacy-peer-deps --force --no-optional --ignore-scripts || {
+                print_error "All installation attempts failed. Please check Node.js version compatibility."
+                return 1
+            }
+        fi
+        
+        # Fix permissions after installation
+        chmod -R 755 node_modules 2>/dev/null || true
+        find node_modules -name "esbuild" -type f -exec chmod +x {} \; 2>/dev/null || true
+        find node_modules -name "vite" -type f -exec chmod +x {} \; 2>/dev/null || true
         
         # Try build again
         VITE_API_URL=$(grep VITE_API_URL .env | cut -d'=' -f2) \
@@ -15647,6 +15771,7 @@ main() {
     # Check prerequisites
     check_root
     detect_os
+    check_node_version
     
     # Install prerequisites
     install_prerequisites
