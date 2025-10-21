@@ -1320,12 +1320,22 @@ EOF
     cat > "$APP_DIR/.npmrc" << EOF
 unsafe-perm=true
 legacy-peer-deps=true
+audit-level=moderate
+fund=false
+EOF
+    
+    # Also create global .npmrc to suppress warnings
+    cat > ~/.npmrc << EOF
+unsafe-perm=true
+legacy-peer-deps=true
+audit-level=moderate
+fund=false
 EOF
     
     # Install dependencies
     print_status "Installing Node.js dependencies..."
     cd "$APP_DIR"
-    npm install
+    npm install --no-fund --no-audit
     
     # Make Node.js binaries executable before running migrations
     if [[ -d "$APP_DIR/node_modules/.bin" ]]; then
@@ -1335,7 +1345,7 @@ EOF
     
     # Validate Prisma schema first
     print_status "Validating Prisma schema..."
-    if ! npx prisma validate; then
+    if ! npx prisma validate --no-warnings; then
         print_error "Prisma schema validation failed. Please check the schema file."
         exit 1
     fi
