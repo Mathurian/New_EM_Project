@@ -197,7 +197,9 @@ setup_permissions() {
     # Make scripts executable
     print_status "Making scripts executable..."
     sudo chmod +x setup.sh 2>/dev/null || chmod +x setup.sh
-    sudo chmod +x install.sh 2>/dev/null || chmod +x install.sh
+    if [[ -f "install.sh" ]]; then
+        sudo chmod +x install.sh 2>/dev/null || chmod +x install.sh
+    fi
     
     # Secure sensitive files
     print_status "Securing sensitive configuration files..."

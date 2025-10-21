@@ -214,6 +214,15 @@ chown: cannot access '/usr/local/lib/node_modules': No such file or directory
 # Solution: The setup script now handles this gracefully
 ```
 
+#### **Specific Error: Missing install.sh File**
+```bash
+# Error message:
+chmod: cannot access 'install.sh': No such file or directory
+
+# Cause: install.sh only exists when --auto-create-installer option is used
+# Solution: The setup script now checks for file existence before chmod
+```
+
 #### **Solution 0: Use Correct Setup Script Options**
 ```bash
 # For development (avoids web server permissions)
