@@ -444,6 +444,7 @@ model Category {
   comments     JudgeComment[]
   certifications TallyMasterCertification[]
   auditorCertifications AuditorCertification[]
+  judgeCertifications JudgeCertification[]
 
   @@map("categories")
 }
@@ -542,6 +543,7 @@ model User {
   judge      Judge?      @relation(fields: [judgeId], references: [id])
   contestant Contestant? @relation(fields: [contestantId], references: [id])
   logs       ActivityLog[]
+  updatedSettings SystemSetting[]
 
   @@map("users")
 }
@@ -794,31 +796,35 @@ const migrate = async () => {
     const { execSync } = require('child_process')
     console.log('📦 Generating Prisma client...')
     
+    // Set environment to suppress npm warnings
+    const env = { ...process.env, NPM_CONFIG_UNSAFE_PERM: 'true' }
+    
     // Try different approaches for Prisma generation
     try {
-      execSync('npx prisma generate', { stdio: 'inherit' })
+      execSync('npx prisma generate', { stdio: 'inherit', env })
     } catch (error) {
       console.log('⚠️  npx prisma generate failed, trying alternative...')
       // Try using the full path to prisma
       const path = require('path')
       const prismaPath = path.join(process.cwd(), 'node_modules', '.bin', 'prisma')
-      execSync(`node ${prismaPath} generate`, { stdio: 'inherit' })
+      execSync(`node ${prismaPath} generate`, { stdio: 'inherit', env })
     }
     
     // Push schema to database
     console.log('🗄️ Pushing schema to database...')
     try {
-      execSync('npx prisma db push', { stdio: 'inherit' })
+      execSync('npx prisma db push', { stdio: 'inherit', env })
     } catch (error) {
       console.log('⚠️  npx prisma db push failed, trying alternative...')
       const path = require('path')
       const prismaPath = path.join(process.cwd(), 'node_modules', '.bin', 'prisma')
-      execSync(`node ${prismaPath} db push`, { stdio: 'inherit' })
+      execSync(`node ${prismaPath} db push`, { stdio: 'inherit', env })
     }
     
     console.log('✅ Database migrations completed successfully!')
   } catch (error) {
     console.error('❌ Migration failed:', error)
+    console.error('Error details:', error.message)
     process.exit(1)
   }
 }
@@ -1313,6 +1319,7 @@ EOF
     # Create .npmrc to handle permission issues
     cat > "$APP_DIR/.npmrc" << EOF
 unsafe-perm=true
+legacy-peer-deps=true
 EOF
     
     # Install dependencies
@@ -1324,6 +1331,13 @@ EOF
     if [[ -d "$APP_DIR/node_modules/.bin" ]]; then
         chmod +x "$APP_DIR/node_modules/.bin"/*
         print_status "Fixed Node.js binary permissions for migration"
+    fi
+    
+    # Validate Prisma schema first
+    print_status "Validating Prisma schema..."
+    if ! npx prisma validate; then
+        print_error "Prisma schema validation failed. Please check the schema file."
+        exit 1
     fi
     
     # Run migrations
