@@ -444,7 +444,7 @@ model Category {
   comments     JudgeComment[]
   certifications TallyMasterCertification[]
   auditorCertifications AuditorCertification[]
-  judgeCertifications JudgeCertification[]
+  judgeCertifications JudgeCertification[] @relation("CategoryJudgeCertifications")
 
   @@map("categories")
 }
@@ -487,7 +487,7 @@ model Judge {
   categoryJudges   CategoryJudge[]
   scores           Score[]
   comments         JudgeComment[]
-  certifications   JudgeCertification[]
+  certifications   JudgeCertification[] @relation("JudgeCertifications")
 
   @@map("judges")
 }
@@ -543,7 +543,7 @@ model User {
   judge      Judge?      @relation(fields: [judgeId], references: [id])
   contestant Contestant? @relation(fields: [contestantId], references: [id])
   logs       ActivityLog[]
-  updatedSettings SystemSetting[]
+  updatedSettings SystemSetting[] @relation("UserUpdatedSettings")
 
   @@map("users")
 }
@@ -571,8 +571,8 @@ model JudgeCertification {
   signatureName String
   certifiedAt   DateTime @default(now())
 
-  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  judge    Judge    @relation(fields: [judgeId], references: [id], onDelete: Cascade)
+  category Category @relation("CategoryJudgeCertifications", fields: [categoryId], references: [id], onDelete: Cascade)
+  judge    Judge    @relation("JudgeCertifications", fields: [judgeId], references: [id], onDelete: Cascade)
 
   @@unique([categoryId, judgeId])
   @@map("judge_certifications")
@@ -642,7 +642,7 @@ model SystemSetting {
   updatedAt   DateTime @updatedAt
   updatedById String?
 
-  updatedBy User? @relation(fields: [updatedById], references: [id])
+  updatedBy User? @relation("UserUpdatedSettings", fields: [updatedById], references: [id])
 
   @@map("system_settings")
 }
