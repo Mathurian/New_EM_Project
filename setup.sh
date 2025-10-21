@@ -1130,10 +1130,21 @@ app.use(morgan('combined'))
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true }))
 
-// Rate limiting
+// Rate limiting - Fixed configuration
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  trustProxy: true,
+  skip: (req) => {
+    // Skip rate limiting for health checks
+    return req.path === '/health'
+  },
+  keyGenerator: (req) => {
+    // Use IP address for rate limiting, handling proxy headers properly
+    return req.ip || req.connection.remoteAddress
+  }
 })
 app.use('/api/', limiter)
 
