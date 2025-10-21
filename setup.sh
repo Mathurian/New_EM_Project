@@ -793,11 +793,28 @@ const migrate = async () => {
     // Generate Prisma client
     const { execSync } = require('child_process')
     console.log('📦 Generating Prisma client...')
-    execSync('npx prisma generate', { stdio: 'inherit' })
+    
+    // Try different approaches for Prisma generation
+    try {
+      execSync('npx prisma generate', { stdio: 'inherit' })
+    } catch (error) {
+      console.log('⚠️  npx prisma generate failed, trying alternative...')
+      // Try using the full path to prisma
+      const path = require('path')
+      const prismaPath = path.join(process.cwd(), 'node_modules', '.bin', 'prisma')
+      execSync(`node ${prismaPath} generate`, { stdio: 'inherit' })
+    }
     
     // Push schema to database
     console.log('🗄️ Pushing schema to database...')
-    execSync('npx prisma db push', { stdio: 'inherit' })
+    try {
+      execSync('npx prisma db push', { stdio: 'inherit' })
+    } catch (error) {
+      console.log('⚠️  npx prisma db push failed, trying alternative...')
+      const path = require('path')
+      const prismaPath = path.join(process.cwd(), 'node_modules', '.bin', 'prisma')
+      execSync(`node ${prismaPath} db push`, { stdio: 'inherit' })
+    }
     
     console.log('✅ Database migrations completed successfully!')
   } catch (error) {
@@ -1293,10 +1310,21 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO $DB_USER;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO $DB_USER;
 EOF
     
+    # Create .npmrc to handle permission issues
+    cat > "$APP_DIR/.npmrc" << EOF
+unsafe-perm=true
+EOF
+    
     # Install dependencies
     print_status "Installing Node.js dependencies..."
     cd "$APP_DIR"
     npm install
+    
+    # Make Node.js binaries executable before running migrations
+    if [[ -d "$APP_DIR/node_modules/.bin" ]]; then
+        chmod +x "$APP_DIR/node_modules/.bin"/*
+        print_status "Fixed Node.js binary permissions for migration"
+    fi
     
     # Run migrations
     print_status "Running database migrations..."
@@ -1331,6 +1359,12 @@ setup_permissions() {
     
     # Set file permissions (644)
     sudo find "$APP_DIR" -type f -exec chmod 644 {} \;
+    
+    # Make Node.js binaries executable (fixes Prisma permission issues)
+    if [[ -d "$APP_DIR/node_modules/.bin" ]]; then
+        sudo chmod +x "$APP_DIR/node_modules/.bin"/*
+        print_status "Fixed Node.js binary permissions"
+    fi
     
     # Secure sensitive files (600)
     sudo chmod 600 "$APP_DIR/.env" "$APP_DIR/frontend/.env"
