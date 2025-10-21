@@ -1689,8 +1689,6 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 EOF
         
         cat > "$APP_DIR/frontend/src/App.tsx" << 'EOF'
-import React from 'react'
-
 function App() {
   return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center">
