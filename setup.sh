@@ -1919,6 +1919,27 @@ server {
         }
     }
     
+    # Socket.IO WebSocket proxy
+    location /socket.io/ {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_cache_bypass \$http_upgrade;
+        proxy_buffering off;
+        proxy_read_timeout 300s;
+        proxy_connect_timeout 75s;
+        
+        # CORS headers for WebSocket
+        add_header Access-Control-Allow-Origin * always;
+        add_header Access-Control-Allow-Methods "GET, POST, OPTIONS" always;
+        add_header Access-Control-Allow-Headers "Authorization, Content-Type" always;
+    }
+    
     # Health check endpoint
     location /health {
         proxy_pass http://127.0.0.1:3000/health;
@@ -2534,10 +2555,9 @@ export const eventsAPI = {
 }
 
 export const contestsAPI = {
-  getAll: () => api.get('/contests'),
-  getByEvent: (eventId: string) => api.get(`/events/${eventId}/contests`),
+  getByEvent: (eventId: string) => api.get(`/contests/event/${eventId}`),
   getById: (id: string) => api.get(`/contests/${id}`),
-  create: (data: any) => api.post('/contests', data),
+  create: (eventId: string, data: any) => api.post(`/contests/event/${eventId}`, data),
   update: (id: string, data: any) => api.put(`/contests/${id}`, data),
   delete: (id: string) => api.delete(`/contests/${id}`),
 }
@@ -2585,7 +2605,7 @@ export const adminAPI = {
   getContests: () => api.get('/admin/contests'),
   getCategories: () => api.get('/admin/categories'),
   getScores: () => api.get('/admin/scores'),
-  getActivityLogs: () => api.get('/admin/activity-logs'),
+  getActivityLogs: () => api.get('/admin/logs'),
   getLogs: (params?: any) => api.get('/admin/logs', { params }),
   getActiveUsers: () => api.get('/admin/active-users'),
   getSettings: () => api.get('/admin/settings'),

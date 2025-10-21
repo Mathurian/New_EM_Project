@@ -54,10 +54,9 @@ export const eventsAPI = {
 }
 
 export const contestsAPI = {
-  getAll: () => api.get('/contests'),
   getByEvent: (eventId: string) => api.get(`/contests/event/${eventId}`),
   getById: (id: string) => api.get(`/contests/${id}`),
-  create: (data: any) => api.post('/contests', data),
+  create: (eventId: string, data: any) => api.post(`/contests/event/${eventId}`, data),
   update: (id: string, data: any) => api.put(`/contests/${id}`, data),
   delete: (id: string) => api.delete(`/contests/${id}`),
 }
@@ -112,7 +111,7 @@ export const adminAPI = {
   getContests: () => api.get('/admin/contests'),
   getCategories: () => api.get('/admin/categories'),
   getScores: () => api.get('/admin/scores'),
-  getActivityLogs: () => api.get('/admin/activity-logs'),
+  getActivityLogs: () => api.get('/admin/logs'),
   getAuditLogs: (params?: any) => api.get('/admin/audit-logs', { params }),
   exportAuditLogs: (params?: any) => api.post('/admin/export-audit-logs', params),
   testConnection: (type: string) => api.post(`/admin/test/${type}`),
