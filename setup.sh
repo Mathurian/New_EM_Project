@@ -1754,6 +1754,17 @@ EOF
         print_status "Fixed frontend binary permissions"
     fi
     
+    # Fix esbuild binary permissions specifically
+    if [[ -d "$APP_DIR/frontend/node_modules/@esbuild" ]]; then
+        find "$APP_DIR/frontend/node_modules/@esbuild" -name "esbuild" -type f -exec chmod +x {} \;
+        print_status "Fixed esbuild binary permissions"
+    fi
+    
+    # Fix all binary files in node_modules
+    find "$APP_DIR/frontend/node_modules" -name "*.bin" -type f -exec chmod +x {} \; 2>/dev/null || true
+    find "$APP_DIR/frontend/node_modules" -name "esbuild" -type f -exec chmod +x {} \; 2>/dev/null || true
+    print_status "Fixed all frontend binary permissions"
+    
     npm run build
     
     print_success "Frontend built successfully"
