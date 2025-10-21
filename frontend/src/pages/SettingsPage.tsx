@@ -5,9 +5,9 @@ import { useAuth } from '../contexts/AuthContext'
 import {
   CogIcon,
   ServerIcon,
-  MailIcon,
+  EnvelopeIcon,
   ShieldCheckIcon,
-  DatabaseIcon,
+  ServerIcon as DatabaseIcon,
   BellIcon,
   KeyIcon,
   GlobeAltIcon,

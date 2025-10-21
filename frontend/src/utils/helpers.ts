@@ -105,6 +105,32 @@ export const getTypeIcon = (type: string) => {
   }
 }
 
+export const getTypeText = (type: string) => {
+  switch (type.toLowerCase()) {
+    case 'welcome':
+      return 'Welcome'
+    case 'intro':
+    case 'introduction':
+      return 'Introduction'
+    case 'announcement':
+      return 'Announcement'
+    case 'award':
+      return 'Award'
+    case 'closing':
+      return 'Closing'
+    case 'custom':
+      return 'Custom'
+    case 'transition':
+      return 'Transition'
+    case 'emergency':
+      return 'Emergency'
+    case 'break':
+      return 'Break'
+    default:
+      return type.charAt(0).toUpperCase() + type.slice(1)
+  }
+}
+
 export const getTypeColor = (type: string) => {
   switch (type.toLowerCase()) {
     case 'announcement':
