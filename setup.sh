@@ -3294,7 +3294,9 @@ class ErrorBoundary extends Component<Props, State> {
 export default ErrorBoundary
 EOF
 
-    # Add missing components that were causing TypeScript errors
+    # Force overwrite components that were causing TypeScript errors
+    print_status "Force overwriting components with correct API usage..."
+    
     cat > "$APP_DIR/frontend/src/components/EmailManager.tsx" << 'EOF'
 import React, { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from 'react-query'
@@ -3551,6 +3553,523 @@ const PrintReports: React.FC = () => {
 }
 
 export default PrintReports
+EOF
+
+    # Force overwrite Dashboard component to fix getAll() usage
+    cat > "$APP_DIR/frontend/src/pages/Dashboard.tsx" << 'EOF'
+import React from 'react'
+import { useQuery } from 'react-query'
+import { useAuth } from '../contexts/AuthContext'
+import { useSocket } from '../contexts/SocketContext'
+import { adminAPI, eventsAPI, contestsAPI } from '../services/api'
+
+const Dashboard: React.FC = () => {
+  const { user } = useAuth()
+  const { isConnected } = useSocket()
+
+  // Fetch admin statistics
+  const { data: stats, isLoading: statsLoading } = useQuery(
+    'adminStats',
+    () => adminAPI.getStats().then((res: any) => res.data),
+    {
+      enabled: user?.role === 'ORGANIZER' || user?.role === 'BOARD',
+      refetchInterval: 30000, // Refresh every 30 seconds
+    }
+  )
+
+  // Fetch recent events
+  const { data: recentEvents, isLoading: eventsLoading } = useQuery(
+    'recentEvents',
+    () => eventsAPI.getAll().then((res: any) => res.data.slice(0, 5)),
+    {
+      enabled: user?.role === 'ORGANIZER' || user?.role === 'BOARD',
+      refetchInterval: 60000, // Refresh every minute
+    }
+  )
+
+  // Fetch recent contests - FIXED: Use correct API method
+  const { data: recentContests, isLoading: contestsLoading } = useQuery(
+    'recentContests',
+    () => contestsAPI.getAll().then((res: any) => res.data.slice(0, 5)),
+    {
+      enabled: user?.role === 'ORGANIZER' || user?.role === 'BOARD',
+      refetchInterval: 60000, // Refresh every minute
+    }
+  )
+
+  const getRoleSpecificContent = () => {
+    switch (user?.role) {
+      case 'ORGANIZER':
+      case 'BOARD':
+        return (
+          <div className="space-y-6">
+            {/* System Overview */}
+            <div className="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg">
+              <div className="px-4 py-5 sm:p-6">
+                <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white mb-4">
+                  System Overview
+                </h3>
+                {statsLoading ? (
+                  <div className="animate-pulse">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                      {[...Array(4)].map((_, i) => (
+                        <div key={i} className="h-20 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="bg-blue-50 dark:bg-blue-900 p-4 rounded-lg">
+                      <div className="flex items-center">
+                        <div className="flex-shrink-0">
+                          <div className="w-8 h-8 bg-blue-500 rounded-md flex items-center justify-center">
+                            <span className="text-white font-bold text-sm">E</span>
+                          </div>
+                        </div>
+                        <div className="ml-3">
+                          <p className="text-sm font-medium text-blue-600 dark:text-blue-400">Events</p>
+                          <p className="text-2xl font-semibold text-blue-900 dark:text-blue-100">{stats?.events || 0}</p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="bg-green-50 dark:bg-green-900 p-4 rounded-lg">
+                      <div className="flex items-center">
+                        <div className="flex-shrink-0">
+                          <div className="w-8 h-8 bg-green-500 rounded-md flex items-center justify-center">
+                            <span className="text-white font-bold text-sm">C</span>
+                          </div>
+                        </div>
+                        <div className="ml-3">
+                          <p className="text-sm font-medium text-green-600 dark:text-green-400">Contests</p>
+                          <p className="text-2xl font-semibold text-green-900 dark:text-green-100">{stats?.contests || 0}</p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="bg-yellow-50 dark:bg-yellow-900 p-4 rounded-lg">
+                      <div className="flex items-center">
+                        <div className="flex-shrink-0">
+                          <div className="w-8 h-8 bg-yellow-500 rounded-md flex items-center justify-center">
+                            <span className="text-white font-bold text-sm">U</span>
+                          </div>
+                        </div>
+                        <div className="ml-3">
+                          <p className="text-sm font-medium text-yellow-600 dark:text-yellow-400">Users</p>
+                          <p className="text-2xl font-semibold text-yellow-900 dark:text-yellow-100">{stats?.users || 0}</p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="bg-purple-50 dark:bg-purple-900 p-4 rounded-lg">
+                      <div className="flex items-center">
+                        <div className="flex-shrink-0">
+                          <div className="w-8 h-8 bg-purple-500 rounded-md flex items-center justify-center">
+                            <span className="text-white font-bold text-sm">S</span>
+                          </div>
+                        </div>
+                        <div className="ml-3">
+                          <p className="text-sm font-medium text-purple-600 dark:text-purple-400">Scores</p>
+                          <p className="text-2xl font-semibold text-purple-900 dark:text-purple-100">{stats?.scores || 0}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Recent Activity */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg">
+                <div className="px-4 py-5 sm:p-6">
+                  <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white mb-4">
+                    Recent Events
+                  </h3>
+                  {eventsLoading ? (
+                    <div className="animate-pulse space-y-3">
+                      {[...Array(3)].map((_, i) => (
+                        <div key={i} className="h-16 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {recentEvents?.map((event: any) => (
+                        <div key={event.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                          <div>
+                            <p className="font-medium text-gray-900 dark:text-white">{event.name}</p>
+                            <p className="text-sm text-gray-600 dark:text-gray-400">{event.location}</p>
+                          </div>
+                          <span className="text-xs text-gray-500 dark:text-gray-400">
+                            {new Date(event.startDate).toLocaleDateString()}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg">
+                <div className="px-4 py-5 sm:p-6">
+                  <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white mb-4">
+                    Recent Contests
+                  </h3>
+                  {contestsLoading ? (
+                    <div className="animate-pulse space-y-3">
+                      {[...Array(3)].map((_, i) => (
+                        <div key={i} className="h-16 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {recentContests?.map((contest: any) => (
+                        <div key={contest.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                          <div>
+                            <p className="font-medium text-gray-900 dark:text-white">{contest.name}</p>
+                            <p className="text-sm text-gray-600 dark:text-gray-400">{contest.status}</p>
+                          </div>
+                          <span className="text-xs text-gray-500 dark:text-gray-400">
+                            {new Date(contest.startDate).toLocaleDateString()}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      
+      case 'JUDGE':
+        return (
+          <div className="space-y-6">
+            <div className="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg">
+              <div className="px-4 py-5 sm:p-6">
+                <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white mb-4">
+                  Judge Dashboard
+                </h3>
+                <p className="text-gray-600 dark:text-gray-400">
+                  Welcome, {user?.name}! You can access your assigned categories and submit scores.
+                </p>
+              </div>
+            </div>
+          </div>
+        )
+      
+      case 'CONTESTANT':
+        return (
+          <div className="space-y-6">
+            <div className="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg">
+              <div className="px-4 py-5 sm:p-6">
+                <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white mb-4">
+                  Contestant Dashboard
+                </h3>
+                <p className="text-gray-600 dark:text-gray-400">
+                  Welcome, {user?.name}! You can view your contest information and results.
+                </p>
+              </div>
+            </div>
+          </div>
+        )
+      
+      default:
+        return (
+          <div className="space-y-6">
+            <div className="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg">
+              <div className="px-4 py-5 sm:p-6">
+                <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white mb-4">
+                  Welcome to Event Manager
+                </h3>
+                <p className="text-gray-600 dark:text-gray-400">
+                  You are logged in as {user?.role}. Use the navigation menu to access your features.
+                </p>
+              </div>
+            </div>
+          </div>
+        )
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg">
+        <div className="px-4 py-5 sm:p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+                Welcome back, {user?.name}!
+              </h1>
+              <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                Here's what's happening with your events today.
+              </p>
+            </div>
+            <div className="flex items-center space-x-2">
+              <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-green-400' : 'bg-red-400'}`}></div>
+              <span className="text-sm text-gray-600 dark:text-gray-400">
+                {isConnected ? 'Connected' : 'Disconnected'}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {getRoleSpecificContent()}
+    </div>
+  )
+}
+
+export default Dashboard
+EOF
+    
+    # Force overwrite ContestsPage to fix create method signature
+    cat > "$APP_DIR/frontend/src/pages/ContestsPage.tsx" << 'EOF'
+import React, { useState } from 'react'
+import { useParams } from 'react-router-dom'
+import { useQuery, useMutation, useQueryClient } from 'react-query'
+import { contestsAPI } from '../services/api'
+import { PlusIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline'
+
+interface Contest {
+  id: string
+  name: string
+  description: string
+  startDate: string
+  endDate: string
+  maxContestants: number
+  status: 'DRAFT' | 'ACTIVE' | 'COMPLETED' | 'ARCHIVED'
+  eventId: string
+  createdAt: string
+  updatedAt: string
+}
+
+const ContestsPage: React.FC = () => {
+  const { eventId } = useParams<{ eventId: string }>()
+  const [showModal, setShowModal] = useState(false)
+  const [editingContest, setEditingContest] = useState<Contest | null>(null)
+  const [formData, setFormData] = useState<Partial<Contest>>({})
+  const queryClient = useQueryClient()
+
+  const { data: contests, isLoading } = useQuery(
+    ['contests', eventId],
+    () => contestsAPI.getByEvent(eventId!).then((res: any) => res.data),
+    { enabled: !!eventId }
+  )
+
+  const createMutation = useMutation(
+    (data: Partial<Contest>) => contestsAPI.create(eventId!, data), // FIXED: Correct signature
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries(['contests', eventId])
+        setShowModal(false)
+        setFormData({})
+      }
+    }
+  )
+
+  const updateMutation = useMutation(
+    ({ id, data }: { id: string; data: Partial<Contest> }) => 
+      contestsAPI.update(id, data),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries(['contests', eventId])
+        setShowModal(false)
+        setEditingContest(null)
+        setFormData({})
+      }
+    }
+  )
+
+  const deleteMutation = useMutation(
+    (id: string) => contestsAPI.delete(id),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries(['contests', eventId])
+      }
+    }
+  )
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (editingContest) {
+      updateMutation.mutate({ id: editingContest.id, data: formData })
+    } else {
+      createMutation.mutate(formData)
+    }
+  }
+
+  const handleEdit = (contest: Contest) => {
+    setEditingContest(contest)
+    setFormData(contest)
+    setShowModal(true)
+  }
+
+  const handleDelete = (id: string) => {
+    if (confirm('Are you sure you want to delete this contest?')) {
+      deleteMutation.mutate(id)
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="loading-spinner"></div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="card">
+        <div className="card-header">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Contests Management</h1>
+          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+            Create and manage contests within events
+          </p>
+        </div>
+        <div className="card-body">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-lg font-semibold">Contests</h2>
+            <button
+              onClick={() => setShowModal(true)}
+              className="btn btn-primary"
+            >
+              <PlusIcon className="h-5 w-5 mr-2" />
+              Add Contest
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {contests?.map((contest: Contest) => (
+              <div key={contest.id} className="card">
+                <div className="card-header">
+                  <h3 className="font-semibold">{contest.name}</h3>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    {contest.description}
+                  </p>
+                </div>
+                <div className="card-body">
+                  <div className="space-y-2">
+                    <p className="text-sm">
+                      <span className="font-medium">Status:</span> {contest.status}
+                    </p>
+                    <p className="text-sm">
+                      <span className="font-medium">Max Contestants:</span> {contest.maxContestants}
+                    </p>
+                    <p className="text-sm">
+                      <span className="font-medium">Start:</span> {new Date(contest.startDate).toLocaleDateString()}
+                    </p>
+                    <p className="text-sm">
+                      <span className="font-medium">End:</span> {new Date(contest.endDate).toLocaleDateString()}
+                    </p>
+                  </div>
+                </div>
+                <div className="card-footer">
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={() => handleEdit(contest)}
+                      className="btn btn-outline btn-sm"
+                    >
+                      <PencilIcon className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(contest.id)}
+                      className="btn btn-destructive btn-sm"
+                    >
+                      <TrashIcon className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Modal */}
+      {showModal && (
+        <div className="modal">
+          <div className="modal-overlay" onClick={() => setShowModal(false)}></div>
+          <div className="modal-content">
+            <h2 className="text-xl font-bold mb-4">
+              {editingContest ? 'Edit Contest' : 'Add Contest'}
+            </h2>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="label">Name</label>
+                <input
+                  type="text"
+                  value={formData.name || ''}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="input"
+                  required
+                />
+              </div>
+              <div>
+                <label className="label">Description</label>
+                <textarea
+                  value={formData.description || ''}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  className="input"
+                  rows={3}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="label">Start Date</label>
+                  <input
+                    type="date"
+                    value={formData.startDate || ''}
+                    onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+                    className="input"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="label">End Date</label>
+                  <input
+                    type="date"
+                    value={formData.endDate || ''}
+                    onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
+                    className="input"
+                    required
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="label">Max Contestants</label>
+                <input
+                  type="number"
+                  value={formData.maxContestants || ''}
+                  onChange={(e) => setFormData({ ...formData, maxContestants: parseInt(e.target.value) })}
+                  className="input"
+                  min="1"
+                  required
+                />
+              </div>
+              <div className="flex justify-end space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="btn btn-outline"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={createMutation.isLoading || updateMutation.isLoading}
+                >
+                  {editingContest ? 'Update' : 'Create'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default ContestsPage
 EOF
     
     cat > "$APP_DIR/frontend/src/pages/LoginPage.tsx" << 'EOF'
