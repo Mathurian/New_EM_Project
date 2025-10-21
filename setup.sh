@@ -2555,6 +2555,16 @@ export const eventsAPI = {
 }
 
 export const contestsAPI = {
+  getAll: async (): Promise<{ data: any[] }> => {
+    // Get all events first, then get contests for each event
+    const events = await api.get('/events')
+    const allContests: any[] = []
+    for (const event of events.data) {
+      const contests = await api.get(`/contests/event/${event.id}`)
+      allContests.push(...contests.data)
+    }
+    return { data: allContests }
+  },
   getByEvent: (eventId: string) => api.get(`/contests/event/${eventId}`),
   getById: (id: string) => api.get(`/contests/${id}`),
   create: (eventId: string, data: any) => api.post(`/contests/event/${eventId}`, data),
@@ -4376,9 +4386,100 @@ export default EventsPage
 EOF
 
     cat > "$APP_DIR/frontend/src/pages/ContestsPage.tsx" << 'EOF'
-import React from 'react'
+import React, { useState } from 'react'
+import { useParams } from 'react-router-dom'
+import { useQuery, useMutation, useQueryClient } from 'react-query'
+import { contestsAPI } from '../services/api'
+import { PlusIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline'
+
+interface Contest {
+  id: string
+  name: string
+  description: string
+  startDate: string
+  endDate: string
+  maxContestants: number
+  status: 'DRAFT' | 'ACTIVE' | 'COMPLETED' | 'ARCHIVED'
+  eventId: string
+  createdAt: string
+  updatedAt: string
+}
 
 const ContestsPage: React.FC = () => {
+  const { eventId } = useParams<{ eventId: string }>()
+  const [showModal, setShowModal] = useState(false)
+  const [editingContest, setEditingContest] = useState<Contest | null>(null)
+  const [formData, setFormData] = useState<Partial<Contest>>({})
+  const queryClient = useQueryClient()
+
+  const { data: contests, isLoading } = useQuery(
+    ['contests', eventId],
+    () => contestsAPI.getByEvent(eventId!).then(res => res.data),
+    { enabled: !!eventId }
+  )
+
+  const createMutation = useMutation(
+    (data: Partial<Contest>) => contestsAPI.create(eventId!, data),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries(['contests', eventId])
+        setShowModal(false)
+        setFormData({})
+      }
+    }
+  )
+
+  const updateMutation = useMutation(
+    ({ id, data }: { id: string; data: Partial<Contest> }) => 
+      contestsAPI.update(id, data),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries(['contests', eventId])
+        setShowModal(false)
+        setEditingContest(null)
+        setFormData({})
+      }
+    }
+  )
+
+  const deleteMutation = useMutation(
+    (id: string) => contestsAPI.delete(id),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries(['contests', eventId])
+      }
+    }
+  )
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (editingContest) {
+      updateMutation.mutate({ id: editingContest.id, data: formData })
+    } else {
+      createMutation.mutate(formData)
+    }
+  }
+
+  const handleEdit = (contest: Contest) => {
+    setEditingContest(contest)
+    setFormData(contest)
+    setShowModal(true)
+  }
+
+  const handleDelete = (id: string) => {
+    if (confirm('Are you sure you want to delete this contest?')) {
+      deleteMutation.mutate(id)
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="loading-spinner"></div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       <div className="card">
@@ -4389,13 +4490,145 @@ const ContestsPage: React.FC = () => {
           </p>
         </div>
         <div className="card-body">
-          <div className="text-center py-12">
-            <div className="text-gray-400 dark:text-gray-500 text-6xl mb-4">🏆</div>
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Contests Page</h3>
-            <p className="text-gray-600 dark:text-gray-400">This page will contain contest management functionality</p>
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-lg font-semibold">Contests</h2>
+            <button
+              onClick={() => setShowModal(true)}
+              className="btn btn-primary"
+            >
+              <PlusIcon className="h-5 w-5 mr-2" />
+              Add Contest
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {contests?.map((contest: Contest) => (
+              <div key={contest.id} className="card">
+                <div className="card-header">
+                  <h3 className="font-semibold">{contest.name}</h3>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    {contest.description}
+                  </p>
+                </div>
+                <div className="card-body">
+                  <div className="space-y-2">
+                    <p className="text-sm">
+                      <span className="font-medium">Status:</span> {contest.status}
+                    </p>
+                    <p className="text-sm">
+                      <span className="font-medium">Max Contestants:</span> {contest.maxContestants}
+                    </p>
+                    <p className="text-sm">
+                      <span className="font-medium">Start:</span> {new Date(contest.startDate).toLocaleDateString()}
+                    </p>
+                    <p className="text-sm">
+                      <span className="font-medium">End:</span> {new Date(contest.endDate).toLocaleDateString()}
+                    </p>
+                  </div>
+                </div>
+                <div className="card-footer">
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={() => handleEdit(contest)}
+                      className="btn btn-outline btn-sm"
+                    >
+                      <PencilIcon className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(contest.id)}
+                      className="btn btn-destructive btn-sm"
+                    >
+                      <TrashIcon className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>
+
+      {/* Modal */}
+      {showModal && (
+        <div className="modal">
+          <div className="modal-overlay" onClick={() => setShowModal(false)}></div>
+          <div className="modal-content">
+            <h2 className="text-xl font-bold mb-4">
+              {editingContest ? 'Edit Contest' : 'Add Contest'}
+            </h2>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="label">Name</label>
+                <input
+                  type="text"
+                  value={formData.name || ''}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="input"
+                  required
+                />
+              </div>
+              <div>
+                <label className="label">Description</label>
+                <textarea
+                  value={formData.description || ''}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  className="input"
+                  rows={3}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="label">Start Date</label>
+                  <input
+                    type="date"
+                    value={formData.startDate || ''}
+                    onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+                    className="input"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="label">End Date</label>
+                  <input
+                    type="date"
+                    value={formData.endDate || ''}
+                    onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
+                    className="input"
+                    required
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="label">Max Contestants</label>
+                <input
+                  type="number"
+                  value={formData.maxContestants || ''}
+                  onChange={(e) => setFormData({ ...formData, maxContestants: parseInt(e.target.value) })}
+                  className="input"
+                  min="1"
+                  required
+                />
+              </div>
+              <div className="flex justify-end space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="btn btn-outline"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={createMutation.isLoading || updateMutation.isLoading}
+                >
+                  {editingContest ? 'Update' : 'Create'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
