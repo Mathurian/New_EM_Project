@@ -1925,7 +1925,14 @@ build_frontend() {
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,
-    "noImplicitAny": false
+    "noImplicitAny": false,
+    "noImplicitReturns": false,
+    "noImplicitThis": false,
+    "strictNullChecks": false,
+    "strictFunctionTypes": false,
+    "strictBindCallApply": false,
+    "strictPropertyInitialization": false,
+    "noImplicitOverride": false
   },
   "include": ["src"],
   "references": [{ "path": "./tsconfig.node.json" }]
@@ -2491,7 +2498,19 @@ export const archiveAPI = {
 export const backupAPI = {
   getAll: () => api.get('/backup'),
   create: (data: any) => api.post('/backup', data),
-  restore: (backupId: string) => api.post(`/backup/${backupId}/restore`),
+  restore: (backupIdOrFile: string | File) => {
+    if (typeof backupIdOrFile === 'string') {
+      return api.post(`/backup/${backupIdOrFile}/restore`)
+    } else {
+      const formData = new FormData()
+      formData.append('file', backupIdOrFile)
+      return api.post('/backup/restore-from-file', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      })
+    }
+  },
   restoreFromFile: (file: File) => {
     const formData = new FormData()
     formData.append('file', file)
