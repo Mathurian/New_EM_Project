@@ -184,6 +184,10 @@ parse_args() {
                 API_URL="${1#*=}"
                 shift
                 ;;
+            --rebuild-frontend)
+                REBUILD_FRONTEND="true"
+                shift
+                ;;
             --domain=*)
                 DOMAIN="${1#*=}"
                 shift
@@ -240,6 +244,7 @@ show_help() {
     echo "  --app-env=ENV            Application environment (development/production)"
     echo "  --app-url=URL            Application base URL"
     echo "  --api-url=URL            Backend API URL (default: auto-detected or relative)"
+    echo "  --rebuild-frontend       Force rebuild frontend with clean cache"
     echo ""
     echo "Web Server Configuration:"
     echo "  --domain=DOMAIN          Domain name for SSL certificate"
@@ -2005,6 +2010,16 @@ EOF
     
     print_status "Frontend environment variables:"
     cat .env | grep VITE_ | sed 's/^/  /'
+    
+    # Clean previous build to ensure fresh build with new environment
+    print_status "Cleaning previous build artifacts..."
+    rm -rf dist
+    rm -rf node_modules/.vite
+    rm -rf node_modules/.cache
+    
+    # Clear npm cache to ensure fresh dependencies
+    print_status "Clearing npm cache..."
+    npm cache clean --force
     
     # Create TypeScript configuration (force overwrite to ensure correct content)
     print_status "Creating TypeScript configuration..."
@@ -5412,11 +5427,30 @@ EOF
     find "$APP_DIR/frontend/node_modules" -name "esbuild" -type f -exec chmod +x {} \; 2>/dev/null || true
     print_status "Fixed all frontend binary permissions"
     
+    # Build with explicit environment variable verification
+    print_status "Building frontend with environment variables..."
+    print_status "Current VITE_API_URL: $(grep VITE_API_URL .env | cut -d'=' -f2)"
+    print_status "Current VITE_WS_URL: $(grep VITE_WS_URL .env | cut -d'=' -f2)"
+    
+    # Force rebuild with clean environment
+    VITE_API_URL=$(grep VITE_API_URL .env | cut -d'=' -f2) \
+    VITE_WS_URL=$(grep VITE_WS_URL .env | cut -d'=' -f2) \
+    VITE_APP_NAME="Event Manager" \
+    VITE_APP_VERSION="1.0.0" \
+    VITE_APP_URL="$APP_URL" \
     npm run build
     
     # Verify build was successful
     if [ -d "dist" ]; then
         print_success "Frontend build completed successfully"
+        
+        # Check if the built files contain the correct environment variables
+        print_status "Verifying environment variables in built files..."
+        if grep -r "VITE_API_URL" dist/ > /dev/null 2>&1; then
+            print_success "Environment variables found in built files"
+        else
+            print_warning "Environment variables not found in built files - using defaults"
+        fi
         
         # Ensure environment variables are still available after build
         if [ -f ".env" ]; then
@@ -5431,6 +5465,55 @@ EOF
     fi
     
     print_success "Comprehensive frontend built successfully"
+}
+
+# Force rebuild frontend with clean environment
+rebuild_frontend() {
+    print_status "Force rebuilding frontend with clean environment..."
+    
+    cd "$APP_DIR/frontend"
+    
+    # Ensure environment file exists
+    if [ ! -f ".env" ]; then
+        print_error "Frontend .env file not found! Creating default environment..."
+        cat > ".env" << EOF
+# Frontend Environment Configuration
+VITE_API_URL=
+VITE_WS_URL=
+VITE_APP_NAME=Event Manager
+VITE_APP_VERSION=1.0.0
+VITE_APP_URL=$APP_URL
+EOF
+    fi
+    
+    # Clean everything
+    print_status "Cleaning all build artifacts and caches..."
+    rm -rf dist
+    rm -rf node_modules/.vite
+    rm -rf node_modules/.cache
+    npm cache clean --force
+    
+    # Show current environment
+    print_status "Current frontend environment:"
+    cat .env | grep VITE_ | sed 's/^/  /'
+    
+    # Build with explicit environment
+    print_status "Building with explicit environment variables..."
+    VITE_API_URL=$(grep VITE_API_URL .env | cut -d'=' -f2) \
+    VITE_WS_URL=$(grep VITE_WS_URL .env | cut -d'=' -f2) \
+    VITE_APP_NAME="Event Manager" \
+    VITE_APP_VERSION="1.0.0" \
+    VITE_APP_URL="$APP_URL" \
+    npm run build
+    
+    if [ -d "dist" ]; then
+        print_success "Frontend rebuild completed successfully"
+        print_status "New build files created in dist/"
+        ls -la dist/ | head -10
+    else
+        print_error "Frontend rebuild failed"
+        return 1
+    fi
 }
 
 # Verify installation
@@ -5474,6 +5557,15 @@ main() {
     
     # Parse command line arguments
     parse_args "$@"
+    
+    # Handle rebuild-frontend option
+    if [[ "$REBUILD_FRONTEND" == "true" ]]; then
+        print_status "Rebuild frontend mode - skipping full installation"
+        setup_application_directory
+        rebuild_frontend
+        print_success "Frontend rebuild completed!"
+        exit 0
+    fi
     
     # Check prerequisites
     check_root
