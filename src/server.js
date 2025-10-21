@@ -14,6 +14,11 @@ const { Server } = require('socket.io')
 const http = require('http')
 const nodemailer = require('nodemailer')
 const winston = require('winston')
+const PDFDocument = require('pdfkit')
+const sharp = require('sharp')
+const puppeteer = require('puppeteer')
+const jsPDF = require('jspdf')
+const htmlPdf = require('html-pdf-node')
 
 const app = express()
 const server = http.createServer(app)
@@ -1099,6 +1104,114 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     logger.info(`User disconnected: ${socket.id}`)
   })
+})
+
+// PDF and Image Generation Routes
+app.post('/api/reports/generate-pdf', authenticateToken, async (req, res) => {
+  try {
+    const { type, data, options = {} } = req.body
+    
+    let pdfBuffer
+    const doc = new PDFDocument()
+    const buffers = []
+    
+    doc.on('data', buffers.push.bind(buffers))
+    doc.on('end', () => {
+      pdfBuffer = Buffer.concat(buffers)
+      res.setHeader('Content-Type', 'application/pdf')
+      res.setHeader('Content-Disposition', `attachment; filename="${type}-report.pdf"`)
+      res.send(pdfBuffer)
+    })
+    
+    // Add content based on report type
+    doc.fontSize(20).text(`${type} Report`, 50, 50)
+    doc.fontSize(12).text(`Generated on: ${new Date().toLocaleDateString()}`, 50, 80)
+    
+    if (data && data.length > 0) {
+      let y = 120
+      data.forEach((item, index) => {
+        if (y > 700) {
+          doc.addPage()
+          y = 50
+        }
+        doc.text(`${index + 1}. ${item.name || item.title || 'Item'}`, 50, y)
+        y += 20
+      })
+    }
+    
+    doc.end()
+  } catch (error) {
+    logger.error('PDF generation error:', error)
+    res.status(500).json({ error: 'Failed to generate PDF' })
+  }
+})
+
+app.post('/api/reports/generate-image', authenticateToken, async (req, res) => {
+  try {
+    const { type, data, options = {} } = req.body
+    
+    // Create a simple image using sharp
+    const width = options.width || 800
+    const height = options.height || 600
+    
+    const svg = `
+      <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="100%" height="100%" fill="white"/>
+        <text x="50%" y="50%" text-anchor="middle" font-family="Arial" font-size="24" fill="black">
+          ${type} Report
+        </text>
+        <text x="50%" y="60%" text-anchor="middle" font-family="Arial" font-size="16" fill="gray">
+          Generated on: ${new Date().toLocaleDateString()}
+        </text>
+      </svg>
+    `
+    
+    const imageBuffer = await sharp(Buffer.from(svg))
+      .png()
+      .toBuffer()
+    
+    res.setHeader('Content-Type', 'image/png')
+    res.setHeader('Content-Disposition', `attachment; filename="${type}-report.png"`)
+    res.send(imageBuffer)
+  } catch (error) {
+    logger.error('Image generation error:', error)
+    res.status(500).json({ error: 'Failed to generate image' })
+  }
+})
+
+app.post('/api/reports/generate-certificate', authenticateToken, async (req, res) => {
+  try {
+    const { contestantName, categoryName, score, rank, eventName } = req.body
+    
+    const doc = new PDFDocument({
+      size: 'A4',
+      layout: 'landscape'
+    })
+    
+    const buffers = []
+    doc.on('data', buffers.push.bind(buffers))
+    doc.on('end', () => {
+      const pdfBuffer = Buffer.concat(buffers)
+      res.setHeader('Content-Type', 'application/pdf')
+      res.setHeader('Content-Disposition', `attachment; filename="certificate-${contestantName.replace(/\s+/g, '-')}.pdf"`)
+      res.send(pdfBuffer)
+    })
+    
+    // Certificate design
+    doc.rect(50, 50, 700, 500).stroke()
+    doc.fontSize(36).text('CERTIFICATE OF ACHIEVEMENT', 150, 100, { align: 'center' })
+    doc.fontSize(24).text('This is to certify that', 300, 180, { align: 'center' })
+    doc.fontSize(32).text(contestantName, 300, 220, { align: 'center' })
+    doc.fontSize(20).text(`has achieved ${rank} place in ${categoryName}`, 300, 280, { align: 'center' })
+    doc.fontSize(18).text(`at ${eventName}`, 300, 320, { align: 'center' })
+    doc.fontSize(16).text(`Score: ${score}`, 300, 380, { align: 'center' })
+    doc.fontSize(14).text(`Date: ${new Date().toLocaleDateString()}`, 300, 450, { align: 'center' })
+    
+    doc.end()
+  } catch (error) {
+    logger.error('Certificate generation error:', error)
+    res.status(500).json({ error: 'Failed to generate certificate' })
+  }
 })
 
 // Error handling middleware

@@ -307,6 +307,17 @@ export const emailAPI = {
   deleteTemplate: (id: string) => api.delete(`/email/templates/${id}`),
 }
 
+export const reportsAPI = {
+  generatePDF: (data: any) => api.post('/reports/generate-pdf', data),
+  generateImage: (data: any) => api.post('/reports/generate-image', data),
+  generateCertificate: (data: any) => api.post('/reports/generate-certificate', data),
+  getAll: () => api.get('/reports'),
+  getById: (id: string) => api.get(`/reports/${id}`),
+  create: (data: any) => api.post('/reports', data),
+  update: (id: string, data: any) => api.put(`/reports/${id}`, data),
+  delete: (id: string) => api.delete(`/reports/${id}`),
+}
+
 // Export the api instance for direct use
 export { api }
 export default api

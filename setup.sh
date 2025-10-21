@@ -3026,6 +3026,17 @@ export const emailAPI = {
   sendBulkEmail: (data: any) => api.post('/email/bulk', data),
 }
 
+export const reportsAPI = {
+  generatePDF: (data: any) => api.post('/reports/generate-pdf', data),
+  generateImage: (data: any) => api.post('/reports/generate-image', data),
+  generateCertificate: (data: any) => api.post('/reports/generate-certificate', data),
+  getAll: () => api.get('/reports'),
+  getById: (id: string) => api.get(\`/reports/\${id}\`),
+  create: (data: any) => api.post('/reports', data),
+  update: (id: string, data: any) => api.put(\`/reports/\${id}\`, data),
+  delete: (id: string) => api.delete(\`/reports/\${id}\`),
+}
+
 // Additional API modules
 export const archiveAPI = {
   getAll: () => api.get('/archive'),
@@ -3318,54 +3329,50 @@ interface LayoutProps {
 
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false)
   const { user, logout } = useAuth()
+  const { theme, setTheme, actualTheme } = useTheme()
   const { isConnected } = useSocket()
-  const { theme, setTheme } = useTheme()
   const location = useLocation()
 
   const navigation = [
-    { name: 'Dashboard', href: '/dashboard', icon: '🏠', roles: ['ORGANIZER', 'BOARD', 'JUDGE', 'CONTESTANT', 'EMCEE', 'TALLY_MASTER', 'AUDITOR'] },
-    { name: 'Events', href: '/events', icon: '📅', roles: ['ORGANIZER', 'BOARD'] },
-    { name: 'Contests', href: '/contests', icon: '🏆', roles: ['ORGANIZER', 'BOARD', 'JUDGE', 'CONTESTANT'] },
-    { name: 'Categories', href: '/categories', icon: '📋', roles: ['ORGANIZER', 'BOARD', 'JUDGE'] },
-    { name: 'Scoring', href: '/scoring', icon: '⭐', roles: ['JUDGE', 'TALLY_MASTER', 'AUDITOR'] },
-    { name: 'Results', href: '/results', icon: '📊', roles: ['ORGANIZER', 'BOARD', 'CONTESTANT', 'TALLY_MASTER', 'AUDITOR'] },
-    { name: 'Users', href: '/users', icon: '👥', roles: ['ORGANIZER', 'BOARD'] },
-    { name: 'Admin', href: '/admin', icon: '⚙️', roles: ['ORGANIZER', 'BOARD'] },
-    { name: 'Settings', href: '/settings', icon: '🔧', roles: ['ORGANIZER', 'BOARD'] },
-    { name: 'Profile', href: '/profile', icon: '👤', roles: ['ORGANIZER', 'BOARD', 'JUDGE', 'CONTESTANT', 'EMCEE', 'TALLY_MASTER', 'AUDITOR'] },
-    { name: 'Emcee Scripts', href: '/emcee', icon: '📜', roles: ['EMCEE', 'ORGANIZER', 'BOARD'] },
-    { name: 'Templates', href: '/templates', icon: '📄', roles: ['ORGANIZER', 'BOARD'] },
-    { name: 'Reports', href: '/reports', icon: '📈', roles: ['ORGANIZER', 'BOARD', 'TALLY_MASTER', 'AUDITOR'] },
+    { name: 'Dashboard', href: '/dashboard', icon: HomeIcon, roles: ['ORGANIZER', 'JUDGE', 'CONTESTANT', 'EMCEE', 'TALLY_MASTER', 'AUDITOR', 'BOARD'] },
+    { name: 'Events', href: '/events', icon: CalendarIcon, roles: ['ORGANIZER', 'BOARD'] },
+    { name: 'Scoring', href: '/scoring', icon: TrophyIcon, roles: ['JUDGE'] },
+    { name: 'Results', href: '/results', icon: ChartBarIcon, roles: ['ORGANIZER', 'JUDGE', 'CONTESTANT', 'TALLY_MASTER', 'AUDITOR', 'BOARD'] },
+    { name: 'Users', href: '/users', icon: UsersIcon, roles: ['ORGANIZER', 'BOARD'] },
+    { name: 'Admin', href: '/admin', icon: CogIcon, roles: ['ORGANIZER', 'BOARD'] },
+    { name: 'Emcee', href: '/emcee', icon: MicrophoneIcon, roles: ['EMCEE'] },
+    { name: 'Templates', href: '/templates', icon: DocumentTextIcon, roles: ['ORGANIZER', 'BOARD'] },
+    { name: 'Reports', href: '/reports', icon: ChartBarIcon, roles: ['ORGANIZER', 'BOARD'] },
   ]
 
   const filteredNavigation = navigation.filter(item => 
-    user?.role && item.roles.includes(user.role)
+    item.roles.includes(user?.role || '')
   )
 
   const getRoleColor = (role: string) => {
-    const colors: { [key: string]: string } = {
-      ORGANIZER: 'bg-blue-600',
-      BOARD: 'bg-purple-600',
-      JUDGE: 'bg-green-600',
-      CONTESTANT: 'bg-yellow-600',
-      EMCEE: 'bg-pink-600',
-      TALLY_MASTER: 'bg-indigo-600',
-      AUDITOR: 'bg-red-600',
+    const colors = {
+      ORGANIZER: 'role-organizer',
+      JUDGE: 'role-judge',
+      CONTESTANT: 'role-contestant',
+      EMCEE: 'role-emcee',
+      TALLY_MASTER: 'role-tally-master',
+      AUDITOR: 'role-auditor',
+      BOARD: 'role-board',
     }
-    return colors[role] || 'bg-gray-600'
+    return colors[role as keyof typeof colors] || 'role-board'
   }
 
   const getRoleDisplayName = (role: string) => {
-    const names: { [key: string]: string } = {
+    const names = {
       ORGANIZER: 'Organizer',
-      BOARD: 'Board Member',
       JUDGE: 'Judge',
       CONTESTANT: 'Contestant',
       EMCEE: 'Emcee',
       TALLY_MASTER: 'Tally Master',
       AUDITOR: 'Auditor',
+      BOARD: 'Board',
     }
     return names[role] || role
   }
@@ -3373,45 +3380,34 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Mobile sidebar */}
-      <div className={`fixed inset-0 z-40 lg:hidden ${sidebarOpen ? 'block' : 'hidden'}`}>
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-75" onClick={() => setSidebarOpen(false)} />
-        <div className="relative flex-1 flex flex-col max-w-xs w-full bg-white dark:bg-gray-800">
-          <div className="absolute top-0 right-0 -mr-12 pt-2">
+      <div className={`mobile-menu ${sidebarOpen ? 'block' : 'hidden'}`}>
+        <div className="mobile-menu-overlay" onClick={() => setSidebarOpen(false)} />
+        <div className="mobile-menu-content">
+          <div className="flex items-center justify-between p-4 border-b">
+            <h2 className="text-lg font-semibold">Event Manager</h2>
             <button
-              type="button"
-              className="ml-1 flex items-center justify-center h-10 w-10 rounded-full focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white"
               onClick={() => setSidebarOpen(false)}
+              className="btn btn-ghost btn-sm"
             >
-              <span className="sr-only">Close sidebar</span>
-              <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
+              <XMarkIcon className="h-5 w-5" />
             </button>
           </div>
-          <div className="flex-1 h-0 pt-5 pb-4 overflow-y-auto">
-            <div className="flex-shrink-0 flex items-center px-4">
-              <h1 className="text-xl font-bold text-gray-900 dark:text-white">Event Manager</h1>
-            </div>
-            <nav className="mt-5 px-2 space-y-1">
-              {filteredNavigation.map((item) => {
-                const isActive = location.pathname === item.href
-                return (
-                  <Link
-                    key={item.name}
-                    to={item.href}
-                    className={`${
-                      isActive
-                        ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white'
-                        : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white'
-                    } group flex items-center px-2 py-2 text-base font-medium rounded-md`}
-                  >
-                    <span className="mr-3 text-lg">{item.icon}</span>
-                    {item.name}
-                  </Link>
-                )
-              })}
-            </nav>
-          </div>
+          <nav className="p-4 space-y-2">
+            {filteredNavigation.map((item) => {
+              const isActive = location.pathname === item.href
+              return (
+                <Link
+                  key={item.name}
+                  to={item.href}
+                  className={`sidebar-nav-item ${isActive ? 'sidebar-nav-item-active' : ''}`}
+                  onClick={() => setSidebarOpen(false)}
+                >
+                  <item.icon className="h-5 w-5 mr-3" />
+                  {item.name}
+                </Link>
+              )
+            })}
+          </nav>
         </div>
       </div>
 
@@ -5742,26 +5738,401 @@ code {
 EOF
     # Create placeholder pages for all routes
     cat > "$APP_DIR/frontend/src/pages/EventsPage.tsx" << 'EOF'
-import React from 'react'
+import React, { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from 'react-query'
+import { eventsAPI, archiveAPI } from '../services/api'
+import { useAuth } from '../contexts/AuthContext'
+import DataTable from '../components/DataTable'
+import SearchFilter from '../components/SearchFilter'
+import ArchiveManager from '../components/ArchiveManager'
+import { PlusIcon, PencilIcon, TrashIcon, ArchiveBoxIcon, EyeIcon } from '@heroicons/react/24/outline'
+import { format } from 'date-fns'
+
+interface Event {
+  id: string
+  name: string
+  description: string
+  startDate: string
+  endDate: string
+  location: string
+  maxContestants: number
+  status: 'DRAFT' | 'ACTIVE' | 'COMPLETED' | 'ARCHIVED'
+  createdAt: string
+  updatedAt: string
+  _count?: {
+    contests: number
+    contestants: number
+  }
+}
 
 const EventsPage: React.FC = () => {
+  const { user } = useAuth()
+  const [showModal, setShowModal] = useState(false)
+  const [showArchiveModal, setShowArchiveModal] = useState(false)
+  const [editingEvent, setEditingEvent] = useState<Event | null>(null)
+  const [formData, setFormData] = useState<Partial<Event>>({})
+  const [searchTerm, setSearchTerm] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const queryClient = useQueryClient()
+
+  const { data: events, isLoading } = useQuery(
+    'events',
+    () => eventsAPI.getAll().then((res: any) => res.data),
+    { refetchInterval: 30000 }
+  )
+
+  const createMutation = useMutation(
+    (data: Partial<Event>) => eventsAPI.create(data),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('events')
+        setShowModal(false)
+        setFormData({})
+      }
+    }
+  )
+
+  const updateMutation = useMutation(
+    ({ id, data }: { id: string; data: Partial<Event> }) => eventsAPI.update(id, data),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('events')
+        setShowModal(false)
+        setEditingEvent(null)
+        setFormData({})
+      }
+    }
+  )
+
+  const deleteMutation = useMutation(
+    (id: string) => eventsAPI.delete(id),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('events')
+      }
+    }
+  )
+
+  const archiveMutation = useMutation(
+    ({ id, reason }: { id: string; reason: string }) => archiveAPI.archiveEvent(id, reason),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('events')
+        setShowArchiveModal(false)
+      }
+    }
+  )
+
+  const handleCreate = () => {
+    setEditingEvent(null)
+    setFormData({
+      name: '',
+      description: '',
+      startDate: '',
+      endDate: '',
+      location: '',
+      maxContestants: 100,
+      status: 'DRAFT'
+    })
+    setShowModal(true)
+  }
+
+  const handleEdit = (event: Event) => {
+    setEditingEvent(event)
+    setFormData(event)
+    setShowModal(true)
+  }
+
+  const handleDelete = (id: string) => {
+    if (confirm('Are you sure you want to delete this event?')) {
+      deleteMutation.mutate(id)
+    }
+  }
+
+  const handleArchive = (event: Event) => {
+    setEditingEvent(event)
+    setShowArchiveModal(true)
+  }
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (editingEvent) {
+      updateMutation.mutate({ id: editingEvent.id, data: formData })
+    } else {
+      createMutation.mutate(formData)
+    }
+  }
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'DRAFT': return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
+      case 'ACTIVE': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+      case 'COMPLETED': return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+      case 'ARCHIVED': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
+    }
+  }
+
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case 'DRAFT': return 'Draft'
+      case 'ACTIVE': return 'Active'
+      case 'COMPLETED': return 'Completed'
+      case 'ARCHIVED': return 'Archived'
+      default: return status
+    }
+  }
+
+  const filteredEvents = events?.filter((event: Event) => {
+    const matchesSearch = event.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         event.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         event.location.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesStatus = !statusFilter || event.status === statusFilter
+    return matchesSearch && matchesStatus
+  }) || []
+
+  const eventColumns = [
+    { key: 'name', label: 'Event Name', sortable: true },
+    { key: 'location', label: 'Location', sortable: true },
+    { key: 'startDate', label: 'Start Date', sortable: true, render: (value: string) => format(new Date(value), 'MMM dd, yyyy') },
+    { key: 'endDate', label: 'End Date', sortable: true, render: (value: string) => format(new Date(value), 'MMM dd, yyyy') },
+    { key: 'status', label: 'Status', sortable: true, render: (value: string) => (
+      <span className={`status-indicator ${getStatusColor(value)}`}>
+        {getStatusText(value)}
+      </span>
+    ) },
+    { key: '_count.contests', label: 'Contests', sortable: true, render: (value: number) => value || 0 },
+    { key: '_count.contestants', label: 'Contestants', sortable: true, render: (value: number) => value || 0 },
+    { key: 'actions', label: 'Actions', render: (value: any, row: Event) => (
+      <div className="flex space-x-2">
+        <button
+          onClick={() => handleEdit(row)}
+          className="btn-sm btn-outline"
+          title="Edit Event"
+        >
+          <PencilIcon className="h-4 w-4" />
+        </button>
+        <button
+          onClick={() => handleArchive(row)}
+          className="btn-sm btn-outline"
+          title="Archive Event"
+        >
+          <ArchiveBoxIcon className="h-4 w-4" />
+        </button>
+        <button
+          onClick={() => handleDelete(row.id)}
+          className="btn-sm btn-destructive"
+          title="Delete Event"
+        >
+          <TrashIcon className="h-4 w-4" />
+        </button>
+      </div>
+    )}
+  ]
+
   return (
     <div className="space-y-6">
       <div className="card">
         <div className="card-header">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Events Management</h1>
-          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-            Create and manage contest events
-          </p>
-        </div>
-        <div className="card-body">
-          <div className="text-center py-12">
-            <div className="text-gray-400 dark:text-gray-500 text-6xl mb-4">📅</div>
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Events Page</h3>
-            <p className="text-gray-600 dark:text-gray-400">This page will contain event management functionality</p>
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Events Management</h1>
+              <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                Create and manage contest events
+              </p>
+            </div>
+            {(user?.role === 'ORGANIZER' || user?.role === 'BOARD') && (
+              <button
+                onClick={handleCreate}
+                className="btn-primary"
+              >
+                <PlusIcon className="h-5 w-5 mr-2" />
+                Create Event
+              </button>
+            )}
           </div>
         </div>
+        <div className="card-body">
+          <div className="mb-6">
+            <SearchFilter
+              searchTerm={searchTerm}
+              onSearchChange={setSearchTerm}
+              filters={{
+                status: {
+                  label: 'Status',
+                  options: [
+                    { value: '', label: 'All Statuses' },
+                    { value: 'DRAFT', label: 'Draft' },
+                    { value: 'ACTIVE', label: 'Active' },
+                    { value: 'COMPLETED', label: 'Completed' },
+                    { value: 'ARCHIVED', label: 'Archived' }
+                  ],
+                  value: statusFilter,
+                  onChange: setStatusFilter
+                }
+              }}
+              placeholder="Search events..."
+            />
+          </div>
+          
+          <DataTable
+            data={filteredEvents}
+            columns={eventColumns}
+            loading={isLoading}
+            searchable={false}
+            pagination={true}
+            pageSize={10}
+          />
+        </div>
       </div>
+
+      {/* Create/Edit Modal */}
+      {showModal && (
+        <div className="modal">
+          <div className="modal-overlay" onClick={() => setShowModal(false)} />
+          <div className="modal-content">
+            <h2 className="text-xl font-bold mb-4">
+              {editingEvent ? 'Edit Event' : 'Create Event'}
+            </h2>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="label">Event Name</label>
+                <input
+                  type="text"
+                  value={formData.name || ''}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="input"
+                  required
+                />
+              </div>
+              <div>
+                <label className="label">Description</label>
+                <textarea
+                  value={formData.description || ''}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  className="input"
+                  rows={3}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="label">Start Date</label>
+                  <input
+                    type="datetime-local"
+                    value={formData.startDate || ''}
+                    onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+                    className="input"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="label">End Date</label>
+                  <input
+                    type="datetime-local"
+                    value={formData.endDate || ''}
+                    onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
+                    className="input"
+                    required
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="label">Location</label>
+                <input
+                  type="text"
+                  value={formData.location || ''}
+                  onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                  className="input"
+                  required
+                />
+              </div>
+              <div>
+                <label className="label">Max Contestants</label>
+                <input
+                  type="number"
+                  value={formData.maxContestants || 100}
+                  onChange={(e) => setFormData({ ...formData, maxContestants: parseInt(e.target.value) })}
+                  className="input"
+                  min="1"
+                  required
+                />
+              </div>
+              <div>
+                <label className="label">Status</label>
+                <select
+                  value={formData.status || 'DRAFT'}
+                  onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
+                  className="input"
+                >
+                  <option value="DRAFT">Draft</option>
+                  <option value="ACTIVE">Active</option>
+                  <option value="COMPLETED">Completed</option>
+                  <option value="ARCHIVED">Archived</option>
+                </select>
+              </div>
+              <div className="flex justify-end space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn-primary"
+                  disabled={createMutation.isLoading || updateMutation.isLoading}
+                >
+                  {createMutation.isLoading || updateMutation.isLoading ? 'Saving...' : 'Save'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Archive Modal */}
+      {showArchiveModal && editingEvent && (
+        <div className="modal">
+          <div className="modal-overlay" onClick={() => setShowArchiveModal(false)} />
+          <div className="modal-content">
+            <h2 className="text-xl font-bold mb-4">Archive Event</h2>
+            <p className="mb-4">Are you sure you want to archive "{editingEvent.name}"?</p>
+            <form onSubmit={(e) => {
+              e.preventDefault()
+              const reason = (e.target as any).reason.value
+              archiveMutation.mutate({ id: editingEvent.id, reason })
+            }} className="space-y-4">
+              <div>
+                <label className="label">Archive Reason</label>
+                <textarea
+                  name="reason"
+                  className="input"
+                  rows={3}
+                  placeholder="Enter reason for archiving..."
+                  required
+                />
+              </div>
+              <div className="flex justify-end space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setShowArchiveModal(false)}
+                  className="btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn-destructive"
+                  disabled={archiveMutation.isLoading}
+                >
+                  {archiveMutation.isLoading ? 'Archiving...' : 'Archive Event'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -6021,26 +6392,316 @@ export default ContestsPage
 EOF
 
     cat > "$APP_DIR/frontend/src/pages/CategoriesPage.tsx" << 'EOF'
-import React from 'react'
+import React, { useState } from 'react'
+import { useParams } from 'react-router-dom'
+import { useQuery, useMutation, useQueryClient } from 'react-query'
+import { categoriesAPI, contestsAPI } from '../services/api'
+import { useAuth } from '../contexts/AuthContext'
+import DataTable from '../components/DataTable'
+import SearchFilter from '../components/SearchFilter'
+import CategoryTemplates from '../components/CategoryTemplates'
+import { PlusIcon, PencilIcon, TrashIcon, EyeIcon, DocumentDuplicateIcon } from '@heroicons/react/24/outline'
+
+interface Category {
+  id: string
+  name: string
+  description: string
+  maxScore: number
+  order: number
+  contestId: string
+  createdAt: string
+  updatedAt: string
+  _count?: {
+    criteria: number
+    contestants: number
+    judges: number
+    scores: number
+  }
+  criteria?: Criterion[]
+  contest?: {
+    id: string
+    name: string
+    event?: {
+      id: string
+      name: string
+    }
+  }
+}
+
+interface Criterion {
+  id: string
+  name: string
+  description: string
+  maxScore: number
+  order: number
+  categoryId: string
+}
 
 const CategoriesPage: React.FC = () => {
+  const { contestId } = useParams<{ contestId: string }>()
+  const { user } = useAuth()
+  const [showModal, setShowModal] = useState(false)
+  const [showTemplatesModal, setShowTemplatesModal] = useState(false)
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null)
+  const [formData, setFormData] = useState<Partial<Category>>({})
+  const [searchTerm, setSearchTerm] = useState('')
+  const queryClient = useQueryClient()
+
+  const { data: categories, isLoading } = useQuery(
+    ['categories', contestId],
+    () => categoriesAPI.getByContest(contestId!).then((res: any) => res.data),
+    { enabled: !!contestId, refetchInterval: 30000 }
+  )
+
+  const { data: contest } = useQuery(
+    ['contest', contestId],
+    () => contestsAPI.getById(contestId!).then((res: any) => res.data),
+    { enabled: !!contestId }
+  )
+
+  const createMutation = useMutation(
+    (data: Partial<Category>) => categoriesAPI.create(contestId!, data),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries(['categories', contestId])
+        setShowModal(false)
+        setFormData({})
+      }
+    }
+  )
+
+  const updateMutation = useMutation(
+    ({ id, data }: { id: string; data: Partial<Category> }) => categoriesAPI.update(id, data),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries(['categories', contestId])
+        setShowModal(false)
+        setEditingCategory(null)
+        setFormData({})
+      }
+    }
+  )
+
+  const deleteMutation = useMutation(
+    (id: string) => categoriesAPI.delete(id),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries(['categories', contestId])
+      }
+    }
+  )
+
+  const handleCreate = () => {
+    setEditingCategory(null)
+    setFormData({
+      name: '',
+      description: '',
+      maxScore: 100,
+      order: (categories?.length || 0) + 1,
+      contestId: contestId!
+    })
+    setShowModal(true)
+  }
+
+  const handleEdit = (category: Category) => {
+    setEditingCategory(category)
+    setFormData(category)
+    setShowModal(true)
+  }
+
+  const handleDelete = (id: string) => {
+    if (confirm('Are you sure you want to delete this category? This will also delete all associated scores.')) {
+      deleteMutation.mutate(id)
+    }
+  }
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (editingCategory) {
+      updateMutation.mutate({ id: editingCategory.id, data: formData })
+    } else {
+      createMutation.mutate(formData)
+    }
+  }
+
+  const filteredCategories = categories?.filter((category: Category) => {
+    return category.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+           category.description.toLowerCase().includes(searchTerm.toLowerCase())
+  }) || []
+
+  const categoryColumns = [
+    { key: 'order', label: 'Order', sortable: true },
+    { key: 'name', label: 'Category Name', sortable: true },
+    { key: 'description', label: 'Description', sortable: true },
+    { key: 'maxScore', label: 'Max Score', sortable: true },
+    { key: '_count.criteria', label: 'Criteria', sortable: true, render: (value: number) => value || 0 },
+    { key: '_count.contestants', label: 'Contestants', sortable: true, render: (value: number) => value || 0 },
+    { key: '_count.judges', label: 'Judges', sortable: true, render: (value: number) => value || 0 },
+    { key: '_count.scores', label: 'Scores', sortable: true, render: (value: number) => value || 0 },
+    { key: 'actions', label: 'Actions', render: (value: any, row: Category) => (
+      <div className="flex space-x-2">
+        <button
+          onClick={() => handleEdit(row)}
+          className="btn-sm btn-outline"
+          title="Edit Category"
+        >
+          <PencilIcon className="h-4 w-4" />
+        </button>
+        <button
+          onClick={() => handleDelete(row.id)}
+          className="btn-sm btn-destructive"
+          title="Delete Category"
+        >
+          <TrashIcon className="h-4 w-4" />
+        </button>
+      </div>
+    )}
+  ]
+
   return (
     <div className="space-y-6">
       <div className="card">
         <div className="card-header">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Categories Management</h1>
-          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-            Create and manage contest categories
-          </p>
-        </div>
-        <div className="card-body">
-          <div className="text-center py-12">
-            <div className="text-gray-400 dark:text-gray-500 text-6xl mb-4">📋</div>
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Categories Page</h3>
-            <p className="text-gray-600 dark:text-gray-400">This page will contain category management functionality</p>
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Categories Management</h1>
+              <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                {contest ? `Categories for ${contest.name}` : 'Create and manage contest categories'}
+              </p>
+            </div>
+            <div className="flex space-x-2">
+              {(user?.role === 'ORGANIZER' || user?.role === 'BOARD') && (
+                <>
+                  <button
+                    onClick={() => setShowTemplatesModal(true)}
+                    className="btn-secondary"
+                  >
+                    <DocumentDuplicateIcon className="h-5 w-5 mr-2" />
+                    Templates
+                  </button>
+                  <button
+                    onClick={handleCreate}
+                    className="btn-primary"
+                  >
+                    <PlusIcon className="h-5 w-5 mr-2" />
+                    Create Category
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         </div>
+        <div className="card-body">
+          <div className="mb-6">
+            <SearchFilter
+              searchTerm={searchTerm}
+              onSearchChange={setSearchTerm}
+              placeholder="Search categories..."
+            />
+          </div>
+          
+          <DataTable
+            data={filteredCategories}
+            columns={categoryColumns}
+            loading={isLoading}
+            searchable={false}
+            pagination={true}
+            pageSize={10}
+          />
+        </div>
       </div>
+
+      {/* Create/Edit Modal */}
+      {showModal && (
+        <div className="modal">
+          <div className="modal-overlay" onClick={() => setShowModal(false)} />
+          <div className="modal-content">
+            <h2 className="text-xl font-bold mb-4">
+              {editingCategory ? 'Edit Category' : 'Create Category'}
+            </h2>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="label">Category Name</label>
+                <input
+                  type="text"
+                  value={formData.name || ''}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="input"
+                  required
+                />
+              </div>
+              <div>
+                <label className="label">Description</label>
+                <textarea
+                  value={formData.description || ''}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  className="input"
+                  rows={3}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="label">Max Score</label>
+                  <input
+                    type="number"
+                    value={formData.maxScore || 100}
+                    onChange={(e) => setFormData({ ...formData, maxScore: parseInt(e.target.value) })}
+                    className="input"
+                    min="1"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="label">Order</label>
+                  <input
+                    type="number"
+                    value={formData.order || 1}
+                    onChange={(e) => setFormData({ ...formData, order: parseInt(e.target.value) })}
+                    className="input"
+                    min="1"
+                    required
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn-primary"
+                  disabled={createMutation.isLoading || updateMutation.isLoading}
+                >
+                  {createMutation.isLoading || updateMutation.isLoading ? 'Saving...' : 'Save'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Templates Modal */}
+      {showTemplatesModal && (
+        <div className="modal">
+          <div className="modal-overlay" onClick={() => setShowTemplatesModal(false)} />
+          <div className="modal-content max-w-4xl">
+            <h2 className="text-xl font-bold mb-4">Category Templates</h2>
+            <CategoryTemplates />
+            <div className="flex justify-end mt-4">
+              <button
+                onClick={() => setShowTemplatesModal(false)}
+                className="btn-secondary"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -6049,9 +6710,389 @@ export default CategoriesPage
 EOF
 
     cat > "$APP_DIR/frontend/src/pages/ScoringPage.tsx" << 'EOF'
-import React from 'react'
+import React, { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from 'react-query'
+import { scoringAPI, categoriesAPI, usersAPI } from '../services/api'
+import { useAuth } from '../contexts/AuthContext'
+import CertificationWorkflow from '../components/CertificationWorkflow'
+import DataTable from '../components/DataTable'
+import SearchFilter from '../components/SearchFilter'
+import { CheckCircleIcon, XCircleIcon, ClockIcon, StarIcon } from '@heroicons/react/24/outline'
+
+interface Category {
+  id: string
+  name: string
+  description: string
+  maxScore: number
+  order: number
+  contestId: string
+  status: 'DRAFT' | 'ACTIVE' | 'COMPLETED' | 'ARCHIVED'
+  _count?: {
+    criteria: number
+    contestants: number
+    judges: number
+    scores: number
+  }
+  criteria?: Criterion[]
+  contestants?: Contestant[]
+  judges?: Judge[]
+}
+
+interface Criterion {
+  id: string
+  name: string
+  description: string
+  maxScore: number
+  order: number
+}
+
+interface Contestant {
+  id: string
+  name: string
+  email: string
+  contestantNumber?: string
+}
+
+interface Judge {
+  id: string
+  name: string
+  email: string
+}
+
+interface Score {
+  id: string
+  score: number
+  comment?: string
+  createdAt: string
+  updatedAt: string
+  judge: Judge
+  contestant: Contestant
+  criterion: Criterion
+  category: Category
+}
 
 const ScoringPage: React.FC = () => {
+  const { user } = useAuth()
+  const [selectedCategory, setSelectedCategory] = useState<Category | null>(null)
+  const [showScoreModal, setShowScoreModal] = useState(false)
+  const [editingScore, setEditingScore] = useState<Score | null>(null)
+  const [formData, setFormData] = useState<Partial<Score>>({})
+  const [searchTerm, setSearchTerm] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const queryClient = useQueryClient()
+
+  const { data: categories, isLoading } = useQuery(
+    'scoring-categories',
+    () => categoriesAPI.getAll().then((res: any) => res.data),
+    { refetchInterval: 30000 }
+  )
+
+  const { data: scores, isLoading: scoresLoading } = useQuery(
+    ['scores', selectedCategory?.id],
+    () => selectedCategory ? scoringAPI.getScores(selectedCategory.id, '').then((res: any) => res.data) : Promise.resolve([]),
+    { enabled: !!selectedCategory, refetchInterval: 10000 }
+  )
+
+  const submitScoreMutation = useMutation(
+    ({ categoryId, contestantId, data }: { categoryId: string; contestantId: string; data: any }) =>
+      scoringAPI.submitScore(categoryId, contestantId, data),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries(['scores', selectedCategory?.id])
+        setShowScoreModal(false)
+        setFormData({})
+      }
+    }
+  )
+
+  const updateScoreMutation = useMutation(
+    ({ scoreId, data }: { scoreId: string; data: any }) => scoringAPI.updateScore(scoreId, data),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries(['scores', selectedCategory?.id])
+        setShowScoreModal(false)
+        setEditingScore(null)
+        setFormData({})
+      }
+    }
+  )
+
+  const certifyMutation = useMutation(
+    (categoryId: string) => scoringAPI.certifyScores(categoryId),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('scoring-categories')
+        queryClient.invalidateQueries(['scores', selectedCategory?.id])
+      }
+    }
+  )
+
+  const handleCategorySelect = (category: Category) => {
+    setSelectedCategory(category)
+  }
+
+  const handleScoreSubmit = (contestant: Contestant, criterion: Criterion, score: number, comment?: string) => {
+    if (!selectedCategory) return
+    
+    const scoreData = {
+      score,
+      comment,
+      criterionId: criterion.id,
+      contestantId: contestant.id
+    }
+    
+    submitScoreMutation.mutate({
+      categoryId: selectedCategory.id,
+      contestantId: contestant.id,
+      data: scoreData
+    })
+  }
+
+  const handleScoreEdit = (score: Score) => {
+    setEditingScore(score)
+    setFormData(score)
+    setShowScoreModal(true)
+  }
+
+  const handleCertify = () => {
+    if (selectedCategory && confirm('Are you sure you want to certify all scores for this category?')) {
+      certifyMutation.mutate(selectedCategory.id)
+    }
+  }
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'DRAFT': return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
+      case 'ACTIVE': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+      case 'COMPLETED': return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+      case 'ARCHIVED': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
+    }
+  }
+
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case 'DRAFT': return 'Draft'
+      case 'ACTIVE': return 'Active'
+      case 'COMPLETED': return 'Completed'
+      case 'ARCHIVED': return 'Archived'
+      default: return status
+    }
+  }
+
+  const filteredCategories = categories?.filter((category: Category) => {
+    const matchesSearch = category.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         category.description.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesStatus = !statusFilter || category.status === statusFilter
+    return matchesSearch && matchesStatus
+  }) || []
+
+  const categoryColumns = [
+    { key: 'name', label: 'Category Name', sortable: true },
+    { key: 'description', label: 'Description', sortable: true },
+    { key: 'maxScore', label: 'Max Score', sortable: true },
+    { key: 'status', label: 'Status', sortable: true, render: (value: string) => (
+      <span className={`status-indicator ${getStatusColor(value)}`}>
+        {getStatusText(value)}
+      </span>
+    ) },
+    { key: '_count.contestants', label: 'Contestants', sortable: true, render: (value: number) => value || 0 },
+    { key: '_count.scores', label: 'Scores', sortable: true, render: (value: number) => value || 0 },
+    { key: 'actions', label: 'Actions', render: (value: any, row: Category) => (
+      <div className="flex space-x-2">
+        <button
+          onClick={() => handleCategorySelect(row)}
+          className="btn-sm btn-primary"
+          title="Score Category"
+        >
+          <StarIcon className="h-4 w-4" />
+        </button>
+      </div>
+    )}
+  ]
+
+  const getRoleSpecificContent = () => {
+    if (user?.role === 'JUDGE') {
+      return (
+        <div className="space-y-6">
+          <div className="card">
+            <div className="card-header">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">Assigned Categories</h2>
+              <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                Categories you are assigned to judge
+              </p>
+            </div>
+            <div className="card-body">
+              <DataTable
+                data={filteredCategories}
+                columns={categoryColumns}
+                loading={isLoading}
+                searchable={false}
+                pagination={true}
+                pageSize={10}
+              />
+            </div>
+          </div>
+
+          {selectedCategory && (
+            <div className="card">
+              <div className="card-header">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                      Scoring: {selectedCategory.name}
+                    </h2>
+                    <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                      Submit scores for contestants in this category
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setSelectedCategory(null)}
+                    className="btn-secondary"
+                  >
+                    Back to Categories
+                  </button>
+                </div>
+              </div>
+              <div className="card-body">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {selectedCategory.contestants?.map((contestant) => (
+                    <div key={contestant.id} className="card">
+                      <div className="card-header">
+                        <h3 className="font-semibold">{contestant.name}</h3>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          #{contestant.contestantNumber || contestant.id.slice(-4)}
+                        </p>
+                      </div>
+                      <div className="card-body">
+                        <div className="space-y-3">
+                          {selectedCategory.criteria?.map((criterion) => {
+                            const existingScore = scores?.find((s: Score) => 
+                              s.contestant.id === contestant.id && s.criterion.id === criterion.id
+                            )
+                            return (
+                              <div key={criterion.id} className="flex items-center justify-between">
+                                <div className="flex-1">
+                                  <label className="text-sm font-medium">{criterion.name}</label>
+                                  <p className="text-xs text-gray-600 dark:text-gray-400">
+                                    Max: {criterion.maxScore}
+                                  </p>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max={criterion.maxScore}
+                                    defaultValue={existingScore?.score || ''}
+                                    className="score-input"
+                                    onChange={(e) => {
+                                      const score = parseInt(e.target.value)
+                                      if (!isNaN(score) && score >= 0 && score <= criterion.maxScore) {
+                                        handleScoreSubmit(contestant, criterion, score)
+                                      }
+                                    }}
+                                  />
+                                  {existingScore && (
+                                    <CheckCircleIcon className="h-5 w-5 text-green-500" />
+                                  )}
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )
+    }
+
+    if (user?.role === 'TALLY_MASTER') {
+      return (
+        <div className="space-y-6">
+          <div className="card">
+            <div className="card-header">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">Certification Queue</h2>
+              <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                Categories ready for tally master certification
+              </p>
+            </div>
+            <div className="card-body">
+              <CertificationWorkflow />
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    if (user?.role === 'AUDITOR') {
+      return (
+        <div className="space-y-6">
+          <div className="card">
+            <div className="card-header">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">Final Certification</h2>
+              <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                Final certification of contest results
+              </p>
+            </div>
+            <div className="card-body">
+              <CertificationWorkflow />
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    return (
+      <div className="space-y-6">
+        <div className="card">
+          <div className="card-header">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white">All Categories</h2>
+            <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+              View and manage scoring for all categories
+            </p>
+          </div>
+          <div className="card-body">
+            <div className="mb-6">
+              <SearchFilter
+                searchTerm={searchTerm}
+                onSearchChange={setSearchTerm}
+                filters={{
+                  status: {
+                    label: 'Status',
+                    options: [
+                      { value: '', label: 'All Statuses' },
+                      { value: 'DRAFT', label: 'Draft' },
+                      { value: 'ACTIVE', label: 'Active' },
+                      { value: 'COMPLETED', label: 'Completed' },
+                      { value: 'ARCHIVED', label: 'Archived' }
+                    ],
+                    value: statusFilter,
+                    onChange: setStatusFilter
+                  }
+                }}
+                placeholder="Search categories..."
+              />
+            </div>
+            
+            <DataTable
+              data={filteredCategories}
+              columns={categoryColumns}
+              loading={isLoading}
+              searchable={false}
+              pagination={true}
+              pageSize={10}
+            />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       <div className="card">
@@ -6062,11 +7103,7 @@ const ScoringPage: React.FC = () => {
           </p>
         </div>
         <div className="card-body">
-          <div className="text-center py-12">
-            <div className="text-gray-400 dark:text-gray-500 text-6xl mb-4">⭐</div>
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Scoring Page</h3>
-            <p className="text-gray-600 dark:text-gray-400">This page will contain scoring functionality</p>
-          </div>
+          {getRoleSpecificContent()}
         </div>
       </div>
     </div>
@@ -6077,9 +7114,363 @@ export default ScoringPage
 EOF
 
     cat > "$APP_DIR/frontend/src/pages/ResultsPage.tsx" << 'EOF'
-import React from 'react'
+import React, { useState } from 'react'
+import { useQuery } from 'react-query'
+import { resultsAPI, eventsAPI, contestsAPI, categoriesAPI } from '../services/api'
+import { useAuth } from '../contexts/AuthContext'
+import DataTable from '../components/DataTable'
+import SearchFilter from '../components/SearchFilter'
+import PrintReports from '../components/PrintReports'
+import { TrophyIcon, MedalIcon, StarIcon, PrinterIcon, DownloadIcon } from '@heroicons/react/24/outline'
+import { format } from 'date-fns'
+
+interface Result {
+  id: string
+  contestantId: string
+  categoryId: string
+  totalScore: number
+  averageScore: number
+  rank: number
+  isCertified: boolean
+  certifiedAt?: string
+  certifiedBy?: string
+  contestant: {
+    id: string
+    name: string
+    email: string
+    contestantNumber?: string
+  }
+  category: {
+    id: string
+    name: string
+    maxScore: number
+    contest?: {
+      id: string
+      name: string
+      event?: {
+        id: string
+        name: string
+      }
+    }
+  }
+  scores: Score[]
+}
+
+interface Score {
+  id: string
+  score: number
+  comment?: string
+  createdAt: string
+  judge: {
+    id: string
+    name: string
+  }
+  criterion: {
+    id: string
+    name: string
+    maxScore: number
+  }
+}
+
+interface Category {
+  id: string
+  name: string
+  description: string
+  maxScore: number
+  status: 'DRAFT' | 'ACTIVE' | 'COMPLETED' | 'ARCHIVED'
+  _count?: {
+    contestants: number
+    scores: number
+  }
+}
 
 const ResultsPage: React.FC = () => {
+  const { user } = useAuth()
+  const [selectedCategory, setSelectedCategory] = useState<Category | null>(null)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [showPrintModal, setShowPrintModal] = useState(false)
+
+  const { data: categories, isLoading: categoriesLoading } = useQuery(
+    'results-categories',
+    () => categoriesAPI.getAll().then((res: any) => res.data),
+    { refetchInterval: 30000 }
+  )
+
+  const { data: results, isLoading: resultsLoading } = useQuery(
+    ['results', selectedCategory?.id],
+    () => selectedCategory ? resultsAPI.getCategoryResults(selectedCategory.id).then((res: any) => res.data) : Promise.resolve([]),
+    { enabled: !!selectedCategory, refetchInterval: 10000 }
+  )
+
+  const { data: allResults } = useQuery(
+    'all-results',
+    () => resultsAPI.getAll().then((res: any) => res.data),
+    { enabled: !selectedCategory, refetchInterval: 30000 }
+  )
+
+  const handleCategorySelect = (category: Category) => {
+    setSelectedCategory(category)
+  }
+
+  const handlePrint = () => {
+    setShowPrintModal(true)
+  }
+
+  const getRankIcon = (rank: number) => {
+    if (rank === 1) return <TrophyIcon className="h-6 w-6 text-yellow-500" />
+    if (rank === 2) return <MedalIcon className="h-6 w-6 text-gray-400" />
+    if (rank === 3) return <MedalIcon className="h-6 w-6 text-amber-600" />
+    return <span className="text-lg font-bold text-gray-600 dark:text-gray-400">#{rank}</span>
+  }
+
+  const getRankColor = (rank: number) => {
+    if (rank === 1) return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+    if (rank === 2) return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
+    if (rank === 3) return 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'
+    return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+  }
+
+  const getCertificationStatus = (isCertified: boolean, certifiedAt?: string) => {
+    if (isCertified) {
+      return (
+        <div className="flex items-center space-x-1">
+          <StarIcon className="h-4 w-4 text-green-500" />
+          <span className="text-sm text-green-600 dark:text-green-400">
+            Certified {certifiedAt && format(new Date(certifiedAt), 'MMM dd, yyyy')}
+          </span>
+        </div>
+      )
+    }
+    return (
+      <div className="flex items-center space-x-1">
+        <StarIcon className="h-4 w-4 text-gray-400" />
+        <span className="text-sm text-gray-600 dark:text-gray-400">Pending</span>
+      </div>
+    )
+  }
+
+  const filteredCategories = categories?.filter((category: Category) => {
+    const matchesSearch = category.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         category.description.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesStatus = !statusFilter || category.status === statusFilter
+    return matchesSearch && matchesStatus
+  }) || []
+
+  const categoryColumns = [
+    { key: 'name', label: 'Category Name', sortable: true },
+    { key: 'description', label: 'Description', sortable: true },
+    { key: 'maxScore', label: 'Max Score', sortable: true },
+    { key: 'status', label: 'Status', sortable: true, render: (value: string) => (
+      <span className={`status-indicator ${getStatusColor(value)}`}>
+        {getStatusText(value)}
+      </span>
+    ) },
+    { key: '_count.contestants', label: 'Contestants', sortable: true, render: (value: number) => value || 0 },
+    { key: 'actions', label: 'Actions', render: (value: any, row: Category) => (
+      <div className="flex space-x-2">
+        <button
+          onClick={() => handleCategorySelect(row)}
+          className="btn-sm btn-primary"
+          title="View Results"
+        >
+          <TrophyIcon className="h-4 w-4" />
+        </button>
+      </div>
+    )}
+  ]
+
+  const resultColumns = [
+    { key: 'rank', label: 'Rank', sortable: true, render: (value: number) => (
+      <div className="flex items-center space-x-2">
+        {getRankIcon(value)}
+        <span className={`status-indicator ${getRankColor(value)}`}>
+          #{value}
+        </span>
+      </div>
+    ) },
+    { key: 'contestant.name', label: 'Contestant', sortable: true, render: (value: string, row: Result) => (
+      <div>
+        <div className="font-medium">{row.contestant.name}</div>
+        <div className="text-sm text-gray-600 dark:text-gray-400">
+          #{row.contestant.contestantNumber || row.contestant.id.slice(-4)}
+        </div>
+      </div>
+    ) },
+    { key: 'totalScore', label: 'Total Score', sortable: true, render: (value: number, row: Result) => (
+      <div className="text-right">
+        <div className="font-bold text-lg">{value.toFixed(2)}</div>
+        <div className="text-sm text-gray-600 dark:text-gray-400">
+          / {row.category.maxScore}
+        </div>
+      </div>
+    ) },
+    { key: 'averageScore', label: 'Average', sortable: true, render: (value: number) => (
+      <div className="text-right font-medium">{value.toFixed(2)}</div>
+    ) },
+    { key: 'isCertified', label: 'Status', sortable: true, render: (value: boolean, row: Result) => 
+      getCertificationStatus(value, row.certifiedAt)
+    },
+    { key: 'actions', label: 'Actions', render: (value: any, row: Result) => (
+      <div className="flex space-x-2">
+        <button
+          onClick={() => handlePrint()}
+          className="btn-sm btn-outline"
+          title="Print Results"
+        >
+          <PrinterIcon className="h-4 w-4" />
+        </button>
+      </div>
+    )}
+  ]
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'DRAFT': return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
+      case 'ACTIVE': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+      case 'COMPLETED': return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+      case 'ARCHIVED': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
+    }
+  }
+
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case 'DRAFT': return 'Draft'
+      case 'ACTIVE': return 'Active'
+      case 'COMPLETED': return 'Completed'
+      case 'ARCHIVED': return 'Archived'
+      default: return status
+    }
+  }
+
+  const getRoleSpecificContent = () => {
+    if (user?.role === 'CONTESTANT') {
+      return (
+        <div className="space-y-6">
+          <div className="card">
+            <div className="card-header">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">My Results</h2>
+              <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                Your contest results and rankings
+              </p>
+            </div>
+            <div className="card-body">
+              <DataTable
+                data={allResults?.filter((result: Result) => result.contestant.id === user.id) || []}
+                columns={resultColumns}
+                loading={resultsLoading}
+                searchable={false}
+                pagination={true}
+                pageSize={10}
+              />
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    return (
+      <div className="space-y-6">
+        <div className="card">
+          <div className="card-header">
+            <div className="flex justify-between items-center">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white">Contest Results</h2>
+                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                  View and manage contest results
+                </p>
+              </div>
+              <div className="flex space-x-2">
+                <button
+                  onClick={handlePrint}
+                  className="btn-secondary"
+                >
+                  <PrinterIcon className="h-5 w-5 mr-2" />
+                  Print Reports
+                </button>
+              </div>
+            </div>
+          </div>
+          <div className="card-body">
+            <div className="mb-6">
+              <SearchFilter
+                searchTerm={searchTerm}
+                onSearchChange={setSearchTerm}
+                filters={{
+                  status: {
+                    label: 'Status',
+                    options: [
+                      { value: '', label: 'All Statuses' },
+                      { value: 'DRAFT', label: 'Draft' },
+                      { value: 'ACTIVE', label: 'Active' },
+                      { value: 'COMPLETED', label: 'Completed' },
+                      { value: 'ARCHIVED', label: 'Archived' }
+                    ],
+                    value: statusFilter,
+                    onChange: setStatusFilter
+                  }
+                }}
+                placeholder="Search categories..."
+              />
+            </div>
+            
+            <DataTable
+              data={filteredCategories}
+              columns={categoryColumns}
+              loading={categoriesLoading}
+              searchable={false}
+              pagination={true}
+              pageSize={10}
+            />
+          </div>
+        </div>
+
+        {selectedCategory && (
+          <div className="card">
+            <div className="card-header">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                    Results: {selectedCategory.name}
+                  </h2>
+                  <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                    Contestant rankings and scores
+                  </p>
+                </div>
+                <div className="flex space-x-2">
+                  <button
+                    onClick={handlePrint}
+                    className="btn-secondary"
+                  >
+                    <PrinterIcon className="h-5 w-5 mr-2" />
+                    Print
+                  </button>
+                  <button
+                    onClick={() => setSelectedCategory(null)}
+                    className="btn-outline"
+                  >
+                    Back to Categories
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div className="card-body">
+              <DataTable
+                data={results || []}
+                columns={resultColumns}
+                loading={resultsLoading}
+                searchable={false}
+                pagination={true}
+                pageSize={10}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       <div className="card">
@@ -6090,13 +7481,28 @@ const ResultsPage: React.FC = () => {
           </p>
         </div>
         <div className="card-body">
-          <div className="text-center py-12">
-            <div className="text-gray-400 dark:text-gray-500 text-6xl mb-4">📊</div>
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Results Page</h3>
-            <p className="text-gray-600 dark:text-gray-400">This page will contain results and reporting functionality</p>
-          </div>
+          {getRoleSpecificContent()}
         </div>
       </div>
+
+      {/* Print Reports Modal */}
+      {showPrintModal && (
+        <div className="modal">
+          <div className="modal-overlay" onClick={() => setShowPrintModal(false)} />
+          <div className="modal-content max-w-4xl">
+            <h2 className="text-xl font-bold mb-4">Print Reports</h2>
+            <PrintReports />
+            <div className="flex justify-end mt-4">
+              <button
+                onClick={() => setShowPrintModal(false)}
+                className="btn-secondary"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -6105,26 +7511,494 @@ export default ResultsPage
 EOF
 
     cat > "$APP_DIR/frontend/src/pages/UsersPage.tsx" << 'EOF'
-import React from 'react'
+import React, { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from 'react-query'
+import { usersAPI, adminAPI } from '../services/api'
+import { useAuth } from '../contexts/AuthContext'
+import DataTable from '../components/DataTable'
+import SearchFilter from '../components/SearchFilter'
+import { PlusIcon, PencilIcon, TrashIcon, UserIcon, ShieldCheckIcon, KeyIcon } from '@heroicons/react/24/outline'
+import { format } from 'date-fns'
+
+interface User {
+  id: string
+  name: string
+  email: string
+  role: 'ORGANIZER' | 'BOARD' | 'JUDGE' | 'TALLY_MASTER' | 'AUDITOR' | 'CONTESTANT'
+  status: 'ACTIVE' | 'INACTIVE' | 'PENDING'
+  createdAt: string
+  updatedAt: string
+  lastLoginAt?: string
+  _count?: {
+    events: number
+    contests: number
+    scores: number
+  }
+}
 
 const UsersPage: React.FC = () => {
+  const { user: currentUser } = useAuth()
+  const [showModal, setShowModal] = useState(false)
+  const [editingUser, setEditingUser] = useState<User | null>(null)
+  const [showResetModal, setShowResetModal] = useState(false)
+  const [selectedUser, setSelectedUser] = useState<User | null>(null)
+  const [formData, setFormData] = useState<Partial<User>>({})
+  const [searchTerm, setSearchTerm] = useState('')
+  const [roleFilter, setRoleFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const queryClient = useQueryClient()
+
+  const { data: users, isLoading } = useQuery(
+    'users',
+    () => usersAPI.getAll().then((res: any) => res.data),
+    { refetchInterval: 30000 }
+  )
+
+  const createMutation = useMutation(
+    (data: Partial<User>) => usersAPI.create(data),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('users')
+        setShowModal(false)
+        setFormData({})
+      }
+    }
+  )
+
+  const updateMutation = useMutation(
+    ({ id, data }: { id: string; data: Partial<User> }) => usersAPI.update(id, data),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('users')
+        setShowModal(false)
+        setEditingUser(null)
+        setFormData({})
+      }
+    }
+  )
+
+  const deleteMutation = useMutation(
+    (id: string) => usersAPI.delete(id),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('users')
+      }
+    }
+  )
+
+  const resetPasswordMutation = useMutation(
+    ({ id, data }: { id: string; data: any }) => usersAPI.resetPassword(id, data),
+    {
+      onSuccess: () => {
+        setShowResetModal(false)
+        setSelectedUser(null)
+      }
+    }
+  )
+
+  const handleCreate = () => {
+    setEditingUser(null)
+    setFormData({})
+    setShowModal(true)
+  }
+
+  const handleEdit = (user: User) => {
+    setEditingUser(user)
+    setFormData(user)
+    setShowModal(true)
+  }
+
+  const handleDelete = (id: string) => {
+    if (window.confirm('Are you sure you want to delete this user?')) {
+      deleteMutation.mutate(id)
+    }
+  }
+
+  const handleResetPassword = (user: User) => {
+    setSelectedUser(user)
+    setShowResetModal(true)
+  }
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (editingUser) {
+      updateMutation.mutate({ id: editingUser.id, data: formData })
+    } else {
+      createMutation.mutate(formData)
+    }
+  }
+
+  const handleResetSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    const formData = new FormData(e.target as HTMLFormElement)
+    const newPassword = formData.get('newPassword') as string
+    const confirmPassword = formData.get('confirmPassword') as string
+
+    if (newPassword !== confirmPassword) {
+      alert('Passwords do not match')
+      return
+    }
+
+    resetPasswordMutation.mutate({
+      id: selectedUser!.id,
+      data: { newPassword }
+    })
+  }
+
+  const getRoleColor = (role: string) => {
+    switch (role) {
+      case 'ORGANIZER': return 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
+      case 'BOARD': return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+      case 'JUDGE': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+      case 'TALLY_MASTER': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+      case 'AUDITOR': return 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200'
+      case 'CONTESTANT': return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
+      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
+    }
+  }
+
+  const getRoleText = (role: string) => {
+    switch (role) {
+      case 'ORGANIZER': return 'Organizer'
+      case 'BOARD': return 'Board Member'
+      case 'JUDGE': return 'Judge'
+      case 'TALLY_MASTER': return 'Tally Master'
+      case 'AUDITOR': return 'Auditor'
+      case 'CONTESTANT': return 'Contestant'
+      default: return role
+    }
+  }
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'ACTIVE': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+      case 'INACTIVE': return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+      case 'PENDING': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
+    }
+  }
+
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case 'ACTIVE': return 'Active'
+      case 'INACTIVE': return 'Inactive'
+      case 'PENDING': return 'Pending'
+      default: return status
+    }
+  }
+
+  const filteredUsers = users?.filter((user: User) => {
+    const matchesSearch = user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         user.email.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesRole = !roleFilter || user.role === roleFilter
+    const matchesStatus = !statusFilter || user.status === statusFilter
+    return matchesSearch && matchesRole && matchesStatus
+  }) || []
+
+  const columns = [
+    { key: 'name', label: 'Name', sortable: true, render: (value: string, row: User) => (
+      <div className="flex items-center space-x-3">
+        <div className="flex-shrink-0">
+          <UserIcon className="h-8 w-8 text-gray-400" />
+        </div>
+        <div>
+          <div className="font-medium text-gray-900 dark:text-white">{row.name}</div>
+          <div className="text-sm text-gray-600 dark:text-gray-400">{row.email}</div>
+        </div>
+      </div>
+    ) },
+    { key: 'role', label: 'Role', sortable: true, render: (value: string) => (
+      <span className={`status-indicator ${getRoleColor(value)}`}>
+        {getRoleText(value)}
+      </span>
+    ) },
+    { key: 'status', label: 'Status', sortable: true, render: (value: string) => (
+      <span className={`status-indicator ${getStatusColor(value)}`}>
+        {getStatusText(value)}
+      </span>
+    ) },
+    { key: 'lastLoginAt', label: 'Last Login', sortable: true, render: (value: string) => (
+      value ? format(new Date(value), 'MMM dd, yyyy HH:mm') : 'Never'
+    ) },
+    { key: 'createdAt', label: 'Created', sortable: true, render: (value: string) => 
+      format(new Date(value), 'MMM dd, yyyy')
+    },
+    { key: 'actions', label: 'Actions', render: (value: any, row: User) => (
+      <div className="flex space-x-2">
+        <button
+          onClick={() => handleEdit(row)}
+          className="btn-sm btn-outline"
+          title="Edit User"
+        >
+          <PencilIcon className="h-4 w-4" />
+        </button>
+        <button
+          onClick={() => handleResetPassword(row)}
+          className="btn-sm btn-outline"
+          title="Reset Password"
+        >
+          <KeyIcon className="h-4 w-4" />
+        </button>
+        {row.id !== currentUser?.id && (
+          <button
+            onClick={() => handleDelete(row.id)}
+            className="btn-sm btn-danger"
+            title="Delete User"
+          >
+            <TrashIcon className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+    )}
+  ]
+
+  const canManageUsers = currentUser?.role === 'ORGANIZER' || currentUser?.role === 'BOARD'
+
+  if (!canManageUsers) {
+    return (
+      <div className="space-y-6">
+        <div className="card">
+          <div className="card-header">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Access Denied</h1>
+            <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+              You don't have permission to manage users
+            </p>
+          </div>
+          <div className="card-body">
+            <div className="text-center py-12">
+              <ShieldCheckIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Access Restricted</h3>
+              <p className="text-gray-600 dark:text-gray-400">
+                Only organizers and board members can manage users
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       <div className="card">
         <div className="card-header">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">User Management</h1>
-          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-            Manage users, judges, and contestants
-          </p>
-        </div>
-        <div className="card-body">
-          <div className="text-center py-12">
-            <div className="text-gray-400 dark:text-gray-500 text-6xl mb-4">👥</div>
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Users Page</h3>
-            <p className="text-gray-600 dark:text-gray-400">This page will contain user management functionality</p>
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">User Management</h1>
+              <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                Manage system users and their permissions
+              </p>
+            </div>
+            <button
+              onClick={handleCreate}
+              className="btn-primary"
+            >
+              <PlusIcon className="h-5 w-5 mr-2" />
+              Add User
+            </button>
           </div>
         </div>
+        <div className="card-body">
+          <div className="mb-6">
+            <SearchFilter
+              searchTerm={searchTerm}
+              onSearchChange={setSearchTerm}
+              filters={{
+                role: {
+                  label: 'Role',
+                  options: [
+                    { value: '', label: 'All Roles' },
+                    { value: 'ORGANIZER', label: 'Organizer' },
+                    { value: 'BOARD', label: 'Board Member' },
+                    { value: 'JUDGE', label: 'Judge' },
+                    { value: 'TALLY_MASTER', label: 'Tally Master' },
+                    { value: 'AUDITOR', label: 'Auditor' },
+                    { value: 'CONTESTANT', label: 'Contestant' }
+                  ],
+                  value: roleFilter,
+                  onChange: setRoleFilter
+                },
+                status: {
+                  label: 'Status',
+                  options: [
+                    { value: '', label: 'All Statuses' },
+                    { value: 'ACTIVE', label: 'Active' },
+                    { value: 'INACTIVE', label: 'Inactive' },
+                    { value: 'PENDING', label: 'Pending' }
+                  ],
+                  value: statusFilter,
+                  onChange: setStatusFilter
+                }
+              }}
+              placeholder="Search users..."
+            />
+          </div>
+          
+          <DataTable
+            data={filteredUsers}
+            columns={columns}
+            loading={isLoading}
+            searchable={false}
+            pagination={true}
+            pageSize={10}
+          />
+        </div>
       </div>
+
+      {/* User Modal */}
+      {showModal && (
+        <div className="modal">
+          <div className="modal-overlay" onClick={() => setShowModal(false)} />
+          <div className="modal-content">
+            <h2 className="text-xl font-bold mb-4">
+              {editingUser ? 'Edit User' : 'Add User'}
+            </h2>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Name
+                </label>
+                <input
+                  type="text"
+                  value={formData.name || ''}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="input"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  value={formData.email || ''}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  className="input"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Role
+                </label>
+                <select
+                  value={formData.role || ''}
+                  onChange={(e) => setFormData({ ...formData, role: e.target.value as any })}
+                  className="input"
+                  required
+                >
+                  <option value="">Select Role</option>
+                  <option value="ORGANIZER">Organizer</option>
+                  <option value="BOARD">Board Member</option>
+                  <option value="JUDGE">Judge</option>
+                  <option value="TALLY_MASTER">Tally Master</option>
+                  <option value="AUDITOR">Auditor</option>
+                  <option value="CONTESTANT">Contestant</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Status
+                </label>
+                <select
+                  value={formData.status || ''}
+                  onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
+                  className="input"
+                  required
+                >
+                  <option value="">Select Status</option>
+                  <option value="ACTIVE">Active</option>
+                  <option value="INACTIVE">Inactive</option>
+                  <option value="PENDING">Pending</option>
+                </select>
+              </div>
+              {!editingUser && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Password
+                  </label>
+                  <input
+                    type="password"
+                    name="password"
+                    className="input"
+                    required
+                  />
+                </div>
+              )}
+              <div className="flex justify-end space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn-primary"
+                  disabled={createMutation.isLoading || updateMutation.isLoading}
+                >
+                  {editingUser ? 'Update' : 'Create'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Reset Password Modal */}
+      {showResetModal && selectedUser && (
+        <div className="modal">
+          <div className="modal-overlay" onClick={() => setShowResetModal(false)} />
+          <div className="modal-content">
+            <h2 className="text-xl font-bold mb-4">Reset Password</h2>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+              Reset password for {selectedUser.name}
+            </p>
+            <form onSubmit={handleResetSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  New Password
+                </label>
+                <input
+                  type="password"
+                  name="newPassword"
+                  className="input"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Confirm Password
+                </label>
+                <input
+                  type="password"
+                  name="confirmPassword"
+                  className="input"
+                  required
+                />
+              </div>
+              <div className="flex justify-end space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setShowResetModal(false)}
+                  className="btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn-primary"
+                  disabled={resetPasswordMutation.isLoading}
+                >
+                  Reset Password
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -6133,23 +8007,495 @@ export default UsersPage
 EOF
 
     cat > "$APP_DIR/frontend/src/pages/AdminPage.tsx" << 'EOF'
-import React from 'react'
+import React, { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from 'react-query'
+import { adminAPI, backupAPI, settingsAPI } from '../services/api'
+import { useAuth } from '../contexts/AuthContext'
+import AuditLog from '../components/AuditLog'
+import BackupManager from '../components/BackupManager'
+import SecurityDashboard from '../components/SecurityDashboard'
+import DataTable from '../components/DataTable'
+import SearchFilter from '../components/SearchFilter'
+import { 
+  ShieldCheckIcon, 
+  ServerIcon, 
+  DatabaseIcon, 
+  ChartBarIcon,
+  ExclamationTriangleIcon,
+  CheckCircleIcon,
+  ClockIcon,
+  UsersIcon,
+  CalendarIcon,
+  TrophyIcon
+} from '@heroicons/react/24/outline'
+import { format } from 'date-fns'
+
+interface AdminStats {
+  totalUsers: number
+  totalEvents: number
+  totalContests: number
+  totalCategories: number
+  totalScores: number
+  activeUsers: number
+  pendingCertifications: number
+  systemHealth: 'HEALTHY' | 'WARNING' | 'CRITICAL'
+  lastBackup?: string
+  databaseSize: string
+  uptime: string
+}
+
+interface ActivityLog {
+  id: string
+  userId: string
+  action: string
+  resource: string
+  resourceId?: string
+  details?: any
+  ipAddress: string
+  userAgent: string
+  createdAt: string
+  user: {
+    id: string
+    name: string
+    email: string
+    role: string
+  }
+}
 
 const AdminPage: React.FC = () => {
+  const { user } = useAuth()
+  const [activeTab, setActiveTab] = useState('overview')
+  const [searchTerm, setSearchTerm] = useState('')
+  const [dateFilter, setDateFilter] = useState('')
+  const [actionFilter, setActionFilter] = useState('')
+  const queryClient = useQueryClient()
+
+  const { data: stats, isLoading: statsLoading } = useQuery(
+    'adminStats',
+    () => adminAPI.getStats().then((res: any) => res.data),
+    { refetchInterval: 30000 }
+  )
+
+  const { data: activityLogs, isLoading: logsLoading } = useQuery(
+    ['activityLogs', { searchTerm, dateFilter, actionFilter }],
+    () => adminAPI.getActivityLogs({ searchTerm, dateFilter, actionFilter }).then((res: any) => res.data),
+    { refetchInterval: 10000 }
+  )
+
+  const { data: activeUsers } = useQuery(
+    'activeUsers',
+    () => adminAPI.getActiveUsers().then((res: any) => res.data),
+    { refetchInterval: 15000 }
+  )
+
+  const { data: systemSettings } = useQuery(
+    'systemSettings',
+    () => adminAPI.getSettings().then((res: any) => res.data)
+  )
+
+  const testConnectionMutation = useMutation(
+    (type: string) => adminAPI.testConnection(type),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('adminStats')
+      }
+    }
+  )
+
+  const getHealthColor = (health: string) => {
+    switch (health) {
+      case 'HEALTHY': return 'text-green-600 dark:text-green-400'
+      case 'WARNING': return 'text-yellow-600 dark:text-yellow-400'
+      case 'CRITICAL': return 'text-red-600 dark:text-red-400'
+      default: return 'text-gray-600 dark:text-gray-400'
+    }
+  }
+
+  const getHealthIcon = (health: string) => {
+    switch (health) {
+      case 'HEALTHY': return <CheckCircleIcon className="h-5 w-5 text-green-500" />
+      case 'WARNING': return <ExclamationTriangleIcon className="h-5 w-5 text-yellow-500" />
+      case 'CRITICAL': return <ExclamationTriangleIcon className="h-5 w-5 text-red-500" />
+      default: return <ClockIcon className="h-5 w-5 text-gray-500" />
+    }
+  }
+
+  const filteredLogs = activityLogs?.filter((log: ActivityLog) => {
+    const matchesSearch = log.action.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         log.resource.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         log.user.name.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesDate = !dateFilter || log.createdAt.startsWith(dateFilter)
+    const matchesAction = !actionFilter || log.action === actionFilter
+    return matchesSearch && matchesDate && matchesAction
+  }) || []
+
+  const logColumns = [
+    { key: 'user.name', label: 'User', sortable: true, render: (value: string, row: ActivityLog) => (
+      <div className="flex items-center space-x-3">
+        <UsersIcon className="h-5 w-5 text-gray-400" />
+        <div>
+          <div className="font-medium text-gray-900 dark:text-white">{row.user.name}</div>
+          <div className="text-sm text-gray-600 dark:text-gray-400">{row.user.email}</div>
+        </div>
+      </div>
+    ) },
+    { key: 'action', label: 'Action', sortable: true, render: (value: string) => (
+      <span className="font-mono text-sm bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
+        {value}
+      </span>
+    ) },
+    { key: 'resource', label: 'Resource', sortable: true, render: (value: string, row: ActivityLog) => (
+      <div>
+        <div className="font-medium">{value}</div>
+        {row.resourceId && (
+          <div className="text-sm text-gray-600 dark:text-gray-400">
+            ID: {row.resourceId}
+          </div>
+        )}
+      </div>
+    ) },
+    { key: 'ipAddress', label: 'IP Address', sortable: true, render: (value: string) => (
+      <span className="font-mono text-sm">{value}</span>
+    ) },
+    { key: 'createdAt', label: 'Timestamp', sortable: true, render: (value: string) => 
+      format(new Date(value), 'MMM dd, yyyy HH:mm:ss')
+    }
+  ]
+
+  const tabs = [
+    { id: 'overview', name: 'Overview', icon: ChartBarIcon },
+    { id: 'logs', name: 'Activity Logs', icon: ClockIcon },
+    { id: 'security', name: 'Security', icon: ShieldCheckIcon },
+    { id: 'backup', name: 'Backup', icon: DatabaseIcon },
+    { id: 'system', name: 'System', icon: ServerIcon }
+  ]
+
+  const canAccessAdmin = user?.role === 'ORGANIZER' || user?.role === 'BOARD'
+
+  if (!canAccessAdmin) {
+    return (
+      <div className="space-y-6">
+        <div className="card">
+          <div className="card-header">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Access Denied</h1>
+            <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+              You don't have permission to access admin functions
+            </p>
+          </div>
+          <div className="card-body">
+            <div className="text-center py-12">
+              <ShieldCheckIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Access Restricted</h3>
+              <p className="text-gray-600 dark:text-gray-400">
+                Only organizers and board members can access admin functions
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       <div className="card">
         <div className="card-header">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Administration</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Admin Dashboard</h1>
           <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-            System administration and configuration
+            System administration and monitoring
           </p>
         </div>
         <div className="card-body">
-          <div className="text-center py-12">
-            <div className="text-gray-400 dark:text-gray-500 text-6xl mb-4">⚙️</div>
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Admin Page</h3>
-            <p className="text-gray-600 dark:text-gray-400">This page will contain administrative functionality</p>
+          <div className="border-b border-gray-200 dark:border-gray-700">
+            <nav className="-mb-px flex space-x-8">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`${
+                    activeTab === tab.id
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  } whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm flex items-center`}
+                >
+                  <tab.icon className="h-5 w-5 mr-2" />
+                  {tab.name}
+                </button>
+              ))}
+            </nav>
+          </div>
+
+          <div className="mt-6">
+            {activeTab === 'overview' && (
+              <div className="space-y-6">
+                {/* System Health */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  <div className="card">
+                    <div className="card-body">
+                      <div className="flex items-center">
+                        <div className="flex-shrink-0">
+                          {getHealthIcon(stats?.systemHealth || 'HEALTHY')}
+                        </div>
+                        <div className="ml-3">
+                          <p className="text-sm font-medium text-gray-600 dark:text-gray-400">System Health</p>
+                          <p className={`text-lg font-semibold ${getHealthColor(stats?.systemHealth || 'HEALTHY')}`}>
+                            {stats?.systemHealth || 'HEALTHY'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="card">
+                    <div className="card-body">
+                      <div className="flex items-center">
+                        <div className="flex-shrink-0">
+                          <UsersIcon className="h-8 w-8 text-blue-500" />
+                        </div>
+                        <div className="ml-3">
+                          <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Users</p>
+                          <p className="text-2xl font-semibold text-gray-900 dark:text-white">
+                            {stats?.totalUsers || 0}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="card">
+                    <div className="card-body">
+                      <div className="flex items-center">
+                        <div className="flex-shrink-0">
+                          <CalendarIcon className="h-8 w-8 text-green-500" />
+                        </div>
+                        <div className="ml-3">
+                          <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Events</p>
+                          <p className="text-2xl font-semibold text-gray-900 dark:text-white">
+                            {stats?.totalEvents || 0}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="card">
+                    <div className="card-body">
+                      <div className="flex items-center">
+                        <div className="flex-shrink-0">
+                          <TrophyIcon className="h-8 w-8 text-yellow-500" />
+                        </div>
+                        <div className="ml-3">
+                          <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Contests</p>
+                          <p className="text-2xl font-semibold text-gray-900 dark:text-white">
+                            {stats?.totalContests || 0}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Quick Stats */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="card">
+                    <div className="card-header">
+                      <h3 className="text-lg font-medium text-gray-900 dark:text-white">Database</h3>
+                    </div>
+                    <div className="card-body">
+                      <div className="space-y-2">
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-600 dark:text-gray-400">Size:</span>
+                          <span className="text-sm font-medium">{stats?.databaseSize || 'N/A'}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-600 dark:text-gray-400">Last Backup:</span>
+                          <span className="text-sm font-medium">
+                            {stats?.lastBackup ? format(new Date(stats.lastBackup), 'MMM dd, yyyy') : 'Never'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="card">
+                    <div className="card-header">
+                      <h3 className="text-lg font-medium text-gray-900 dark:text-white">Performance</h3>
+                    </div>
+                    <div className="card-body">
+                      <div className="space-y-2">
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-600 dark:text-gray-400">Uptime:</span>
+                          <span className="text-sm font-medium">{stats?.uptime || 'N/A'}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-600 dark:text-gray-400">Active Users:</span>
+                          <span className="text-sm font-medium">{stats?.activeUsers || 0}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="card">
+                    <div className="card-header">
+                      <h3 className="text-lg font-medium text-gray-900 dark:text-white">Certifications</h3>
+                    </div>
+                    <div className="card-body">
+                      <div className="space-y-2">
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-600 dark:text-gray-400">Pending:</span>
+                          <span className="text-sm font-medium text-yellow-600 dark:text-yellow-400">
+                            {stats?.pendingCertifications || 0}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-600 dark:text-gray-400">Total Scores:</span>
+                          <span className="text-sm font-medium">{stats?.totalScores || 0}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* System Tests */}
+                <div className="card">
+                  <div className="card-header">
+                    <h3 className="text-lg font-medium text-gray-900 dark:text-white">System Tests</h3>
+                  </div>
+                  <div className="card-body">
+                    <div className="flex space-x-4">
+                      <button
+                        onClick={() => testConnectionMutation.mutate('database')}
+                        className="btn-outline"
+                        disabled={testConnectionMutation.isLoading}
+                      >
+                        <DatabaseIcon className="h-5 w-5 mr-2" />
+                        Test Database
+                      </button>
+                      <button
+                        onClick={() => testConnectionMutation.mutate('email')}
+                        className="btn-outline"
+                        disabled={testConnectionMutation.isLoading}
+                      >
+                        <ServerIcon className="h-5 w-5 mr-2" />
+                        Test Email
+                      </button>
+                      <button
+                        onClick={() => testConnectionMutation.mutate('backup')}
+                        className="btn-outline"
+                        disabled={testConnectionMutation.isLoading}
+                      >
+                        <DatabaseIcon className="h-5 w-5 mr-2" />
+                        Test Backup
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'logs' && (
+              <div className="space-y-6">
+                <div className="mb-6">
+                  <SearchFilter
+                    searchTerm={searchTerm}
+                    onSearchChange={setSearchTerm}
+                    filters={{
+                      date: {
+                        label: 'Date',
+                        options: [
+                          { value: '', label: 'All Dates' },
+                          { value: new Date().toISOString().split('T')[0], label: 'Today' },
+                          { value: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], label: 'Last 7 days' },
+                          { value: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], label: 'Last 30 days' }
+                        ],
+                        value: dateFilter,
+                        onChange: setDateFilter
+                      },
+                      action: {
+                        label: 'Action',
+                        options: [
+                          { value: '', label: 'All Actions' },
+                          { value: 'CREATE', label: 'Create' },
+                          { value: 'UPDATE', label: 'Update' },
+                          { value: 'DELETE', label: 'Delete' },
+                          { value: 'LOGIN', label: 'Login' },
+                          { value: 'LOGOUT', label: 'Logout' }
+                        ],
+                        value: actionFilter,
+                        onChange: setActionFilter
+                      }
+                    }}
+                    placeholder="Search activity logs..."
+                  />
+                </div>
+
+                <DataTable
+                  data={filteredLogs}
+                  columns={logColumns}
+                  loading={logsLoading}
+                  searchable={false}
+                  pagination={true}
+                  pageSize={20}
+                />
+              </div>
+            )}
+
+            {activeTab === 'security' && (
+              <SecurityDashboard />
+            )}
+
+            {activeTab === 'backup' && (
+              <BackupManager />
+            )}
+
+            {activeTab === 'system' && (
+              <div className="space-y-6">
+                <div className="card">
+                  <div className="card-header">
+                    <h3 className="text-lg font-medium text-gray-900 dark:text-white">System Settings</h3>
+                  </div>
+                  <div className="card-body">
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Application Name
+                          </label>
+                          <input
+                            type="text"
+                            value={systemSettings?.appName || ''}
+                            className="input"
+                            readOnly
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Version
+                          </label>
+                          <input
+                            type="text"
+                            value={systemSettings?.version || ''}
+                            className="input"
+                            readOnly
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                          Environment
+                        </label>
+                        <input
+                          type="text"
+                          value={systemSettings?.environment || ''}
+                          className="input"
+                          readOnly
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -6161,24 +8507,661 @@ export default AdminPage
 EOF
 
     cat > "$APP_DIR/frontend/src/pages/SettingsPage.tsx" << 'EOF'
-import React from 'react'
+import React, { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from 'react-query'
+import { settingsAPI, adminAPI } from '../services/api'
+import { useAuth } from '../contexts/AuthContext'
+import { 
+  CogIcon,
+  ServerIcon,
+  EnvelopeIcon,
+  ShieldCheckIcon,
+  DatabaseIcon,
+  BellIcon,
+  KeyIcon,
+  GlobeAltIcon,
+  DocumentTextIcon,
+  CloudIcon,
+  ExclamationTriangleIcon,
+  CheckCircleIcon,
+  InformationCircleIcon
+} from '@heroicons/react/24/outline'
+
+interface SystemSetting {
+  id: string
+  key: string
+  value: string
+  description: string
+  category: 'GENERAL' | 'EMAIL' | 'SECURITY' | 'DATABASE' | 'NOTIFICATIONS' | 'BACKUP'
+  type: 'STRING' | 'NUMBER' | 'BOOLEAN' | 'JSON'
+  isPublic: boolean
+  updatedAt: string
+  updatedBy: string
+}
+
+interface EmailSettings {
+  smtpHost: string
+  smtpPort: number
+  smtpUser: string
+  smtpPass: string
+  smtpFrom: string
+  smtpSecure: boolean
+}
+
+interface SecuritySettings {
+  sessionTimeout: number
+  maxLoginAttempts: number
+  passwordMinLength: number
+  requireTwoFactor: boolean
+  allowedOrigins: string[]
+}
 
 const SettingsPage: React.FC = () => {
+  const { user } = useAuth()
+  const [activeTab, setActiveTab] = useState('general')
+  const [formData, setFormData] = useState<any>({})
+  const [testResults, setTestResults] = useState<Record<string, any>>({})
+  const [isTesting, setIsTesting] = useState(false)
+  const queryClient = useQueryClient()
+
+  const { data: settings, isLoading } = useQuery(
+    'settings',
+    () => settingsAPI.getSettings().then((res: any) => res.data),
+    {
+      onSuccess: (data) => {
+        // Group settings by category
+        const groupedSettings: Record<string, any> = {}
+        data.forEach((setting: SystemSetting) => {
+          if (!groupedSettings[setting.category]) {
+            groupedSettings[setting.category] = {}
+          }
+          groupedSettings[setting.category][setting.key] = setting.value
+        })
+        setFormData(groupedSettings)
+      }
+    }
+  )
+
+  const updateMutation = useMutation(
+    (data: any) => settingsAPI.updateSettings(data),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('settings')
+      }
+    }
+  )
+
+  const testMutation = useMutation(
+    (type: string) => settingsAPI.test(type),
+    {
+      onSuccess: (data, type) => {
+        setTestResults(prev => ({ ...prev, [type]: data.data }))
+      },
+      onError: (error: any, type) => {
+        setTestResults(prev => ({ ...prev, [type]: { success: false, error: error.message } }))
+      }
+    }
+  )
+
+  const handleInputChange = (category: string, key: string, value: any) => {
+    setFormData((prev: any) => ({
+      ...prev,
+      [category]: {
+        ...prev[category],
+        [key]: value
+      }
+    }))
+  }
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    updateMutation.mutate(formData)
+  }
+
+  const handleTest = async (type: string) => {
+    setIsTesting(true)
+    try {
+      await testMutation.mutateAsync(type)
+    } finally {
+      setIsTesting(false)
+    }
+  }
+
+  const tabs = [
+    { id: 'general', name: 'General', icon: CogIcon },
+    { id: 'email', name: 'Email', icon: EnvelopeIcon },
+    { id: 'security', name: 'Security', icon: ShieldCheckIcon },
+    { id: 'database', name: 'Database', icon: DatabaseIcon },
+    { id: 'notifications', name: 'Notifications', icon: BellIcon },
+    { id: 'backup', name: 'Backup', icon: CloudIcon },
+  ]
+
+  const canManageSettings = user?.role === 'ORGANIZER' || user?.role === 'BOARD'
+
+  if (!canManageSettings) {
+    return (
+      <div className="space-y-6">
+        <div className="card">
+          <div className="card-header">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Access Denied</h1>
+            <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+              You don't have permission to manage system settings
+            </p>
+          </div>
+          <div className="card-body">
+            <div className="text-center py-12">
+              <ShieldCheckIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Access Restricted</h3>
+              <p className="text-gray-600 dark:text-gray-400">
+                Only organizers and board members can manage system settings
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       <div className="card">
         <div className="card-header">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">System Settings</h1>
           <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-            Configure system settings and preferences
+            Configure system-wide settings and preferences
           </p>
         </div>
         <div className="card-body">
-          <div className="text-center py-12">
-            <div className="text-gray-400 dark:text-gray-500 text-6xl mb-4">🔧</div>
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Settings Page</h3>
-            <p className="text-gray-600 dark:text-gray-400">This page will contain system settings functionality</p>
+          <div className="border-b border-gray-200 dark:border-gray-700">
+            <nav className="-mb-px flex space-x-8">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`${
+                    activeTab === tab.id
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  } whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm flex items-center`}
+                >
+                  <tab.icon className="h-5 w-5 mr-2" />
+                  {tab.name}
+                </button>
+              ))}
+            </nav>
           </div>
+
+          <form onSubmit={handleSubmit} className="mt-6">
+            {activeTab === 'general' && (
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Application Name
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.GENERAL?.appName || ''}
+                      onChange={(e) => handleInputChange('GENERAL', 'appName', e.target.value)}
+                      className="input"
+                      placeholder="Event Manager"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Application URL
+                    </label>
+                    <input
+                      type="url"
+                      value={formData.GENERAL?.appUrl || ''}
+                      onChange={(e) => handleInputChange('GENERAL', 'appUrl', e.target.value)}
+                      className="input"
+                      placeholder="https://eventmanager.com"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Timezone
+                  </label>
+                  <select
+                    value={formData.GENERAL?.timezone || 'UTC'}
+                    onChange={(e) => handleInputChange('GENERAL', 'timezone', e.target.value)}
+                    className="input"
+                  >
+                    <option value="UTC">UTC</option>
+                    <option value="America/New_York">Eastern Time</option>
+                    <option value="America/Chicago">Central Time</option>
+                    <option value="America/Denver">Mountain Time</option>
+                    <option value="America/Los_Angeles">Pacific Time</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Default Language
+                  </label>
+                  <select
+                    value={formData.GENERAL?.language || 'en'}
+                    onChange={(e) => handleInputChange('GENERAL', 'language', e.target.value)}
+                    className="input"
+                  >
+                    <option value="en">English</option>
+                    <option value="es">Spanish</option>
+                    <option value="fr">French</option>
+                    <option value="de">German</option>
+                  </select>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'email' && (
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      SMTP Host
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.EMAIL?.smtpHost || ''}
+                      onChange={(e) => handleInputChange('EMAIL', 'smtpHost', e.target.value)}
+                      className="input"
+                      placeholder="smtp.gmail.com"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      SMTP Port
+                    </label>
+                    <input
+                      type="number"
+                      value={formData.EMAIL?.smtpPort || 587}
+                      onChange={(e) => handleInputChange('EMAIL', 'smtpPort', parseInt(e.target.value))}
+                      className="input"
+                      placeholder="587"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      SMTP Username
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.EMAIL?.smtpUser || ''}
+                      onChange={(e) => handleInputChange('EMAIL', 'smtpUser', e.target.value)}
+                      className="input"
+                      placeholder="your-email@gmail.com"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      SMTP Password
+                    </label>
+                    <input
+                      type="password"
+                      value={formData.EMAIL?.smtpPass || ''}
+                      onChange={(e) => handleInputChange('EMAIL', 'smtpPass', e.target.value)}
+                      className="input"
+                      placeholder="••••••••"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    From Email Address
+                  </label>
+                  <input
+                    type="email"
+                    value={formData.EMAIL?.smtpFrom || ''}
+                    onChange={(e) => handleInputChange('EMAIL', 'smtpFrom', e.target.value)}
+                    className="input"
+                    placeholder="noreply@eventmanager.com"
+                  />
+                </div>
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={formData.EMAIL?.smtpSecure || false}
+                    onChange={(e) => handleInputChange('EMAIL', 'smtpSecure', e.target.checked)}
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  />
+                  <label className="ml-2 block text-sm text-gray-700 dark:text-gray-300">
+                    Use SSL/TLS
+                  </label>
+                </div>
+                <div className="flex space-x-4">
+                  <button
+                    type="button"
+                    onClick={() => handleTest('email')}
+                    className="btn-outline"
+                    disabled={isTesting}
+                  >
+                    <EnvelopeIcon className="h-5 w-5 mr-2" />
+                    Test Email Connection
+                  </button>
+                  {testResults.email && (
+                    <div className={`flex items-center ${testResults.email.success ? 'text-green-600' : 'text-red-600'}`}>
+                      {testResults.email.success ? (
+                        <CheckCircleIcon className="h-5 w-5 mr-1" />
+                      ) : (
+                        <ExclamationTriangleIcon className="h-5 w-5 mr-1" />
+                      )}
+                      <span className="text-sm">
+                        {testResults.email.success ? 'Connection successful' : testResults.email.error}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'security' && (
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Session Timeout (minutes)
+                    </label>
+                    <input
+                      type="number"
+                      value={formData.SECURITY?.sessionTimeout || 60}
+                      onChange={(e) => handleInputChange('SECURITY', 'sessionTimeout', parseInt(e.target.value))}
+                      className="input"
+                      min="5"
+                      max="1440"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Max Login Attempts
+                    </label>
+                    <input
+                      type="number"
+                      value={formData.SECURITY?.maxLoginAttempts || 5}
+                      onChange={(e) => handleInputChange('SECURITY', 'maxLoginAttempts', parseInt(e.target.value))}
+                      className="input"
+                      min="3"
+                      max="10"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Minimum Password Length
+                  </label>
+                  <input
+                    type="number"
+                    value={formData.SECURITY?.passwordMinLength || 8}
+                    onChange={(e) => handleInputChange('SECURITY', 'passwordMinLength', parseInt(e.target.value))}
+                    className="input"
+                    min="6"
+                    max="32"
+                  />
+                </div>
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={formData.SECURITY?.requireTwoFactor || false}
+                    onChange={(e) => handleInputChange('SECURITY', 'requireTwoFactor', e.target.checked)}
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  />
+                  <label className="ml-2 block text-sm text-gray-700 dark:text-gray-300">
+                    Require Two-Factor Authentication
+                  </label>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Allowed Origins (one per line)
+                  </label>
+                  <textarea
+                    value={formData.SECURITY?.allowedOrigins?.join('\n') || ''}
+                    onChange={(e) => handleInputChange('SECURITY', 'allowedOrigins', e.target.value.split('\n').filter(Boolean))}
+                    className="input"
+                    rows={4}
+                    placeholder="https://eventmanager.com&#10;https://www.eventmanager.com"
+                  />
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'database' && (
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Database Host
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.DATABASE?.dbHost || ''}
+                      onChange={(e) => handleInputChange('DATABASE', 'dbHost', e.target.value)}
+                      className="input"
+                      placeholder="localhost"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Database Port
+                    </label>
+                    <input
+                      type="number"
+                      value={formData.DATABASE?.dbPort || 5432}
+                      onChange={(e) => handleInputChange('DATABASE', 'dbPort', parseInt(e.target.value))}
+                      className="input"
+                      placeholder="5432"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Database Name
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.DATABASE?.dbName || ''}
+                    onChange={(e) => handleInputChange('DATABASE', 'dbName', e.target.value)}
+                    className="input"
+                    placeholder="eventmanager"
+                  />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Database Username
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.DATABASE?.dbUser || ''}
+                      onChange={(e) => handleInputChange('DATABASE', 'dbUser', e.target.value)}
+                      className="input"
+                      placeholder="postgres"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Database Password
+                    </label>
+                    <input
+                      type="password"
+                      value={formData.DATABASE?.dbPassword || ''}
+                      onChange={(e) => handleInputChange('DATABASE', 'dbPassword', e.target.value)}
+                      className="input"
+                      placeholder="••••••••"
+                    />
+                  </div>
+                </div>
+                <div className="flex space-x-4">
+                  <button
+                    type="button"
+                    onClick={() => handleTest('database')}
+                    className="btn-outline"
+                    disabled={isTesting}
+                  >
+                    <DatabaseIcon className="h-5 w-5 mr-2" />
+                    Test Database Connection
+                  </button>
+                  {testResults.database && (
+                    <div className={`flex items-center ${testResults.database.success ? 'text-green-600' : 'text-red-600'}`}>
+                      {testResults.database.success ? (
+                        <CheckCircleIcon className="h-5 w-5 mr-1" />
+                      ) : (
+                        <ExclamationTriangleIcon className="h-5 w-5 mr-1" />
+                      )}
+                      <span className="text-sm">
+                        {testResults.database.success ? 'Connection successful' : testResults.database.error}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'notifications' && (
+              <div className="space-y-6">
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={formData.NOTIFICATIONS?.emailNotifications || false}
+                    onChange={(e) => handleInputChange('NOTIFICATIONS', 'emailNotifications', e.target.checked)}
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  />
+                  <label className="ml-2 block text-sm text-gray-700 dark:text-gray-300">
+                    Enable Email Notifications
+                  </label>
+                </div>
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={formData.NOTIFICATIONS?.scoreNotifications || false}
+                    onChange={(e) => handleInputChange('NOTIFICATIONS', 'scoreNotifications', e.target.checked)}
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  />
+                  <label className="ml-2 block text-sm text-gray-700 dark:text-gray-300">
+                    Notify on Score Submission
+                  </label>
+                </div>
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={formData.NOTIFICATIONS?.certificationNotifications || false}
+                    onChange={(e) => handleInputChange('NOTIFICATIONS', 'certificationNotifications', e.target.checked)}
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  />
+                  <label className="ml-2 block text-sm text-gray-700 dark:text-gray-300">
+                    Notify on Certification Status Changes
+                  </label>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Notification Email Template
+                  </label>
+                  <textarea
+                    value={formData.NOTIFICATIONS?.emailTemplate || ''}
+                    onChange={(e) => handleInputChange('NOTIFICATIONS', 'emailTemplate', e.target.value)}
+                    className="input"
+                    rows={6}
+                    placeholder="Enter email template..."
+                  />
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'backup' && (
+              <div className="space-y-6">
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={formData.BACKUP?.autoBackup || false}
+                    onChange={(e) => handleInputChange('BACKUP', 'autoBackup', e.target.checked)}
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  />
+                  <label className="ml-2 block text-sm text-gray-700 dark:text-gray-300">
+                    Enable Automatic Backups
+                  </label>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Backup Frequency (hours)
+                  </label>
+                  <input
+                    type="number"
+                    value={formData.BACKUP?.backupFrequency || 24}
+                    onChange={(e) => handleInputChange('BACKUP', 'backupFrequency', parseInt(e.target.value))}
+                    className="input"
+                    min="1"
+                    max="168"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Backup Retention (days)
+                  </label>
+                  <input
+                    type="number"
+                    value={formData.BACKUP?.backupRetention || 30}
+                    onChange={(e) => handleInputChange('BACKUP', 'backupRetention', parseInt(e.target.value))}
+                    className="input"
+                    min="1"
+                    max="365"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Backup Storage Path
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.BACKUP?.backupPath || '/backups'}
+                    onChange={(e) => handleInputChange('BACKUP', 'backupPath', e.target.value)}
+                    className="input"
+                    placeholder="/backups"
+                  />
+                </div>
+                <div className="flex space-x-4">
+                  <button
+                    type="button"
+                    onClick={() => handleTest('backup')}
+                    className="btn-outline"
+                    disabled={isTesting}
+                  >
+                    <CloudIcon className="h-5 w-5 mr-2" />
+                    Test Backup System
+                  </button>
+                  {testResults.backup && (
+                    <div className={`flex items-center ${testResults.backup.success ? 'text-green-600' : 'text-red-600'}`}>
+                      {testResults.backup.success ? (
+                        <CheckCircleIcon className="h-5 w-5 mr-1" />
+                      ) : (
+                        <ExclamationTriangleIcon className="h-5 w-5 mr-1" />
+                      )}
+                      <span className="text-sm">
+                        {testResults.backup.success ? 'Backup system ready' : testResults.backup.error}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className="mt-8 flex justify-end space-x-4">
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => window.location.reload()}
+              >
+                Reset
+              </button>
+              <button
+                type="submit"
+                className="btn-primary"
+                disabled={updateMutation.isLoading}
+              >
+                {updateMutation.isLoading ? 'Saving...' : 'Save Settings'}
+              </button>
+            </div>
+          </form>
         </div>
       </div>
     </div>
@@ -6189,9 +9172,262 @@ export default SettingsPage
 EOF
 
     cat > "$APP_DIR/frontend/src/pages/ProfilePage.tsx" << 'EOF'
-import React from 'react'
+import React, { useState } from 'react'
+import { useMutation, useQueryClient } from 'react-query'
+import { useAuth } from '../contexts/AuthContext'
+import { usersAPI } from '../services/api'
+import {
+  UserIcon,
+  EnvelopeIcon,
+  PhoneIcon,
+  CalendarIcon,
+  MapPinIcon,
+  ShieldCheckIcon,
+  KeyIcon,
+  EyeIcon,
+  EyeSlashIcon,
+  PencilIcon,
+  CheckIcon,
+  XMarkIcon,
+  ExclamationTriangleIcon,
+  InformationCircleIcon,
+  ClockIcon,
+  DocumentTextIcon,
+  CogIcon,
+  BellIcon,
+  GlobeAltIcon,
+  LockClosedIcon,
+  UserGroupIcon,
+  AcademicCapIcon,
+  BriefcaseIcon,
+  StarIcon,
+  TrophyIcon,
+  ChartBarIcon,
+  ClipboardDocumentListIcon
+} from '@heroicons/react/24/outline'
+import { format } from 'date-fns'
+
+interface UserProfile {
+  id: string
+  email: string
+  name: string
+  firstName: string
+  lastName: string
+  phone?: string
+  address?: string
+  city?: string
+  state?: string
+  zipCode?: string
+  country?: string
+  role: 'ORGANIZER' | 'BOARD' | 'JUDGE' | 'TALLY_MASTER' | 'AUDITOR' | 'CONTESTANT'
+  status: 'ACTIVE' | 'INACTIVE' | 'PENDING' | 'SUSPENDED'
+  lastLoginAt?: string
+  createdAt: string
+  updatedAt: string
+  preferences: {
+    theme: 'light' | 'dark' | 'system'
+    language: string
+    timezone: string
+    notifications: {
+      email: boolean
+      push: boolean
+      sms: boolean
+    }
+  }
+  certifications: {
+    id: string
+    name: string
+    level: string
+    issuedAt: string
+    expiresAt?: string
+    status: 'ACTIVE' | 'EXPIRED' | 'PENDING'
+  }[]
+  statistics: {
+    totalEvents: number
+    totalContests: number
+    totalScores: number
+    averageScore: number
+    lastActivity: string
+  }
+}
 
 const ProfilePage: React.FC = () => {
+  const { user, logout } = useAuth()
+  const [activeTab, setActiveTab] = useState('profile')
+  const [showPasswordModal, setShowPasswordModal] = useState(false)
+  const [showPreferencesModal, setShowPreferencesModal] = useState(false)
+  const [formData, setFormData] = useState<Partial<UserProfile>>({})
+  const [passwordData, setPasswordData] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  })
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false)
+  const [showNewPassword, setShowNewPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const queryClient = useQueryClient()
+
+  // Mock user profile data
+  const userProfile: UserProfile = {
+    id: user?.id || '1',
+    email: user?.email || 'user@eventmanager.com',
+    name: user?.name || 'John Doe',
+    firstName: 'John',
+    lastName: 'Doe',
+    phone: '+1 (555) 123-4567',
+    address: '123 Main Street',
+    city: 'Anytown',
+    state: 'CA',
+    zipCode: '12345',
+    country: 'United States',
+    role: user?.role || 'JUDGE',
+    status: 'ACTIVE',
+    lastLoginAt: '2024-01-15T10:30:00Z',
+    createdAt: '2024-01-01T00:00:00Z',
+    updatedAt: '2024-01-15T10:30:00Z',
+    preferences: {
+      theme: 'system',
+      language: 'en',
+      timezone: 'America/Los_Angeles',
+      notifications: {
+        email: true,
+        push: true,
+        sms: false
+      }
+    },
+    certifications: [
+      {
+        id: '1',
+        name: 'Certified Judge - Vocal Performance',
+        level: 'Advanced',
+        issuedAt: '2024-01-01T00:00:00Z',
+        expiresAt: '2025-01-01T00:00:00Z',
+        status: 'ACTIVE'
+      },
+      {
+        id: '2',
+        name: 'Music Theory Certification',
+        level: 'Intermediate',
+        issuedAt: '2023-06-01T00:00:00Z',
+        expiresAt: '2024-06-01T00:00:00Z',
+        status: 'ACTIVE'
+      }
+    ],
+    statistics: {
+      totalEvents: 12,
+      totalContests: 45,
+      totalScores: 180,
+      averageScore: 87.5,
+      lastActivity: '2024-01-15T10:30:00Z'
+    }
+  }
+
+  const updateProfileMutation = useMutation(
+    (data: Partial<UserProfile>) => usersAPI.update(userProfile.id, data),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('userProfile')
+        setFormData({})
+      }
+    }
+  )
+
+  const changePasswordMutation = useMutation(
+    (data: any) => usersAPI.resetPassword(userProfile.id, data),
+    {
+      onSuccess: () => {
+        setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' })
+        setShowPasswordModal(false)
+      }
+    }
+  )
+
+  const handleInputChange = (field: string, value: any) => {
+    setFormData(prev => ({
+      ...prev,
+      [field]: value
+    }))
+  }
+
+  const handlePasswordChange = (field: string, value: string) => {
+    setPasswordData(prev => ({
+      ...prev,
+      [field]: value
+    }))
+  }
+
+  const handleSaveProfile = () => {
+    updateProfileMutation.mutate(formData)
+  }
+
+  const handleChangePassword = () => {
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      alert('New passwords do not match')
+      return
+    }
+    changePasswordMutation.mutate(passwordData)
+  }
+
+  const getRoleIcon = (role: string) => {
+    switch (role) {
+      case 'ORGANIZER':
+        return <CogIcon className="h-5 w-5 text-blue-500" />
+      case 'BOARD':
+        return <ShieldCheckIcon className="h-5 w-5 text-purple-500" />
+      case 'JUDGE':
+        return <AcademicCapIcon className="h-5 w-5 text-green-500" />
+      case 'TALLY_MASTER':
+        return <ChartBarIcon className="h-5 w-5 text-orange-500" />
+      case 'AUDITOR':
+        return <ClipboardDocumentListIcon className="h-5 w-5 text-red-500" />
+      case 'CONTESTANT':
+        return <UserIcon className="h-5 w-5 text-gray-500" />
+      default:
+        return <UserIcon className="h-5 w-5 text-gray-500" />
+    }
+  }
+
+  const getRoleColor = (role: string) => {
+    switch (role) {
+      case 'ORGANIZER':
+        return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+      case 'BOARD':
+        return 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
+      case 'JUDGE':
+        return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+      case 'TALLY_MASTER':
+        return 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200'
+      case 'AUDITOR':
+        return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+      case 'CONTESTANT':
+        return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
+      default:
+        return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
+    }
+  }
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'ACTIVE':
+        return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+      case 'INACTIVE':
+        return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
+      case 'PENDING':
+        return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+      case 'SUSPENDED':
+        return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+      default:
+        return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
+    }
+  }
+
+  const tabs = [
+    { id: 'profile', name: 'Profile', icon: UserIcon },
+    { id: 'preferences', name: 'Preferences', icon: CogIcon },
+    { id: 'certifications', name: 'Certifications', icon: AcademicCapIcon },
+    { id: 'statistics', name: 'Statistics', icon: ChartBarIcon },
+  ]
+
   return (
     <div className="space-y-6">
       <div className="card">
@@ -6202,13 +9438,581 @@ const ProfilePage: React.FC = () => {
           </p>
         </div>
         <div className="card-body">
-          <div className="text-center py-12">
-            <div className="text-gray-400 dark:text-gray-500 text-6xl mb-4">👤</div>
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Profile Page</h3>
-            <p className="text-gray-600 dark:text-gray-400">This page will contain user profile functionality</p>
+          <div className="border-b border-gray-200 dark:border-gray-700">
+            <nav className="-mb-px flex space-x-8">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`${
+                    activeTab === tab.id
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  } whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm flex items-center`}
+                >
+                  <tab.icon className="h-5 w-5 mr-2" />
+                  {tab.name}
+                </button>
+              ))}
+            </nav>
           </div>
+
+          {activeTab === 'profile' && (
+            <div className="mt-6">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-1">
+                  <div className="card">
+                    <div className="card-body text-center">
+                      <div className="mx-auto h-24 w-24 bg-gray-200 dark:bg-gray-700 rounded-full flex items-center justify-center mb-4">
+                        <UserIcon className="h-12 w-12 text-gray-400" />
+                      </div>
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                        {userProfile.name}
+                      </h3>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                        {userProfile.email}
+                      </p>
+                      <div className="flex items-center justify-center space-x-2 mb-4">
+                        {getRoleIcon(userProfile.role)}
+                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${getRoleColor(userProfile.role)}`}>
+                          {userProfile.role.replace('_', ' ')}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-center space-x-2">
+                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(userProfile.status)}`}>
+                          {userProfile.status}
+                        </span>
+                      </div>
+                      <div className="mt-6 space-y-2 text-sm text-gray-600 dark:text-gray-400">
+                        <div className="flex items-center justify-center">
+                          <CalendarIcon className="h-4 w-4 mr-2" />
+                          Joined {format(new Date(userProfile.createdAt), 'MMM yyyy')}
+                        </div>
+                        {userProfile.lastLoginAt && (
+                          <div className="flex items-center justify-center">
+                            <ClockIcon className="h-4 w-4 mr-2" />
+                            Last login {format(new Date(userProfile.lastLoginAt), 'MMM dd, yyyy')}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="lg:col-span-2">
+                  <div className="card">
+                    <div className="card-header">
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Personal Information</h3>
+                    </div>
+                    <div className="card-body">
+                      <form onSubmit={(e) => { e.preventDefault(); handleSaveProfile() }}>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                              First Name
+                            </label>
+                            <input
+                              type="text"
+                              value={formData.firstName || userProfile.firstName}
+                              onChange={(e) => handleInputChange('firstName', e.target.value)}
+                              className="input"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                              Last Name
+                            </label>
+                            <input
+                              type="text"
+                              value={formData.lastName || userProfile.lastName}
+                              onChange={(e) => handleInputChange('lastName', e.target.value)}
+                              className="input"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                              Email Address
+                            </label>
+                            <input
+                              type="email"
+                              value={formData.email || userProfile.email}
+                              onChange={(e) => handleInputChange('email', e.target.value)}
+                              className="input"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                              Phone Number
+                            </label>
+                            <input
+                              type="tel"
+                              value={formData.phone || userProfile.phone || ''}
+                              onChange={(e) => handleInputChange('phone', e.target.value)}
+                              className="input"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="mt-6">
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Address
+                          </label>
+                          <input
+                            type="text"
+                            value={formData.address || userProfile.address || ''}
+                            onChange={(e) => handleInputChange('address', e.target.value)}
+                            className="input"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                              City
+                            </label>
+                            <input
+                              type="text"
+                              value={formData.city || userProfile.city || ''}
+                              onChange={(e) => handleInputChange('city', e.target.value)}
+                              className="input"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                              State
+                            </label>
+                            <input
+                              type="text"
+                              value={formData.state || userProfile.state || ''}
+                              onChange={(e) => handleInputChange('state', e.target.value)}
+                              className="input"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                              ZIP Code
+                            </label>
+                            <input
+                              type="text"
+                              value={formData.zipCode || userProfile.zipCode || ''}
+                              onChange={(e) => handleInputChange('zipCode', e.target.value)}
+                              className="input"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="mt-6">
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Country
+                          </label>
+                          <input
+                            type="text"
+                            value={formData.country || userProfile.country || ''}
+                            onChange={(e) => handleInputChange('country', e.target.value)}
+                            className="input"
+                          />
+                        </div>
+
+                        <div className="flex justify-end space-x-3 mt-6">
+                          <button
+                            type="button"
+                            onClick={() => setFormData({})}
+                            className="btn-secondary"
+                          >
+                            Reset
+                          </button>
+                          <button
+                            type="submit"
+                            className="btn-primary"
+                            disabled={updateProfileMutation.isLoading}
+                          >
+                            {updateProfileMutation.isLoading ? 'Saving...' : 'Save Changes'}
+                          </button>
+                        </div>
+                      </form>
+                    </div>
+                  </div>
+
+                  <div className="card mt-6">
+                    <div className="card-header">
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Security</h3>
+                    </div>
+                    <div className="card-body">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="text-sm font-medium text-gray-900 dark:text-white">Password</h4>
+                          <p className="text-sm text-gray-600 dark:text-gray-400">Update your password to keep your account secure</p>
+                        </div>
+                        <button
+                          onClick={() => setShowPasswordModal(true)}
+                          className="btn-outline"
+                        >
+                          <KeyIcon className="h-4 w-4 mr-2" />
+                          Change Password
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'preferences' && (
+            <div className="mt-6">
+              <div className="card">
+                <div className="card-header">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Application Preferences</h3>
+                </div>
+                <div className="card-body">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Theme
+                      </label>
+                      <select
+                        value={userProfile.preferences.theme}
+                        onChange={(e) => handleInputChange('preferences', { ...userProfile.preferences, theme: e.target.value })}
+                        className="input"
+                      >
+                        <option value="light">Light</option>
+                        <option value="dark">Dark</option>
+                        <option value="system">System</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Language
+                      </label>
+                      <select
+                        value={userProfile.preferences.language}
+                        onChange={(e) => handleInputChange('preferences', { ...userProfile.preferences, language: e.target.value })}
+                        className="input"
+                      >
+                        <option value="en">English</option>
+                        <option value="es">Spanish</option>
+                        <option value="fr">French</option>
+                        <option value="de">German</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="mt-6">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Timezone
+                    </label>
+                    <select
+                      value={userProfile.preferences.timezone}
+                      onChange={(e) => handleInputChange('preferences', { ...userProfile.preferences, timezone: e.target.value })}
+                      className="input"
+                    >
+                      <option value="UTC">UTC</option>
+                      <option value="America/New_York">Eastern Time</option>
+                      <option value="America/Chicago">Central Time</option>
+                      <option value="America/Denver">Mountain Time</option>
+                      <option value="America/Los_Angeles">Pacific Time</option>
+                    </select>
+                  </div>
+
+                  <div className="mt-6">
+                    <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-4">Notifications</h4>
+                    <div className="space-y-3">
+                      <div className="flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={userProfile.preferences.notifications.email}
+                          onChange={(e) => handleInputChange('preferences', {
+                            ...userProfile.preferences,
+                            notifications: { ...userProfile.preferences.notifications, email: e.target.checked }
+                          })}
+                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                        />
+                        <label className="ml-2 block text-sm text-gray-700 dark:text-gray-300">
+                          Email Notifications
+                        </label>
+                      </div>
+                      <div className="flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={userProfile.preferences.notifications.push}
+                          onChange={(e) => handleInputChange('preferences', {
+                            ...userProfile.preferences,
+                            notifications: { ...userProfile.preferences.notifications, push: e.target.checked }
+                          })}
+                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                        />
+                        <label className="ml-2 block text-sm text-gray-700 dark:text-gray-300">
+                          Push Notifications
+                        </label>
+                      </div>
+                      <div className="flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={userProfile.preferences.notifications.sms}
+                          onChange={(e) => handleInputChange('preferences', {
+                            ...userProfile.preferences,
+                            notifications: { ...userProfile.preferences.notifications, sms: e.target.checked }
+                          })}
+                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                        />
+                        <label className="ml-2 block text-sm text-gray-700 dark:text-gray-300">
+                          SMS Notifications
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end space-x-3 mt-6">
+                    <button
+                      onClick={() => setFormData({})}
+                      className="btn-secondary"
+                    >
+                      Reset
+                    </button>
+                    <button
+                      onClick={handleSaveProfile}
+                      className="btn-primary"
+                      disabled={updateProfileMutation.isLoading}
+                    >
+                      {updateProfileMutation.isLoading ? 'Saving...' : 'Save Preferences'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'certifications' && (
+            <div className="mt-6">
+              <div className="card">
+                <div className="card-header">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Certifications</h3>
+                  <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                    Your professional certifications and qualifications
+                  </p>
+                </div>
+                <div className="card-body">
+                  <div className="space-y-4">
+                    {userProfile.certifications.map((cert) => (
+                      <div key={cert.id} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-start">
+                            <AcademicCapIcon className="h-6 w-6 text-blue-500 mr-3 mt-1" />
+                            <div>
+                              <h4 className="text-sm font-medium text-gray-900 dark:text-white">
+                                {cert.name}
+                              </h4>
+                              <p className="text-sm text-gray-600 dark:text-gray-400">
+                                Level: {cert.level}
+                              </p>
+                              <div className="flex items-center space-x-4 mt-2 text-xs text-gray-500 dark:text-gray-400">
+                                <span>Issued: {format(new Date(cert.issuedAt), 'MMM dd, yyyy')}</span>
+                                {cert.expiresAt && (
+                                  <span>Expires: {format(new Date(cert.expiresAt), 'MMM dd, yyyy')}</span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                            cert.status === 'ACTIVE' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' :
+                            cert.status === 'EXPIRED' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' :
+                            'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+                          }`}>
+                            {cert.status}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'statistics' && (
+            <div className="mt-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <div className="card">
+                  <div className="card-body">
+                    <div className="flex items-center">
+                      <CalendarIcon className="h-8 w-8 text-blue-500" />
+                      <div className="ml-4">
+                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Events Participated</p>
+                        <p className="text-2xl font-semibold text-gray-900 dark:text-white">{userProfile.statistics.totalEvents}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="card">
+                  <div className="card-body">
+                    <div className="flex items-center">
+                      <TrophyIcon className="h-8 w-8 text-yellow-500" />
+                      <div className="ml-4">
+                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Contests Judged</p>
+                        <p className="text-2xl font-semibold text-gray-900 dark:text-white">{userProfile.statistics.totalContests}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="card">
+                  <div className="card-body">
+                    <div className="flex items-center">
+                      <ChartBarIcon className="h-8 w-8 text-green-500" />
+                      <div className="ml-4">
+                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Scores Submitted</p>
+                        <p className="text-2xl font-semibold text-gray-900 dark:text-white">{userProfile.statistics.totalScores}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="card">
+                  <div className="card-body">
+                    <div className="flex items-center">
+                      <StarIcon className="h-8 w-8 text-purple-500" />
+                      <div className="ml-4">
+                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Average Score</p>
+                        <p className="text-2xl font-semibold text-gray-900 dark:text-white">{userProfile.statistics.averageScore}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="card">
+                <div className="card-header">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Activity Summary</h3>
+                </div>
+                <div className="card-body">
+                  <div className="text-center py-8">
+                    <ClockIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                    <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Recent Activity</h4>
+                    <p className="text-gray-600 dark:text-gray-400">
+                      Last activity: {format(new Date(userProfile.statistics.lastActivity), 'MMM dd, yyyy HH:mm')}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Change Password Modal */}
+      {showPasswordModal && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white dark:bg-gray-800">
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+                  Change Password
+                </h3>
+                <button
+                  onClick={() => setShowPasswordModal(false)}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                >
+                  <XMarkIcon className="h-6 w-6" />
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Current Password
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showCurrentPassword ? 'text' : 'password'}
+                      value={passwordData.currentPassword}
+                      onChange={(e) => handlePasswordChange('currentPassword', e.target.value)}
+                      className="input pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                    >
+                      {showCurrentPassword ? (
+                        <EyeSlashIcon className="h-5 w-5 text-gray-400" />
+                      ) : (
+                        <EyeIcon className="h-5 w-5 text-gray-400" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    New Password
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showNewPassword ? 'text' : 'password'}
+                      value={passwordData.newPassword}
+                      onChange={(e) => handlePasswordChange('newPassword', e.target.value)}
+                      className="input pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                    >
+                      {showNewPassword ? (
+                        <EyeSlashIcon className="h-5 w-5 text-gray-400" />
+                      ) : (
+                        <EyeIcon className="h-5 w-5 text-gray-400" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Confirm New Password
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      value={passwordData.confirmPassword}
+                      onChange={(e) => handlePasswordChange('confirmPassword', e.target.value)}
+                      className="input pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                    >
+                      {showConfirmPassword ? (
+                        <EyeSlashIcon className="h-5 w-5 text-gray-400" />
+                      ) : (
+                        <EyeIcon className="h-5 w-5 text-gray-400" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex justify-end space-x-3 mt-6">
+                <button
+                  onClick={() => setShowPasswordModal(false)}
+                  className="btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleChangePassword}
+                  className="btn-primary"
+                  disabled={changePasswordMutation.isLoading}
+                >
+                  {changePasswordMutation.isLoading ? 'Changing...' : 'Change Password'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -6217,26 +10021,952 @@ export default ProfilePage
 EOF
 
     cat > "$APP_DIR/frontend/src/pages/EmceePage.tsx" << 'EOF'
-import React from 'react'
+import React, { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from 'react-query'
+import { useAuth } from '../contexts/AuthContext'
+import { eventsAPI, contestsAPI, categoriesAPI } from '../services/api'
+import {
+  DocumentTextIcon,
+  PlusIcon,
+  PencilIcon,
+  TrashIcon,
+  EyeIcon,
+  MagnifyingGlassIcon,
+  ClockIcon,
+  CalendarIcon,
+  UserIcon,
+  ClipboardDocumentListIcon,
+  SpeakerWaveIcon,
+  MicrophoneIcon,
+  PlayIcon,
+  PauseIcon,
+  StopIcon,
+  VolumeUpIcon,
+  DocumentDuplicateIcon,
+  TagIcon,
+  StarIcon,
+  CheckCircleIcon,
+  ExclamationTriangleIcon,
+  InformationCircleIcon,
+  XMarkIcon,
+  ArrowDownTrayIcon,
+  ArrowUpTrayIcon,
+  CogIcon,
+  BellIcon,
+  MegaphoneIcon,
+  PresentationChartLineIcon,
+  ChartBarIcon,
+  ClipboardDocumentCheckIcon
+} from '@heroicons/react/24/outline'
+import { format } from 'date-fns'
+
+interface EmceeScript {
+  id: string
+  name: string
+  description: string
+  content: string
+  type: 'WELCOME' | 'INTRO' | 'ANNOUNCEMENT' | 'AWARD' | 'CLOSING' | 'CUSTOM' | 'TRANSITION' | 'EMERGENCY' | 'BREAK'
+  eventId?: string
+  contestId?: string
+  categoryId?: string
+  duration: number
+  isPublic: boolean
+  tags: string[]
+  usageCount: number
+  createdBy: string
+  createdAt: string
+  updatedAt: string
+  lastUsedAt?: string
+  status: 'DRAFT' | 'ACTIVE' | 'ARCHIVED'
+}
+
+interface ScriptUsage {
+  id: string
+  scriptId: string
+  eventId: string
+  contestId?: string
+  categoryId?: string
+  usedBy: string
+  usedAt: string
+  duration: number
+  notes?: string
+}
 
 const EmceePage: React.FC = () => {
+  const { user } = useAuth()
+  const [activeTab, setActiveTab] = useState('scripts')
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [showPreviewModal, setShowPreviewModal] = useState(false)
+  const [selectedScript, setSelectedScript] = useState<EmceeScript | null>(null)
+  const [formData, setFormData] = useState<Partial<EmceeScript>>({})
+  const [filters, setFilters] = useState({
+    search: '',
+    type: '',
+    status: '',
+    eventId: ''
+  })
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [currentTime, setCurrentTime] = useState(0)
+  const queryClient = useQueryClient()
+
+  // Fetch data for scripts
+  const { data: events } = useQuery('events', () => eventsAPI.getAll().then((res: any) => res.data))
+  const { data: contests } = useQuery('contests', () => contestsAPI.getAll().then((res: any) => res.data))
+  const { data: categories } = useQuery('categories', () => categoriesAPI.getAll().then((res: any) => res.data))
+
+  // Mock data for scripts
+  const emceeScripts: EmceeScript[] = [
+    {
+      id: '1',
+      name: 'Welcome Address - Spring Competition',
+      description: 'Opening welcome speech for the Spring Competition event',
+      content: 'Good evening, ladies and gentlemen! Welcome to the Spring Competition 2024. We are thrilled to have you here tonight for what promises to be an evening filled with incredible talent and unforgettable performances. Tonight, we will witness the dedication and artistry of our talented contestants as they showcase their skills in various categories. Let\'s give them all a warm round of applause!',
+      type: 'WELCOME',
+      eventId: '1',
+      duration: 120,
+      isPublic: true,
+      tags: ['welcome', 'opening', 'spring', 'competition'],
+      usageCount: 8,
+      createdBy: 'admin@eventmanager.com',
+      createdAt: '2024-01-01T00:00:00Z',
+      updatedAt: '2024-01-15T10:30:00Z',
+      lastUsedAt: '2024-01-15T10:30:00Z',
+      status: 'ACTIVE'
+    },
+    {
+      id: '2',
+      name: 'Vocal Solo Introduction',
+      description: 'Introduction for vocal solo performances',
+      content: 'Next up, we have our vocal solo category. This is where we get to hear the beautiful voices of our talented singers. Each contestant will perform a piece of their choice, showcasing their vocal range, technique, and musical interpretation. Please welcome our first vocal soloist!',
+      type: 'INTRO',
+      contestId: '1',
+      categoryId: '1',
+      duration: 45,
+      isPublic: true,
+      tags: ['vocal', 'solo', 'introduction', 'singing'],
+      usageCount: 15,
+      createdBy: 'emcee@eventmanager.com',
+      createdAt: '2024-01-05T00:00:00Z',
+      updatedAt: '2024-01-12T14:20:00Z',
+      lastUsedAt: '2024-01-12T14:20:00Z',
+      status: 'ACTIVE'
+    },
+    {
+      id: '3',
+      name: 'Award Presentation - First Place',
+      description: 'Script for presenting first place awards',
+      content: 'And now, the moment we\'ve all been waiting for! The first place winner in the [Category Name] category has demonstrated exceptional skill, dedication, and artistry. Their performance tonight was truly outstanding and deserving of this recognition. Please join me in congratulating our first place winner!',
+      type: 'AWARD',
+      duration: 60,
+      isPublic: false,
+      tags: ['award', 'first-place', 'winner', 'recognition'],
+      usageCount: 5,
+      createdBy: 'organizer@eventmanager.com',
+      createdAt: '2024-01-08T00:00:00Z',
+      updatedAt: '2024-01-10T09:15:00Z',
+      lastUsedAt: '2024-01-10T09:15:00Z',
+      status: 'ACTIVE'
+    },
+    {
+      id: '4',
+      name: 'Intermission Announcement',
+      description: 'Announcement for intermission break',
+      content: 'We\'ll now take a 15-minute intermission. Please feel free to visit our refreshment stand, use the restrooms, or simply stretch your legs. We\'ll resume with the second half of our program in 15 minutes. Thank you for your patience!',
+      type: 'BREAK',
+      duration: 30,
+      isPublic: true,
+      tags: ['intermission', 'break', 'announcement'],
+      usageCount: 12,
+      createdBy: 'admin@eventmanager.com',
+      createdAt: '2024-01-03T00:00:00Z',
+      updatedAt: '2024-01-14T16:45:00Z',
+      lastUsedAt: '2024-01-14T16:45:00Z',
+      status: 'ACTIVE'
+    },
+    {
+      id: '5',
+      name: 'Closing Remarks',
+      description: 'Closing speech for the event',
+      content: 'What an incredible evening this has been! We\'ve witnessed some truly remarkable performances from all of our talented contestants. Each and every one of you should be proud of your dedication and hard work. Thank you to our judges, volunteers, and everyone who made this event possible. Until next time, goodnight and thank you for coming!',
+      type: 'CLOSING',
+      eventId: '1',
+      duration: 90,
+      isPublic: true,
+      tags: ['closing', 'thank-you', 'farewell', 'event-end'],
+      usageCount: 6,
+      createdBy: 'admin@eventmanager.com',
+      createdAt: '2024-01-01T00:00:00Z',
+      updatedAt: '2024-01-15T10:30:00Z',
+      lastUsedAt: '2024-01-15T10:30:00Z',
+      status: 'ACTIVE'
+    }
+  ]
+
+  const scriptUsage: ScriptUsage[] = [
+    {
+      id: '1',
+      scriptId: '1',
+      eventId: '1',
+      usedBy: 'emcee@eventmanager.com',
+      usedAt: '2024-01-15T10:30:00Z',
+      duration: 125,
+      notes: 'Used for Spring Competition opening'
+    },
+    {
+      id: '2',
+      scriptId: '2',
+      eventId: '1',
+      contestId: '1',
+      categoryId: '1',
+      usedBy: 'emcee@eventmanager.com',
+      usedAt: '2024-01-15T11:15:00Z',
+      duration: 42,
+      notes: 'Vocal solo category introduction'
+    }
+  ]
+
+  const filteredScripts = emceeScripts.filter(script => {
+    const matchesSearch = script.name.toLowerCase().includes(filters.search.toLowerCase()) ||
+                         script.description.toLowerCase().includes(filters.search.toLowerCase()) ||
+                         script.content.toLowerCase().includes(filters.search.toLowerCase()) ||
+                         script.tags.some(tag => tag.toLowerCase().includes(filters.search.toLowerCase()))
+    const matchesType = !filters.type || script.type === filters.type
+    const matchesStatus = !filters.status || script.status === filters.status
+    const matchesEvent = !filters.eventId || script.eventId === filters.eventId
+
+    return matchesSearch && matchesType && matchesStatus && matchesEvent
+  })
+
+  const handleCreateScript = () => {
+    setFormData({
+      name: '',
+      description: '',
+      content: '',
+      type: 'WELCOME',
+      duration: 60,
+      isPublic: true,
+      tags: [],
+      status: 'DRAFT'
+    })
+    setShowCreateModal(true)
+  }
+
+  const handleEditScript = (script: EmceeScript) => {
+    setSelectedScript(script)
+    setFormData(script)
+    setShowEditModal(true)
+  }
+
+  const handlePreviewScript = (script: EmceeScript) => {
+    setSelectedScript(script)
+    setShowPreviewModal(true)
+  }
+
+  const handleSaveScript = () => {
+    // Mock save operation
+    console.log('Saving script:', formData)
+    setShowCreateModal(false)
+    setShowEditModal(false)
+    setFormData({})
+    setSelectedScript(null)
+  }
+
+  const handleDeleteScript = (scriptId: string) => {
+    if (confirm('Are you sure you want to delete this script?')) {
+      // Mock delete operation
+      console.log('Deleting script:', scriptId)
+    }
+  }
+
+  const handleDuplicateScript = (script: EmceeScript) => {
+    setFormData({
+      ...script,
+      name: `${script.name} (Copy)`,
+      id: undefined
+    })
+    setShowCreateModal(true)
+  }
+
+  const addTag = (tag: string) => {
+    if (tag && !formData.tags?.includes(tag)) {
+      setFormData(prev => ({
+        ...prev,
+        tags: [...(prev.tags || []), tag]
+      }))
+    }
+  }
+
+  const removeTag = (tagToRemove: string) => {
+    setFormData(prev => ({
+      ...prev,
+      tags: prev.tags?.filter(tag => tag !== tagToRemove)
+    }))
+  }
+
+  const getTypeIcon = (type: string) => {
+    switch (type) {
+      case 'WELCOME':
+        return <MegaphoneIcon className="h-5 w-5 text-blue-500" />
+      case 'INTRO':
+        return <MicrophoneIcon className="h-5 w-5 text-green-500" />
+      case 'ANNOUNCEMENT':
+        return <BellIcon className="h-5 w-5 text-yellow-500" />
+      case 'AWARD':
+        return <StarIcon className="h-5 w-5 text-purple-500" />
+      case 'CLOSING':
+        return <SpeakerWaveIcon className="h-5 w-5 text-red-500" />
+      case 'CUSTOM':
+        return <DocumentTextIcon className="h-5 w-5 text-gray-500" />
+      case 'TRANSITION':
+        return <ArrowDownTrayIcon className="h-5 w-5 text-indigo-500" />
+      case 'EMERGENCY':
+        return <ExclamationTriangleIcon className="h-5 w-5 text-red-500" />
+      case 'BREAK':
+        return <PauseIcon className="h-5 w-5 text-orange-500" />
+      default:
+        return <DocumentTextIcon className="h-5 w-5 text-gray-500" />
+    }
+  }
+
+  const getTypeColor = (type: string) => {
+    switch (type) {
+      case 'WELCOME':
+        return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+      case 'INTRO':
+        return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+      case 'ANNOUNCEMENT':
+        return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+      case 'AWARD':
+        return 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
+      case 'CLOSING':
+        return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+      case 'CUSTOM':
+        return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
+      case 'TRANSITION':
+        return 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200'
+      case 'EMERGENCY':
+        return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+      case 'BREAK':
+        return 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200'
+      default:
+        return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
+    }
+  }
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'ACTIVE':
+        return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+      case 'DRAFT':
+        return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+      case 'ARCHIVED':
+        return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
+      default:
+        return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
+    }
+  }
+
+  const tabs = [
+    { id: 'scripts', name: 'Scripts', icon: DocumentTextIcon },
+    { id: 'usage', name: 'Usage History', icon: ClipboardDocumentListIcon },
+    { id: 'analytics', name: 'Analytics', icon: ChartBarIcon },
+  ]
+
+  const canManageScripts = user?.role === 'ORGANIZER' || user?.role === 'BOARD' || user?.role === 'JUDGE'
+
   return (
     <div className="space-y-6">
       <div className="card">
         <div className="card-header">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Emcee Scripts</h1>
           <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-            Manage emcee scripts and announcements
+            Manage emcee scripts and announcements for events
           </p>
         </div>
         <div className="card-body">
-          <div className="text-center py-12">
-            <div className="text-gray-400 dark:text-gray-500 text-6xl mb-4">📜</div>
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Emcee Page</h3>
-            <p className="text-gray-600 dark:text-gray-400">This page will contain emcee script functionality</p>
+          <div className="border-b border-gray-200 dark:border-gray-700">
+            <nav className="-mb-px flex space-x-8">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`${
+                    activeTab === tab.id
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  } whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm flex items-center`}
+                >
+                  <tab.icon className="h-5 w-5 mr-2" />
+                  {tab.name}
+                </button>
+              ))}
+            </nav>
           </div>
+
+          {activeTab === 'scripts' && (
+            <div className="mt-6">
+              <div className="flex flex-col sm:flex-row gap-4 mb-6">
+                <div className="flex-1">
+                  <div className="relative">
+                    <MagnifyingGlassIcon className="h-5 w-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Search scripts..."
+                      value={filters.search}
+                      onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
+                      className="input pl-10"
+                    />
+                  </div>
+                </div>
+                <select
+                  value={filters.type}
+                  onChange={(e) => setFilters(prev => ({ ...prev, type: e.target.value }))}
+                  className="input"
+                >
+                  <option value="">All Types</option>
+                  <option value="WELCOME">Welcome</option>
+                  <option value="INTRO">Introduction</option>
+                  <option value="ANNOUNCEMENT">Announcement</option>
+                  <option value="AWARD">Award</option>
+                  <option value="CLOSING">Closing</option>
+                  <option value="CUSTOM">Custom</option>
+                  <option value="TRANSITION">Transition</option>
+                  <option value="EMERGENCY">Emergency</option>
+                  <option value="BREAK">Break</option>
+                </select>
+                <select
+                  value={filters.status}
+                  onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
+                  className="input"
+                >
+                  <option value="">All Status</option>
+                  <option value="ACTIVE">Active</option>
+                  <option value="DRAFT">Draft</option>
+                  <option value="ARCHIVED">Archived</option>
+                </select>
+                {canManageScripts && (
+                  <button
+                    onClick={handleCreateScript}
+                    className="btn-primary"
+                  >
+                    <PlusIcon className="h-5 w-5 mr-2" />
+                    New Script
+                  </button>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredScripts.map((script) => (
+                  <div key={script.id} className="card">
+                    <div className="card-body">
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex items-center">
+                          {getTypeIcon(script.type)}
+                          <h3 className="text-lg font-semibold text-gray-900 dark:text-white ml-2">
+                            {script.name}
+                          </h3>
+                        </div>
+                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${getTypeColor(script.type)}`}>
+                          {script.type}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                        {script.description}
+                      </p>
+                      
+                      <div className="space-y-2 mb-4">
+                        <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
+                          <ClockIcon className="h-4 w-4 mr-2" />
+                          {script.duration} seconds
+                        </div>
+                        <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
+                          <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
+                          Used {script.usageCount} times
+                        </div>
+                        {script.lastUsedAt && (
+                          <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
+                            <CalendarIcon className="h-4 w-4 mr-2" />
+                            Last used {format(new Date(script.lastUsedAt), 'MMM dd, yyyy')}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex flex-wrap gap-1 mb-4">
+                        {script.tags.map((tag) => (
+                          <span key={tag} className="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded">
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(script.status)}`}>
+                          {script.status}
+                        </span>
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={() => handlePreviewScript(script)}
+                            className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
+                            title="Preview"
+                          >
+                            <EyeIcon className="h-4 w-4" />
+                          </button>
+                          {canManageScripts && (
+                            <>
+                              <button
+                                onClick={() => handleDuplicateScript(script)}
+                                className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
+                                title="Duplicate"
+                              >
+                                <DocumentDuplicateIcon className="h-4 w-4" />
+                              </button>
+                              <button
+                                onClick={() => handleEditScript(script)}
+                                className="text-yellow-600 hover:text-yellow-900 dark:text-yellow-400 dark:hover:text-yellow-300"
+                                title="Edit"
+                              >
+                                <PencilIcon className="h-4 w-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteScript(script.id)}
+                                className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+                                title="Delete"
+                              >
+                                <TrashIcon className="h-4 w-4" />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'usage' && (
+            <div className="mt-6">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                  <thead className="bg-gray-50 dark:bg-gray-800">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Script
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Event
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Used By
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Duration
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Used At
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Notes
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+                    {scriptUsage.map((usage) => {
+                      const script = emceeScripts.find(s => s.id === usage.scriptId)
+                      return (
+                        <tr key={usage.id}>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm font-medium text-gray-900 dark:text-white">
+                              {script?.name || 'Unknown Script'}
+                            </div>
+                            <div className="text-sm text-gray-600 dark:text-gray-400">
+                              {script?.type || 'Unknown Type'}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
+                            Event {usage.eventId}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
+                            {usage.usedBy}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
+                            {usage.duration}s
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
+                            {format(new Date(usage.usedAt), 'MMM dd, yyyy HH:mm')}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
+                            {usage.notes || '-'}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'analytics' && (
+            <div className="mt-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <div className="card">
+                  <div className="card-body">
+                    <div className="flex items-center">
+                      <DocumentTextIcon className="h-8 w-8 text-blue-500" />
+                      <div className="ml-4">
+                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Scripts</p>
+                        <p className="text-2xl font-semibold text-gray-900 dark:text-white">{emceeScripts.length}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="card">
+                  <div className="card-body">
+                    <div className="flex items-center">
+                      <ArrowDownTrayIcon className="h-8 w-8 text-green-500" />
+                      <div className="ml-4">
+                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Usage</p>
+                        <p className="text-2xl font-semibold text-gray-900 dark:text-white">
+                          {emceeScripts.reduce((sum, s) => sum + s.usageCount, 0)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="card">
+                  <div className="card-body">
+                    <div className="flex items-center">
+                      <CheckCircleIcon className="h-8 w-8 text-green-500" />
+                      <div className="ml-4">
+                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Active Scripts</p>
+                        <p className="text-2xl font-semibold text-gray-900 dark:text-white">
+                          {emceeScripts.filter(s => s.status === 'ACTIVE').length}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="card">
+                  <div className="card-body">
+                    <div className="flex items-center">
+                      <ExclamationTriangleIcon className="h-8 w-8 text-yellow-500" />
+                      <div className="ml-4">
+                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Draft Scripts</p>
+                        <p className="text-2xl font-semibold text-gray-900 dark:text-white">
+                          {emceeScripts.filter(s => s.status === 'DRAFT').length}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="card">
+                  <div className="card-header">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Script Types</h3>
+                  </div>
+                  <div className="card-body">
+                    <div className="space-y-4">
+                      {['WELCOME', 'INTRO', 'ANNOUNCEMENT', 'AWARD', 'CLOSING', 'CUSTOM', 'TRANSITION', 'EMERGENCY', 'BREAK'].map((type) => {
+                        const count = emceeScripts.filter(s => s.type === type).length
+                        return (
+                          <div key={type} className="flex items-center justify-between">
+                            <span className="text-sm text-gray-600 dark:text-gray-400 capitalize">{type.toLowerCase()}</span>
+                            <div className="flex items-center">
+                              <div className="w-32 bg-gray-200 dark:bg-gray-700 rounded-full h-2 mr-3">
+                                <div 
+                                  className="bg-blue-500 h-2 rounded-full" 
+                                  style={{ width: `${(count / emceeScripts.length) * 100}%` }}
+                                ></div>
+                              </div>
+                              <span className="text-sm font-medium text-gray-900 dark:text-white">{count}</span>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="card">
+                  <div className="card-header">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Most Used Scripts</h3>
+                  </div>
+                  <div className="card-body">
+                    <div className="space-y-3">
+                      {emceeScripts
+                        .sort((a, b) => b.usageCount - a.usageCount)
+                        .slice(0, 5)
+                        .map((script) => (
+                        <div key={script.id} className="flex items-center justify-between">
+                          <div className="flex items-center">
+                            {getTypeIcon(script.type)}
+                            <div className="ml-3">
+                              <p className="text-sm font-medium text-gray-900 dark:text-white">{script.name}</p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">{script.type}</p>
+                            </div>
+                          </div>
+                          <span className="text-sm font-medium text-gray-900 dark:text-white">{script.usageCount}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Create/Edit Script Modal */}
+      {(showCreateModal || showEditModal) && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-full max-w-4xl shadow-lg rounded-md bg-white dark:bg-gray-800">
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+                  {showCreateModal ? 'Create New Script' : 'Edit Script'}
+                </h3>
+                <button
+                  onClick={() => {
+                    setShowCreateModal(false)
+                    setShowEditModal(false)
+                    setFormData({})
+                    setSelectedScript(null)
+                  }}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                >
+                  <XMarkIcon className="h-6 w-6" />
+                </button>
+              </div>
+              
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Script Name *
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.name || ''}
+                      onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                      className="input"
+                      placeholder="Enter script name"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Script Type *
+                    </label>
+                    <select
+                      value={formData.type || 'WELCOME'}
+                      onChange={(e) => setFormData(prev => ({ ...prev, type: e.target.value as any }))}
+                      className="input"
+                    >
+                      <option value="WELCOME">Welcome</option>
+                      <option value="INTRO">Introduction</option>
+                      <option value="ANNOUNCEMENT">Announcement</option>
+                      <option value="AWARD">Award</option>
+                      <option value="CLOSING">Closing</option>
+                      <option value="CUSTOM">Custom</option>
+                      <option value="TRANSITION">Transition</option>
+                      <option value="EMERGENCY">Emergency</option>
+                      <option value="BREAK">Break</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Description *
+                  </label>
+                  <textarea
+                    value={formData.description || ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                    className="input"
+                    rows={2}
+                    placeholder="Enter script description"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Script Content *
+                  </label>
+                  <textarea
+                    value={formData.content || ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, content: e.target.value }))}
+                    className="input"
+                    rows={8}
+                    placeholder="Enter script content..."
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Duration (seconds)
+                    </label>
+                    <input
+                      type="number"
+                      value={formData.duration || 60}
+                      onChange={(e) => setFormData(prev => ({ ...prev, duration: parseInt(e.target.value) }))}
+                      className="input"
+                      min="1"
+                      max="600"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Status
+                    </label>
+                    <select
+                      value={formData.status || 'DRAFT'}
+                      onChange={(e) => setFormData(prev => ({ ...prev, status: e.target.value as any }))}
+                      className="input"
+                    >
+                      <option value="DRAFT">Draft</option>
+                      <option value="ACTIVE">Active</option>
+                      <option value="ARCHIVED">Archived</option>
+                    </select>
+                  </div>
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={formData.isPublic || false}
+                      onChange={(e) => setFormData(prev => ({ ...prev, isPublic: e.target.checked }))}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    />
+                    <label className="ml-2 block text-sm text-gray-700 dark:text-gray-300">
+                      Public Script
+                    </label>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Tags
+                  </label>
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {formData.tags?.map((tag) => (
+                      <span key={tag} className="px-2 py-1 text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded flex items-center">
+                        {tag}
+                        <button
+                          onClick={() => removeTag(tag)}
+                          className="ml-1 text-blue-600 hover:text-blue-800"
+                        >
+                          <XMarkIcon className="h-3 w-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Add tag and press Enter"
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        addTag(e.currentTarget.value.trim())
+                        e.currentTarget.value = ''
+                      }
+                    }}
+                    className="input"
+                  />
+                </div>
+              </div>
+              
+              <div className="flex justify-end space-x-3 mt-6">
+                <button
+                  onClick={() => {
+                    setShowCreateModal(false)
+                    setShowEditModal(false)
+                    setFormData({})
+                    setSelectedScript(null)
+                  }}
+                  className="btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveScript}
+                  className="btn-primary"
+                >
+                  {showCreateModal ? 'Create Script' : 'Save Changes'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Preview Script Modal */}
+      {showPreviewModal && selectedScript && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-full max-w-2xl shadow-lg rounded-md bg-white dark:bg-gray-800">
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+                  Script Preview: {selectedScript.name}
+                </h3>
+                <button
+                  onClick={() => setShowPreviewModal(false)}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                >
+                  <XMarkIcon className="h-6 w-6" />
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                <div className="flex items-center space-x-4">
+                  {getTypeIcon(selectedScript.type)}
+                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${getTypeColor(selectedScript.type)}`}>
+                    {selectedScript.type}
+                  </span>
+                  <span className="text-sm text-gray-600 dark:text-gray-400">
+                    {selectedScript.duration} seconds
+                  </span>
+                </div>
+                
+                <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+                  <p className="text-gray-900 dark:text-white leading-relaxed">
+                    {selectedScript.content}
+                  </p>
+                </div>
+                
+                <div className="flex items-center justify-between">
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={() => setIsPlaying(!isPlaying)}
+                      className="btn-primary"
+                    >
+                      {isPlaying ? (
+                        <PauseIcon className="h-4 w-4 mr-2" />
+                      ) : (
+                        <PlayIcon className="h-4 w-4 mr-2" />
+                      )}
+                      {isPlaying ? 'Pause' : 'Play'}
+                    </button>
+                    <button
+                      onClick={() => setIsPlaying(false)}
+                      className="btn-outline"
+                    >
+                      <StopIcon className="h-4 w-4 mr-2" />
+                      Stop
+                    </button>
+                  </div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">
+                    Used {selectedScript.usageCount} times
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -6245,26 +10975,892 @@ export default EmceePage
 EOF
 
     cat > "$APP_DIR/frontend/src/pages/TemplatesPage.tsx" << 'EOF'
-import React from 'react'
+import React, { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from 'react-query'
+import { useAuth } from '../contexts/AuthContext'
+import { categoriesAPI, contestsAPI } from '../services/api'
+import {
+  DocumentDuplicateIcon,
+  PlusIcon,
+  PencilIcon,
+  TrashIcon,
+  EyeIcon,
+  MagnifyingGlassIcon,
+  DocumentTextIcon,
+  ClockIcon,
+  CalendarIcon,
+  UserIcon,
+  ClipboardDocumentListIcon,
+  CogIcon,
+  XMarkIcon,
+  CheckCircleIcon,
+  ExclamationTriangleIcon,
+  InformationCircleIcon,
+  StarIcon,
+  TagIcon,
+  FolderIcon,
+  DocumentIcon,
+  ArrowDownTrayIcon,
+  ArrowUpTrayIcon
+} from '@heroicons/react/24/outline'
+import { format } from 'date-fns'
+
+interface CategoryTemplate {
+  id: string
+  name: string
+  description: string
+  categoryType: 'VOCAL' | 'INSTRUMENTAL' | 'DANCE' | 'SPEECH' | 'DRAMA' | 'OTHER'
+  criteria: {
+    id: string
+    name: string
+    description: string
+    maxScore: number
+    weight: number
+    isRequired: boolean
+  }[]
+  maxContestants: number
+  timeLimit: number
+  isPublic: boolean
+  tags: string[]
+  usageCount: number
+  createdBy: string
+  createdAt: string
+  updatedAt: string
+}
+
+interface TemplateUsage {
+  id: string
+  templateId: string
+  contestId: string
+  categoryId: string
+  usedBy: string
+  usedAt: string
+  contestName: string
+  categoryName: string
+}
 
 const TemplatesPage: React.FC = () => {
+  const { user } = useAuth()
+  const [activeTab, setActiveTab] = useState('templates')
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [selectedTemplate, setSelectedTemplate] = useState<CategoryTemplate | null>(null)
+  const [formData, setFormData] = useState<Partial<CategoryTemplate>>({})
+  const [filters, setFilters] = useState({
+    search: '',
+    categoryType: '',
+    tags: '',
+    isPublic: ''
+  })
+  const queryClient = useQueryClient()
+
+  // Mock data for templates
+  const categoryTemplates: CategoryTemplate[] = [
+    {
+      id: '1',
+      name: 'Vocal Solo - Classical',
+      description: 'Template for classical vocal solo performances with traditional judging criteria',
+      categoryType: 'VOCAL',
+      criteria: [
+        { id: '1', name: 'Technique', description: 'Vocal technique and control', maxScore: 25, weight: 1.0, isRequired: true },
+        { id: '2', name: 'Musicality', description: 'Musical interpretation and expression', maxScore: 25, weight: 1.0, isRequired: true },
+        { id: '3', name: 'Stage Presence', description: 'Performance and stage presence', maxScore: 20, weight: 0.8, isRequired: true },
+        { id: '4', name: 'Song Choice', description: 'Appropriateness of song selection', maxScore: 15, weight: 0.6, isRequired: false },
+        { id: '5', name: 'Overall Impact', description: 'Overall performance impact', maxScore: 15, weight: 0.6, isRequired: true }
+      ],
+      maxContestants: 20,
+      timeLimit: 5,
+      isPublic: true,
+      tags: ['classical', 'vocal', 'solo', 'traditional'],
+      usageCount: 15,
+      createdBy: 'admin@eventmanager.com',
+      createdAt: '2024-01-01T00:00:00Z',
+      updatedAt: '2024-01-15T10:30:00Z'
+    },
+    {
+      id: '2',
+      name: 'Piano Solo - Contemporary',
+      description: 'Template for contemporary piano solo performances',
+      categoryType: 'INSTRUMENTAL',
+      criteria: [
+        { id: '6', name: 'Technical Skill', description: 'Piano technique and skill', maxScore: 30, weight: 1.0, isRequired: true },
+        { id: '7', name: 'Musical Expression', description: 'Musical expression and interpretation', maxScore: 25, weight: 0.8, isRequired: true },
+        { id: '8', name: 'Repertoire', description: 'Choice and difficulty of repertoire', maxScore: 20, weight: 0.7, isRequired: true },
+        { id: '9', name: 'Stage Presence', description: 'Performance presence and communication', maxScore: 15, weight: 0.5, isRequired: false },
+        { id: '10', name: 'Creativity', description: 'Creative interpretation and style', maxScore: 10, weight: 0.3, isRequired: false }
+      ],
+      maxContestants: 15,
+      timeLimit: 8,
+      isPublic: true,
+      tags: ['piano', 'contemporary', 'solo', 'instrumental'],
+      usageCount: 8,
+      createdBy: 'judge@eventmanager.com',
+      createdAt: '2024-01-05T00:00:00Z',
+      updatedAt: '2024-01-10T14:20:00Z'
+    },
+    {
+      id: '3',
+      name: 'Dance Group - Modern',
+      description: 'Template for modern dance group performances',
+      categoryType: 'DANCE',
+      criteria: [
+        { id: '11', name: 'Choreography', description: 'Originality and creativity of choreography', maxScore: 25, weight: 1.0, isRequired: true },
+        { id: '12', name: 'Technique', description: 'Dance technique and execution', maxScore: 25, weight: 1.0, isRequired: true },
+        { id: '13', name: 'Synchronization', description: 'Group synchronization and timing', maxScore: 20, weight: 0.8, isRequired: true },
+        { id: '14', name: 'Music', description: 'Music selection and interpretation', maxScore: 15, weight: 0.6, isRequired: true },
+        { id: '15', name: 'Costume', description: 'Costume design and appropriateness', maxScore: 10, weight: 0.4, isRequired: false },
+        { id: '16', name: 'Overall Impact', description: 'Overall performance impact', maxScore: 5, weight: 0.2, isRequired: true }
+      ],
+      maxContestants: 12,
+      timeLimit: 6,
+      isPublic: false,
+      tags: ['dance', 'modern', 'group', 'choreography'],
+      usageCount: 3,
+      createdBy: 'organizer@eventmanager.com',
+      createdAt: '2024-01-08T00:00:00Z',
+      updatedAt: '2024-01-12T09:15:00Z'
+    }
+  ]
+
+  const templateUsage: TemplateUsage[] = [
+    {
+      id: '1',
+      templateId: '1',
+      contestId: '1',
+      categoryId: '1',
+      usedBy: 'admin@eventmanager.com',
+      usedAt: '2024-01-15T10:30:00Z',
+      contestName: 'Spring Competition 2024',
+      categoryName: 'Vocal Solo - Classical'
+    },
+    {
+      id: '2',
+      templateId: '2',
+      contestId: '2',
+      categoryId: '2',
+      usedBy: 'judge@eventmanager.com',
+      usedAt: '2024-01-14T15:45:00Z',
+      contestName: 'Summer Music Festival',
+      categoryName: 'Piano Solo - Contemporary'
+    }
+  ]
+
+  const filteredTemplates = categoryTemplates.filter(template => {
+    const matchesSearch = template.name.toLowerCase().includes(filters.search.toLowerCase()) ||
+                         template.description.toLowerCase().includes(filters.search.toLowerCase()) ||
+                         template.tags.some(tag => tag.toLowerCase().includes(filters.search.toLowerCase()))
+    const matchesType = !filters.categoryType || template.categoryType === filters.categoryType
+    const matchesTags = !filters.tags || template.tags.some(tag => tag.toLowerCase().includes(filters.tags.toLowerCase()))
+    const matchesPublic = filters.isPublic === '' || 
+                         (filters.isPublic === 'true' && template.isPublic) ||
+                         (filters.isPublic === 'false' && !template.isPublic)
+
+    return matchesSearch && matchesType && matchesTags && matchesPublic
+  })
+
+  const handleCreateTemplate = () => {
+    setFormData({
+      name: '',
+      description: '',
+      categoryType: 'VOCAL',
+      criteria: [],
+      maxContestants: 20,
+      timeLimit: 5,
+      isPublic: true,
+      tags: []
+    })
+    setShowCreateModal(true)
+  }
+
+  const handleEditTemplate = (template: CategoryTemplate) => {
+    setSelectedTemplate(template)
+    setFormData(template)
+    setShowEditModal(true)
+  }
+
+  const handleSaveTemplate = () => {
+    // Mock save operation
+    console.log('Saving template:', formData)
+    setShowCreateModal(false)
+    setShowEditModal(false)
+    setFormData({})
+    setSelectedTemplate(null)
+  }
+
+  const handleDeleteTemplate = (templateId: string) => {
+    if (confirm('Are you sure you want to delete this template?')) {
+      // Mock delete operation
+      console.log('Deleting template:', templateId)
+    }
+  }
+
+  const handleDuplicateTemplate = (template: CategoryTemplate) => {
+    setFormData({
+      ...template,
+      name: `${template.name} (Copy)`,
+      id: undefined
+    })
+    setShowCreateModal(true)
+  }
+
+  const addCriteria = () => {
+    const newCriteria = {
+      id: Date.now().toString(),
+      name: '',
+      description: '',
+      maxScore: 10,
+      weight: 1.0,
+      isRequired: false
+    }
+    setFormData(prev => ({
+      ...prev,
+      criteria: [...(prev.criteria || []), newCriteria]
+    }))
+  }
+
+  const updateCriteria = (index: number, field: string, value: any) => {
+    setFormData(prev => ({
+      ...prev,
+      criteria: prev.criteria?.map((criteria, i) => 
+        i === index ? { ...criteria, [field]: value } : criteria
+      )
+    }))
+  }
+
+  const removeCriteria = (index: number) => {
+    setFormData(prev => ({
+      ...prev,
+      criteria: prev.criteria?.filter((_, i) => i !== index)
+    }))
+  }
+
+  const addTag = (tag: string) => {
+    if (tag && !formData.tags?.includes(tag)) {
+      setFormData(prev => ({
+        ...prev,
+        tags: [...(prev.tags || []), tag]
+      }))
+    }
+  }
+
+  const removeTag = (tagToRemove: string) => {
+    setFormData(prev => ({
+      ...prev,
+      tags: prev.tags?.filter(tag => tag !== tagToRemove)
+    }))
+  }
+
+  const tabs = [
+    { id: 'templates', name: 'Templates', icon: DocumentTextIcon },
+    { id: 'usage', name: 'Usage History', icon: ClipboardDocumentListIcon },
+    { id: 'analytics', name: 'Analytics', icon: CogIcon },
+  ]
+
+  const canManageTemplates = user?.role === 'ORGANIZER' || user?.role === 'BOARD'
+
   return (
     <div className="space-y-6">
       <div className="card">
         <div className="card-header">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Category Templates</h1>
           <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-            Create and manage reusable category templates
+            Create and manage reusable category templates for consistent judging
           </p>
         </div>
         <div className="card-body">
-          <div className="text-center py-12">
-            <div className="text-gray-400 dark:text-gray-500 text-6xl mb-4">📄</div>
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Templates Page</h3>
-            <p className="text-gray-600 dark:text-gray-400">This page will contain template management functionality</p>
+          <div className="border-b border-gray-200 dark:border-gray-700">
+            <nav className="-mb-px flex space-x-8">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`${
+                    activeTab === tab.id
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  } whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm flex items-center`}
+                >
+                  <tab.icon className="h-5 w-5 mr-2" />
+                  {tab.name}
+                </button>
+              ))}
+            </nav>
           </div>
+
+          {activeTab === 'templates' && (
+            <div className="mt-6">
+              <div className="flex flex-col sm:flex-row gap-4 mb-6">
+                <div className="flex-1">
+                  <div className="relative">
+                    <MagnifyingGlassIcon className="h-5 w-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Search templates..."
+                      value={filters.search}
+                      onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
+                      className="input pl-10"
+                    />
+                  </div>
+                </div>
+                <select
+                  value={filters.categoryType}
+                  onChange={(e) => setFilters(prev => ({ ...prev, categoryType: e.target.value }))}
+                  className="input"
+                >
+                  <option value="">All Types</option>
+                  <option value="VOCAL">Vocal</option>
+                  <option value="INSTRUMENTAL">Instrumental</option>
+                  <option value="DANCE">Dance</option>
+                  <option value="SPEECH">Speech</option>
+                  <option value="DRAMA">Drama</option>
+                  <option value="OTHER">Other</option>
+                </select>
+                <select
+                  value={filters.isPublic}
+                  onChange={(e) => setFilters(prev => ({ ...prev, isPublic: e.target.value }))}
+                  className="input"
+                >
+                  <option value="">All Visibility</option>
+                  <option value="true">Public</option>
+                  <option value="false">Private</option>
+                </select>
+                {canManageTemplates && (
+                  <button
+                    onClick={handleCreateTemplate}
+                    className="btn-primary"
+                  >
+                    <PlusIcon className="h-5 w-5 mr-2" />
+                    New Template
+                  </button>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredTemplates.map((template) => (
+                  <div key={template.id} className="card">
+                    <div className="card-body">
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex items-center">
+                          {template.categoryType === 'VOCAL' && <UserIcon className="h-6 w-6 text-blue-500 mr-2" />}
+                          {template.categoryType === 'INSTRUMENTAL' && <DocumentIcon className="h-6 w-6 text-green-500 mr-2" />}
+                          {template.categoryType === 'DANCE' && <StarIcon className="h-6 w-6 text-purple-500 mr-2" />}
+                          {template.categoryType === 'SPEECH' && <DocumentTextIcon className="h-6 w-6 text-orange-500 mr-2" />}
+                          {template.categoryType === 'DRAMA' && <FolderIcon className="h-6 w-6 text-red-500 mr-2" />}
+                          {template.categoryType === 'OTHER' && <TagIcon className="h-6 w-6 text-gray-500 mr-2" />}
+                          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                            {template.name}
+                          </h3>
+                        </div>
+                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                          template.isPublic 
+                            ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                            : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+                        }`}>
+                          {template.isPublic ? 'Public' : 'Private'}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                        {template.description}
+                      </p>
+                      
+                      <div className="space-y-2 mb-4">
+                        <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
+                          <ClipboardDocumentListIcon className="h-4 w-4 mr-2" />
+                          {template.criteria.length} criteria
+                        </div>
+                        <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
+                          <UserIcon className="h-4 w-4 mr-2" />
+                          Max {template.maxContestants} contestants
+                        </div>
+                        <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
+                          <ClockIcon className="h-4 w-4 mr-2" />
+                          {template.timeLimit} min time limit
+                        </div>
+                        <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
+                          <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
+                          Used {template.usageCount} times
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap gap-1 mb-4">
+                        {template.tags.map((tag) => (
+                          <span key={tag} className="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded">
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                          Created {format(new Date(template.createdAt), 'MMM dd, yyyy')}
+                        </div>
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={() => handleEditTemplate(template)}
+                            className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
+                            title="View Details"
+                          >
+                            <EyeIcon className="h-4 w-4" />
+                          </button>
+                          {canManageTemplates && (
+                            <>
+                              <button
+                                onClick={() => handleDuplicateTemplate(template)}
+                                className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
+                                title="Duplicate"
+                              >
+                                <DocumentDuplicateIcon className="h-4 w-4" />
+                              </button>
+                              <button
+                                onClick={() => handleEditTemplate(template)}
+                                className="text-yellow-600 hover:text-yellow-900 dark:text-yellow-400 dark:hover:text-yellow-300"
+                                title="Edit"
+                              >
+                                <PencilIcon className="h-4 w-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteTemplate(template.id)}
+                                className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+                                title="Delete"
+                              >
+                                <TrashIcon className="h-4 w-4" />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'usage' && (
+            <div className="mt-6">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                  <thead className="bg-gray-50 dark:bg-gray-800">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Template
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Contest
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Category
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Used By
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Used At
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+                    {templateUsage.map((usage) => {
+                      const template = categoryTemplates.find(t => t.id === usage.templateId)
+                      return (
+                        <tr key={usage.id}>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm font-medium text-gray-900 dark:text-white">
+                              {template?.name || 'Unknown Template'}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
+                            {usage.contestName}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
+                            {usage.categoryName}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
+                            {usage.usedBy}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
+                            {format(new Date(usage.usedAt), 'MMM dd, yyyy HH:mm')}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'analytics' && (
+            <div className="mt-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <div className="card">
+                  <div className="card-body">
+                    <div className="flex items-center">
+                      <DocumentTextIcon className="h-8 w-8 text-blue-500" />
+                      <div className="ml-4">
+                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Templates</p>
+                        <p className="text-2xl font-semibold text-gray-900 dark:text-white">{categoryTemplates.length}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="card">
+                  <div className="card-body">
+                    <div className="flex items-center">
+                      <ArrowDownTrayIcon className="h-8 w-8 text-green-500" />
+                      <div className="ml-4">
+                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Usage</p>
+                        <p className="text-2xl font-semibold text-gray-900 dark:text-white">
+                          {categoryTemplates.reduce((sum, t) => sum + t.usageCount, 0)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="card">
+                  <div className="card-body">
+                    <div className="flex items-center">
+                      <CheckCircleIcon className="h-8 w-8 text-green-500" />
+                      <div className="ml-4">
+                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Public Templates</p>
+                        <p className="text-2xl font-semibold text-gray-900 dark:text-white">
+                          {categoryTemplates.filter(t => t.isPublic).length}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="card">
+                  <div className="card-body">
+                    <div className="flex items-center">
+                      <ExclamationTriangleIcon className="h-8 w-8 text-yellow-500" />
+                      <div className="ml-4">
+                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Private Templates</p>
+                        <p className="text-2xl font-semibold text-gray-900 dark:text-white">
+                          {categoryTemplates.filter(t => !t.isPublic).length}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="card">
+                  <div className="card-header">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Template Types</h3>
+                  </div>
+                  <div className="card-body">
+                    <div className="space-y-4">
+                      {['VOCAL', 'INSTRUMENTAL', 'DANCE', 'SPEECH', 'DRAMA', 'OTHER'].map((type) => {
+                        const count = categoryTemplates.filter(t => t.categoryType === type).length
+                        return (
+                          <div key={type} className="flex items-center justify-between">
+                            <span className="text-sm text-gray-600 dark:text-gray-400 capitalize">{type.toLowerCase()}</span>
+                            <div className="flex items-center">
+                              <div className="w-32 bg-gray-200 dark:bg-gray-700 rounded-full h-2 mr-3">
+                                <div 
+                                  className="bg-blue-500 h-2 rounded-full" 
+                                  style={{ width: `${(count / categoryTemplates.length) * 100}%` }}
+                                ></div>
+                              </div>
+                              <span className="text-sm font-medium text-gray-900 dark:text-white">{count}</span>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="card">
+                  <div className="card-header">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Most Used Templates</h3>
+                  </div>
+                  <div className="card-body">
+                    <div className="space-y-3">
+                      {categoryTemplates
+                        .sort((a, b) => b.usageCount - a.usageCount)
+                        .slice(0, 5)
+                        .map((template) => (
+                        <div key={template.id} className="flex items-center justify-between">
+                          <div className="flex items-center">
+                            <DocumentTextIcon className="h-5 w-5 text-gray-400 mr-3" />
+                            <div>
+                              <p className="text-sm font-medium text-gray-900 dark:text-white">{template.name}</p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">{template.categoryType}</p>
+                            </div>
+                          </div>
+                          <span className="text-sm font-medium text-gray-900 dark:text-white">{template.usageCount}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Create/Edit Template Modal */}
+      {(showCreateModal || showEditModal) && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-full max-w-4xl shadow-lg rounded-md bg-white dark:bg-gray-800">
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+                  {showCreateModal ? 'Create New Template' : 'Edit Template'}
+                </h3>
+                <button
+                  onClick={() => {
+                    setShowCreateModal(false)
+                    setShowEditModal(false)
+                    setFormData({})
+                    setSelectedTemplate(null)
+                  }}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                >
+                  <XMarkIcon className="h-6 w-6" />
+                </button>
+              </div>
+              
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Template Name *
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.name || ''}
+                      onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                      className="input"
+                      placeholder="Enter template name"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Category Type *
+                    </label>
+                    <select
+                      value={formData.categoryType || 'VOCAL'}
+                      onChange={(e) => setFormData(prev => ({ ...prev, categoryType: e.target.value as any }))}
+                      className="input"
+                    >
+                      <option value="VOCAL">Vocal</option>
+                      <option value="INSTRUMENTAL">Instrumental</option>
+                      <option value="DANCE">Dance</option>
+                      <option value="SPEECH">Speech</option>
+                      <option value="DRAMA">Drama</option>
+                      <option value="OTHER">Other</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Description *
+                  </label>
+                  <textarea
+                    value={formData.description || ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                    className="input"
+                    rows={3}
+                    placeholder="Enter template description"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Max Contestants
+                    </label>
+                    <input
+                      type="number"
+                      value={formData.maxContestants || 20}
+                      onChange={(e) => setFormData(prev => ({ ...prev, maxContestants: parseInt(e.target.value) }))}
+                      className="input"
+                      min="1"
+                      max="100"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Time Limit (minutes)
+                    </label>
+                    <input
+                      type="number"
+                      value={formData.timeLimit || 5}
+                      onChange={(e) => setFormData(prev => ({ ...prev, timeLimit: parseInt(e.target.value) }))}
+                      className="input"
+                      min="1"
+                      max="60"
+                    />
+                  </div>
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={formData.isPublic || false}
+                      onChange={(e) => setFormData(prev => ({ ...prev, isPublic: e.target.checked }))}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    />
+                    <label className="ml-2 block text-sm text-gray-700 dark:text-gray-300">
+                      Public Template
+                    </label>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Tags
+                  </label>
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {formData.tags?.map((tag) => (
+                      <span key={tag} className="px-2 py-1 text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded flex items-center">
+                        {tag}
+                        <button
+                          onClick={() => removeTag(tag)}
+                          className="ml-1 text-blue-600 hover:text-blue-800"
+                        >
+                          <XMarkIcon className="h-3 w-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Add tag and press Enter"
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        addTag(e.currentTarget.value.trim())
+                        e.currentTarget.value = ''
+                      }
+                    }}
+                    className="input"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Judging Criteria *
+                    </label>
+                    <button
+                      onClick={addCriteria}
+                      className="btn-outline text-sm"
+                    >
+                      <PlusIcon className="h-4 w-4 mr-1" />
+                      Add Criteria
+                    </button>
+                  </div>
+                  <div className="space-y-4">
+                    {formData.criteria?.map((criteria, index) => (
+                      <div key={criteria.id} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                              Criteria Name *
+                            </label>
+                            <input
+                              type="text"
+                              value={criteria.name}
+                              onChange={(e) => updateCriteria(index, 'name', e.target.value)}
+                              className="input"
+                              placeholder="Enter criteria name"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                              Max Score *
+                            </label>
+                            <input
+                              type="number"
+                              value={criteria.maxScore}
+                              onChange={(e) => updateCriteria(index, 'maxScore', parseInt(e.target.value))}
+                              className="input"
+                              min="1"
+                              max="100"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Description
+                          </label>
+                          <textarea
+                            value={criteria.description}
+                            onChange={(e) => updateCriteria(index, 'description', e.target.value)}
+                            className="input"
+                            rows={2}
+                            placeholder="Enter criteria description"
+                          />
+                        </div>
+                        <div className="flex items-center justify-between mt-4">
+                          <div className="flex items-center space-x-4">
+                            <div className="flex items-center">
+                              <input
+                                type="checkbox"
+                                checked={criteria.isRequired}
+                                onChange={(e) => updateCriteria(index, 'isRequired', e.target.checked)}
+                                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                              />
+                              <label className="ml-2 block text-sm text-gray-700 dark:text-gray-300">
+                                Required
+                              </label>
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                Weight
+                              </label>
+                              <input
+                                type="number"
+                                value={criteria.weight}
+                                onChange={(e) => updateCriteria(index, 'weight', parseFloat(e.target.value))}
+                                className="input w-20"
+                                min="0"
+                                max="2"
+                                step="0.1"
+                              />
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => removeCriteria(index)}
+                            className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+                          >
+                            <TrashIcon className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex justify-end space-x-3 mt-6">
+                <button
+                  onClick={() => {
+                    setShowCreateModal(false)
+                    setShowEditModal(false)
+                    setFormData({})
+                    setSelectedTemplate(null)
+                  }}
+                  className="btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveTemplate}
+                  className="btn-primary"
+                >
+                  {showCreateModal ? 'Create Template' : 'Save Changes'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -6273,26 +11869,731 @@ export default TemplatesPage
 EOF
 
     cat > "$APP_DIR/frontend/src/pages/ReportsPage.tsx" << 'EOF'
-import React from 'react'
+import React, { useState } from 'react'
+import { useQuery } from 'react-query'
+import { useAuth } from '../contexts/AuthContext'
+import { eventsAPI, contestsAPI, categoriesAPI, resultsAPI, adminAPI } from '../services/api'
+import {
+  DocumentTextIcon,
+  PrinterIcon,
+  DownloadIcon,
+  CalendarIcon,
+  ChartBarIcon,
+  UserGroupIcon,
+  TrophyIcon,
+  ClipboardDocumentListIcon,
+  MagnifyingGlassIcon,
+  FunnelIcon,
+  EyeIcon,
+  ArrowDownTrayIcon,
+  DocumentArrowDownIcon,
+  TableCellsIcon,
+  PresentationChartLineIcon,
+  DocumentChartBarIcon,
+  DocumentReportIcon,
+  ClipboardDocumentCheckIcon,
+  ExclamationTriangleIcon,
+  CheckCircleIcon,
+  ClockIcon,
+  XCircleIcon,
+  InformationCircleIcon
+} from '@heroicons/react/24/outline'
+import { format } from 'date-fns'
+
+interface ReportTemplate {
+  id: string
+  name: string
+  description: string
+  type: 'EVENT' | 'CONTEST' | 'CATEGORY' | 'USER' | 'SCORE' | 'CERTIFICATION' | 'AUDIT'
+  format: 'PDF' | 'EXCEL' | 'CSV' | 'HTML'
+  parameters: any[]
+  isPublic: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+interface ReportInstance {
+  id: string
+  templateId: string
+  name: string
+  status: 'PENDING' | 'GENERATING' | 'COMPLETED' | 'FAILED'
+  parameters: any
+  fileUrl?: string
+  generatedAt?: string
+  generatedBy: string
+  createdAt: string
+}
 
 const ReportsPage: React.FC = () => {
+  const { user } = useAuth()
+  const [activeTab, setActiveTab] = useState('templates')
+  const [selectedTemplate, setSelectedTemplate] = useState<ReportTemplate | null>(null)
+  const [showGenerateModal, setShowGenerateModal] = useState(false)
+  const [reportParameters, setReportParameters] = useState<any>({})
+  const [filters, setFilters] = useState({
+    search: '',
+    type: '',
+    format: '',
+    status: ''
+  })
+
+  // Fetch data for reports
+  const { data: events } = useQuery('events', () => eventsAPI.getAll().then((res: any) => res.data))
+  const { data: contests } = useQuery('contests', () => contestsAPI.getAll().then((res: any) => res.data))
+  const { data: categories } = useQuery('categories', () => categoriesAPI.getAll().then((res: any) => res.data))
+  const { data: results } = useQuery('results', () => resultsAPI.getAll().then((res: any) => res.data))
+  const { data: adminStats } = useQuery('adminStats', () => adminAPI.getStats().then((res: any) => res.data))
+
+  // Mock data for templates and instances
+  const reportTemplates: ReportTemplate[] = [
+    {
+      id: '1',
+      name: 'Event Summary Report',
+      description: 'Comprehensive summary of an event including contests, participants, and results',
+      type: 'EVENT',
+      format: 'PDF',
+      parameters: [
+        { name: 'eventId', label: 'Event', type: 'select', required: true, options: events || [] },
+        { name: 'includeContests', label: 'Include Contests', type: 'boolean', required: false },
+        { name: 'includeParticipants', label: 'Include Participants', type: 'boolean', required: false },
+        { name: 'includeResults', label: 'Include Results', type: 'boolean', required: false }
+      ],
+      isPublic: true,
+      createdAt: '2024-01-01T00:00:00Z',
+      updatedAt: '2024-01-01T00:00:00Z'
+    },
+    {
+      id: '2',
+      name: 'Contest Results Report',
+      description: 'Detailed results for a specific contest with scoring breakdown',
+      type: 'CONTEST',
+      format: 'EXCEL',
+      parameters: [
+        { name: 'contestId', label: 'Contest', type: 'select', required: true, options: contests || [] },
+        { name: 'includeScores', label: 'Include Individual Scores', type: 'boolean', required: false },
+        { name: 'includeRankings', label: 'Include Rankings', type: 'boolean', required: false }
+      ],
+      isPublic: true,
+      createdAt: '2024-01-01T00:00:00Z',
+      updatedAt: '2024-01-01T00:00:00Z'
+    },
+    {
+      id: '3',
+      name: 'Judge Score Report',
+      description: 'Scores submitted by judges for a specific category',
+      type: 'SCORE',
+      format: 'CSV',
+      parameters: [
+        { name: 'categoryId', label: 'Category', type: 'select', required: true, options: categories || [] },
+        { name: 'judgeId', label: 'Judge (Optional)', type: 'select', required: false, options: [] },
+        { name: 'dateRange', label: 'Date Range', type: 'daterange', required: false }
+      ],
+      isPublic: false,
+      createdAt: '2024-01-01T00:00:00Z',
+      updatedAt: '2024-01-01T00:00:00Z'
+    },
+    {
+      id: '4',
+      name: 'Certification Status Report',
+      description: 'Current certification status for all categories',
+      type: 'CERTIFICATION',
+      format: 'HTML',
+      parameters: [
+        { name: 'eventId', label: 'Event (Optional)', type: 'select', required: false, options: events || [] },
+        { name: 'status', label: 'Status Filter', type: 'select', required: false, options: [
+          { value: 'PENDING', label: 'Pending' },
+          { value: 'IN_PROGRESS', label: 'In Progress' },
+          { value: 'CERTIFIED', label: 'Certified' },
+          { value: 'REJECTED', label: 'Rejected' }
+        ]}
+      ],
+      isPublic: true,
+      createdAt: '2024-01-01T00:00:00Z',
+      updatedAt: '2024-01-01T00:00:00Z'
+    },
+    {
+      id: '5',
+      name: 'User Activity Report',
+      description: 'User login and activity logs for administrative purposes',
+      type: 'USER',
+      format: 'PDF',
+      parameters: [
+        { name: 'dateRange', label: 'Date Range', type: 'daterange', required: true },
+        { name: 'userId', label: 'User (Optional)', type: 'select', required: false, options: [] },
+        { name: 'activityType', label: 'Activity Type', type: 'select', required: false, options: [
+          { value: 'LOGIN', label: 'Login' },
+          { value: 'SCORE_SUBMISSION', label: 'Score Submission' },
+          { value: 'CERTIFICATION', label: 'Certification' },
+          { value: 'ADMIN_ACTION', label: 'Admin Action' }
+        ]}
+      ],
+      isPublic: false,
+      createdAt: '2024-01-01T00:00:00Z',
+      updatedAt: '2024-01-01T00:00:00Z'
+    }
+  ]
+
+  const reportInstances: ReportInstance[] = [
+    {
+      id: '1',
+      templateId: '1',
+      name: 'Event Summary - Spring Competition 2024',
+      status: 'COMPLETED',
+      parameters: { eventId: '1', includeContests: true, includeParticipants: true, includeResults: true },
+      fileUrl: '/reports/event-summary-spring-2024.pdf',
+      generatedAt: '2024-01-15T10:30:00Z',
+      generatedBy: 'admin@eventmanager.com',
+      createdAt: '2024-01-15T10:25:00Z'
+    },
+    {
+      id: '2',
+      templateId: '2',
+      name: 'Contest Results - Vocal Solo',
+      status: 'GENERATING',
+      parameters: { contestId: '2', includeScores: true, includeRankings: true },
+      generatedBy: 'judge@eventmanager.com',
+      createdAt: '2024-01-15T11:00:00Z'
+    },
+    {
+      id: '3',
+      templateId: '3',
+      name: 'Judge Scores - Piano Category',
+      status: 'FAILED',
+      parameters: { categoryId: '3', dateRange: { start: '2024-01-01', end: '2024-01-15' } },
+      generatedBy: 'tallymaster@eventmanager.com',
+      createdAt: '2024-01-15T09:45:00Z'
+    }
+  ]
+
+  const filteredTemplates = reportTemplates.filter(template => {
+    const matchesSearch = template.name.toLowerCase().includes(filters.search.toLowerCase()) ||
+                         template.description.toLowerCase().includes(filters.search.toLowerCase())
+    const matchesType = !filters.type || template.type === filters.type
+    const matchesFormat = !filters.format || template.format === filters.format
+    const matchesPublic = user?.role === 'ORGANIZER' || user?.role === 'BOARD' || template.isPublic
+
+    return matchesSearch && matchesType && matchesFormat && matchesPublic
+  })
+
+  const filteredInstances = reportInstances.filter(instance => {
+    const template = reportTemplates.find(t => t.id === instance.templateId)
+    const matchesSearch = instance.name.toLowerCase().includes(filters.search.toLowerCase())
+    const matchesStatus = !filters.status || instance.status === filters.status
+    const matchesType = !filters.type || template?.type === filters.type
+
+    return matchesSearch && matchesStatus && matchesType
+  })
+
+  const handleGenerateReport = (template: ReportTemplate) => {
+    setSelectedTemplate(template)
+    setReportParameters({})
+    setShowGenerateModal(true)
+  }
+
+  const handleParameterChange = (paramName: string, value: any) => {
+    setReportParameters(prev => ({
+      ...prev,
+      [paramName]: value
+    }))
+  }
+
+  const handleSubmitReport = () => {
+    // Mock report generation
+    console.log('Generating report:', selectedTemplate?.name, reportParameters)
+    setShowGenerateModal(false)
+    setSelectedTemplate(null)
+    setReportParameters({})
+  }
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'PENDING':
+        return <ClockIcon className="h-5 w-5 text-yellow-500" />
+      case 'GENERATING':
+        return <ArrowDownTrayIcon className="h-5 w-5 text-blue-500" />
+      case 'COMPLETED':
+        return <CheckCircleIcon className="h-5 w-5 text-green-500" />
+      case 'FAILED':
+        return <XCircleIcon className="h-5 w-5 text-red-500" />
+      default:
+        return <InformationCircleIcon className="h-5 w-5 text-gray-500" />
+    }
+  }
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'PENDING':
+        return 'text-yellow-600 bg-yellow-100 dark:text-yellow-400 dark:bg-yellow-900'
+      case 'GENERATING':
+        return 'text-blue-600 bg-blue-100 dark:text-blue-400 dark:bg-blue-900'
+      case 'COMPLETED':
+        return 'text-green-600 bg-green-100 dark:text-green-400 dark:bg-green-900'
+      case 'FAILED':
+        return 'text-red-600 bg-red-100 dark:text-red-400 dark:bg-red-900'
+      default:
+        return 'text-gray-600 bg-gray-100 dark:text-gray-400 dark:bg-gray-900'
+    }
+  }
+
+  const tabs = [
+    { id: 'templates', name: 'Report Templates', icon: DocumentTextIcon },
+    { id: 'instances', name: 'Generated Reports', icon: ClipboardDocumentListIcon },
+    { id: 'analytics', name: 'Report Analytics', icon: ChartBarIcon },
+  ]
+
   return (
     <div className="space-y-6">
       <div className="card">
         <div className="card-header">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Reports & Analytics</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Reports Generation</h1>
           <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-            Generate detailed reports and view analytics
+            Generate and manage various reports for events, contests, and users
           </p>
         </div>
         <div className="card-body">
-          <div className="text-center py-12">
-            <div className="text-gray-400 dark:text-gray-500 text-6xl mb-4">📈</div>
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Reports Page</h3>
-            <p className="text-gray-600 dark:text-gray-400">This page will contain reporting and analytics functionality</p>
+          <div className="border-b border-gray-200 dark:border-gray-700">
+            <nav className="-mb-px flex space-x-8">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`${
+                    activeTab === tab.id
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  } whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm flex items-center`}
+                >
+                  <tab.icon className="h-5 w-5 mr-2" />
+                  {tab.name}
+                </button>
+              ))}
+            </nav>
           </div>
+
+          {activeTab === 'templates' && (
+            <div className="mt-6">
+              <div className="flex flex-col sm:flex-row gap-4 mb-6">
+                <div className="flex-1">
+                  <div className="relative">
+                    <MagnifyingGlassIcon className="h-5 w-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Search templates..."
+                      value={filters.search}
+                      onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
+                      className="input pl-10"
+                    />
+                  </div>
+                </div>
+                <select
+                  value={filters.type}
+                  onChange={(e) => setFilters(prev => ({ ...prev, type: e.target.value }))}
+                  className="input"
+                >
+                  <option value="">All Types</option>
+                  <option value="EVENT">Event</option>
+                  <option value="CONTEST">Contest</option>
+                  <option value="CATEGORY">Category</option>
+                  <option value="USER">User</option>
+                  <option value="SCORE">Score</option>
+                  <option value="CERTIFICATION">Certification</option>
+                  <option value="AUDIT">Audit</option>
+                </select>
+                <select
+                  value={filters.format}
+                  onChange={(e) => setFilters(prev => ({ ...prev, format: e.target.value }))}
+                  className="input"
+                >
+                  <option value="">All Formats</option>
+                  <option value="PDF">PDF</option>
+                  <option value="EXCEL">Excel</option>
+                  <option value="CSV">CSV</option>
+                  <option value="HTML">HTML</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredTemplates.map((template) => (
+                  <div key={template.id} className="card">
+                    <div className="card-body">
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex items-center">
+                          {template.type === 'EVENT' && <CalendarIcon className="h-6 w-6 text-blue-500 mr-2" />}
+                          {template.type === 'CONTEST' && <TrophyIcon className="h-6 w-6 text-yellow-500 mr-2" />}
+                          {template.type === 'CATEGORY' && <ClipboardDocumentCheckIcon className="h-6 w-6 text-green-500 mr-2" />}
+                          {template.type === 'USER' && <UserGroupIcon className="h-6 w-6 text-purple-500 mr-2" />}
+                          {template.type === 'SCORE' && <ChartBarIcon className="h-6 w-6 text-indigo-500 mr-2" />}
+                          {template.type === 'CERTIFICATION' && <CheckCircleIcon className="h-6 w-6 text-green-500 mr-2" />}
+                          {template.type === 'AUDIT' && <DocumentReportIcon className="h-6 w-6 text-red-500 mr-2" />}
+                          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                            {template.name}
+                          </h3>
+                        </div>
+                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                          template.format === 'PDF' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' :
+                          template.format === 'EXCEL' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' :
+                          template.format === 'CSV' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' :
+                          'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
+                        }`}>
+                          {template.format}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                        {template.description}
+                      </p>
+                      <div className="flex items-center justify-between">
+                        <span className={`text-xs px-2 py-1 rounded-full ${
+                          template.isPublic 
+                            ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                            : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+                        }`}>
+                          {template.isPublic ? 'Public' : 'Restricted'}
+                        </span>
+                        <button
+                          onClick={() => handleGenerateReport(template)}
+                          className="btn-primary text-sm"
+                        >
+                          <DocumentArrowDownIcon className="h-4 w-4 mr-1" />
+                          Generate
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'instances' && (
+            <div className="mt-6">
+              <div className="flex flex-col sm:flex-row gap-4 mb-6">
+                <div className="flex-1">
+                  <div className="relative">
+                    <MagnifyingGlassIcon className="h-5 w-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Search reports..."
+                      value={filters.search}
+                      onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
+                      className="input pl-10"
+                    />
+                  </div>
+                </div>
+                <select
+                  value={filters.status}
+                  onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
+                  className="input"
+                >
+                  <option value="">All Status</option>
+                  <option value="PENDING">Pending</option>
+                  <option value="GENERATING">Generating</option>
+                  <option value="COMPLETED">Completed</option>
+                  <option value="FAILED">Failed</option>
+                </select>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                  <thead className="bg-gray-50 dark:bg-gray-800">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Report Name
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Template
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Status
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Generated By
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Created
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+                    {filteredInstances.map((instance) => {
+                      const template = reportTemplates.find(t => t.id === instance.templateId)
+                      return (
+                        <tr key={instance.id}>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm font-medium text-gray-900 dark:text-white">
+                              {instance.name}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-gray-600 dark:text-gray-400">
+                              {template?.name || 'Unknown Template'}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              {getStatusIcon(instance.status)}
+                              <span className={`ml-2 px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(instance.status)}`}>
+                                {instance.status}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
+                            {instance.generatedBy}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
+                            {format(new Date(instance.createdAt), 'MMM dd, yyyy HH:mm')}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            {instance.status === 'COMPLETED' && instance.fileUrl && (
+                              <div className="flex space-x-2">
+                                <button className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300">
+                                  <EyeIcon className="h-4 w-4" />
+                                </button>
+                                <button className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300">
+                                  <DownloadIcon className="h-4 w-4" />
+                                </button>
+                                <button className="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-300">
+                                  <PrinterIcon className="h-4 w-4" />
+                                </button>
+                              </div>
+                            )}
+                            {instance.status === 'FAILED' && (
+                              <button className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300">
+                                <ExclamationTriangleIcon className="h-4 w-4" />
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'analytics' && (
+            <div className="mt-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <div className="card">
+                  <div className="card-body">
+                    <div className="flex items-center">
+                      <DocumentTextIcon className="h-8 w-8 text-blue-500" />
+                      <div className="ml-4">
+                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Templates</p>
+                        <p className="text-2xl font-semibold text-gray-900 dark:text-white">{reportTemplates.length}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="card">
+                  <div className="card-body">
+                    <div className="flex items-center">
+                      <ClipboardDocumentListIcon className="h-8 w-8 text-green-500" />
+                      <div className="ml-4">
+                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Generated Reports</p>
+                        <p className="text-2xl font-semibold text-gray-900 dark:text-white">{reportInstances.length}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="card">
+                  <div className="card-body">
+                    <div className="flex items-center">
+                      <CheckCircleIcon className="h-8 w-8 text-green-500" />
+                      <div className="ml-4">
+                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Completed</p>
+                        <p className="text-2xl font-semibold text-gray-900 dark:text-white">
+                          {reportInstances.filter(i => i.status === 'COMPLETED').length}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="card">
+                  <div className="card-body">
+                    <div className="flex items-center">
+                      <XCircleIcon className="h-8 w-8 text-red-500" />
+                      <div className="ml-4">
+                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Failed</p>
+                        <p className="text-2xl font-semibold text-gray-900 dark:text-white">
+                          {reportInstances.filter(i => i.status === 'FAILED').length}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="card">
+                  <div className="card-header">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Report Types</h3>
+                  </div>
+                  <div className="card-body">
+                    <div className="space-y-4">
+                      {['EVENT', 'CONTEST', 'CATEGORY', 'USER', 'SCORE', 'CERTIFICATION', 'AUDIT'].map((type) => {
+                        const count = reportTemplates.filter(t => t.type === type).length
+                        return (
+                          <div key={type} className="flex items-center justify-between">
+                            <span className="text-sm text-gray-600 dark:text-gray-400 capitalize">{type.toLowerCase()}</span>
+                            <div className="flex items-center">
+                              <div className="w-32 bg-gray-200 dark:bg-gray-700 rounded-full h-2 mr-3">
+                                <div 
+                                  className="bg-blue-500 h-2 rounded-full" 
+                                  style={{ width: `${(count / reportTemplates.length) * 100}%` }}
+                                ></div>
+                              </div>
+                              <span className="text-sm font-medium text-gray-900 dark:text-white">{count}</span>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="card">
+                  <div className="card-header">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Recent Activity</h3>
+                  </div>
+                  <div className="card-body">
+                    <div className="space-y-3">
+                      {reportInstances.slice(0, 5).map((instance) => (
+                        <div key={instance.id} className="flex items-center justify-between">
+                          <div className="flex items-center">
+                            {getStatusIcon(instance.status)}
+                            <div className="ml-3">
+                              <p className="text-sm font-medium text-gray-900 dark:text-white">{instance.name}</p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">
+                                {format(new Date(instance.createdAt), 'MMM dd, HH:mm')}
+                              </p>
+                            </div>
+                          </div>
+                          <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(instance.status)}`}>
+                            {instance.status}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Generate Report Modal */}
+      {showGenerateModal && selectedTemplate && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white dark:bg-gray-800">
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+                  Generate Report: {selectedTemplate.name}
+                </h3>
+                <button
+                  onClick={() => setShowGenerateModal(false)}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                >
+                  <XCircleIcon className="h-6 w-6" />
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  {selectedTemplate.description}
+                </p>
+                
+                {selectedTemplate.parameters.map((param) => (
+                  <div key={param.name}>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      {param.label} {param.required && <span className="text-red-500">*</span>}
+                    </label>
+                    {param.type === 'select' ? (
+                      <select
+                        value={reportParameters[param.name] || ''}
+                        onChange={(e) => handleParameterChange(param.name, e.target.value)}
+                        className="input"
+                        required={param.required}
+                      >
+                        <option value="">Select {param.label}</option>
+                        {param.options?.map((option: any) => (
+                          <option key={option.id || option.value} value={option.id || option.value}>
+                            {option.name || option.label}
+                          </option>
+                        ))}
+                      </select>
+                    ) : param.type === 'boolean' ? (
+                      <div className="flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={reportParameters[param.name] || false}
+                          onChange={(e) => handleParameterChange(param.name, e.target.checked)}
+                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                        />
+                        <label className="ml-2 block text-sm text-gray-700 dark:text-gray-300">
+                          {param.label}
+                        </label>
+                      </div>
+                    ) : param.type === 'daterange' ? (
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          type="date"
+                          value={reportParameters[param.name]?.start || ''}
+                          onChange={(e) => handleParameterChange(param.name, {
+                            ...reportParameters[param.name],
+                            start: e.target.value
+                          })}
+                          className="input"
+                          required={param.required}
+                        />
+                        <input
+                          type="date"
+                          value={reportParameters[param.name]?.end || ''}
+                          onChange={(e) => handleParameterChange(param.name, {
+                            ...reportParameters[param.name],
+                            end: e.target.value
+                          })}
+                          className="input"
+                          required={param.required}
+                        />
+                      </div>
+                    ) : (
+                      <input
+                        type={param.type}
+                        value={reportParameters[param.name] || ''}
+                        onChange={(e) => handleParameterChange(param.name, e.target.value)}
+                        className="input"
+                        required={param.required}
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+              
+              <div className="flex justify-end space-x-3 mt-6">
+                <button
+                  onClick={() => setShowGenerateModal(false)}
+                  className="btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSubmitReport}
+                  className="btn-primary"
+                >
+                  <DocumentArrowDownIcon className="h-4 w-4 mr-2" />
+                  Generate Report
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -6564,7 +12865,7 @@ EOF
 import React, { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from 'react-query'
 import { useAuth } from '../contexts/AuthContext'
-import { auditorAPI } from '../services/api'
+import { eventsAPI, contestsAPI, categoriesAPI, resultsAPI, scoringAPI, adminAPI } from '../services/api'
 import {
   CheckCircleIcon,
   ExclamationTriangleIcon,
@@ -6574,135 +12875,1083 @@ import {
   EyeIcon,
   PrinterIcon,
   ChartBarIcon,
+  MagnifyingGlassIcon,
+  CalendarIcon,
+  UserIcon,
+  TrophyIcon,
+  StarIcon,
+  ArrowDownTrayIcon,
+  ArrowUpTrayIcon,
+  CogIcon,
+  BellIcon,
+  InformationCircleIcon,
+  XCircleIcon,
+  CheckIcon,
+  XMarkIcon,
+  PlusIcon,
+  TrashIcon,
+  DocumentDuplicateIcon,
+  PresentationChartLineIcon,
+  TableCellsIcon,
+  DocumentReportIcon,
+  ClipboardDocumentCheckIcon,
+  AcademicCapIcon,
+  UserGroupIcon,
+  ChartPieIcon,
+  TrendingUpIcon,
+  TrendingDownIcon,
+  LockClosedIcon,
+  KeyIcon,
+  ExclamationCircleIcon
 } from '@heroicons/react/24/outline'
+import { format } from 'date-fns'
+
+interface AuditLog {
+  id: string
+  eventId: string
+  contestId: string
+  categoryId: string
+  contestantId: string
+  judgeId: string
+  action: 'SCORE_SUBMITTED' | 'SCORE_MODIFIED' | 'CERTIFICATION_REQUESTED' | 'CERTIFICATION_APPROVED' | 'CERTIFICATION_REJECTED' | 'RESULT_CALCULATED' | 'RESULT_MODIFIED'
+  details: string
+  oldValue?: any
+  newValue?: any
+  timestamp: string
+  ipAddress: string
+  userAgent: string
+  status: 'PENDING' | 'VERIFIED' | 'FLAGGED' | 'RESOLVED'
+  verifiedBy?: string
+  verifiedAt?: string
+  notes?: string
+}
+
+interface ScoreAudit {
+  id: string
+  contestId: string
+  categoryId: string
+  contestantId: string
+  contestantName: string
+  judgeId: string
+  judgeName: string
+  scores: {
+    criteriaId: string
+    criteriaName: string
+    score: number
+    maxScore: number
+    weight: number
+  }[]
+  totalScore: number
+  submittedAt: string
+  modifiedAt?: string
+  status: 'VERIFIED' | 'FLAGGED' | 'PENDING'
+  flags: string[]
+  auditNotes?: string
+}
+
+interface CertificationAudit {
+  id: string
+  contestantId: string
+  contestantName: string
+  currentLevel: string
+  requestedLevel: string
+  status: 'PENDING' | 'APPROVED' | 'REJECTED'
+  submittedAt: string
+  reviewedAt?: string
+  reviewedBy?: string
+  auditStatus: 'VERIFIED' | 'FLAGGED' | 'PENDING'
+  flags: string[]
+  auditNotes?: string
+}
 
 const AuditorPage: React.FC = () => {
   const { user } = useAuth()
+  const [activeTab, setActiveTab] = useState('audit-logs')
+  const [showDetailsModal, setShowDetailsModal] = useState(false)
+  const [showVerifyModal, setShowVerifyModal] = useState(false)
+  const [selectedAudit, setSelectedAudit] = useState<AuditLog | null>(null)
+  const [selectedScore, setSelectedScore] = useState<ScoreAudit | null>(null)
+  const [selectedCertification, setSelectedCertification] = useState<CertificationAudit | null>(null)
+  const [filters, setFilters] = useState({
+    search: '',
+    eventId: '',
+    contestId: '',
+    categoryId: '',
+    status: '',
+    action: '',
+    dateRange: ''
+  })
+  const [verificationNotes, setVerificationNotes] = useState('')
   const queryClient = useQueryClient()
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'scores' | 'certifications' | 'reports'>('dashboard')
 
-  const { data: auditStats, isLoading: statsLoading } = useQuery(
-    'auditor-stats',
-    () => auditorAPI.getStats().then(res => res.data),
+  // Fetch data for audit operations
+  const { data: events } = useQuery('events', () => eventsAPI.getAll().then((res: any) => res.data))
+  const { data: contests } = useQuery('contests', () => contestsAPI.getAll().then((res: any) => res.data))
+  const { data: categories } = useQuery('categories', () => categoriesAPI.getAll().then((res: any) => res.data))
+  const { data: results } = useQuery('results', () => resultsAPI.getAll().then((res: any) => res.data))
+
+  // Mock data for audit logs
+  const auditLogs: AuditLog[] = [
     {
-      refetchInterval: 30000,
+      id: '1',
+      eventId: '1',
+      contestId: '1',
+      categoryId: '1',
+      contestantId: '1',
+      judgeId: '1',
+      action: 'SCORE_SUBMITTED',
+      details: 'Score submitted for Sarah Johnson in Vocal Solo category',
+      newValue: { totalScore: 94, scores: [{ criteriaId: '1', score: 23 }, { criteriaId: '2', score: 24 }] },
+      timestamp: '2024-01-15T10:25:00Z',
+      ipAddress: '192.168.1.100',
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      status: 'VERIFIED',
+      verifiedBy: 'auditor@eventmanager.com',
+      verifiedAt: '2024-01-15T10:30:00Z',
+      notes: 'Score verified as accurate'
+    },
+    {
+      id: '2',
+      eventId: '1',
+      contestId: '1',
+      categoryId: '1',
+      contestantId: '2',
+      judgeId: '2',
+      action: 'SCORE_MODIFIED',
+      details: 'Score modified for Michael Chen in Vocal Solo category',
+      oldValue: { totalScore: 85, scores: [{ criteriaId: '1', score: 20 }, { criteriaId: '2', score: 21 }] },
+      newValue: { totalScore: 89, scores: [{ criteriaId: '1', score: 22 }, { criteriaId: '2', score: 23 }] },
+      timestamp: '2024-01-15T10:28:00Z',
+      ipAddress: '192.168.1.101',
+      userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+      status: 'FLAGGED',
+      notes: 'Score modification requires review - significant change detected'
+    },
+    {
+      id: '3',
+      eventId: '1',
+      contestId: '1',
+      categoryId: '1',
+      contestantId: '1',
+      judgeId: '1',
+      action: 'CERTIFICATION_REQUESTED',
+      details: 'Certification requested for Sarah Johnson - Advanced level',
+      newValue: { level: 'Advanced', score: 92.5 },
+      timestamp: '2024-01-15T10:30:00Z',
+      ipAddress: '192.168.1.100',
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      status: 'PENDING',
+      notes: 'Certification request pending review'
     }
-  )
+  ]
+
+  const scoreAudits: ScoreAudit[] = [
+    {
+      id: '1',
+      contestId: '1',
+      categoryId: '1',
+      contestantId: '1',
+      contestantName: 'Sarah Johnson',
+      judgeId: '1',
+      judgeName: 'Dr. Smith',
+      scores: [
+        { criteriaId: '1', criteriaName: 'Technique', score: 23, maxScore: 25, weight: 1.0 },
+        { criteriaId: '2', criteriaName: 'Musicality', score: 24, maxScore: 25, weight: 1.0 },
+        { criteriaId: '3', criteriaName: 'Stage Presence', score: 19, maxScore: 20, weight: 0.8 },
+        { criteriaId: '4', criteriaName: 'Song Choice', score: 14, maxScore: 15, weight: 0.6 },
+        { criteriaId: '5', criteriaName: 'Overall Impact', score: 14, maxScore: 15, weight: 0.6 }
+      ],
+      totalScore: 94,
+      submittedAt: '2024-01-15T10:25:00Z',
+      status: 'VERIFIED',
+      flags: [],
+      auditNotes: 'Score verified as accurate and consistent with performance'
+    },
+    {
+      id: '2',
+      contestId: '1',
+      categoryId: '1',
+      contestantId: '2',
+      contestantName: 'Michael Chen',
+      judgeId: '2',
+      judgeName: 'Prof. Brown',
+      scores: [
+        { criteriaId: '1', criteriaName: 'Technique', score: 22, maxScore: 25, weight: 1.0 },
+        { criteriaId: '2', criteriaName: 'Musicality', score: 23, maxScore: 25, weight: 1.0 },
+        { criteriaId: '3', criteriaName: 'Stage Presence', score: 18, maxScore: 20, weight: 0.8 },
+        { criteriaId: '4', criteriaName: 'Song Choice', score: 13, maxScore: 15, weight: 0.6 },
+        { criteriaId: '5', criteriaName: 'Overall Impact', score: 13, maxScore: 15, weight: 0.6 }
+      ],
+      totalScore: 89,
+      submittedAt: '2024-01-15T10:28:00Z',
+      modifiedAt: '2024-01-15T10:30:00Z',
+      status: 'FLAGGED',
+      flags: ['Score modification detected', 'Significant change in technique score'],
+      auditNotes: 'Score modification requires review - technique score increased from 20 to 22'
+    }
+  ]
+
+  const certificationAudits: CertificationAudit[] = [
+    {
+      id: '1',
+      contestantId: '1',
+      contestantName: 'Sarah Johnson',
+      currentLevel: 'Intermediate',
+      requestedLevel: 'Advanced',
+      status: 'APPROVED',
+      submittedAt: '2024-01-15T10:30:00Z',
+      reviewedAt: '2024-01-15T11:00:00Z',
+      reviewedBy: 'tallymaster@eventmanager.com',
+      auditStatus: 'VERIFIED',
+      flags: [],
+      auditNotes: 'Certification approved based on score of 92.5 and performance quality'
+    },
+    {
+      id: '2',
+      contestantId: '2',
+      contestantName: 'Michael Chen',
+      currentLevel: 'Beginner',
+      requestedLevel: 'Intermediate',
+      status: 'PENDING',
+      submittedAt: '2024-01-15T10:35:00Z',
+      auditStatus: 'FLAGGED',
+      flags: ['Score modification pending review', 'Inconsistent scoring pattern'],
+      auditNotes: 'Certification request flagged due to pending score audit'
+    }
+  ]
+
+  const filteredAuditLogs = auditLogs.filter(log => {
+    const matchesSearch = log.details.toLowerCase().includes(filters.search.toLowerCase()) ||
+                         log.action.toLowerCase().includes(filters.search.toLowerCase())
+    const matchesEvent = !filters.eventId || log.eventId === filters.eventId
+    const matchesContest = !filters.contestId || log.contestId === filters.contestId
+    const matchesCategory = !filters.categoryId || log.categoryId === filters.categoryId
+    const matchesStatus = !filters.status || log.status === filters.status
+    const matchesAction = !filters.action || log.action === filters.action
+
+    return matchesSearch && matchesEvent && matchesContest && matchesCategory && matchesStatus && matchesAction
+  })
+
+  const filteredScoreAudits = scoreAudits.filter(audit => {
+    const matchesSearch = audit.contestantName.toLowerCase().includes(filters.search.toLowerCase()) ||
+                         audit.judgeName.toLowerCase().includes(filters.search.toLowerCase())
+    const matchesContest = !filters.contestId || audit.contestId === filters.contestId
+    const matchesCategory = !filters.categoryId || audit.categoryId === filters.categoryId
+    const matchesStatus = !filters.status || audit.status === filters.status
+
+    return matchesSearch && matchesContest && matchesCategory && matchesStatus
+  })
+
+  const filteredCertificationAudits = certificationAudits.filter(audit => {
+    const matchesSearch = audit.contestantName.toLowerCase().includes(filters.search.toLowerCase())
+    const matchesStatus = !filters.status || audit.status === filters.status
+    const matchesAuditStatus = !filters.status || audit.auditStatus === filters.status
+
+    return matchesSearch && (matchesStatus || matchesAuditStatus)
+  })
+
+  const handleViewDetails = (audit: AuditLog) => {
+    setSelectedAudit(audit)
+    setShowDetailsModal(true)
+  }
+
+  const handleVerifyAudit = (audit: AuditLog) => {
+    setSelectedAudit(audit)
+    setVerificationNotes('')
+    setShowVerifyModal(true)
+  }
+
+  const handleVerifyScore = (score: ScoreAudit) => {
+    setSelectedScore(score)
+    setVerificationNotes('')
+    setShowVerifyModal(true)
+  }
+
+  const handleVerifyCertification = (certification: CertificationAudit) => {
+    setSelectedCertification(certification)
+    setVerificationNotes('')
+    setShowVerifyModal(true)
+  }
+
+  const handleSubmitVerification = () => {
+    // Mock verification submission
+    console.log('Submitting verification:', verificationNotes)
+    setShowVerifyModal(false)
+    setSelectedAudit(null)
+    setSelectedScore(null)
+    setSelectedCertification(null)
+    setVerificationNotes('')
+  }
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'PENDING':
+        return <ClockIcon className="h-5 w-5 text-yellow-500" />
+      case 'VERIFIED':
+        return <CheckCircleIcon className="h-5 w-5 text-green-500" />
+      case 'FLAGGED':
+        return <ExclamationTriangleIcon className="h-5 w-5 text-red-500" />
+      case 'RESOLVED':
+        return <CheckIcon className="h-5 w-5 text-blue-500" />
+      default:
+        return <InformationCircleIcon className="h-5 w-5 text-gray-500" />
+    }
+  }
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'PENDING':
+        return 'text-yellow-600 bg-yellow-100 dark:text-yellow-400 dark:bg-yellow-900'
+      case 'VERIFIED':
+        return 'text-green-600 bg-green-100 dark:text-green-400 dark:bg-green-900'
+      case 'FLAGGED':
+        return 'text-red-600 bg-red-100 dark:text-red-400 dark:bg-red-900'
+      case 'RESOLVED':
+        return 'text-blue-600 bg-blue-100 dark:text-blue-400 dark:bg-blue-900'
+      default:
+        return 'text-gray-600 bg-gray-100 dark:text-gray-400 dark:bg-gray-900'
+    }
+  }
+
+  const getActionIcon = (action: string) => {
+    switch (action) {
+      case 'SCORE_SUBMITTED':
+        return <DocumentTextIcon className="h-5 w-5 text-blue-500" />
+      case 'SCORE_MODIFIED':
+        return <PencilIcon className="h-5 w-5 text-orange-500" />
+      case 'CERTIFICATION_REQUESTED':
+        return <AcademicCapIcon className="h-5 w-5 text-purple-500" />
+      case 'CERTIFICATION_APPROVED':
+        return <CheckCircleIcon className="h-5 w-5 text-green-500" />
+      case 'CERTIFICATION_REJECTED':
+        return <XCircleIcon className="h-5 w-5 text-red-500" />
+      case 'RESULT_CALCULATED':
+        return <CalculatorIcon className="h-5 w-5 text-indigo-500" />
+      case 'RESULT_MODIFIED':
+        return <CogIcon className="h-5 w-5 text-yellow-500" />
+      default:
+        return <InformationCircleIcon className="h-5 w-5 text-gray-500" />
+    }
+  }
 
   const tabs = [
-    { id: 'dashboard', label: 'Dashboard', icon: ChartBarIcon },
-    { id: 'scores', label: 'Score Audit', icon: DocumentTextIcon },
-    { id: 'certifications', label: 'Certifications', icon: ShieldCheckIcon },
-    { id: 'reports', label: 'Reports', icon: PrinterIcon },
+    { id: 'audit-logs', name: 'Audit Logs', icon: DocumentTextIcon },
+    { id: 'score-audits', name: 'Score Audits', icon: ChartBarIcon },
+    { id: 'certification-audits', name: 'Certification Audits', icon: ShieldCheckIcon },
+    { id: 'analytics', name: 'Analytics', icon: ChartPieIcon },
   ]
+
+  const canAudit = user?.role === 'AUDITOR' || user?.role === 'ORGANIZER' || user?.role === 'BOARD'
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Auditor Dashboard</h1>
-        <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-          Review and verify all scores across contests and categories
-        </p>
+      <div className="card">
+        <div className="card-header">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Auditor Dashboard</h1>
+          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+            Review and verify all scores, certifications, and system activities
+          </p>
+        </div>
+        <div className="card-body">
+          <div className="border-b border-gray-200 dark:border-gray-700">
+            <nav className="-mb-px flex space-x-8">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`${
+                    activeTab === tab.id
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  } whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm flex items-center`}
+                >
+                  <tab.icon className="h-5 w-5 mr-2" />
+                  {tab.name}
+                </button>
+              ))}
+            </nav>
+          </div>
+
+          {activeTab === 'audit-logs' && (
+            <div className="mt-6">
+              <div className="flex flex-col sm:flex-row gap-4 mb-6">
+                <div className="flex-1">
+                  <div className="relative">
+                    <MagnifyingGlassIcon className="h-5 w-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Search audit logs..."
+                      value={filters.search}
+                      onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
+                      className="input pl-10"
+                    />
+                  </div>
+                </div>
+                <select
+                  value={filters.action}
+                  onChange={(e) => setFilters(prev => ({ ...prev, action: e.target.value }))}
+                  className="input"
+                >
+                  <option value="">All Actions</option>
+                  <option value="SCORE_SUBMITTED">Score Submitted</option>
+                  <option value="SCORE_MODIFIED">Score Modified</option>
+                  <option value="CERTIFICATION_REQUESTED">Certification Requested</option>
+                  <option value="CERTIFICATION_APPROVED">Certification Approved</option>
+                  <option value="CERTIFICATION_REJECTED">Certification Rejected</option>
+                  <option value="RESULT_CALCULATED">Result Calculated</option>
+                  <option value="RESULT_MODIFIED">Result Modified</option>
+                </select>
+                <select
+                  value={filters.status}
+                  onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
+                  className="input"
+                >
+                  <option value="">All Status</option>
+                  <option value="PENDING">Pending</option>
+                  <option value="VERIFIED">Verified</option>
+                  <option value="FLAGGED">Flagged</option>
+                  <option value="RESOLVED">Resolved</option>
+                </select>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                  <thead className="bg-gray-50 dark:bg-gray-800">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Action
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Details
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Status
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Timestamp
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        IP Address
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+                    {filteredAuditLogs.map((log) => (
+                      <tr key={log.id}>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            {getActionIcon(log.action)}
+                            <span className="ml-2 text-sm font-medium text-gray-900 dark:text-white">
+                              {log.action.replace(/_/g, ' ')}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="text-sm text-gray-900 dark:text-white">
+                            {log.details}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            {getStatusIcon(log.status)}
+                            <span className={`ml-2 px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(log.status)}`}>
+                              {log.status}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
+                          {format(new Date(log.timestamp), 'MMM dd, HH:mm')}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
+                          {log.ipAddress}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => handleViewDetails(log)}
+                              className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
+                              title="View Details"
+                            >
+                              <EyeIcon className="h-4 w-4" />
+                            </button>
+                            {canAudit && log.status === 'PENDING' && (
+                              <button
+                                onClick={() => handleVerifyAudit(log)}
+                                className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
+                                title="Verify"
+                              >
+                                <CheckIcon className="h-4 w-4" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'score-audits' && (
+            <div className="mt-6">
+              <div className="flex flex-col sm:flex-row gap-4 mb-6">
+                <div className="flex-1">
+                  <div className="relative">
+                    <MagnifyingGlassIcon className="h-5 w-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Search score audits..."
+                      value={filters.search}
+                      onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
+                      className="input pl-10"
+                    />
+                  </div>
+                </div>
+                <select
+                  value={filters.status}
+                  onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
+                  className="input"
+                >
+                  <option value="">All Status</option>
+                  <option value="VERIFIED">Verified</option>
+                  <option value="FLAGGED">Flagged</option>
+                  <option value="PENDING">Pending</option>
+                </select>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                  <thead className="bg-gray-50 dark:bg-gray-800">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Contestant
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Judge
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Total Score
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Status
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Flags
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Submitted
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+                    {filteredScoreAudits.map((audit) => (
+                      <tr key={audit.id}>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-medium text-gray-900 dark:text-white">
+                            {audit.contestantName}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-600 dark:text-gray-400">
+                            {audit.judgeName}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-medium text-gray-900 dark:text-white">
+                            {audit.totalScore}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            {getStatusIcon(audit.status)}
+                            <span className={`ml-2 px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(audit.status)}`}>
+                              {audit.status}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-600 dark:text-gray-400">
+                            {audit.flags.length > 0 ? (
+                              <span className="text-red-600 dark:text-red-400">
+                                {audit.flags.length} flag{audit.flags.length > 1 ? 's' : ''}
+                              </span>
+                            ) : (
+                              <span className="text-green-600 dark:text-green-400">None</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
+                          {format(new Date(audit.submittedAt), 'MMM dd, HH:mm')}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => handleVerifyScore(audit)}
+                              className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
+                              title="View Details"
+                            >
+                              <EyeIcon className="h-4 w-4" />
+                            </button>
+                            {canAudit && audit.status === 'PENDING' && (
+                              <button
+                                onClick={() => handleVerifyScore(audit)}
+                                className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
+                                title="Verify"
+                              >
+                                <CheckIcon className="h-4 w-4" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'certification-audits' && (
+            <div className="mt-6">
+              <div className="flex flex-col sm:flex-row gap-4 mb-6">
+                <div className="flex-1">
+                  <div className="relative">
+                    <MagnifyingGlassIcon className="h-5 w-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Search certification audits..."
+                      value={filters.search}
+                      onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
+                      className="input pl-10"
+                    />
+                  </div>
+                </div>
+                <select
+                  value={filters.status}
+                  onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
+                  className="input"
+                >
+                  <option value="">All Status</option>
+                  <option value="PENDING">Pending</option>
+                  <option value="APPROVED">Approved</option>
+                  <option value="REJECTED">Rejected</option>
+                </select>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                  <thead className="bg-gray-50 dark:bg-gray-800">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Contestant
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Current Level
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Requested Level
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Status
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Audit Status
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Flags
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Submitted
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+                    {filteredCertificationAudits.map((audit) => (
+                      <tr key={audit.id}>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-medium text-gray-900 dark:text-white">
+                            {audit.contestantName}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-600 dark:text-gray-400">
+                            {audit.currentLevel}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-600 dark:text-gray-400">
+                            {audit.requestedLevel}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            {getStatusIcon(audit.status)}
+                            <span className={`ml-2 px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(audit.status)}`}>
+                              {audit.status}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            {getStatusIcon(audit.auditStatus)}
+                            <span className={`ml-2 px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(audit.auditStatus)}`}>
+                              {audit.auditStatus}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-600 dark:text-gray-400">
+                            {audit.flags.length > 0 ? (
+                              <span className="text-red-600 dark:text-red-400">
+                                {audit.flags.length} flag{audit.flags.length > 1 ? 's' : ''}
+                              </span>
+                            ) : (
+                              <span className="text-green-600 dark:text-green-400">None</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
+                          {format(new Date(audit.submittedAt), 'MMM dd, HH:mm')}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => handleVerifyCertification(audit)}
+                              className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
+                              title="View Details"
+                            >
+                              <EyeIcon className="h-4 w-4" />
+                            </button>
+                            {canAudit && audit.auditStatus === 'PENDING' && (
+                              <button
+                                onClick={() => handleVerifyCertification(audit)}
+                                className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
+                                title="Verify"
+                              >
+                                <CheckIcon className="h-4 w-4" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'analytics' && (
+            <div className="mt-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <div className="card">
+                  <div className="card-body">
+                    <div className="flex items-center">
+                      <DocumentTextIcon className="h-8 w-8 text-blue-500" />
+                      <div className="ml-4">
+                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Audits</p>
+                        <p className="text-2xl font-semibold text-gray-900 dark:text-white">{auditLogs.length}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="card">
+                  <div className="card-body">
+                    <div className="flex items-center">
+                      <CheckCircleIcon className="h-8 w-8 text-green-500" />
+                      <div className="ml-4">
+                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Verified</p>
+                        <p className="text-2xl font-semibold text-gray-900 dark:text-white">
+                          {auditLogs.filter(l => l.status === 'VERIFIED').length}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="card">
+                  <div className="card-body">
+                    <div className="flex items-center">
+                      <ExclamationTriangleIcon className="h-8 w-8 text-red-500" />
+                      <div className="ml-4">
+                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Flagged</p>
+                        <p className="text-2xl font-semibold text-gray-900 dark:text-white">
+                          {auditLogs.filter(l => l.status === 'FLAGGED').length}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="card">
+                  <div className="card-body">
+                    <div className="flex items-center">
+                      <ClockIcon className="h-8 w-8 text-yellow-500" />
+                      <div className="ml-4">
+                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Pending</p>
+                        <p className="text-2xl font-semibold text-gray-900 dark:text-white">
+                          {auditLogs.filter(l => l.status === 'PENDING').length}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="card">
+                  <div className="card-header">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Action Types</h3>
+                  </div>
+                  <div className="card-body">
+                    <div className="space-y-4">
+                      {['SCORE_SUBMITTED', 'SCORE_MODIFIED', 'CERTIFICATION_REQUESTED', 'CERTIFICATION_APPROVED', 'CERTIFICATION_REJECTED', 'RESULT_CALCULATED', 'RESULT_MODIFIED'].map((action) => {
+                        const count = auditLogs.filter(l => l.action === action).length
+                        return (
+                          <div key={action} className="flex items-center justify-between">
+                            <span className="text-sm text-gray-600 dark:text-gray-400">{action.replace(/_/g, ' ')}</span>
+                            <div className="flex items-center">
+                              <div className="w-32 bg-gray-200 dark:bg-gray-700 rounded-full h-2 mr-3">
+                                <div
+                                  className="bg-blue-500 h-2 rounded-full"
+                                  style={{ width: `${(count / auditLogs.length) * 100}%` }}
+                                ></div>
+                              </div>
+                              <span className="text-sm font-medium text-gray-900 dark:text-white">{count}</span>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="card">
+                  <div className="card-header">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Recent Activity</h3>
+                  </div>
+                  <div className="card-body">
+                    <div className="space-y-3">
+                      {auditLogs.slice(0, 5).map((log) => (
+                        <div key={log.id} className="flex items-center justify-between">
+                          <div className="flex items-center">
+                            {getActionIcon(log.action)}
+                            <div className="ml-3">
+                              <p className="text-sm font-medium text-gray-900 dark:text-white">{log.details}</p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">
+                                {format(new Date(log.timestamp), 'MMM dd, HH:mm')}
+                              </p>
+                            </div>
+                          </div>
+                          <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(log.status)}`}>
+                            {log.status}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
-      <div className="border-b border-gray-200 dark:border-gray-700">
-        <nav className="-mb-px flex space-x-8">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
-              className={`flex items-center space-x-2 py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === tab.id
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
-              }`}
-            >
-              <tab.icon className="h-4 w-4" />
-              <span>{tab.label}</span>
-            </button>
-          ))}
-        </nav>
-      </div>
-
-      {activeTab === 'dashboard' && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="card">
-              <div className="card-content">
-                <div className="flex items-center">
-                  <ClockIcon className="h-8 w-8 text-yellow-500" />
-                  <div className="ml-3">
-                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Pending Audits</p>
-                    <p className="text-2xl font-semibold text-gray-900 dark:text-white">
-                      {statsLoading ? '--' : auditStats?.pendingAudits || 0}
-                    </p>
-                  </div>
-                </div>
+      {/* Audit Details Modal */}
+      {showDetailsModal && selectedAudit && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-full max-w-4xl shadow-lg rounded-md bg-white dark:bg-gray-800">
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+                  Audit Details: {selectedAudit.action.replace(/_/g, ' ')}
+                </h3>
+                <button
+                  onClick={() => setShowDetailsModal(false)}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                >
+                  <XMarkIcon className="h-6 w-6" />
+                </button>
               </div>
-            </div>
+              
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="card">
+                    <div className="card-header">
+                      <h4 className="text-lg font-semibold text-gray-900 dark:text-white">Basic Information</h4>
+                    </div>
+                    <div className="card-body">
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Action</label>
+                          <div className="text-sm text-gray-900 dark:text-white">{selectedAudit.action.replace(/_/g, ' ')}</div>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Details</label>
+                          <div className="text-sm text-gray-900 dark:text-white">{selectedAudit.details}</div>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Status</label>
+                          <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(selectedAudit.status)}`}>
+                            {selectedAudit.status}
+                          </span>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Timestamp</label>
+                          <div className="text-sm text-gray-900 dark:text-white">
+                            {format(new Date(selectedAudit.timestamp), 'MMM dd, yyyy HH:mm:ss')}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
 
-            <div className="card">
-              <div className="card-content">
-                <div className="flex items-center">
-                  <CheckCircleIcon className="h-8 w-8 text-green-500" />
-                  <div className="ml-3">
-                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Completed Audits</p>
-                    <p className="text-2xl font-semibold text-gray-900 dark:text-white">
-                      {statsLoading ? '--' : auditStats?.completedAudits || 0}
-                    </p>
+                  <div className="card">
+                    <div className="card-header">
+                      <h4 className="text-lg font-semibold text-gray-900 dark:text-white">Technical Details</h4>
+                    </div>
+                    <div className="card-body">
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">IP Address</label>
+                          <div className="text-sm text-gray-900 dark:text-white">{selectedAudit.ipAddress}</div>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">User Agent</label>
+                          <div className="text-sm text-gray-900 dark:text-white break-all">{selectedAudit.userAgent}</div>
+                        </div>
+                        {selectedAudit.verifiedBy && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Verified By</label>
+                            <div className="text-sm text-gray-900 dark:text-white">{selectedAudit.verifiedBy}</div>
+                          </div>
+                        )}
+                        {selectedAudit.verifiedAt && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Verified At</label>
+                            <div className="text-sm text-gray-900 dark:text-white">
+                              {format(new Date(selectedAudit.verifiedAt), 'MMM dd, yyyy HH:mm:ss')}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </div>
 
-            <div className="card">
-              <div className="card-content">
-                <div className="flex items-center">
-                  <ExclamationTriangleIcon className="h-8 w-8 text-red-500" />
-                  <div className="ml-3">
-                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Issues Found</p>
-                    <p className="text-2xl font-semibold text-gray-900 dark:text-white">
-                      {statsLoading ? '--' : auditStats?.issuesFound || 0}
-                    </p>
+                {(selectedAudit.oldValue || selectedAudit.newValue) && (
+                  <div className="card">
+                    <div className="card-header">
+                      <h4 className="text-lg font-semibold text-gray-900 dark:text-white">Value Changes</h4>
+                    </div>
+                    <div className="card-body">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {selectedAudit.oldValue && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Old Value</label>
+                            <div className="bg-gray-100 dark:bg-gray-700 p-3 rounded-lg">
+                              <pre className="text-sm text-gray-900 dark:text-white whitespace-pre-wrap">
+                                {JSON.stringify(selectedAudit.oldValue, null, 2)}
+                              </pre>
+                            </div>
+                          </div>
+                        )}
+                        {selectedAudit.newValue && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">New Value</label>
+                            <div className="bg-gray-100 dark:bg-gray-700 p-3 rounded-lg">
+                              <pre className="text-sm text-gray-900 dark:text-white whitespace-pre-wrap">
+                                {JSON.stringify(selectedAudit.newValue, null, 2)}
+                              </pre>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                </div>
+                )}
+
+                {selectedAudit.notes && (
+                  <div className="card">
+                    <div className="card-header">
+                      <h4 className="text-lg font-semibold text-gray-900 dark:text-white">Notes</h4>
+                    </div>
+                    <div className="card-body">
+                      <div className="text-sm text-gray-900 dark:text-white">{selectedAudit.notes}</div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {activeTab === 'scores' && (
-        <div className="card">
-          <div className="card-content">
-            <div className="text-center py-12">
-              <DocumentTextIcon className="h-12 w-12 mx-auto mb-4 text-gray-300 dark:text-gray-600" />
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Score Audit</h3>
-              <p className="text-gray-600 dark:text-gray-400">This page will contain comprehensive score auditing functionality</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {activeTab === 'certifications' && (
-        <div className="card">
-          <div className="card-content">
-            <div className="text-center py-12">
-              <ShieldCheckIcon className="h-12 w-12 mx-auto mb-4 text-gray-300 dark:text-gray-600" />
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Final Certification</h3>
-              <p className="text-gray-600 dark:text-gray-400">This page will contain final certification functionality</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {activeTab === 'reports' && (
-        <div className="card">
-          <div className="card-content">
-            <div className="text-center py-12">
-              <PrinterIcon className="h-12 w-12 mx-auto mb-4 text-gray-300 dark:text-gray-600" />
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Audit Reports</h3>
-              <p className="text-gray-600 dark:text-gray-400">This page will contain audit report generation functionality</p>
+      {/* Verification Modal */}
+      {showVerifyModal && (selectedAudit || selectedScore || selectedCertification) && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white dark:bg-gray-800">
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+                  Verify {selectedAudit ? 'Audit' : selectedScore ? 'Score' : 'Certification'}
+                </h3>
+                <button
+                  onClick={() => setShowVerifyModal(false)}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                >
+                  <XMarkIcon className="h-6 w-6" />
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Verification Notes
+                  </label>
+                  <textarea
+                    value={verificationNotes}
+                    onChange={(e) => setVerificationNotes(e.target.value)}
+                    className="input"
+                    rows={4}
+                    placeholder="Add verification notes..."
+                  />
+                </div>
+                
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="verified"
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  />
+                  <label htmlFor="verified" className="ml-2 block text-sm text-gray-700 dark:text-gray-300">
+                    Mark as verified
+                  </label>
+                </div>
+              </div>
+              
+              <div className="flex justify-end space-x-3 mt-6">
+                <button
+                  onClick={() => setShowVerifyModal(false)}
+                  className="btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSubmitVerification}
+                  className="btn-primary"
+                >
+                  Submit Verification
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -6902,107 +14151,925 @@ EOF
 import React, { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from 'react-query'
 import { useAuth } from '../contexts/AuthContext'
-import { tallyMasterAPI } from '../services/api'
+import { eventsAPI, contestsAPI, categoriesAPI, resultsAPI, scoringAPI } from '../services/api'
 import {
-  CheckCircleIcon,
-  ClockIcon,
-  DocumentTextIcon,
-  ShieldCheckIcon,
-  ExclamationTriangleIcon,
-  EyeIcon,
+  CalculatorIcon,
   ChartBarIcon,
   ClipboardDocumentListIcon,
+  MagnifyingGlassIcon,
+  EyeIcon,
+  PencilIcon,
+  CheckCircleIcon,
+  ExclamationTriangleIcon,
+  ClockIcon,
+  CalendarIcon,
+  UserIcon,
+  TrophyIcon,
+  StarIcon,
+  DocumentTextIcon,
+  ArrowDownTrayIcon,
+  ArrowUpTrayIcon,
+  CogIcon,
+  BellIcon,
+  InformationCircleIcon,
+  XCircleIcon,
+  CheckIcon,
+  XMarkIcon,
+  PlusIcon,
+  TrashIcon,
+  DocumentDuplicateIcon,
+  PresentationChartLineIcon,
+  TableCellsIcon,
+  DocumentReportIcon,
+  ClipboardDocumentCheckIcon,
+  AcademicCapIcon,
+  UserGroupIcon,
+  ChartPieIcon,
+  TrendingUpIcon,
+  TrendingDownIcon
 } from '@heroicons/react/24/outline'
+import { format } from 'date-fns'
+
+interface TallyResult {
+  id: string
+  contestId: string
+  categoryId: string
+  contestantId: string
+  contestantName: string
+  totalScore: number
+  averageScore: number
+  rank: number
+  judgeScores: {
+    judgeId: string
+    judgeName: string
+    scores: {
+      criteriaId: string
+      criteriaName: string
+      score: number
+      maxScore: number
+    }[]
+    totalScore: number
+  }[]
+  isCertified: boolean
+  certificationLevel?: string
+  calculatedAt: string
+  calculatedBy: string
+}
+
+interface ScoreSubmission {
+  id: string
+  contestId: string
+  categoryId: string
+  contestantId: string
+  judgeId: string
+  scores: {
+    criteriaId: string
+    score: number
+    maxScore: number
+  }[]
+  totalScore: number
+  submittedAt: string
+  status: 'PENDING' | 'APPROVED' | 'REJECTED'
+}
+
+interface CertificationRequest {
+  id: string
+  contestId: string
+  categoryId: string
+  contestantId: string
+  contestantName: string
+  currentLevel: string
+  requestedLevel: string
+  status: 'PENDING' | 'APPROVED' | 'REJECTED'
+  submittedAt: string
+  reviewedAt?: string
+  reviewedBy?: string
+  notes?: string
+}
 
 const TallyMasterPage: React.FC = () => {
   const { user } = useAuth()
+  const [activeTab, setActiveTab] = useState('tally')
+  const [showCertificationModal, setShowCertificationModal] = useState(false)
+  const [showScoreModal, setShowScoreModal] = useState(false)
+  const [selectedResult, setSelectedResult] = useState<TallyResult | null>(null)
+  const [selectedSubmission, setSelectedSubmission] = useState<ScoreSubmission | null>(null)
+  const [filters, setFilters] = useState({
+    search: '',
+    contestId: '',
+    categoryId: '',
+    status: ''
+  })
   const queryClient = useQueryClient()
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'certifications' | 'score-review' | 'reports'>('dashboard')
 
-  const { data: tallyStats, isLoading: statsLoading } = useQuery(
-    'tally-stats',
-    () => tallyMasterAPI.getStats().then(res => res.data),
+  // Fetch data for tally operations
+  const { data: events } = useQuery('events', () => eventsAPI.getAll().then((res: any) => res.data))
+  const { data: contests } = useQuery('contests', () => contestsAPI.getAll().then((res: any) => res.data))
+  const { data: categories } = useQuery('categories', () => categoriesAPI.getAll().then((res: any) => res.data))
+  const { data: results } = useQuery('results', () => resultsAPI.getAll().then((res: any) => res.data))
+
+  // Mock data for tally results
+  const tallyResults: TallyResult[] = [
     {
-      refetchInterval: 30000,
+      id: '1',
+      contestId: '1',
+      categoryId: '1',
+      contestantId: '1',
+      contestantName: 'Sarah Johnson',
+      totalScore: 92.5,
+      averageScore: 92.5,
+      rank: 1,
+      judgeScores: [
+        {
+          judgeId: '1',
+          judgeName: 'Dr. Smith',
+          scores: [
+            { criteriaId: '1', criteriaName: 'Technique', score: 23, maxScore: 25 },
+            { criteriaId: '2', criteriaName: 'Musicality', score: 24, maxScore: 25 },
+            { criteriaId: '3', criteriaName: 'Stage Presence', score: 19, maxScore: 20 },
+            { criteriaId: '4', criteriaName: 'Song Choice', score: 14, maxScore: 15 },
+            { criteriaId: '5', criteriaName: 'Overall Impact', score: 14, maxScore: 15 }
+          ],
+          totalScore: 94
+        },
+        {
+          judgeId: '2',
+          judgeName: 'Prof. Brown',
+          scores: [
+            { criteriaId: '1', criteriaName: 'Technique', score: 22, maxScore: 25 },
+            { criteriaId: '2', criteriaName: 'Musicality', score: 23, maxScore: 25 },
+            { criteriaId: '3', criteriaName: 'Stage Presence', score: 18, maxScore: 20 },
+            { criteriaId: '4', criteriaName: 'Song Choice', score: 13, maxScore: 15 },
+            { criteriaId: '5', criteriaName: 'Overall Impact', score: 13, maxScore: 15 }
+          ],
+          totalScore: 89
+        }
+      ],
+      isCertified: true,
+      certificationLevel: 'Advanced',
+      calculatedAt: '2024-01-15T10:30:00Z',
+      calculatedBy: 'tallymaster@eventmanager.com'
+    },
+    {
+      id: '2',
+      contestId: '1',
+      categoryId: '1',
+      contestantId: '2',
+      contestantName: 'Michael Chen',
+      totalScore: 87.2,
+      averageScore: 87.2,
+      rank: 2,
+      judgeScores: [
+        {
+          judgeId: '1',
+          judgeName: 'Dr. Smith',
+          scores: [
+            { criteriaId: '1', criteriaName: 'Technique', score: 21, maxScore: 25 },
+            { criteriaId: '2', criteriaName: 'Musicality', score: 22, maxScore: 25 },
+            { criteriaId: '3', criteriaName: 'Stage Presence', score: 17, maxScore: 20 },
+            { criteriaId: '4', criteriaName: 'Song Choice', score: 12, maxScore: 15 },
+            { criteriaId: '5', criteriaName: 'Overall Impact', score: 12, maxScore: 15 }
+          ],
+          totalScore: 84
+        },
+        {
+          judgeId: '2',
+          judgeName: 'Prof. Brown',
+          scores: [
+            { criteriaId: '1', criteriaName: 'Technique', score: 22, maxScore: 25 },
+            { criteriaId: '2', criteriaName: 'Musicality', score: 23, maxScore: 25 },
+            { criteriaId: '3', criteriaName: 'Stage Presence', score: 18, maxScore: 20 },
+            { criteriaId: '4', criteriaName: 'Song Choice', score: 13, maxScore: 15 },
+            { criteriaId: '5', criteriaName: 'Overall Impact', score: 13, maxScore: 15 }
+          ],
+          totalScore: 89
+        }
+      ],
+      isCertified: false,
+      calculatedAt: '2024-01-15T10:30:00Z',
+      calculatedBy: 'tallymaster@eventmanager.com'
     }
-  )
+  ]
+
+  const scoreSubmissions: ScoreSubmission[] = [
+    {
+      id: '1',
+      contestId: '1',
+      categoryId: '1',
+      contestantId: '1',
+      judgeId: '1',
+      scores: [
+        { criteriaId: '1', score: 23, maxScore: 25 },
+        { criteriaId: '2', score: 24, maxScore: 25 },
+        { criteriaId: '3', score: 19, maxScore: 20 },
+        { criteriaId: '4', score: 14, maxScore: 15 },
+        { criteriaId: '5', score: 14, maxScore: 15 }
+      ],
+      totalScore: 94,
+      submittedAt: '2024-01-15T10:25:00Z',
+      status: 'APPROVED'
+    },
+    {
+      id: '2',
+      contestId: '1',
+      categoryId: '1',
+      contestantId: '2',
+      judgeId: '2',
+      scores: [
+        { criteriaId: '1', score: 22, maxScore: 25 },
+        { criteriaId: '2', score: 23, maxScore: 25 },
+        { criteriaId: '3', score: 18, maxScore: 20 },
+        { criteriaId: '4', score: 13, maxScore: 15 },
+        { criteriaId: '5', score: 13, maxScore: 15 }
+      ],
+      totalScore: 89,
+      submittedAt: '2024-01-15T10:28:00Z',
+      status: 'PENDING'
+    }
+  ]
+
+  const certificationRequests: CertificationRequest[] = [
+    {
+      id: '1',
+      contestId: '1',
+      categoryId: '1',
+      contestantId: '1',
+      contestantName: 'Sarah Johnson',
+      currentLevel: 'Intermediate',
+      requestedLevel: 'Advanced',
+      status: 'APPROVED',
+      submittedAt: '2024-01-15T10:30:00Z',
+      reviewedAt: '2024-01-15T11:00:00Z',
+      reviewedBy: 'tallymaster@eventmanager.com',
+      notes: 'Excellent performance, meets all criteria for advanced level'
+    },
+    {
+      id: '2',
+      contestId: '1',
+      categoryId: '1',
+      contestantId: '2',
+      contestantName: 'Michael Chen',
+      currentLevel: 'Beginner',
+      requestedLevel: 'Intermediate',
+      status: 'PENDING',
+      submittedAt: '2024-01-15T10:35:00Z'
+    }
+  ]
+
+  const filteredResults = tallyResults.filter(result => {
+    const matchesSearch = result.contestantName.toLowerCase().includes(filters.search.toLowerCase())
+    const matchesContest = !filters.contestId || result.contestId === filters.contestId
+    const matchesCategory = !filters.categoryId || result.categoryId === filters.categoryId
+    const matchesStatus = !filters.status || 
+      (filters.status === 'certified' && result.isCertified) ||
+      (filters.status === 'uncertified' && !result.isCertified)
+
+    return matchesSearch && matchesContest && matchesCategory && matchesStatus
+  })
+
+  const filteredSubmissions = scoreSubmissions.filter(submission => {
+    const matchesSearch = submission.id.toLowerCase().includes(filters.search.toLowerCase())
+    const matchesContest = !filters.contestId || submission.contestId === filters.contestId
+    const matchesCategory = !filters.categoryId || submission.categoryId === filters.categoryId
+    const matchesStatus = !filters.status || submission.status === filters.status
+
+    return matchesSearch && matchesContest && matchesCategory && matchesStatus
+  })
+
+  const handleViewDetails = (result: TallyResult) => {
+    setSelectedResult(result)
+    setShowScoreModal(true)
+  }
+
+  const handleApproveSubmission = (submissionId: string) => {
+    // Mock approval operation
+    console.log('Approving submission:', submissionId)
+  }
+
+  const handleRejectSubmission = (submissionId: string) => {
+    // Mock rejection operation
+    console.log('Rejecting submission:', submissionId)
+  }
+
+  const handleCertificationRequest = (result: TallyResult) => {
+    setSelectedResult(result)
+    setShowCertificationModal(true)
+  }
+
+  const handleApproveCertification = (requestId: string) => {
+    // Mock certification approval
+    console.log('Approving certification:', requestId)
+  }
+
+  const handleRejectCertification = (requestId: string) => {
+    // Mock certification rejection
+    console.log('Rejecting certification:', requestId)
+  }
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'PENDING':
+        return <ClockIcon className="h-5 w-5 text-yellow-500" />
+      case 'APPROVED':
+        return <CheckCircleIcon className="h-5 w-5 text-green-500" />
+      case 'REJECTED':
+        return <XCircleIcon className="h-5 w-5 text-red-500" />
+      default:
+        return <InformationCircleIcon className="h-5 w-5 text-gray-500" />
+    }
+  }
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'PENDING':
+        return 'text-yellow-600 bg-yellow-100 dark:text-yellow-400 dark:bg-yellow-900'
+      case 'APPROVED':
+        return 'text-green-600 bg-green-100 dark:text-green-400 dark:bg-green-900'
+      case 'REJECTED':
+        return 'text-red-600 bg-red-100 dark:text-red-400 dark:bg-red-900'
+      default:
+        return 'text-gray-600 bg-gray-100 dark:text-gray-400 dark:bg-gray-900'
+    }
+  }
 
   const tabs = [
-    { id: 'dashboard', label: 'Dashboard', icon: ChartBarIcon },
-    { id: 'certifications', label: 'Certifications', icon: ShieldCheckIcon },
-    { id: 'score-review', label: 'Score Review', icon: ClipboardDocumentListIcon },
-    { id: 'reports', label: 'Reports', icon: DocumentTextIcon },
+    { id: 'tally', name: 'Tally Results', icon: CalculatorIcon },
+    { id: 'submissions', name: 'Score Submissions', icon: ClipboardDocumentListIcon },
+    { id: 'certifications', name: 'Certifications', icon: AcademicCapIcon },
+    { id: 'analytics', name: 'Analytics', icon: ChartBarIcon },
   ]
+
+  const canManageTally = user?.role === 'TALLY_MASTER' || user?.role === 'ORGANIZER' || user?.role === 'BOARD'
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Tally Master Dashboard</h1>
-        <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-          Review and certify contest scores after judges complete scoring
-        </p>
+      <div className="card">
+        <div className="card-header">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Tally Master</h1>
+          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+            Manage score calculations, certifications, and result tallies
+          </p>
+        </div>
+        <div className="card-body">
+          <div className="border-b border-gray-200 dark:border-gray-700">
+            <nav className="-mb-px flex space-x-8">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`${
+                    activeTab === tab.id
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  } whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm flex items-center`}
+                >
+                  <tab.icon className="h-5 w-5 mr-2" />
+                  {tab.name}
+                </button>
+              ))}
+            </nav>
+          </div>
+
+          {activeTab === 'tally' && (
+            <div className="mt-6">
+              <div className="flex flex-col sm:flex-row gap-4 mb-6">
+                <div className="flex-1">
+                  <div className="relative">
+                    <MagnifyingGlassIcon className="h-5 w-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Search contestants..."
+                      value={filters.search}
+                      onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
+                      className="input pl-10"
+                    />
+                  </div>
+                </div>
+                <select
+                  value={filters.contestId}
+                  onChange={(e) => setFilters(prev => ({ ...prev, contestId: e.target.value }))}
+                  className="input"
+                >
+                  <option value="">All Contests</option>
+                  {contests?.map((contest: any) => (
+                    <option key={contest.id} value={contest.id}>{contest.name}</option>
+                  ))}
+                </select>
+                <select
+                  value={filters.categoryId}
+                  onChange={(e) => setFilters(prev => ({ ...prev, categoryId: e.target.value }))}
+                  className="input"
+                >
+                  <option value="">All Categories</option>
+                  {categories?.map((category: any) => (
+                    <option key={category.id} value={category.id}>{category.name}</option>
+                  ))}
+                </select>
+                <select
+                  value={filters.status}
+                  onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
+                  className="input"
+                >
+                  <option value="">All Status</option>
+                  <option value="certified">Certified</option>
+                  <option value="uncertified">Uncertified</option>
+                </select>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                  <thead className="bg-gray-50 dark:bg-gray-800">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Contestant
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Total Score
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Average
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Rank
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Certification
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Calculated
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+                    {filteredResults.map((result) => (
+                      <tr key={result.id}>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-medium text-gray-900 dark:text-white">
+                            {result.contestantName}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-medium text-gray-900 dark:text-white">
+                            {result.totalScore.toFixed(1)}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-600 dark:text-gray-400">
+                            {result.averageScore.toFixed(1)}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <TrophyIcon className={`h-5 w-5 mr-2 ${
+                              result.rank === 1 ? 'text-yellow-500' :
+                              result.rank === 2 ? 'text-gray-400' :
+                              result.rank === 3 ? 'text-orange-500' : 'text-gray-300'
+                            }`} />
+                            <span className="text-sm font-medium text-gray-900 dark:text-white">
+                              #{result.rank}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                            result.isCertified
+                              ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                              : 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
+                          }`}>
+                            {result.isCertified ? result.certificationLevel : 'Not Certified'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
+                          {format(new Date(result.calculatedAt), 'MMM dd, HH:mm')}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => handleViewDetails(result)}
+                              className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
+                              title="View Details"
+                            >
+                              <EyeIcon className="h-4 w-4" />
+                            </button>
+                            {canManageTally && !result.isCertified && (
+                              <button
+                                onClick={() => handleCertificationRequest(result)}
+                                className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
+                                title="Request Certification"
+                              >
+                                <AcademicCapIcon className="h-4 w-4" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'submissions' && (
+            <div className="mt-6">
+              <div className="flex flex-col sm:flex-row gap-4 mb-6">
+                <div className="flex-1">
+                  <div className="relative">
+                    <MagnifyingGlassIcon className="h-5 w-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Search submissions..."
+                      value={filters.search}
+                      onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
+                      className="input pl-10"
+                    />
+                  </div>
+                </div>
+                <select
+                  value={filters.status}
+                  onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
+                  className="input"
+                >
+                  <option value="">All Status</option>
+                  <option value="PENDING">Pending</option>
+                  <option value="APPROVED">Approved</option>
+                  <option value="REJECTED">Rejected</option>
+                </select>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                  <thead className="bg-gray-50 dark:bg-gray-800">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Submission ID
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Contestant
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Judge
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Total Score
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Status
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Submitted
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+                    {filteredSubmissions.map((submission) => (
+                      <tr key={submission.id}>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-medium text-gray-900 dark:text-white">
+                            #{submission.id}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-600 dark:text-gray-400">
+                            Contestant {submission.contestantId}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-600 dark:text-gray-400">
+                            Judge {submission.judgeId}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-medium text-gray-900 dark:text-white">
+                            {submission.totalScore}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            {getStatusIcon(submission.status)}
+                            <span className={`ml-2 px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(submission.status)}`}>
+                              {submission.status}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
+                          {format(new Date(submission.submittedAt), 'MMM dd, HH:mm')}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          {submission.status === 'PENDING' && canManageTally && (
+                            <div className="flex space-x-2">
+                              <button
+                                onClick={() => handleApproveSubmission(submission.id)}
+                                className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
+                                title="Approve"
+                              >
+                                <CheckIcon className="h-4 w-4" />
+                              </button>
+                              <button
+                                onClick={() => handleRejectSubmission(submission.id)}
+                                className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+                                title="Reject"
+                              >
+                                <XMarkIcon className="h-4 w-4" />
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'certifications' && (
+            <div className="mt-6">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                  <thead className="bg-gray-50 dark:bg-gray-800">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Contestant
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Current Level
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Requested Level
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Status
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Submitted
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Reviewed By
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+                    {certificationRequests.map((request) => (
+                      <tr key={request.id}>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-medium text-gray-900 dark:text-white">
+                            {request.contestantName}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-600 dark:text-gray-400">
+                            {request.currentLevel}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-600 dark:text-gray-400">
+                            {request.requestedLevel}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            {getStatusIcon(request.status)}
+                            <span className={`ml-2 px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(request.status)}`}>
+                              {request.status}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
+                          {format(new Date(request.submittedAt), 'MMM dd, HH:mm')}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
+                          {request.reviewedBy || '-'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          {request.status === 'PENDING' && canManageTally && (
+                            <div className="flex space-x-2">
+                              <button
+                                onClick={() => handleApproveCertification(request.id)}
+                                className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
+                                title="Approve"
+                              >
+                                <CheckIcon className="h-4 w-4" />
+                              </button>
+                              <button
+                                onClick={() => handleRejectCertification(request.id)}
+                                className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+                                title="Reject"
+                              >
+                                <XMarkIcon className="h-4 w-4" />
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'analytics' && (
+            <div className="mt-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <div className="card">
+                  <div className="card-body">
+                    <div className="flex items-center">
+                      <CalculatorIcon className="h-8 w-8 text-blue-500" />
+                      <div className="ml-4">
+                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Results</p>
+                        <p className="text-2xl font-semibold text-gray-900 dark:text-white">{tallyResults.length}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="card">
+                  <div className="card-body">
+                    <div className="flex items-center">
+                      <CheckCircleIcon className="h-8 w-8 text-green-500" />
+                      <div className="ml-4">
+                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Certified</p>
+                        <p className="text-2xl font-semibold text-gray-900 dark:text-white">
+                          {tallyResults.filter(r => r.isCertified).length}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="card">
+                  <div className="card-body">
+                    <div className="flex items-center">
+                      <ClockIcon className="h-8 w-8 text-yellow-500" />
+                      <div className="ml-4">
+                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Pending</p>
+                        <p className="text-2xl font-semibold text-gray-900 dark:text-white">
+                          {scoreSubmissions.filter(s => s.status === 'PENDING').length}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="card">
+                  <div className="card-body">
+                    <div className="flex items-center">
+                      <ChartBarIcon className="h-8 w-8 text-purple-500" />
+                      <div className="ml-4">
+                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Avg Score</p>
+                        <p className="text-2xl font-semibold text-gray-900 dark:text-white">
+                          {(tallyResults.reduce((sum, r) => sum + r.averageScore, 0) / tallyResults.length).toFixed(1)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="card">
+                  <div className="card-header">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Score Distribution</h3>
+                  </div>
+                  <div className="card-body">
+                    <div className="space-y-4">
+                      {['90-100', '80-89', '70-79', '60-69', 'Below 60'].map((range) => {
+                        const [min, max] = range === 'Below 60' ? [0, 59] : range.split('-').map(Number)
+                        const count = tallyResults.filter(r => r.averageScore >= min && r.averageScore <= max).length
+                        return (
+                          <div key={range} className="flex items-center justify-between">
+                            <span className="text-sm text-gray-600 dark:text-gray-400">{range}</span>
+                            <div className="flex items-center">
+                              <div className="w-32 bg-gray-200 dark:bg-gray-700 rounded-full h-2 mr-3">
+                                <div
+                                  className="bg-blue-500 h-2 rounded-full"
+                                  style={{ width: `${(count / tallyResults.length) * 100}%` }}
+                                ></div>
+                              </div>
+                              <span className="text-sm font-medium text-gray-900 dark:text-white">{count}</span>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="card">
+                  <div className="card-header">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Recent Activity</h3>
+                  </div>
+                  <div className="card-body">
+                    <div className="space-y-3">
+                      {tallyResults.slice(0, 5).map((result) => (
+                        <div key={result.id} className="flex items-center justify-between">
+                          <div className="flex items-center">
+                            <CalculatorIcon className="h-5 w-5 text-gray-400 mr-3" />
+                            <div>
+                              <p className="text-sm font-medium text-gray-900 dark:text-white">{result.contestantName}</p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">
+                                {format(new Date(result.calculatedAt), 'MMM dd, HH:mm')}
+                              </p>
+                            </div>
+                          </div>
+                          <span className="text-sm font-medium text-gray-900 dark:text-white">
+                            {result.averageScore.toFixed(1)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
-      <div className="border-b border-gray-200 dark:border-gray-700">
-        <nav className="-mb-px flex space-x-8">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
-              className={`flex items-center space-x-2 py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === tab.id
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
-              }`}
-            >
-              <tab.icon className="h-4 w-4" />
-              <span>{tab.label}</span>
-            </button>
-          ))}
-        </nav>
-      </div>
-
-      {activeTab === 'dashboard' && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="card">
-              <div className="card-content">
-                <div className="flex items-center">
-                  <ClockIcon className="h-8 w-8 text-yellow-500" />
-                  <div className="ml-3">
-                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Pending Review</p>
-                    <p className="text-2xl font-semibold text-gray-900 dark:text-white">
-                      {statsLoading ? '--' : tallyStats?.pendingReview || 0}
-                    </p>
+      {/* Score Details Modal */}
+      {showScoreModal && selectedResult && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-full max-w-4xl shadow-lg rounded-md bg-white dark:bg-gray-800">
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+                  Score Details: {selectedResult.contestantName}
+                </h3>
+                <button
+                  onClick={() => setShowScoreModal(false)}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                >
+                  <XMarkIcon className="h-6 w-6" />
+                </button>
+              </div>
+              
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="card">
+                    <div className="card-body text-center">
+                      <div className="text-3xl font-bold text-blue-600 dark:text-blue-400">
+                        {selectedResult.totalScore.toFixed(1)}
+                      </div>
+                      <div className="text-sm text-gray-600 dark:text-gray-400">Total Score</div>
+                    </div>
+                  </div>
+                  <div className="card">
+                    <div className="card-body text-center">
+                      <div className="text-3xl font-bold text-green-600 dark:text-green-400">
+                        {selectedResult.averageScore.toFixed(1)}
+                      </div>
+                      <div className="text-sm text-gray-600 dark:text-gray-400">Average Score</div>
+                    </div>
+                  </div>
+                  <div className="card">
+                    <div className="card-body text-center">
+                      <div className="text-3xl font-bold text-purple-600 dark:text-purple-400">
+                        #{selectedResult.rank}
+                      </div>
+                      <div className="text-sm text-gray-600 dark:text-gray-400">Rank</div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </div>
 
-            <div className="card">
-              <div className="card-content">
-                <div className="flex items-center">
-                  <CheckCircleIcon className="h-8 w-8 text-green-500" />
-                  <div className="ml-3">
-                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Certified</p>
-                    <p className="text-2xl font-semibold text-gray-900 dark:text-white">
-                      {statsLoading ? '--' : tallyStats?.certified || 0}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="card">
-              <div className="card-content">
-                <div className="flex items-center">
-                  <ExclamationTriangleIcon className="h-8 w-8 text-red-500" />
-                  <div className="ml-3">
-                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Issues Found</p>
-                    <p className="text-2xl font-semibold text-gray-900 dark:text-white">
-                      {statsLoading ? '--' : tallyStats?.issuesFound || 0}
-                    </p>
-                  </div>
+                <div className="space-y-4">
+                  {selectedResult.judgeScores.map((judgeScore, index) => (
+                    <div key={judgeScore.judgeId} className="card">
+                      <div className="card-header">
+                        <h4 className="text-lg font-semibold text-gray-900 dark:text-white">
+                          {judgeScore.judgeName}
+                        </h4>
+                        <span className="text-sm text-gray-600 dark:text-gray-400">
+                          Total: {judgeScore.totalScore}
+                        </span>
+                      </div>
+                      <div className="card-body">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {judgeScore.scores.map((score) => (
+                            <div key={score.criteriaId} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                              <div>
+                                <div className="text-sm font-medium text-gray-900 dark:text-white">
+                                  {score.criteriaName}
+                                </div>
+                                <div className="text-xs text-gray-600 dark:text-gray-400">
+                                  Max: {score.maxScore}
+                                </div>
+                              </div>
+                              <div className="text-lg font-semibold text-gray-900 dark:text-white">
+                                {score.score}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
@@ -7010,37 +15077,80 @@ const TallyMasterPage: React.FC = () => {
         </div>
       )}
 
-      {activeTab === 'certifications' && (
-        <div className="card">
-          <div className="card-content">
-            <div className="text-center py-12">
-              <ShieldCheckIcon className="h-12 w-12 mx-auto mb-4 text-gray-300 dark:text-gray-600" />
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Certification Management</h3>
-              <p className="text-gray-600 dark:text-gray-400">This page will contain certification management functionality</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {activeTab === 'score-review' && (
-        <div className="card">
-          <div className="card-content">
-            <div className="text-center py-12">
-              <ClipboardDocumentListIcon className="h-12 w-12 mx-auto mb-4 text-gray-300 dark:text-gray-600" />
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Score Review</h3>
-              <p className="text-gray-600 dark:text-gray-400">This page will contain detailed score review functionality</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {activeTab === 'reports' && (
-        <div className="card">
-          <div className="card-content">
-            <div className="text-center py-12">
-              <DocumentTextIcon className="h-12 w-12 mx-auto mb-4 text-gray-300 dark:text-gray-600" />
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Tally Reports</h3>
-              <p className="text-gray-600 dark:text-gray-400">This page will contain tally master report generation functionality</p>
+      {/* Certification Request Modal */}
+      {showCertificationModal && selectedResult && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white dark:bg-gray-800">
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+                  Request Certification
+                </h3>
+                <button
+                  onClick={() => setShowCertificationModal(false)}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                >
+                  <XMarkIcon className="h-6 w-6" />
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Contestant
+                  </label>
+                  <div className="text-sm text-gray-900 dark:text-white">
+                    {selectedResult.contestantName}
+                  </div>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Current Score
+                  </label>
+                  <div className="text-lg font-semibold text-gray-900 dark:text-white">
+                    {selectedResult.averageScore.toFixed(1)}
+                  </div>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Certification Level
+                  </label>
+                  <select className="input">
+                    <option value="Beginner">Beginner</option>
+                    <option value="Intermediate">Intermediate</option>
+                    <option value="Advanced">Advanced</option>
+                    <option value="Expert">Expert</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Notes
+                  </label>
+                  <textarea
+                    className="input"
+                    rows={3}
+                    placeholder="Add certification notes..."
+                  />
+                </div>
+              </div>
+              
+              <div className="flex justify-end space-x-3 mt-6">
+                <button
+                  onClick={() => setShowCertificationModal(false)}
+                  className="btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => setShowCertificationModal(false)}
+                  className="btn-primary"
+                >
+                  Request Certification
+                </button>
+              </div>
             </div>
           </div>
         </div>
