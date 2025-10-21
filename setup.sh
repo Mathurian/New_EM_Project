@@ -1404,6 +1404,12 @@ setup_permissions() {
         print_status "Fixed Prisma engine binary permissions"
     fi
     
+    # Make frontend binaries executable
+    if [[ -d "$APP_DIR/frontend/node_modules/.bin" ]]; then
+        sudo chmod +x "$APP_DIR/frontend/node_modules/.bin"/*
+        print_status "Fixed frontend binary permissions"
+    fi
+    
     # Secure sensitive files (600)
     sudo chmod 600 "$APP_DIR/.env" "$APP_DIR/frontend/.env"
     
@@ -1586,7 +1592,14 @@ build_frontend() {
     print_status "Building frontend..."
     
     cd "$APP_DIR/frontend"
-    npm install
+    npm install --no-fund --no-audit
+    
+    # Fix frontend binary permissions
+    if [[ -d "$APP_DIR/frontend/node_modules/.bin" ]]; then
+        chmod +x "$APP_DIR/frontend/node_modules/.bin"/*
+        print_status "Fixed frontend binary permissions"
+    fi
+    
     npm run build
     
     print_success "Frontend built successfully"
