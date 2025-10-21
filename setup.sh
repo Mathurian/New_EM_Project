@@ -392,7 +392,7 @@ create_backend_files() {
     
     # Create Prisma schema (overwrite if exists to ensure correct relations)
     print_status "Creating Prisma schema..."
-        cat > "$APP_DIR/prisma/schema.prisma" << 'EOF'
+    cat > "$APP_DIR/prisma/schema.prisma" << 'EOF'
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
@@ -794,7 +794,7 @@ EOF
     
     # Create migration script (overwrite if exists to ensure correct operations)
     print_status "Creating database migration script..."
-        cat > "$APP_DIR/src/database/migrate.js" << 'EOF'
+    cat > "$APP_DIR/src/database/migrate.js" << 'EOF'
 const migrate = async () => {
   try {
     console.log('🔄 Running database migrations...')
@@ -1085,7 +1085,7 @@ EOF
     
     # Create seed script (overwrite if exists to ensure correct operations)
     print_status "Creating database seed script..."
-        cat > "$APP_DIR/src/database/seed.js" << 'EOF'
+    cat > "$APP_DIR/src/database/seed.js" << 'EOF'
 const { seed } = require('./migrate')
 
 const main = async () => {
@@ -2000,6 +2000,9 @@ setup_ssl() {
     # Setup automatic renewal
     echo "0 12 * * * root certbot renew --quiet" | sudo tee -a /etc/crontab
     
+    print_success "SSL certificate configured"
+}
+
 # Fix TypeScript compilation errors automatically
 fix_typescript_errors() {
     print_status "Resolving TypeScript compilation errors..."
@@ -2430,9 +2433,9 @@ interface ImportMeta {
 }
 EOF
     
-    # Create TypeScript configuration (force overwrite to ensure correct content)
+    # Create TypeScript configuration (force overwrite to ensure correct content)                                                                               
     print_status "Creating TypeScript configuration..."
-        cat > "$APP_DIR/frontend/tsconfig.json" << 'EOF'
+    cat > "$APP_DIR/frontend/tsconfig.json" << 'EOF'
 {
   "compilerOptions": {
     "target": "ES2020",
