@@ -1591,6 +1591,7 @@ EOF
     
     print_status "Creating frontend environment with API_URL='$API_URL' and WS_URL='$WS_URL'"
     
+    # Create frontend .env file with proper VITE variables
     cat > "$APP_DIR/frontend/.env" << EOF
 # Frontend Environment Configuration
 VITE_API_URL=$API_URL
@@ -1599,6 +1600,16 @@ VITE_APP_NAME=Event Manager
 VITE_APP_VERSION=1.0.0
 VITE_APP_URL=$APP_URL
 EOF
+    
+    # Verify frontend .env was created correctly
+    if [ -f "$APP_DIR/frontend/.env" ]; then
+        print_success "Frontend environment file created successfully"
+        print_status "Frontend .env contents:"
+        cat "$APP_DIR/frontend/.env" | sed 's/^/  /'
+    else
+        print_error "Failed to create frontend environment file"
+        return 1
+    fi
     
     # Secure environment files
     chmod 600 "$APP_DIR/.env" "$APP_DIR/frontend/.env"
@@ -1971,6 +1982,29 @@ build_frontend() {
     print_status "Building comprehensive frontend..."
     
     cd "$APP_DIR/frontend"
+    
+    # Verify frontend environment variables exist
+    if [ ! -f ".env" ]; then
+        print_error "Frontend .env file not found! Creating default environment..."
+        cat > ".env" << EOF
+# Frontend Environment Configuration
+VITE_API_URL=
+VITE_WS_URL=
+VITE_APP_NAME=Event Manager
+VITE_APP_VERSION=1.0.0
+VITE_APP_URL=$APP_URL
+EOF
+    fi
+    
+    # Verify VITE variables are present
+    if ! grep -q "VITE_API_URL" .env; then
+        print_error "VITE_API_URL not found in frontend .env! Adding missing variables..."
+        echo "VITE_API_URL=" >> .env
+        echo "VITE_WS_URL=" >> .env
+    fi
+    
+    print_status "Frontend environment variables:"
+    cat .env | grep VITE_ | sed 's/^/  /'
     
     # Create TypeScript configuration (force overwrite to ensure correct content)
     print_status "Creating TypeScript configuration..."
@@ -5380,7 +5414,56 @@ EOF
     
     npm run build
     
+    # Verify build was successful
+    if [ -d "dist" ]; then
+        print_success "Frontend build completed successfully"
+        
+        # Ensure environment variables are still available after build
+        if [ -f ".env" ]; then
+            print_status "Frontend environment preserved after build:"
+            cat .env | grep VITE_ | sed 's/^/  /'
+        else
+            print_error "Frontend .env file missing after build!"
+        fi
+    else
+        print_error "Frontend build failed - dist directory not found"
+        return 1
+    fi
+    
     print_success "Comprehensive frontend built successfully"
+}
+
+# Verify installation
+verify_installation() {
+    print_status "Verifying installation..."
+    
+    # Check frontend environment
+    if [ -f "$APP_DIR/frontend/.env" ]; then
+        print_success "Frontend environment file exists"
+        print_status "Frontend environment variables:"
+        cat "$APP_DIR/frontend/.env" | grep VITE_ | sed 's/^/  /'
+    else
+        print_error "Frontend environment file missing!"
+        return 1
+    fi
+    
+    # Check frontend build
+    if [ -d "$APP_DIR/frontend/dist" ]; then
+        print_success "Frontend build directory exists"
+    else
+        print_error "Frontend build directory missing!"
+        return 1
+    fi
+    
+    # Check backend environment
+    if [ -f "$APP_DIR/.env" ]; then
+        print_success "Backend environment file exists"
+    else
+        print_error "Backend environment file missing!"
+        return 1
+    fi
+    
+    print_success "Installation verification completed"
 }
 
 # Main installation function
