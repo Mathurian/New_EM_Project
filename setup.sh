@@ -180,6 +180,10 @@ parse_args() {
                 APP_URL="${1#*=}"
                 shift
                 ;;
+            --api-url=*)
+                API_URL="${1#*=}"
+                shift
+                ;;
             --domain=*)
                 DOMAIN="${1#*=}"
                 shift
@@ -235,6 +239,7 @@ show_help() {
     echo "  --session-secret=SECRET   Session encryption secret (auto-generated if not provided)"
     echo "  --app-env=ENV            Application environment (development/production)"
     echo "  --app-url=URL            Application base URL"
+    echo "  --api-url=URL            Backend API URL (default: auto-detected or relative)"
     echo ""
     echo "Web Server Configuration:"
     echo "  --domain=DOMAIN          Domain name for SSL certificate"
@@ -1525,9 +1530,28 @@ FRONTEND_URL=$APP_URL
 EOF
     
     # Create frontend .env file
+    # Use relative URLs for better domain/IP compatibility
+    if [ -z "$API_URL" ]; then
+        # Check if we have a domain configured
+        if [ -n "$DOMAIN" ]; then
+            # Use domain name for API URL
+            API_URL="https://${DOMAIN}"
+            WS_URL="wss://${DOMAIN}"
+        else
+            # Fallback to relative URLs (works with both IP and domain)
+            API_URL=""
+            WS_URL=""
+        fi
+    else
+        # Use provided API URL
+        WS_URL="${API_URL/http:/ws:}"
+        WS_URL="${WS_URL/https:/wss:}"
+    fi
+    
     cat > "$APP_DIR/frontend/.env" << EOF
 # Environment Configuration for Frontend
-VITE_API_URL=http://localhost:3000
+VITE_API_URL=$API_URL
+VITE_WS_URL=$WS_URL
 VITE_APP_NAME=Event Manager
 VITE_APP_VERSION=1.0.0
 VITE_APP_URL=$APP_URL
@@ -2167,7 +2191,7 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
 
   useEffect(() => {
     if (user) {
-      const newSocket = io(import.meta.env.VITE_API_URL || 'http://localhost:3000', {
+      const newSocket = io(import.meta.env.VITE_WS_URL || window.location.origin, {
         auth: {
           token: localStorage.getItem('token')
         }
@@ -2343,7 +2367,7 @@ EOF
 import axios from 'axios'
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3000/api',
+  baseURL: import.meta.env.VITE_API_URL || '/api',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
