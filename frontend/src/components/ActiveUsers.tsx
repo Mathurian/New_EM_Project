@@ -9,15 +9,15 @@ import {
   ClockIcon,
   CheckCircleIcon,
 } from '@heroicons/react/24/outline'
-import { format, formatDistanceToNow } from 'date-fns'
+import { formatDistanceToNow } from 'date-fns'
 
 const ActiveUsers: React.FC = () => {
   const { activeUsers } = useSocket()
   const { user } = useAuth()
   const [isOpen, setIsOpen] = useState(false)
 
-  const onlineUsers = activeUsers.filter(u => u.isOnline)
-  const offlineUsers = activeUsers.filter(u => !u.isOnline)
+  const onlineUsers = activeUsers.filter((u: any) => u.isOnline)
+  const offlineUsers = activeUsers.filter((u: any) => !u.isOnline)
 
   const getRoleColor = (role: string) => {
     switch (role) {
@@ -118,7 +118,7 @@ const ActiveUsers: React.FC = () => {
                     Online ({onlineUsers.length})
                   </h4>
                   <div className="space-y-2">
-                    {onlineUsers.map((activeUser) => (
+                    {onlineUsers.map((activeUser: any) => (
                       <div
                         key={activeUser.id}
                         className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
@@ -159,7 +159,7 @@ const ActiveUsers: React.FC = () => {
                     Recently Active ({offlineUsers.length})
                   </h4>
                   <div className="space-y-2">
-                    {offlineUsers.slice(0, 10).map((activeUser) => (
+                    {offlineUsers.slice(0, 10).map((activeUser: any) => (
                       <div
                         key={activeUser.id}
                         className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"

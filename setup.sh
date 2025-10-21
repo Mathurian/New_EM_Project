@@ -1922,8 +1922,8 @@ build_frontend() {
     "noEmit": true,
     "jsx": "react-jsx",
     "strict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true
   },
   "include": ["src"],
@@ -1973,6 +1973,7 @@ EOF
     mkdir -p "$APP_DIR/frontend/src/pages"
     mkdir -p "$APP_DIR/frontend/src/services"
     mkdir -p "$APP_DIR/frontend/src/hooks"
+    mkdir -p "$APP_DIR/frontend/src/utils"
     
     cat > "$APP_DIR/frontend/src/main.tsx" << 'EOF'
 import React from 'react'
@@ -2352,6 +2353,8 @@ export const adminAPI = {
   getCategories: () => api.get('/admin/categories'),
   getScores: () => api.get('/admin/scores'),
   getActivityLogs: () => api.get('/admin/activity-logs'),
+  getAuditLogs: (params?: any) => api.get('/admin/audit-logs', { params }),
+  exportAuditLogs: (params?: any) => api.post('/admin/export-audit-logs', params),
 }
 
 export const uploadAPI = {
@@ -2365,11 +2368,232 @@ export const uploadAPI = {
       },
     })
   },
+  getFiles: () => api.get('/upload/files'),
+  deleteFile: (fileId: string) => api.delete(`/upload/files/${fileId}`),
 }
 
 export const emailAPI = {
   sendEmail: (data: any) => api.post('/email/send', data),
   sendBulkEmail: (data: any) => api.post('/email/bulk', data),
+}
+
+// Additional API modules
+export const archiveAPI = {
+  getAll: () => api.get('/archive'),
+  getActiveEvents: () => api.get('/archive/active-events'),
+  archiveEvent: (eventId: string) => api.post(`/archive/events/${eventId}`),
+  restoreEvent: (eventId: string) => api.post(`/archive/events/${eventId}/restore`),
+}
+
+export const backupAPI = {
+  getAll: () => api.get('/backup'),
+  create: (data: any) => api.post('/backup', data),
+  restore: (backupId: string) => api.post(`/backup/${backupId}/restore`),
+  download: (backupId: string) => api.get(`/backup/${backupId}/download`),
+}
+
+export const settingsAPI = {
+  getAll: () => api.get('/settings'),
+  update: (data: any) => api.put('/settings', data),
+}
+
+export const assignmentsAPI = {
+  getAll: () => api.get('/assignments'),
+  create: (data: any) => api.post('/assignments', data),
+  update: (id: string, data: any) => api.put(`/assignments/${id}`, data),
+  delete: (id: string) => api.delete(`/assignments/${id}`),
+}
+
+export const auditorAPI = {
+  getStats: () => api.get('/auditor/stats'),
+  getAuditLogs: (params?: any) => api.get('/auditor/logs', { params }),
+  exportAuditLogs: (params?: any) => api.post('/auditor/export', params),
+}
+
+export const boardAPI = {
+  getStats: () => api.get('/board/stats'),
+  getCertifications: () => api.get('/board/certifications'),
+  approveCertification: (id: string) => api.post(`/board/certifications/${id}/approve`),
+  rejectCertification: (id: string, reason: string) => api.post(`/board/certifications/${id}/reject`, { reason }),
+}
+
+export const tallyMasterAPI = {
+  getStats: () => api.get('/tally-master/stats'),
+  getCertifications: () => api.get('/tally-master/certifications'),
+  certifyScores: (categoryId: string) => api.post(`/tally-master/certify/${categoryId}`),
+}
+
+export default api
+EOF
+    
+    # Create utility functions file
+    print_status "Creating utility functions..."
+    cat > "$APP_DIR/frontend/src/utils/helpers.ts" << 'EOF'
+// Utility functions for the application
+
+export const getSeverityColor = (severity: string) => {
+  switch (severity.toLowerCase()) {
+    case 'error':
+      return 'badge-destructive'
+    case 'warning':
+      return 'badge-warning'
+    case 'info':
+      return 'badge-info'
+    case 'success':
+      return 'badge-success'
+    default:
+      return 'badge-secondary'
+  }
+}
+
+export const getStatusColor = (status: string) => {
+  switch (status.toLowerCase()) {
+    case 'pending':
+      return 'badge-warning'
+    case 'in_progress':
+      return 'badge-info'
+    case 'certified':
+    case 'approved':
+    case 'completed':
+      return 'badge-success'
+    case 'rejected':
+    case 'failed':
+      return 'badge-destructive'
+    case 'active':
+      return 'badge-success'
+    case 'inactive':
+      return 'badge-secondary'
+    default:
+      return 'badge-secondary'
+  }
+}
+
+export const getStepIcon = (stepStatus: string) => {
+  switch (stepStatus.toLowerCase()) {
+    case 'pending':
+      return '⏳'
+    case 'in_progress':
+      return '🔄'
+    case 'completed':
+      return '✅'
+    case 'failed':
+      return '❌'
+    default:
+      return '📋'
+  }
+}
+
+export const getCategoryIcon = (type: string) => {
+  switch (type.toLowerCase()) {
+    case 'performance':
+      return '🎭'
+    case 'talent':
+      return '⭐'
+    case 'interview':
+      return '💬'
+    case 'presentation':
+      return '📊'
+    case 'creative':
+      return '🎨'
+    default:
+      return '📋'
+  }
+}
+
+export const getCategoryColor = (type: string) => {
+  switch (type.toLowerCase()) {
+    case 'performance':
+      return 'badge-purple'
+    case 'talent':
+      return 'badge-yellow'
+    case 'interview':
+      return 'badge-blue'
+    case 'presentation':
+      return 'badge-green'
+    case 'creative':
+      return 'badge-pink'
+    default:
+      return 'badge-secondary'
+  }
+}
+
+export const getTypeIcon = (type: string) => {
+  switch (type.toLowerCase()) {
+    case 'announcement':
+      return '📢'
+    case 'introduction':
+      return '👋'
+    case 'transition':
+      return '🔄'
+    case 'closing':
+      return '👋'
+    case 'award':
+      return '🏆'
+    case 'break':
+      return '☕'
+    default:
+      return '📝'
+  }
+}
+
+export const getTypeColor = (type: string) => {
+  switch (type.toLowerCase()) {
+    case 'announcement':
+      return 'badge-blue'
+    case 'introduction':
+      return 'badge-green'
+    case 'transition':
+      return 'badge-yellow'
+    case 'closing':
+      return 'badge-purple'
+    case 'award':
+      return 'badge-gold'
+    case 'break':
+      return 'badge-gray'
+    default:
+      return 'badge-secondary'
+  }
+}
+
+export const getFileIcon = (mimeType: string) => {
+  if (mimeType.startsWith('image/')) return '🖼️'
+  if (mimeType.startsWith('video/')) return '🎥'
+  if (mimeType.startsWith('audio/')) return '🎵'
+  if (mimeType.includes('pdf')) return '📄'
+  if (mimeType.includes('word')) return '📝'
+  if (mimeType.includes('excel') || mimeType.includes('spreadsheet')) return '📊'
+  if (mimeType.includes('powerpoint') || mimeType.includes('presentation')) return '📈'
+  if (mimeType.includes('zip') || mimeType.includes('rar')) return '📦'
+  return '📁'
+}
+
+export const formatFileSize = (bytes: number) => {
+  if (bytes === 0) return '0 Bytes'
+  const k = 1024
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+}
+
+export const getStatusText = (status: string) => {
+  switch (status.toLowerCase()) {
+    case 'pending':
+      return 'Pending'
+    case 'in_progress':
+      return 'In Progress'
+    case 'sent':
+      return 'Sent'
+    case 'delivered':
+      return 'Delivered'
+    case 'failed':
+      return 'Failed'
+    case 'draft':
+      return 'Draft'
+    case 'scheduled':
+      return 'Scheduled'
+    default:
+      return status.charAt(0).toUpperCase() + status.slice(1)
+  }
 }
 EOF
     

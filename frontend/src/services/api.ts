@@ -101,19 +101,68 @@ export const adminAPI = {
 }
 
 export const uploadAPI = {
-  uploadFile: (file: File) => {
+  uploadFile: (file: File, type: string) => {
     const formData = new FormData()
     formData.append('file', file)
+    formData.append('type', type)
     return api.post('/upload', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
     })
   },
+  getFiles: () => api.get('/upload/files'),
+  deleteFile: (fileId: string) => api.delete(`/upload/files/${fileId}`),
 }
 
 export const emailAPI = {
   sendEmail: (data: any) => api.post('/email/send', data),
+}
+
+// Additional API modules
+export const archiveAPI = {
+  getAll: () => api.get('/archive'),
+  getActiveEvents: () => api.get('/archive/active-events'),
+  archiveEvent: (eventId: string) => api.post(`/archive/events/${eventId}`),
+  restoreEvent: (eventId: string) => api.post(`/archive/events/${eventId}/restore`),
+}
+
+export const backupAPI = {
+  getAll: () => api.get('/backup'),
+  create: (data: any) => api.post('/backup', data),
+  restore: (backupId: string) => api.post(`/backup/${backupId}/restore`),
+  download: (backupId: string) => api.get(`/backup/${backupId}/download`),
+}
+
+export const settingsAPI = {
+  getAll: () => api.get('/settings'),
+  update: (data: any) => api.put('/settings', data),
+}
+
+export const assignmentsAPI = {
+  getAll: () => api.get('/assignments'),
+  create: (data: any) => api.post('/assignments', data),
+  update: (id: string, data: any) => api.put(`/assignments/${id}`, data),
+  delete: (id: string) => api.delete(`/assignments/${id}`),
+}
+
+export const auditorAPI = {
+  getStats: () => api.get('/auditor/stats'),
+  getAuditLogs: (params?: any) => api.get('/auditor/logs', { params }),
+  exportAuditLogs: (params?: any) => api.post('/auditor/export', params),
+}
+
+export const boardAPI = {
+  getStats: () => api.get('/board/stats'),
+  getCertifications: () => api.get('/board/certifications'),
+  approveCertification: (id: string) => api.post(`/board/certifications/${id}/approve`),
+  rejectCertification: (id: string, reason: string) => api.post(`/board/certifications/${id}/reject`, { reason }),
+}
+
+export const tallyMasterAPI = {
+  getStats: () => api.get('/tally-master/stats'),
+  getCertifications: () => api.get('/tally-master/certifications'),
+  certifyScores: (categoryId: string) => api.post(`/tally-master/certify/${categoryId}`),
 }
 
 export default api
