@@ -1784,6 +1784,108 @@ app.get('/api/admin/settings', authenticateToken, async (req, res) => {
   }
 })
 
+// Categories endpoint
+app.get('/api/categories', authenticateToken, async (req, res) => {
+  try {
+    const { contestId } = req.query
+    
+    const where = contestId ? { contestId } : {}
+    
+    const categories = await prisma.category.findMany({
+      where,
+      include: {
+        contest: {
+          select: {
+            id: true,
+            name: true
+          }
+        },
+        _count: {
+          select: {
+            criteria: true,
+            contestants: true,
+            judges: true,
+            scores: true
+          }
+        }
+      },
+      orderBy: { order: 'asc' }
+    })
+    
+    res.json(categories)
+  } catch (error) {
+    console.error('Categories fetch error:', error)
+    res.status(500).json({ error: 'Failed to fetch categories' })
+  }
+})
+
+// Results endpoint
+app.get('/api/results', authenticateToken, async (req, res) => {
+  try {
+    const { categoryId, contestId } = req.query
+    
+    let where = {}
+    if (categoryId) {
+      where.categoryId = categoryId
+    } else if (contestId) {
+      where.category = {
+        contestId: contestId
+      }
+    }
+    
+    const results = await prisma.score.groupBy({
+      by: ['contestantId', 'categoryId'],
+      where,
+      _sum: {
+        score: true
+      },
+      _avg: {
+        score: true
+      },
+      _count: {
+        score: true
+      }
+    })
+    
+    // Get detailed results with contestant and category info
+    const detailedResults = await Promise.all(results.map(async (result) => {
+      const contestant = await prisma.contestant.findUnique({
+        where: { id: result.contestantId },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          contestantNumber: true
+        }
+      })
+      
+      const category = await prisma.category.findUnique({
+        where: { id: result.categoryId },
+        select: {
+          id: true,
+          name: true,
+          maxScore: true
+        }
+      })
+      
+      return {
+        contestantId: result.contestantId,
+        categoryId: result.categoryId,
+        totalScore: result._sum.score,
+        averageScore: result._avg.score,
+        scoreCount: result._count.score,
+        contestant,
+        category
+      }
+    }))
+    
+    res.json(detailedResults)
+  } catch (error) {
+    console.error('Results fetch error:', error)
+    res.status(500).json({ error: 'Failed to fetch results' })
+  }
+})
+
 // Admin backup endpoint
 app.get('/api/admin/backup', authenticateToken, async (req, res) => {
   try {
@@ -18826,17 +18928,12 @@ EOF
 
 # Fix API endpoints and admin functionality
 fix_api_endpoints() {
-    print_status "🔧 Fixing API endpoints and admin functionality..."
+    print_status "🔧 API endpoints are now included in main server template - skipping duplicate addition..."
     
-    local server_file="$APP_DIR/src/server.js"
-    
-    if [[ ! -f "$server_file" ]]; then
-        print_error "Server file not found: $server_file"
-        return 1
-    fi
-    
-    # Add missing admin endpoints - Always add to ensure they exist
-    print_status "Adding missing admin API endpoints..."
+    # All endpoints are now included in the main server.js template
+    # No need to append additional endpoints to avoid duplicates
+    print_success "✅ All API endpoints are included in server template"
+}
     
     # Admin Activity Logs
     print_status "Adding /api/admin/logs endpoint..."
