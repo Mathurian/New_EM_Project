@@ -7034,7 +7034,9 @@ const Dashboard: React.FC = () => {
     () => adminAPI.getStats().then((res: any) => res.data),
     {
       enabled: user?.role === 'ORGANIZER' || user?.role === 'BOARD',
-      refetchInterval: 30000, // Refresh every 30 seconds
+      refetchInterval: 300000, // Refresh every 5 minutes (reduced from 30 seconds)
+      refetchOnWindowFocus: false, // Don't refetch on window focus
+      staleTime: 120000, // Consider data stale after 2 minutes
     }
   )
 
@@ -7044,7 +7046,9 @@ const Dashboard: React.FC = () => {
     () => eventsAPI.getAll().then((res: any) => res.data.slice(0, 5)),
     {
       enabled: user?.role === 'ORGANIZER' || user?.role === 'BOARD',
-      refetchInterval: 60000, // Refresh every minute
+      refetchInterval: 300000, // Refresh every 5 minutes (reduced from 1 minute)
+      refetchOnWindowFocus: false, // Don't refetch on window focus
+      staleTime: 120000, // Consider data stale after 2 minutes
     }
   )
 
@@ -7054,7 +7058,9 @@ const Dashboard: React.FC = () => {
     () => contestsAPI.getAll().then((res: any) => res.data.slice(0, 5)),
     {
       enabled: user?.role === 'ORGANIZER' || user?.role === 'BOARD',
-      refetchInterval: 60000, // Refresh every minute
+      refetchInterval: 300000, // Refresh every 5 minutes (reduced from 1 minute)
+      refetchOnWindowFocus: false, // Don't refetch on window focus
+      staleTime: 120000, // Consider data stale after 2 minutes
     }
   )
 
@@ -7700,7 +7706,9 @@ const Dashboard: React.FC = () => {
     () => adminAPI.getStats().then(res => res.data),
     {
       enabled: user?.role === 'ORGANIZER' || user?.role === 'BOARD',
-      refetchInterval: 30000, // Refresh every 30 seconds
+      refetchInterval: 300000, // Refresh every 5 minutes (reduced from 30 seconds)
+      refetchOnWindowFocus: false, // Don't refetch on window focus
+      staleTime: 120000, // Consider data stale after 2 minutes
     }
   )
 
@@ -7710,7 +7718,9 @@ const Dashboard: React.FC = () => {
     () => eventsAPI.getAll().then(res => res.data.slice(0, 5)),
     {
       enabled: user?.role === 'ORGANIZER' || user?.role === 'BOARD',
-      refetchInterval: 60000, // Refresh every minute
+      refetchInterval: 300000, // Refresh every 5 minutes (reduced from 1 minute)
+      refetchOnWindowFocus: false, // Don't refetch on window focus
+      staleTime: 120000, // Consider data stale after 2 minutes
     }
   )
 
@@ -8643,7 +8653,11 @@ const EventsPage: React.FC = () => {
   const { data: events, isLoading } = useQuery(
     'events',
     () => eventsAPI.getAll().then((res: any) => res.data),
-    { refetchInterval: 30000 }
+    { 
+      refetchInterval: 300000, // Refresh every 5 minutes (reduced from 30 seconds)
+      refetchOnWindowFocus: false,
+      staleTime: 120000
+    }
   )
 
   const createMutation = useMutation(
@@ -9315,7 +9329,7 @@ const CategoriesPage: React.FC = () => {
   const { data: categories, isLoading } = useQuery(
     ['categories', contestId],
     () => categoriesAPI.getByContest(contestId!).then((res: any) => res.data),
-    { enabled: !!contestId, refetchInterval: 30000 }
+    { enabled: !!contestId, refetchInterval: 300000, refetchOnWindowFocus: false, staleTime: 120000 }
   )
 
   const { data: contest } = useQuery(
@@ -9649,13 +9663,17 @@ const ScoringPage: React.FC = () => {
   const { data: categories, isLoading } = useQuery(
     'scoring-categories',
     () => categoriesAPI.getAll().then((res: any) => res.data),
-    { refetchInterval: 30000 }
+    { 
+      refetchInterval: 300000, // Refresh every 5 minutes (reduced from 30 seconds)
+      refetchOnWindowFocus: false,
+      staleTime: 120000
+    }
   )
 
   const { data: scores, isLoading: scoresLoading } = useQuery(
     ['scores', selectedCategory?.id],
     () => selectedCategory ? scoringAPI.getScores(selectedCategory.id, '').then((res: any) => res.data) : Promise.resolve([]),
-    { enabled: !!selectedCategory, refetchInterval: 10000 }
+    { enabled: !!selectedCategory, refetchInterval: 300000, refetchOnWindowFocus: false, staleTime: 120000 }
   )
 
   const submitScoreMutation = useMutation(
@@ -10059,19 +10077,23 @@ const ResultsPage: React.FC = () => {
   const { data: categories, isLoading: categoriesLoading } = useQuery(
     'results-categories',
     () => categoriesAPI.getAll().then((res: any) => res.data),
-    { refetchInterval: 30000 }
+    { 
+      refetchInterval: 300000, // Refresh every 5 minutes (reduced from 30 seconds)
+      refetchOnWindowFocus: false,
+      staleTime: 120000
+    }
   )
 
   const { data: results, isLoading: resultsLoading } = useQuery(
     ['results', selectedCategory?.id],
     () => selectedCategory ? resultsAPI.getCategoryResults(selectedCategory.id).then((res: any) => res.data) : Promise.resolve([]),
-    { enabled: !!selectedCategory, refetchInterval: 10000 }
+    { enabled: !!selectedCategory, refetchInterval: 300000, refetchOnWindowFocus: false, staleTime: 120000 }
   )
 
   const { data: allResults } = useQuery(
     'all-results',
     () => resultsAPI.getAll().then((res: any) => res.data),
-    { enabled: !selectedCategory, refetchInterval: 30000 }
+    { enabled: !selectedCategory, refetchInterval: 300000, refetchOnWindowFocus: false, staleTime: 120000 }
   )
 
   const handleCategorySelect = (category: Category) => {
@@ -10416,7 +10438,11 @@ const UsersPage: React.FC = () => {
   const { data: users, isLoading } = useQuery(
     'users',
     () => usersAPI.getAll().then((res: any) => res.data),
-    { refetchInterval: 30000 }
+    { 
+      refetchInterval: 300000, // Refresh every 5 minutes (reduced from 30 seconds)
+      refetchOnWindowFocus: false,
+      staleTime: 120000
+    }
   )
 
   const createMutation = useMutation(
@@ -10938,19 +10964,23 @@ const AdminPage: React.FC = () => {
   const { data: stats, isLoading: statsLoading } = useQuery(
     'adminStats',
     () => adminAPI.getStats().then((res: any) => res.data),
-    { refetchInterval: 30000 }
+    { 
+      refetchInterval: 300000, // Refresh every 5 minutes (reduced from 30 seconds)
+      refetchOnWindowFocus: false,
+      staleTime: 120000
+    }
   )
 
   const { data: activityLogs, isLoading: logsLoading } = useQuery(
     ['activityLogs', { searchTerm, dateFilter, actionFilter }],
     () => adminAPI.getActivityLogs().then((res: any) => res.data),
-    { refetchInterval: 10000 }
+    { refetchInterval: 300000, refetchOnWindowFocus: false, staleTime: 120000 }
   )
 
   const { data: activeUsers } = useQuery(
     'activeUsers',
     () => adminAPI.getActiveUsers().then((res: any) => res.data),
-    { refetchInterval: 15000 }
+    { refetchInterval: 300000, refetchOnWindowFocus: false, staleTime: 120000 }
   )
 
   const { data: systemSettings } = useQuery(
@@ -15365,7 +15395,9 @@ const AssignmentsPage: React.FC = () => {
     'assignments',
     () => assignmentsAPI.getAll().then(res => res.data),
     {
-      refetchInterval: 30000,
+      refetchInterval: 300000, // Refresh every 5 minutes (reduced from 30 seconds)
+      refetchOnWindowFocus: false, // Don't refetch on window focus
+      staleTime: 120000, // Consider data stale after 2 minutes
     }
   )
 
@@ -16727,7 +16759,9 @@ const BoardPage: React.FC = () => {
     'board-stats',
     () => boardAPI.getStats().then(res => res.data),
     {
-      refetchInterval: 30000,
+      refetchInterval: 300000, // Refresh every 5 minutes (reduced from 30 seconds)
+      refetchOnWindowFocus: false, // Don't refetch on window focus
+      staleTime: 120000, // Consider data stale after 2 minutes
     }
   )
 
