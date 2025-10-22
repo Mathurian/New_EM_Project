@@ -5141,7 +5141,7 @@ const BackupManager: React.FC = () => {
   const queryClient = useQueryClient()
 
   const createBackupMutation = useMutation(
-    (data: { type: 'FULL' | 'SCHEMA' | 'DATA' }) => backupAPI.create(data),
+    (data: { type: 'FULL' | 'SCHEMA' | 'DATA' }) => backupAPI.create(data.type),
     {
       onSuccess: () => {
         queryClient.invalidateQueries('backups')
