@@ -5051,13 +5051,8 @@ api.interceptors.response.use(
   }
 )
 
-VITE_API_URL=
-VITE_WS_URL=
-VITE_APP_NAME=Event Manager
-VITE_APP_VERSION=1.0.0
-VITE_APP_URL=$APP_URL
+export default api
 EOF
-    fi
     
     # Clean everything
     print_status "Cleaning all build artifacts and caches..."
@@ -5144,6 +5139,9 @@ api.interceptors.response.use(
     return Promise.reject(error)
   }
 )
+
+export default api
+EOF
 
 # Verify installation
 verify_installation() {
