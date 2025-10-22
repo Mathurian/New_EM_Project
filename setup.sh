@@ -18542,7 +18542,15 @@ verify_installation() {
         return 1
     fi
     
-    # Check backend environment
+    # Check backend files
+    if [ -f "$APP_DIR/src/server.js" ]; then
+        print_success "Backend server file exists"
+    else
+        print_error "Backend server file missing!"
+        return 1
+    fi
+    
+    # Check database connection
     if [ -f "$APP_DIR/.env" ]; then
         print_success "Backend environment file exists"
     else
@@ -18550,31 +18558,19 @@ verify_installation() {
         return 1
     fi
     
-    print_success "Installation verification completed"
+    print_success "✅ Installation verification complete"
 }
 
 # Main installation function
-main() {
-    echo "🚀 Event Manager Complete Setup Script"
-    echo "======================================"
-    echo ""
-    
-    # Parse command line arguments
-    parse_args "$@"
-    
-    # Handle rebuild-frontend option
-    if [[ "$REBUILD_FRONTEND" == "true" ]]; then
-        print_status "Rebuild frontend mode - skipping full installation"
-        setup_application_directory
-        rebuild_frontend
-        print_success "Frontend rebuild completed!"
-        exit 0
-    fi
+install_application() {
+    print_status "🚀 Starting Event Manager installation..."
     
     # Check prerequisites
     check_root
-    detect_os
     check_node_version
+    
+    # Generate secrets
+    generate_secrets
     
     # Install prerequisites
     install_prerequisites
@@ -18582,667 +18578,61 @@ main() {
     # Setup application directory
     setup_application_directory
     
-    # Setup environment variables
-    setup_environment
+    # Create backend files
+    create_backend_files
+    
+    # Install backend dependencies
+    install_backend_dependencies
     
     # Setup database
     setup_database
     
+    # Create frontend files
+    create_frontend_files
+    
+    # Install frontend dependencies
+    install_frontend_dependencies
+    
     # Build frontend
     build_frontend
     
-    # Setup web server permissions
-    setup_permissions
+    # Setup system services
+    setup_system_services
     
-    # Check for PM2
-    check_pm2
+    # Start services
+    start_services
     
-    # Setup process management
-    setup_systemd_service
+    # Verify installation
+    verify_installation
     
-    # Configure Nginx
-    configure_nginx
-    
-    # Setup SSL certificate
-    setup_ssl
-    
-    echo ""
-    echo "🎉 Complete Event Manager Application Deployed!"
-    echo "==============================================="
-    echo ""
-    echo "📋 Application Details:"
-    echo "   Application Directory: $APP_DIR"
-    echo "   Database: $DB_NAME"
-    echo "   Database User: $DB_USER"
-    echo "   Web Server User: $WEB_SERVER_USER"
-    echo "   Process Manager: $([ "$USE_PM2" == "true" ] && echo "PM2" || echo "systemd")"
-    echo ""
-    echo "🌐 Access Information:"
-    if [[ -n "$DOMAIN" ]]; then
-        echo "   URL: https://$DOMAIN"
-    else
-        echo "   URL: http://localhost (or your server IP)"
-    fi
-    echo "   Backend API: http://localhost:3000"
-    echo ""
-    echo "🔐 Default Login Credentials:"
-    echo "   Email: admin@eventmanager.com"
-    echo "   Password: admin123"
-    echo ""
-    echo "✨ Complete Event Manager Application Features:"
-    echo "   ✅ Professional Login Page with Authentication"
-    echo "   ✅ Role-Based Dashboards (Organizer, Judge, Contestant, Board, etc.)"
-    echo "   ✅ Event Management System (Create, Edit, Delete Events)"
-    echo "   ✅ Contest Management (Multiple Contests per Event)"
-    echo "   ✅ Category Management (Multiple Categories per Contest)"
-    echo "   ✅ User Management with Role Assignment"
-    echo "   ✅ Scoring System with Real-time Updates"
-    echo "   ✅ Judge Certification Workflows"
-    echo "   ✅ Contestant Score Tracking"
-    echo "   ✅ Admin Statistics and Reporting"
-    echo "   ✅ Real-time Updates via WebSocket"
-    echo "   ✅ Responsive Design with Tailwind CSS"
-    echo "   ✅ PostgreSQL Database with Prisma ORM"
-    echo "   ✅ Complete REST API (Events, Contests, Categories, Users, Scoring)"
-    echo "   ✅ JWT Authentication with Role-Based Access Control"
-    echo "   ✅ Nginx Reverse Proxy with SSL Support"
-    echo "   ✅ Systemd Service Management"
-    echo "   ✅ Production-Ready Security Configuration"
-    echo ""
-    echo "📚 Management Commands:"
-    echo "   Service Status: sudo systemctl status event-manager"
-    echo "   Service Logs: sudo journalctl -u event-manager -f"
-    echo "   Service Restart: sudo systemctl restart event-manager"
-    echo "   Nginx Status: sudo systemctl status nginx"
-    echo "   Nginx Reload: sudo systemctl reload nginx"
-    echo ""
-    echo "🚀 Next Steps:"
-    echo "   1. Open your browser and navigate to your server IP"
-    echo "   2. You'll see the professional login page"
-    echo "   3. Log in with the default credentials"
-    echo "   4. Explore the dashboard and start managing events!"
-    echo ""
-    echo "🎉 Your Event Manager application is now fully operational!"
-    echo ""
-    echo "📚 Management Commands:"
-    if [[ "$USE_PM2" == "true" ]]; then
-        echo "   PM2 Status: sudo -u $WEB_SERVER_USER pm2 status"
-        echo "   PM2 Logs: sudo -u $WEB_SERVER_USER pm2 logs"
-        echo "   PM2 Restart: sudo -u $WEB_SERVER_USER pm2 restart $APP_NAME"
-    else
-        echo "   Service Status: sudo systemctl status $APP_NAME"
-        echo "   Service Logs: sudo journalctl -u $APP_NAME -f"
-        echo "   Service Restart: sudo systemctl restart $APP_NAME"
-    fi
-    echo "   Nginx Status: sudo systemctl status nginx"
-    echo "   Nginx Reload: sudo systemctl reload nginx"
-    # Evaluate setup completeness
-    evaluate_setup_completeness
-    
-    echo ""
+    print_success "🎉 Event Manager installation completed successfully!"
+    print_status "Access your application at: http://$(hostname -I | awk '{print $1}')"
+    print_status "Default login: admin@eventmanager.com / admin123"
 }
 
-# Comprehensive evaluation of setup for remaining issues
-evaluate_setup_completeness() {
-    print_status "Evaluating setup completeness and checking for remaining issues..."
+# Main execution
+main() {
+    # Parse command line arguments
+    parse_args "$@"
     
-    local issues_found=0
+    # Detect operating system
+    detect_os
     
-    # Check for common installation issues
-    if [[ -f "$APP_DIR/package.json" ]]; then
-        print_success "✓ Package.json created successfully"
-    else
-        print_error "✗ Package.json missing"
-        ((issues_found++))
-    fi
+    # Show installation info
+    print_status "Event Manager Complete Setup Script"
+    print_status "===================================="
+    print_status "Operating System: $OS"
+    print_status "Node.js Version: $(node --version)"
+    print_status "npm Version: $(npm --version)"
+    print_status "Installation Directory: $APP_DIR"
+    print_status "Environment: $APP_ENV"
+    print_status "===================================="
     
-    # Check for canvas module installation
-    if [[ -d "$APP_DIR/node_modules/canvas" ]]; then
-        if [[ -f "$APP_DIR/node_modules/canvas/build/Release/canvas.node" ]]; then
-            print_success "✓ Canvas module installed and built successfully"
-        else
-            print_warning "⚠ Canvas module installed but not built properly"
-            ((issues_found++))
-        fi
-    else
-        print_error "✗ Canvas module not installed"
-        ((issues_found++))
-    fi
-    
-    # Check for npmlog dependency
-    if [[ -d "$APP_DIR/node_modules/npmlog" ]]; then
-        print_success "✓ npmlog dependency installed"
-    else
-        print_warning "⚠ npmlog dependency missing (may cause canvas issues)"
-        ((issues_found++))
-    fi
-    
-    # Check for deprecated multer version
-    if [[ -f "$APP_DIR/node_modules/multer/package.json" ]]; then
-        local multer_version=$(grep '"version"' "$APP_DIR/node_modules/multer/package.json" | cut -d'"' -f4)
-        if [[ "$multer_version" =~ ^2\. ]]; then
-            print_success "✓ Multer updated to version 2.x"
-        else
-            print_warning "⚠ Multer still on deprecated version $multer_version"
-            ((issues_found++))
-        fi
-    fi
-    
-    # Check frontend TypeScript configuration
-    if [[ -f "$APP_DIR/frontend/tsconfig.json" ]]; then
-        if grep -q '"noImplicitAny": false' "$APP_DIR/frontend/tsconfig.json"; then
-            print_success "✓ TypeScript configuration optimized for compatibility"
-        else
-            print_warning "⚠ TypeScript configuration may need optimization"
-            ((issues_found++))
-        fi
-    fi
-    
-    # Check for Heroicons fixes
-    if [[ -f "$APP_DIR/frontend/src/components/Layout.tsx" ]]; then
-        if grep -q "ArrowDownTrayIcon" "$APP_DIR/frontend/src/components/Layout.tsx" 2>/dev/null; then
-            print_success "✓ Heroicons imports fixed in Layout component"
-        else
-            print_warning "⚠ Heroicons imports may need fixing"
-            ((issues_found++))
-        fi
-    fi
-    
-    # Check for deprecated package removal
-    if [[ -f "$APP_DIR/package.json" ]]; then
-        local deprecated_found=0
-        
-        # Check for specific deprecated packages
-        if grep -q "are-we-there-yet" "$APP_DIR/package.json"; then
-            print_warning "⚠ Deprecated are-we-there-yet package still present"
-            ((deprecated_found++))
-        fi
-        
-        if grep -q "inflight" "$APP_DIR/package.json"; then
-            print_warning "⚠ Deprecated inflight package still present"
-            ((deprecated_found++))
-        fi
-        
-        if grep -q "glob.*7\." "$APP_DIR/package.json"; then
-            print_warning "⚠ Deprecated glob@7 package still present"
-            ((deprecated_found++))
-        fi
-        
-        if grep -q "rimraf.*3\." "$APP_DIR/package.json"; then
-            print_warning "⚠ Deprecated rimraf@3 package still present"
-            ((deprecated_found++))
-        fi
-        
-        if [[ $deprecated_found -eq 0 ]]; then
-            print_success "✓ All deprecated packages removed from overrides"
-        else
-            print_warning "⚠ $deprecated_found deprecated packages still present"
-            ((issues_found++))
-        fi
-    fi
-    
-    # Check for @heroicons/react version compatibility
-    if [[ -f "$APP_DIR/frontend/node_modules/@heroicons/react/package.json" ]]; then
-        local heroicons_version=$(grep '"version"' "$APP_DIR/frontend/node_modules/@heroicons/react/package.json" | cut -d'"' -f4)
-        if [[ "$heroicons_version" =~ ^2\. ]]; then
-            print_success "✓ @heroicons/react updated to React 18 compatible version $heroicons_version"
-        else
-            print_warning "⚠ @heroicons/react still on version $heroicons_version (may have React compatibility issues)"
-            ((issues_found++))
-        fi
-    fi
-    
-    # Check for system warnings cleanup
-    if ! dpkg -l | grep -q libllvm19; then
-        print_success "✓ System warnings cleaned up (libllvm19 removed)"
-    else
-        print_warning "⚠ System warnings still present (libllvm19)"
-        ((issues_found++))
-    fi
-    
-    # Summary
-    if [[ $issues_found -eq 0 ]]; then
-        print_success "🎉 Setup evaluation complete - No issues found!"
-        print_status "All critical fixes have been applied successfully."
-    else
-        print_warning "⚠ Setup evaluation complete - $issues_found issues found"
-        print_status "Some issues may require manual intervention or re-running the setup."
-    fi
-    
-    return $issues_found
+    # Run installation
+    install_application
 }
 
-# Fix modal visibility and centering issues
-fix_modal_visibility() {
-    print_status "🔧 Fixing modal visibility and centering issues..."
-    
-    local css_file="$APP_DIR/frontend/src/index.css"
-    
-    if [[ ! -f "$css_file" ]]; then
-        print_error "CSS file not found: $css_file"
-        return 1
-    fi
-    
-    # Backup the original CSS file
-    cp "$css_file" "${css_file}.bak"
-    
-    # Update modal styles for better visibility and centering
-    print_status "Updating modal CSS for proper z-index and centering..."
-    
-    # Replace existing modal styles with enhanced versions
-    sed -i '/\.modal {/,/}/c\
-  .modal {\
-    @apply fixed inset-0 z-[9999] flex items-center justify-center;\
-  }' "$css_file"
-    
-    sed -i '/\.modal-content {/,/}/c\
-  .modal-content {\
-    @apply bg-background p-6 shadow-lg border rounded-lg max-w-md w-full mx-4 relative z-[10000];\
-  }' "$css_file"
-    
-    sed -i '/\.modal-overlay {/,/}/c\
-  .modal-overlay {\
-    @apply fixed inset-0 bg-black/50 z-[9998];\
-  }' "$css_file"
-    
-    # Add enhanced modal styles if they don't exist
-    if ! grep -q "modal-container" "$css_file"; then
-        print_status "Adding enhanced modal styles..."
-        cat >> "$css_file" << 'EOF'
-
-  /* Enhanced modal styles for better visibility and centering */
-  .modal-container {
-    @apply fixed inset-0 z-[9999] flex items-center justify-center p-4;
-  }
-
-  .modal-dialog {
-    @apply relative bg-background rounded-lg shadow-xl border max-w-lg w-full max-h-[90vh] overflow-y-auto;
-  }
-
-  .modal-header {
-    @apply flex items-center justify-between p-6 border-b;
-  }
-
-  .modal-body {
-    @apply p-6;
-  }
-
-  .modal-footer {
-    @apply flex items-center justify-end gap-3 p-6 border-t;
-  }
-
-  /* Ensure modals are always on top */
-  .modal-backdrop {
-    @apply fixed inset-0 bg-black/50 z-[9998] backdrop-blur-sm;
-  }
-EOF
-    fi
-    
-    # Update modal components to use enhanced structure
-    print_status "Updating modal components to use enhanced structure..."
-    
-    # Find and update ContestsPage modal
-    local contests_file="$APP_DIR/frontend/src/pages/ContestsPage.tsx"
-    if [[ -f "$contests_file" ]]; then
-        # Add XMarkIcon import if not present
-        if ! grep -q "XMarkIcon" "$contests_file"; then
-            sed -i '/ArrowLeftIcon,/a\  XMarkIcon,' "$contests_file"
-        fi
-        
-        # Update modal structure
-        sed -i 's/<div className="modal">/<div className="modal-container">/g' "$contests_file"
-        sed -i 's/<div className="modal-overlay"/<div className="modal-backdrop"/g' "$contests_file"
-        sed -i 's/<div className="modal-content/<div className="modal-dialog"/g' "$contests_file"
-        
-        # Add close button to modal header
-        sed -i '/modal-dialog">/a\        <div className="modal-header">\
-          <h2 className="text-xl font-semibold">\
-            {contest ? '\''Edit Contest'\'' : '\''Create Contest'\''}\
-          </h2>\
-          <button\
-            onClick={onClose}\
-            className="btn btn-ghost btn-sm"\
-          >\
-            <XMarkIcon className="h-5 w-5" />\
-          </button>\
-        </div>\
-        <div className="modal-body">' "$contests_file"
-    fi
-    
-    # Apply similar fixes to other modal components
-    local pages_dir="$APP_DIR/frontend/src/pages"
-    if [[ -d "$pages_dir" ]]; then
-        for page_file in "$pages_dir"/*.tsx; do
-            if [[ -f "$page_file" ]]; then
-                # Update modal classes in all page files
-                sed -i 's/className="modal"/className="modal-container"/g' "$page_file"
-                sed -i 's/className="modal-overlay"/className="modal-backdrop"/g' "$page_file"
-                sed -i 's/className="modal-content"/className="modal-dialog"/g' "$page_file"
-            fi
-        done
-    fi
-    
-    print_success "✓ Modal visibility and centering issues fixed"
-    print_status "Enhanced modal styles applied with proper z-index stacking"
-}
-
-# Fix API endpoints and admin functionality
-fix_api_endpoints() {
-    print_status "🔧 API endpoints are now included in main server template - skipping duplicate addition..."
-    
-    # All endpoints are now included in the main server.js template
-    # No need to append additional endpoints to avoid duplicates
-    print_success "✅ All API endpoints are included in server template"
-}
-    
-    # Admin Activity Logs
-    print_status "Adding /api/admin/logs endpoint..."
-    cat >> "$server_file" << 'EOF'
-
-// Admin Activity Logs
-app.get('/api/admin/logs', authenticateToken, async (req, res) => {
-  try {
-    if (req.user.role !== 'ORGANIZER' && req.user.role !== 'BOARD' && req.user.role !== 'AUDITOR') {
-      return res.status(403).json({ error: 'Insufficient permissions' })
-    }
-    
-    const logs = await prisma.activityLog.findMany({
-      orderBy: { createdAt: 'desc' },
-      take: 100,
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            role: true
-          }
-        }
-      }
-    })
-    
-    res.json(logs)
-  } catch (error) {
-    console.error('Activity logs fetch error:', error)
-    res.status(500).json({ error: 'Failed to fetch activity logs' })
-  }
-})
-EOF
-
-    # Admin Active Users
-    print_status "Adding /api/admin/active-users endpoint..."
-    cat >> "$server_file" << 'EOF'
-
-// Admin Active Users
-app.get('/api/admin/active-users', authenticateToken, async (req, res) => {
-  try {
-    if (req.user.role !== 'ORGANIZER' && req.user.role !== 'BOARD') {
-      return res.status(403).json({ error: 'Insufficient permissions' })
-    }
-    
-    const activeUsers = await prisma.user.findMany({
-      where: {
-        isActive: true
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        lastLoginAt: true
-      }
-    })
-    
-    res.json(activeUsers)
-  } catch (error) {
-    console.error('Active users fetch error:', error)
-    res.status(500).json({ error: 'Failed to fetch active users' })
-  }
-})
-EOF
-
-    # Admin Settings
-    print_status "Adding /api/admin/settings endpoint..."
-    cat >> "$server_file" << 'EOF'
-
-// Admin Settings
-app.get('/api/admin/settings', authenticateToken, async (req, res) => {
-  try {
-    if (req.user.role !== 'ORGANIZER' && req.user.role !== 'BOARD') {
-      return res.status(403).json({ error: 'Insufficient permissions' })
-    }
-    
-    const settings = await prisma.systemSetting.findMany()
-    res.json(settings)
-  } catch (error) {
-    console.error('Settings fetch error:', error)
-    res.status(500).json({ error: 'Failed to fetch settings' })
-  }
-})
-EOF
-    
-    if ! grep -q "app.get('/api/admin/backup'" "$server_file"; then
-        print_status "Adding /api/admin/backup endpoint..."
-        sed -i '/\/\/ Admin API/a\
-\
-// Admin Backup\
-app.get('\''/api/admin/backup'\'', authenticateToken, async (req, res) => {\
-  try {\
-    if (req.user.role !== '\''ORGANIZER'\'' && req.user.role !== '\''BOARD'\'') {\
-      return res.status(403).json({ error: '\''Insufficient permissions'\'' })\
-    }\
-    \
-    res.json({\
-      message: '\''Backup functionality available'\'',\
-      lastBackup: new Date().toISOString(),\
-      status: '\''available'\''\
-    })\
-  } catch (error) {\
-    console.error('\''Backup fetch error:'\'', error)\
-    res.status(500).json({ error: '\''Failed to fetch backup status'\'' })\
-  }\
-})\
-' "$server_file"
-    fi
-    
-    # Add missing events endpoint
-    if ! grep -q "app.get('/api/events'" "$server_file"; then
-        print_status "Adding /api/events endpoint..."
-        sed -i '/\/\/ Events API/a\
-\
-// Get all events\
-app.get('\''/api/events'\'', authenticateToken, async (req, res) => {\
-  try {\
-    const events = await prisma.event.findMany({\
-      include: {\
-        contests: {\
-          include: {\
-            categories: true\
-          }\
-        }\
-      },\
-      orderBy: {\
-        createdAt: '\''desc'\''\
-      }\
-    })\
-    res.json(events)\
-  } catch (error) {\
-    console.error('\''Error fetching events:'\'', error)\
-    res.status(500).json({ error: '\''Failed to fetch events'\'' })\
-  }\
-})\
-' "$server_file"
-    fi
-    # Add missing categories endpoint - Always add to ensure it exists
-    print_status "Adding /api/categories endpoint..."
-    cat >> "$server_file" << 'EOF'
-
-// Get all categories
-app.get('/api/categories', authenticateToken, async (req, res) => {
-  try {
-    const { contestId } = req.query
-    
-    const where = contestId ? { contestId } : {}
-    
-    const categories = await prisma.category.findMany({
-      where,
-      include: {
-        contest: {
-          select: {
-            id: true,
-            name: true
-          }
-        },
-        _count: {
-          select: {
-            criteria: true,
-            contestants: true,
-            judges: true,
-            scores: true
-          }
-        }
-      },
-      orderBy: { order: 'asc' }
-    })
-    
-    res.json(categories)
-  } catch (error) {
-    console.error('Categories fetch error:', error)
-    res.status(500).json({ error: 'Failed to fetch categories' })
-  }
-})
-EOF
-    
-    # Add missing results endpoint - Always add to ensure it exists
-    print_status "Adding /api/results endpoint..."
-    cat >> "$server_file" << 'EOF'
-
-// Get results
-app.get('/api/results', authenticateToken, async (req, res) => {
-  try {
-    const { categoryId, contestId } = req.query
-    
-    let where = {}
-    if (categoryId) {
-      where.categoryId = categoryId
-    } else if (contestId) {
-      where.category = {
-        contestId: contestId
-      }
-    }
-    
-    const results = await prisma.score.groupBy({
-      by: ['contestantId', 'categoryId'],
-      where,
-      _sum: {
-        score: true
-      },
-      _avg: {
-        score: true
-      },
-      _count: {
-        score: true
-      }
-    })
-    
-    // Get detailed results with contestant and category info
-    const detailedResults = await Promise.all(results.map(async (result) => {
-      const contestant = await prisma.contestant.findUnique({
-        where: { id: result.contestantId },
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          contestantNumber: true
-        }
-      })
-      
-      const category = await prisma.category.findUnique({
-        where: { id: result.categoryId },
-        select: {
-          id: true,
-          name: true,
-          maxScore: true
-        }
-      })
-      
-      return {
-        contestantId: result.contestantId,
-        categoryId: result.categoryId,
-        totalScore: result._sum.score,
-        averageScore: result._avg.score,
-        scoreCount: result._count.score,
-        contestant,
-        category
-      }
-    }))
-    
-    res.json(detailedResults)
-  } catch (error) {
-    console.error('Results fetch error:', error)
-    res.status(500).json({ error: 'Failed to fetch results' })
-  }
-})
-EOF
-    
-    # Verify endpoints were added
-    print_status "Verifying endpoints were added..."
-    if grep -q "app.get('/api/categories'" "$server_file"; then
-        print_status "✅ /api/categories endpoint found"
-    else
-        print_error "❌ /api/categories endpoint NOT found"
-    fi
-    
-    if grep -q "app.get('/api/results'" "$server_file"; then
-        print_status "✅ /api/results endpoint found"
-    else
-        print_error "❌ /api/results endpoint NOT found"
-    fi
-    
-    if grep -q "app.get('/api/admin/logs'" "$server_file"; then
-        print_status "✅ /api/admin/logs endpoint found"
-    else
-        print_error "❌ /api/admin/logs endpoint NOT found"
-    fi
-    
-    if grep -q "app.get('/api/admin/active-users'" "$server_file"; then
-        print_status "✅ /api/admin/active-users endpoint found"
-    else
-        print_error "❌ /api/admin/active-users endpoint NOT found"
-    fi
-    
-    if grep -q "app.get('/api/admin/settings'" "$server_file"; then
-        print_status "✅ /api/admin/settings endpoint found"
-    else
-        print_error "❌ /api/admin/settings endpoint NOT found"
-    fi
-    
-    # Fix double /api/ issue in frontend
-    print_status "Fixing double /api/ issue in frontend..."
-    
-    local api_file="$APP_DIR/frontend/src/services/api.ts"
-    if [[ -f "$api_file" ]]; then
-        # Create a temporary file with corrected content
-        sed 's|/api/api/|/api/|g' "$api_file" > "${api_file}.tmp"
-        mv "${api_file}.tmp" "$api_file"
-        
-        # Ensure baseURL uses relative path correctly
-        sed -i 's#baseURL: import.meta.env.VITE_API_URL || /api#baseURL: import.meta.env.VITE_API_URL || "/api"#g' "$api_file"
-    fi
-    
-    # Update frontend environment to use relative URLs
-    print_status "Updating frontend environment to prevent double /api/..."
-    local env_file="$APP_DIR/frontend/.env"
-    if [[ -f "$env_file" ]]; then
-        # Set empty VITE_API_URL to use relative URLs
-        sed -i 's/VITE_API_URL=.*/VITE_API_URL=/' "$env_file"
-        sed -i 's/VITE_WS_URL=.*/VITE_WS_URL=/' "$env_file"
-    fi
-    
-    print_success "✓ API endpoints and admin functionality fixed"
-    print_status "Added missing admin endpoints: /api/admin/logs, /api/admin/active-users, /api/admin/settings, /api/admin/backup"
-    print_status "Added missing endpoints: /api/categories, /api/results"
-    print_status "Fixed double /api/ issue in frontend"
-}
-
-# Run main function
-main "$@"
+# Run main function if script is executed directly
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi
