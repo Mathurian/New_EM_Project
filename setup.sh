@@ -1411,8 +1411,8 @@ app.use(express.urlencoded({ extended: true }))
 
 // Rate limiting - Fixed configuration
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 1000, // Increased from 100 to 1000 requests per 15 minutes
   standardHeaders: true,
   legacyHeaders: false,
   trustProxy: true,
@@ -18814,13 +18814,12 @@ fix_api_endpoints() {
         return 1
     fi
     
-    # Add missing admin endpoints
+    # Add missing admin endpoints - Always add to ensure they exist
     print_status "Adding missing admin API endpoints..."
     
-    # Check if admin endpoints already exist
-    if ! grep -q "app.get('/api/admin/logs'" "$server_file"; then
-        print_status "Adding /api/admin/logs endpoint..."
-        cat >> "$server_file" << 'EOF'
+    # Admin Activity Logs
+    print_status "Adding /api/admin/logs endpoint..."
+    cat >> "$server_file" << 'EOF'
 
 // Admin Activity Logs
 app.get('/api/admin/logs', authenticateToken, async (req, res) => {
@@ -18850,11 +18849,10 @@ app.get('/api/admin/logs', authenticateToken, async (req, res) => {
   }
 })
 EOF
-    fi
-    
-    if ! grep -q "app.get('/api/admin/active-users'" "$server_file"; then
-        print_status "Adding /api/admin/active-users endpoint..."
-        cat >> "$server_file" << 'EOF'
+
+    # Admin Active Users
+    print_status "Adding /api/admin/active-users endpoint..."
+    cat >> "$server_file" << 'EOF'
 
 // Admin Active Users
 app.get('/api/admin/active-users', authenticateToken, async (req, res) => {
@@ -18883,11 +18881,10 @@ app.get('/api/admin/active-users', authenticateToken, async (req, res) => {
   }
 })
 EOF
-    fi
-    
-    if ! grep -q "app.get('/api/admin/settings'" "$server_file"; then
-        print_status "Adding /api/admin/settings endpoint..."
-        cat >> "$server_file" << 'EOF'
+
+    # Admin Settings
+    print_status "Adding /api/admin/settings endpoint..."
+    cat >> "$server_file" << 'EOF'
 
 // Admin Settings
 app.get('/api/admin/settings', authenticateToken, async (req, res) => {
@@ -18904,7 +18901,6 @@ app.get('/api/admin/settings', authenticateToken, async (req, res) => {
   }
 })
 EOF
-    fi
     
     if ! grep -q "app.get('/api/admin/backup'" "$server_file"; then
         print_status "Adding /api/admin/backup endpoint..."
@@ -18958,9 +18954,9 @@ app.get('\''/api/events'\'', authenticateToken, async (req, res) => {\
 })\
 ' "$server_file"
     fi
-    if ! grep -q "app.get('/api/categories'" "$server_file"; then
-        print_status "Adding /api/categories endpoint..."
-        cat >> "$server_file" << 'EOF'
+    # Add missing categories endpoint - Always add to ensure it exists
+    print_status "Adding /api/categories endpoint..."
+    cat >> "$server_file" << 'EOF'
 
 // Get all categories
 app.get('/api/categories', authenticateToken, async (req, res) => {
@@ -18997,12 +18993,10 @@ app.get('/api/categories', authenticateToken, async (req, res) => {
   }
 })
 EOF
-    fi
     
-    # Add missing results endpoint
-    if ! grep -q "app.get('/api/results'" "$server_file"; then
-        print_status "Adding /api/results endpoint..."
-        cat >> "$server_file" << 'EOF'
+    # Add missing results endpoint - Always add to ensure it exists
+    print_status "Adding /api/results endpoint..."
+    cat >> "$server_file" << 'EOF'
 
 // Get results
 app.get('/api/results', authenticateToken, async (req, res) => {
@@ -19071,6 +19065,37 @@ app.get('/api/results', authenticateToken, async (req, res) => {
   }
 })
 EOF
+    
+    # Verify endpoints were added
+    print_status "Verifying endpoints were added..."
+    if grep -q "app.get('/api/categories'" "$server_file"; then
+        print_status "✅ /api/categories endpoint found"
+    else
+        print_error "❌ /api/categories endpoint NOT found"
+    fi
+    
+    if grep -q "app.get('/api/results'" "$server_file"; then
+        print_status "✅ /api/results endpoint found"
+    else
+        print_error "❌ /api/results endpoint NOT found"
+    fi
+    
+    if grep -q "app.get('/api/admin/logs'" "$server_file"; then
+        print_status "✅ /api/admin/logs endpoint found"
+    else
+        print_error "❌ /api/admin/logs endpoint NOT found"
+    fi
+    
+    if grep -q "app.get('/api/admin/active-users'" "$server_file"; then
+        print_status "✅ /api/admin/active-users endpoint found"
+    else
+        print_error "❌ /api/admin/active-users endpoint NOT found"
+    fi
+    
+    if grep -q "app.get('/api/admin/settings'" "$server_file"; then
+        print_status "✅ /api/admin/settings endpoint found"
+    else
+        print_error "❌ /api/admin/settings endpoint NOT found"
     fi
     
     # Fix double /api/ issue in frontend
