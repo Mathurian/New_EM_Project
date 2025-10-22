@@ -116,16 +116,59 @@ safe_npm_install() {
     
     # Strategy 0: Fix node-pre-gyp compatibility and install canvas system dependencies
     if [[ "$install_type" == "backend" ]]; then
-        print_status "Installing canvas system dependencies..."
-        # Install system dependencies for canvas if not present
-        if ! dpkg -l | grep -q libcairo2-dev; then
-            sudo apt-get update -qq
-            sudo apt-get install -y build-essential libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev 2>/dev/null || true
+        print_status "Installing ALL canvas system dependencies..."
+        # Install ALL required system dependencies for canvas (from GitHub guide)
+        sudo apt-get update -qq
+        sudo apt-get install -y \
+            build-essential \
+            libcairo2-dev \
+            libpango1.0-dev \
+            libjpeg-dev \
+            libgif-dev \
+            librsvg2-dev \
+            libpixman-1-dev \
+            libffi-dev \
+            libgdk-pixbuf2.0-dev \
+            libglib2.0-dev \
+            libgtk-3-dev \
+            libx11-dev \
+            libxext-dev \
+            libxrender-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libxcursor-dev \
+            libxcomposite-dev \
+            libxdamage-dev \
+            libxfixes-dev \
+            libxss-dev \
+            libxtst-dev \
+            libxi-dev \
+            pkg-config \
+            python3-dev \
+            python3-pip \
+            g++ \
+            make \
+            2>/dev/null || true
+        
+        # Verify canvas dependencies are installed
+        print_status "Verifying canvas dependencies..."
+        if dpkg -l | grep -q libcairo2-dev && dpkg -l | grep -q libpango1.0-dev; then
+            print_success "Canvas system dependencies installed successfully"
+        else
+            print_warning "Some canvas dependencies may not be installed properly"
         fi
         
         # Fix node-pre-gyp compatibility with Node.js v20.19.5
         print_status "Fixing node-pre-gyp compatibility for canvas module..."
         npm install @mapbox/node-pre-gyp@^1.0.10 --no-save --legacy-peer-deps --force 2>/dev/null || true
+        
+        # Verify canvas can be imported after system dependencies are installed
+        print_status "Testing canvas module compatibility..."
+        if node -e "console.log('Canvas test:', require('canvas').version)" 2>/dev/null; then
+            print_success "Canvas module is working correctly"
+        else
+            print_warning "Canvas module may need additional configuration"
+        fi
     fi
     
     # Set npm configuration for better compatibility
