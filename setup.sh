@@ -114,19 +114,18 @@ safe_npm_install() {
     print_status "Cleaning up problematic modules..."
     rm -rf node_modules package-lock.json 2>/dev/null || true
     
-    # Strategy 0: Install npmlog first to fix canvas module issues
+    # Strategy 0: Fix node-pre-gyp compatibility and install canvas system dependencies
     if [[ "$install_type" == "backend" ]]; then
-        print_status "Installing npmlog dependency for canvas module compatibility..."
-        if ! npm list npmlog >/dev/null 2>&1; then
-            npm install npmlog@^5.0.1 --legacy-peer-deps --force --no-fund --no-audit 2>/dev/null || true
-        fi
-        
+        print_status "Installing canvas system dependencies..."
         # Install system dependencies for canvas if not present
         if ! dpkg -l | grep -q libcairo2-dev; then
-            print_status "Installing canvas system dependencies..."
             sudo apt-get update -qq
             sudo apt-get install -y build-essential libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev 2>/dev/null || true
         fi
+        
+        # Fix node-pre-gyp compatibility with Node.js v20.19.5
+        print_status "Fixing node-pre-gyp compatibility for canvas module..."
+        npm install @mapbox/node-pre-gyp@^1.0.10 --no-save --legacy-peer-deps --force 2>/dev/null || true
     fi
     
     # Set npm configuration for better compatibility
@@ -1729,9 +1728,16 @@ EOF
             API_URL="https://${DOMAIN}"
             WS_URL="wss://${DOMAIN}"
         else
-            # Use relative URLs (works with both IP and domain)
-            API_URL=""
-            WS_URL=""
+            # Get server IP for API URL (fallback to localhost for development)
+            SERVER_IP=$(hostname -I | awk '{print $1}' 2>/dev/null || echo "localhost")
+            if [ -z "$SERVER_IP" ] || [ "$SERVER_IP" = "127.0.0.1" ]; then
+                # Fallback to localhost if IP detection fails
+                API_URL="http://localhost:3000"
+                WS_URL="ws://localhost:3000"
+            else
+                API_URL="http://${SERVER_IP}:3000"
+                WS_URL="ws://${SERVER_IP}:3000"
+            fi
         fi
     else
         # Use provided API URL
@@ -2239,7 +2245,7 @@ import {\
         sed -i 's/import {.*DatabaseIcon.*}/import { CircleStackIcon }/g' "src/pages/AdminPage.tsx"
     fi
     
-    # Fix AuditorPage.tsx
+    # Fix AuditorPage.tsx - Add missing PencilIcon and CalculatorIcon
     if [[ -f "src/pages/AuditorPage.tsx" ]]; then
         sed -i 's/DocumentReportIcon/DocumentTextIcon/g' "src/pages/AuditorPage.tsx"
         sed -i 's/TrendingUpIcon/ArrowTrendingUpIcon/g' "src/pages/AuditorPage.tsx"
@@ -2250,6 +2256,49 @@ import {\
   PencilIcon,\
   CalculatorIcon,\
 ' "src/pages/AuditorPage.tsx"
+        fi
+    fi
+    
+    # Fix PrintReports.tsx - Replace DownloadIcon with ArrowDownTrayIcon
+    if [[ -f "src/components/PrintReports.tsx" ]]; then
+        sed -i 's/DownloadIcon/ArrowDownTrayIcon/g' "src/components/PrintReports.tsx"
+        if ! grep -q "ArrowDownTrayIcon" "src/components/PrintReports.tsx"; then
+            sed -i '/import {/a\
+  ArrowDownTrayIcon,\
+' "src/components/PrintReports.tsx"
+        fi
+    fi
+    
+    # Fix ReportsPage.tsx - Remove duplicate DocumentTextIcon and fix DownloadIcon
+    if [[ -f "src/pages/ReportsPage.tsx" ]]; then
+        # Remove duplicate DocumentTextIcon imports
+        sed -i '/DocumentTextIcon,/N;s/DocumentTextIcon,\n  DocumentTextIcon,/DocumentTextIcon,/g' "src/pages/ReportsPage.tsx"
+        # Replace DownloadIcon with ArrowDownTrayIcon
+        sed -i 's/DownloadIcon/ArrowDownTrayIcon/g' "src/pages/ReportsPage.tsx"
+        if ! grep -q "ArrowDownTrayIcon" "src/pages/ReportsPage.tsx"; then
+            sed -i '/import {/a\
+  ArrowDownTrayIcon,\
+' "src/pages/ReportsPage.tsx"
+        fi
+    fi
+    
+    # Fix ResultsPage.tsx - Replace MedalIcon with TrophyIcon
+    if [[ -f "src/pages/ResultsPage.tsx" ]]; then
+        sed -i 's/MedalIcon/TrophyIcon/g' "src/pages/ResultsPage.tsx"
+        if ! grep -q "TrophyIcon" "src/pages/ResultsPage.tsx"; then
+            sed -i '/import {/a\
+  TrophyIcon,\
+' "src/pages/ResultsPage.tsx"
+        fi
+    fi
+    
+    # Fix SettingsPage.tsx - Replace DatabaseIcon with CircleStackIcon
+    if [[ -f "src/pages/SettingsPage.tsx" ]]; then
+        sed -i 's/DatabaseIcon/CircleStackIcon/g' "src/pages/SettingsPage.tsx"
+        if ! grep -q "CircleStackIcon" "src/pages/SettingsPage.tsx"; then
+            sed -i '/import {/a\
+  CircleStackIcon,\
+' "src/pages/SettingsPage.tsx"
         fi
     fi
     
