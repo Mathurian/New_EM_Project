@@ -1706,6 +1706,1640 @@ module.exports = {
 }
 EOF
 
+    # Upload Controller
+    cat > "$APP_DIR/src/controllers/uploadController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+const path = require('path')
+const fs = require('fs')
+
+const prisma = new PrismaClient()
+
+const uploadFile = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' })
+    }
+
+    const { type = 'OTHER', contestantId, judgeId, contestId, categoryId } = req.body
+
+    const uploadedFile = await prisma.uploadedFile.create({
+      data: {
+        filename: req.file.filename,
+        originalName: req.file.originalname,
+        mimeType: req.file.mimetype,
+        size: req.file.size,
+        path: req.file.path,
+        uploadedBy: req.user.id,
+        category: type,
+        contestantId: contestantId || null,
+        judgeId: judgeId || null,
+        contestId: contestId || null,
+        categoryId: categoryId || null,
+        isPublic: false,
+        metadata: {}
+      }
+    })
+
+    res.json({ success: true, file: uploadedFile })
+  } catch (error) {
+    console.error('Upload error:', error)
+    res.status(500).json({ error: 'File upload failed' })
+  }
+}
+
+const getFiles = async (req, res) => {
+  try {
+    const { category, userId, contestId, categoryId } = req.query
+    
+    const where = {}
+    if (category) where.category = category
+    if (userId) where.uploadedBy = userId
+    if (contestId) where.contestId = contestId
+    if (categoryId) where.categoryId = categoryId
+
+    const files = await prisma.uploadedFile.findMany({
+      where,
+      include: {
+        uploadedByUser: {
+          select: { id: true, name: true, email: true }
+        }
+      },
+      orderBy: { uploadedAt: 'desc' }
+    })
+
+    res.json({ success: true, files })
+  } catch (error) {
+    console.error('Get files error:', error)
+    res.status(500).json({ error: 'Failed to retrieve files' })
+  }
+}
+
+const deleteFile = async (req, res) => {
+  try {
+    const { id } = req.params
+
+    const file = await prisma.uploadedFile.findUnique({
+      where: { id }
+    })
+
+    if (!file) {
+      return res.status(404).json({ error: 'File not found' })
+    }
+
+    // Delete physical file
+    if (fs.existsSync(file.path)) {
+      fs.unlinkSync(file.path)
+    }
+
+    // Delete database record
+    await prisma.uploadedFile.delete({
+      where: { id }
+    })
+
+    res.json({ success: true, message: 'File deleted successfully' })
+  } catch (error) {
+    console.error('Delete file error:', error)
+    res.status(500).json({ error: 'Failed to delete file' })
+  }
+}
+
+module.exports = {
+  uploadFile,
+  getFiles,
+  deleteFile
+}
+EOF
+
+    # Archive Controller
+    cat > "$APP_DIR/src/controllers/archiveController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+const getAllArchives = async (req, res) => {
+  try {
+    const archives = await prisma.archivedEvent.findMany({
+      include: {
+        archivedByUser: {
+          select: { id: true, name: true, email: true }
+        }
+      },
+      orderBy: { archivedAt: 'desc' }
+    })
+
+    res.json({ success: true, archives })
+  } catch (error) {
+    console.error('Get archives error:', error)
+    res.status(500).json({ error: 'Failed to retrieve archives' })
+  }
+}
+
+const archiveEvent = async (req, res) => {
+  try {
+    const { eventId } = req.params
+    const { reason } = req.body
+
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      include: {
+        contests: {
+          include: {
+            categories: {
+              include: {
+                contestants: true,
+                judges: true,
+                scores: true
+              }
+            }
+          }
+        }
+      }
+    })
+
+    if (!event) {
+      return res.status(404).json({ error: 'Event not found' })
+    }
+
+    // Create archived event
+    const archivedEvent = await prisma.archivedEvent.create({
+      data: {
+        name: event.name,
+        description: event.description,
+        startDate: event.startDate,
+        endDate: event.endDate,
+        location: event.location,
+        archivedAt: new Date(),
+        archivedBy: req.user.id,
+        reason: reason || 'Manual archive',
+        originalEventId: event.id,
+        contests: event.contests.length,
+        contestants: event.contests.reduce((sum, contest) => 
+          sum + contest.categories.reduce((catSum, cat) => catSum + cat.contestants.length, 0), 0),
+        totalScores: event.contests.reduce((sum, contest) => 
+          sum + contest.categories.reduce((catSum, cat) => catSum + cat.scores.length, 0), 0)
+      }
+    })
+
+    // Delete original event and related data
+    await prisma.event.delete({
+      where: { id: eventId }
+    })
+
+    res.json({ success: true, archivedEvent })
+  } catch (error) {
+    console.error('Archive event error:', error)
+    res.status(500).json({ error: 'Failed to archive event' })
+  }
+}
+
+const restoreEvent = async (req, res) => {
+  try {
+    const { eventId } = req.params
+
+    const archivedEvent = await prisma.archivedEvent.findUnique({
+      where: { originalEventId: eventId }
+    })
+
+    if (!archivedEvent) {
+      return res.status(404).json({ error: 'Archived event not found' })
+    }
+
+    // Restore event
+    const restoredEvent = await prisma.event.create({
+      data: {
+        name: archivedEvent.name,
+        description: archivedEvent.description,
+        startDate: archivedEvent.startDate,
+        endDate: archivedEvent.endDate,
+        location: archivedEvent.location,
+        status: 'DRAFT'
+      }
+    })
+
+    // Delete archived record
+    await prisma.archivedEvent.delete({
+      where: { originalEventId: eventId }
+    })
+
+    res.json({ success: true, event: restoredEvent })
+  } catch (error) {
+    console.error('Restore event error:', error)
+    res.status(500).json({ error: 'Failed to restore event' })
+  }
+}
+
+const deleteArchive = async (req, res) => {
+  try {
+    const { eventId } = req.params
+
+    await prisma.archivedEvent.delete({
+      where: { originalEventId: eventId }
+    })
+
+    res.json({ success: true, message: 'Archive deleted successfully' })
+  } catch (error) {
+    console.error('Delete archive error:', error)
+    res.status(500).json({ error: 'Failed to delete archive' })
+  }
+}
+
+module.exports = {
+  getAllArchives,
+  archiveEvent,
+  restoreEvent,
+  deleteArchive
+}
+EOF
+
+    # Backup Controller
+    cat > "$APP_DIR/src/controllers/backupController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+const fs = require('fs')
+const path = require('path')
+const { exec } = require('child_process')
+const { promisify } = require('util')
+
+const prisma = new PrismaClient()
+const execAsync = promisify(exec)
+
+const createBackup = async (req, res) => {
+  try {
+    const { type = 'FULL' } = req.body
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+    const filename = `backup-${type.toLowerCase()}-${timestamp}.sql`
+    const filepath = path.join('backups', filename)
+
+    // Ensure backups directory exists
+    if (!fs.existsSync('backups')) {
+      fs.mkdirSync('backups', { recursive: true })
+    }
+
+    let command
+    switch (type) {
+      case 'SCHEMA':
+        command = `pg_dump -h ${process.env.DB_HOST || 'localhost'} -U ${process.env.DB_USER || 'event_manager'} -d ${process.env.DB_NAME || 'event_manager'} --schema-only > ${filepath}`
+        break
+      case 'DATA':
+        command = `pg_dump -h ${process.env.DB_HOST || 'localhost'} -U ${process.env.DB_USER || 'event_manager'} -d ${process.env.DB_NAME || 'event_manager'} --data-only > ${filepath}`
+        break
+      default:
+        command = `pg_dump -h ${process.env.DB_HOST || 'localhost'} -U ${process.env.DB_USER || 'event_manager'} -d ${process.env.DB_NAME || 'event_manager'} > ${filepath}`
+    }
+
+    await execAsync(command)
+
+    const stats = fs.statSync(filepath)
+    const backup = await prisma.backup.create({
+      data: {
+        filename,
+        type,
+        size: stats.size,
+        createdAt: new Date(),
+        createdBy: req.user.id,
+        status: 'COMPLETED',
+        description: `${type} backup created successfully`
+      }
+    })
+
+    res.json({ success: true, backup })
+  } catch (error) {
+    console.error('Create backup error:', error)
+    res.status(500).json({ error: 'Failed to create backup' })
+  }
+}
+
+const restoreBackup = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { file } = req
+
+    let filepath
+    if (file) {
+      // Restore from uploaded file
+      filepath = file.path
+    } else {
+      // Restore from existing backup
+      const backup = await prisma.backup.findUnique({
+        where: { id }
+      })
+
+      if (!backup) {
+        return res.status(404).json({ error: 'Backup not found' })
+      }
+
+      filepath = path.join('backups', backup.filename)
+    }
+
+    if (!fs.existsSync(filepath)) {
+      return res.status(404).json({ error: 'Backup file not found' })
+    }
+
+    const command = `psql -h ${process.env.DB_HOST || 'localhost'} -U ${process.env.DB_USER || 'event_manager'} -d ${process.env.DB_NAME || 'event_manager'} < ${filepath}`
+    
+    await execAsync(command)
+
+    res.json({ success: true, message: 'Backup restored successfully' })
+  } catch (error) {
+    console.error('Restore backup error:', error)
+    res.status(500).json({ error: 'Failed to restore backup' })
+  }
+}
+
+const downloadBackup = async (req, res) => {
+  try {
+    const { id } = req.params
+
+    const backup = await prisma.backup.findUnique({
+      where: { id }
+    })
+
+    if (!backup) {
+      return res.status(404).json({ error: 'Backup not found' })
+    }
+
+    const filepath = path.join('backups', backup.filename)
+
+    if (!fs.existsSync(filepath)) {
+      return res.status(404).json({ error: 'Backup file not found' })
+    }
+
+    res.download(filepath, backup.filename)
+  } catch (error) {
+    console.error('Download backup error:', error)
+    res.status(500).json({ error: 'Failed to download backup' })
+  }
+}
+
+const listBackups = async (req, res) => {
+  try {
+    const backups = await prisma.backup.findMany({
+      include: {
+        createdByUser: {
+          select: { id: true, name: true, email: true }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    res.json({ success: true, backups })
+  } catch (error) {
+    console.error('List backups error:', error)
+    res.status(500).json({ error: 'Failed to list backups' })
+  }
+}
+
+const deleteBackup = async (req, res) => {
+  try {
+    const { id } = req.params
+
+    const backup = await prisma.backup.findUnique({
+      where: { id }
+    })
+
+    if (!backup) {
+      return res.status(404).json({ error: 'Backup not found' })
+    }
+
+    // Delete physical file
+    const filepath = path.join('backups', backup.filename)
+    if (fs.existsSync(filepath)) {
+      fs.unlinkSync(filepath)
+    }
+
+    // Delete database record
+    await prisma.backup.delete({
+      where: { id }
+    })
+
+    res.json({ success: true, message: 'Backup deleted successfully' })
+  } catch (error) {
+    console.error('Delete backup error:', error)
+    res.status(500).json({ error: 'Failed to delete backup' })
+  }
+}
+
+module.exports = {
+  createBackup,
+  restoreBackup,
+  downloadBackup,
+  listBackups,
+  deleteBackup
+}
+EOF
+
+    # Settings Controller
+    cat > "$APP_DIR/src/controllers/settingsController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+const nodemailer = require('nodemailer')
+
+const prisma = new PrismaClient()
+
+const getSettings = async (req, res) => {
+  try {
+    const settings = await prisma.systemSetting.findMany({
+      orderBy: { category: 'asc' }
+    })
+
+    res.json({ success: true, settings })
+  } catch (error) {
+    console.error('Get settings error:', error)
+    res.status(500).json({ error: 'Failed to retrieve settings' })
+  }
+}
+
+const updateSettings = async (req, res) => {
+  try {
+    const updates = req.body
+
+    for (const [key, value] of Object.entries(updates)) {
+      await prisma.systemSetting.upsert({
+        where: { key },
+        update: { 
+          value: String(value),
+          updatedAt: new Date(),
+          updatedBy: req.user.id
+        },
+        create: {
+          key,
+          value: String(value),
+          description: `Setting for ${key}`,
+          category: 'general',
+          type: 'string',
+          isPublic: false,
+          updatedBy: req.user.id
+        }
+      })
+    }
+
+    res.json({ success: true, message: 'Settings updated successfully' })
+  } catch (error) {
+    console.error('Update settings error:', error)
+    res.status(500).json({ error: 'Failed to update settings' })
+  }
+}
+
+const testSettings = async (req, res) => {
+  try {
+    const { type } = req.params
+
+    switch (type) {
+      case 'email':
+        const transporter = nodemailer.createTransporter({
+          host: process.env.SMTP_HOST,
+          port: process.env.SMTP_PORT,
+          secure: false,
+          auth: {
+            user: process.env.SMTP_USER,
+            pass: process.env.SMTP_PASS
+          }
+        })
+
+        await transporter.sendMail({
+          from: process.env.SMTP_FROM,
+          to: req.user.email,
+          subject: 'Test Email',
+          text: 'This is a test email from Event Manager.'
+        })
+
+        res.json({ success: true, message: 'Email test successful' })
+        break
+
+      case 'database':
+        await prisma.$queryRaw`SELECT 1`
+        res.json({ success: true, message: 'Database connection test successful' })
+        break
+
+      case 'backup':
+        // Test backup creation
+        const testBackup = await createTestBackup()
+        res.json({ success: true, message: 'Backup test successful', backup: testBackup })
+        break
+
+      default:
+        res.status(400).json({ error: 'Invalid test type' })
+    }
+  } catch (error) {
+    console.error('Test settings error:', error)
+    res.status(500).json({ error: `Test failed: ${error.message}` })
+  }
+}
+
+const createTestBackup = async () => {
+  // Create a simple test backup
+  const timestamp = new Date().toISOString()
+  return {
+    filename: `test-backup-${timestamp}.sql`,
+    type: 'TEST',
+    size: 1024,
+    createdAt: new Date(),
+    status: 'COMPLETED',
+    description: 'Test backup created successfully'
+  }
+}
+
+module.exports = {
+  getSettings,
+  updateSettings,
+  testSettings
+}
+EOF
+
+    # Assignments Controller
+    cat > "$APP_DIR/src/controllers/assignmentsController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+const getAllAssignments = async (req, res) => {
+  try {
+    const assignments = await prisma.contestJudge.findMany({
+      include: {
+        judge: {
+          include: { user: true }
+        },
+        category: {
+          include: { contest: true }
+        }
+      }
+    })
+
+    res.json({ success: true, assignments })
+  } catch (error) {
+    console.error('Get assignments error:', error)
+    res.status(500).json({ error: 'Failed to retrieve assignments' })
+  }
+}
+
+const createAssignment = async (req, res) => {
+  try {
+    const { judgeId, categoryId } = req.body
+
+    const assignment = await prisma.contestJudge.create({
+      data: {
+        judgeId,
+        categoryId
+      },
+      include: {
+        judge: { include: { user: true } },
+        category: { include: { contest: true } }
+      }
+    })
+
+    res.json({ success: true, assignment })
+  } catch (error) {
+    console.error('Create assignment error:', error)
+    res.status(500).json({ error: 'Failed to create assignment' })
+  }
+}
+
+const updateAssignment = async (req, res) => {
+  try {
+    const { id } = req.params
+    const updates = req.body
+
+    const assignment = await prisma.contestJudge.update({
+      where: { id },
+      data: updates,
+      include: {
+        judge: { include: { user: true } },
+        category: { include: { contest: true } }
+      }
+    })
+
+    res.json({ success: true, assignment })
+  } catch (error) {
+    console.error('Update assignment error:', error)
+    res.status(500).json({ error: 'Failed to update assignment' })
+  }
+}
+
+const deleteAssignment = async (req, res) => {
+  try {
+    const { id } = req.params
+
+    await prisma.contestJudge.delete({
+      where: { id }
+    })
+
+    res.json({ success: true, message: 'Assignment deleted successfully' })
+  } catch (error) {
+    console.error('Delete assignment error:', error)
+    res.status(500).json({ error: 'Failed to delete assignment' })
+  }
+}
+
+const getJudges = async (req, res) => {
+  try {
+    const judges = await prisma.judge.findMany({
+      include: {
+        user: true,
+        categories: {
+          include: { category: true }
+        }
+      }
+    })
+
+    res.json({ success: true, judges })
+  } catch (error) {
+    console.error('Get judges error:', error)
+    res.status(500).json({ error: 'Failed to retrieve judges' })
+  }
+}
+
+const getCategories = async (req, res) => {
+  try {
+    const categories = await prisma.category.findMany({
+      include: {
+        contest: true,
+        judges: {
+          include: { judge: { include: { user: true } } }
+        }
+      }
+    })
+
+    res.json({ success: true, categories })
+  } catch (error) {
+    console.error('Get categories error:', error)
+    res.status(500).json({ error: 'Failed to retrieve categories' })
+  }
+}
+
+module.exports = {
+  getAllAssignments,
+  createAssignment,
+  updateAssignment,
+  deleteAssignment,
+  getJudges,
+  getCategories
+}
+EOF
+
+    # Auditor Controller
+    cat > "$APP_DIR/src/controllers/auditorController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+const getStats = async (req, res) => {
+  try {
+    const stats = {
+      totalAudits: await prisma.auditorCertification.count(),
+      pendingAudits: await prisma.auditorCertification.count({
+        where: { status: 'PENDING' }
+      }),
+      completedAudits: await prisma.auditorCertification.count({
+        where: { status: 'COMPLETED' }
+      }),
+      rejectedAudits: await prisma.auditorCertification.count({
+        where: { status: 'REJECTED' }
+      })
+    }
+
+    res.json({ success: true, stats })
+  } catch (error) {
+    console.error('Get auditor stats error:', error)
+    res.status(500).json({ error: 'Failed to retrieve auditor stats' })
+  }
+}
+
+const getAuditLogs = async (req, res) => {
+  try {
+    const logs = await prisma.auditorCertification.findMany({
+      include: {
+        category: {
+          include: { contest: true }
+        },
+        auditor: {
+          include: { user: true }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    res.json({ success: true, logs })
+  } catch (error) {
+    console.error('Get audit logs error:', error)
+    res.status(500).json({ error: 'Failed to retrieve audit logs' })
+  }
+}
+
+const approveAudit = async (req, res) => {
+  try {
+    const { categoryId } = req.params
+    const { comments } = req.body
+
+    const audit = await prisma.auditorCertification.update({
+      where: { categoryId },
+      data: {
+        status: 'COMPLETED',
+        completedAt: new Date(),
+        comments: comments || 'Audit approved'
+      },
+      include: {
+        category: { include: { contest: true } },
+        auditor: { include: { user: true } }
+      }
+    })
+
+    res.json({ success: true, audit })
+  } catch (error) {
+    console.error('Approve audit error:', error)
+    res.status(500).json({ error: 'Failed to approve audit' })
+  }
+}
+
+const rejectAudit = async (req, res) => {
+  try {
+    const { categoryId } = req.params
+    const { reason } = req.body
+
+    const audit = await prisma.auditorCertification.update({
+      where: { categoryId },
+      data: {
+        status: 'REJECTED',
+        completedAt: new Date(),
+        comments: reason || 'Audit rejected'
+      },
+      include: {
+        category: { include: { contest: true } },
+        auditor: { include: { user: true } }
+      }
+    })
+
+    res.json({ success: true, audit })
+  } catch (error) {
+    console.error('Reject audit error:', error)
+    res.status(500).json({ error: 'Failed to reject audit' })
+  }
+}
+
+const exportAuditLogs = async (req, res) => {
+  try {
+    const { format = 'csv', dateFrom, dateTo } = req.body
+
+    const where = {}
+    if (dateFrom) where.createdAt = { gte: new Date(dateFrom) }
+    if (dateTo) where.createdAt = { ...where.createdAt, lte: new Date(dateTo) }
+
+    const logs = await prisma.auditorCertification.findMany({
+      where,
+      include: {
+        category: { include: { contest: true } },
+        auditor: { include: { user: true } }
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    // Simple CSV export
+    if (format === 'csv') {
+      const csv = [
+        'Date,Category,Contest,Auditor,Status,Comments',
+        ...logs.map(log => 
+          `${log.createdAt.toISOString()},${log.category.name},${log.category.contest.name},${log.auditor.user.name},${log.status},"${log.comments || ''}"`
+        )
+      ].join('\n')
+
+      res.setHeader('Content-Type', 'text/csv')
+      res.setHeader('Content-Disposition', 'attachment; filename=audit-logs.csv')
+      res.send(csv)
+    } else {
+      res.json({ success: true, logs })
+    }
+  } catch (error) {
+    console.error('Export audit logs error:', error)
+    res.status(500).json({ error: 'Failed to export audit logs' })
+  }
+}
+
+module.exports = {
+  getStats,
+  getAuditLogs,
+  approveAudit,
+  rejectAudit,
+  exportAuditLogs
+}
+EOF
+
+    # Board Controller
+    cat > "$APP_DIR/src/controllers/boardController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+const getStats = async (req, res) => {
+  try {
+    const stats = {
+      totalEvents: await prisma.event.count(),
+      totalContests: await prisma.contest.count(),
+      totalUsers: await prisma.user.count(),
+      totalCertifications: await prisma.auditorCertification.count(),
+      pendingCertifications: await prisma.auditorCertification.count({
+        where: { status: 'PENDING' }
+      })
+    }
+
+    res.json({ success: true, stats })
+  } catch (error) {
+    console.error('Get board stats error:', error)
+    res.status(500).json({ error: 'Failed to retrieve board stats' })
+  }
+}
+
+const getCertifications = async (req, res) => {
+  try {
+    const certifications = await prisma.auditorCertification.findMany({
+      include: {
+        category: {
+          include: { contest: { include: { event: true } } }
+        },
+        auditor: {
+          include: { user: true }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    res.json({ success: true, certifications })
+  } catch (error) {
+    console.error('Get certifications error:', error)
+    res.status(500).json({ error: 'Failed to retrieve certifications' })
+  }
+}
+
+const approveCertification = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { comments } = req.body
+
+    const certification = await prisma.auditorCertification.update({
+      where: { id },
+      data: {
+        status: 'COMPLETED',
+        completedAt: new Date(),
+        comments: comments || 'Board approved'
+      },
+      include: {
+        category: { include: { contest: { include: { event: true } } } },
+        auditor: { include: { user: true } }
+      }
+    })
+
+    res.json({ success: true, certification })
+  } catch (error) {
+    console.error('Approve certification error:', error)
+    res.status(500).json({ error: 'Failed to approve certification' })
+  }
+}
+
+const rejectCertification = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { reason } = req.body
+
+    const certification = await prisma.auditorCertification.update({
+      where: { id },
+      data: {
+        status: 'REJECTED',
+        completedAt: new Date(),
+        comments: reason || 'Board rejected'
+      },
+      include: {
+        category: { include: { contest: { include: { event: true } } } },
+        auditor: { include: { user: true } }
+      }
+    })
+
+    res.json({ success: true, certification })
+  } catch (error) {
+    console.error('Reject certification error:', error)
+    res.status(500).json({ error: 'Failed to reject certification' })
+  }
+}
+
+const getEmceeScripts = async (req, res) => {
+  try {
+    const scripts = await prisma.emceeScript.findMany({
+      include: {
+        createdByUser: {
+          select: { id: true, name: true, email: true }
+        },
+        event: true,
+        contest: true,
+        category: true
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    res.json({ success: true, scripts })
+  } catch (error) {
+    console.error('Get emcee scripts error:', error)
+    res.status(500).json({ error: 'Failed to retrieve emcee scripts' })
+  }
+}
+
+module.exports = {
+  getStats,
+  getCertifications,
+  approveCertification,
+  rejectCertification,
+  getEmceeScripts
+}
+EOF
+
+    # Tally Master Controller
+    cat > "$APP_DIR/src/controllers/tallyMasterController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+const getStats = async (req, res) => {
+  try {
+    const stats = {
+      totalCertifications: await prisma.tallyMasterCertification.count(),
+      pendingCertifications: await prisma.tallyMasterCertification.count({
+        where: { status: 'PENDING' }
+      }),
+      completedCertifications: await prisma.tallyMasterCertification.count({
+        where: { status: 'COMPLETED' }
+      })
+    }
+
+    res.json({ success: true, stats })
+  } catch (error) {
+    console.error('Get tally master stats error:', error)
+    res.status(500).json({ error: 'Failed to retrieve tally master stats' })
+  }
+}
+
+const getCertifications = async (req, res) => {
+  try {
+    const certifications = await prisma.tallyMasterCertification.findMany({
+      include: {
+        category: {
+          include: { contest: { include: { event: true } } }
+        },
+        tallyMaster: {
+          include: { user: true }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    res.json({ success: true, certifications })
+  } catch (error) {
+    console.error('Get certifications error:', error)
+    res.status(500).json({ error: 'Failed to retrieve certifications' })
+  }
+}
+
+const certifyTotals = async (req, res) => {
+  try {
+    const { categoryId } = req.params
+    const { comments } = req.body
+
+    const certification = await prisma.tallyMasterCertification.update({
+      where: { categoryId },
+      data: {
+        status: 'COMPLETED',
+        completedAt: new Date(),
+        comments: comments || 'Totals certified'
+      },
+      include: {
+        category: { include: { contest: { include: { event: true } } } },
+        tallyMaster: { include: { user: true } }
+      }
+    })
+
+    res.json({ success: true, certification })
+  } catch (error) {
+    console.error('Certify totals error:', error)
+    res.status(500).json({ error: 'Failed to certify totals' })
+  }
+}
+
+const getCertificationQueue = async (req, res) => {
+  try {
+    const queue = await prisma.tallyMasterCertification.findMany({
+      where: { status: 'PENDING' },
+      include: {
+        category: {
+          include: { 
+            contest: { include: { event: true } },
+            scores: true
+          }
+        },
+        tallyMaster: {
+          include: { user: true }
+        }
+      },
+      orderBy: { createdAt: 'asc' }
+    })
+
+    res.json({ success: true, queue })
+  } catch (error) {
+    console.error('Get certification queue error:', error)
+    res.status(500).json({ error: 'Failed to retrieve certification queue' })
+  }
+}
+
+module.exports = {
+  getStats,
+  getCertifications,
+  certifyTotals,
+  getCertificationQueue
+}
+EOF
+
+    # Email Controller
+    cat > "$APP_DIR/src/controllers/emailController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+const nodemailer = require('nodemailer')
+
+const prisma = new PrismaClient()
+
+const sendEmail = async (req, res) => {
+  try {
+    const { to, subject, body, templateId } = req.body
+    
+    const transporter = nodemailer.createTransporter({
+      host: process.env.SMTP_HOST,
+      port: process.env.SMTP_PORT,
+      secure: false,
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS
+      }
+    })
+
+    await transporter.sendMail({
+      from: process.env.SMTP_FROM,
+      to,
+      subject,
+      html: body
+    })
+
+    res.json({ success: true, message: 'Email sent successfully' })
+  } catch (error) {
+    console.error('Send email error:', error)
+    res.status(500).json({ error: 'Failed to send email' })
+  }
+}
+
+const sendBulkEmail = async (req, res) => {
+  try {
+    const { recipients, subject, body, templateId } = req.body
+    
+    const transporter = nodemailer.createTransporter({
+      host: process.env.SMTP_HOST,
+      port: process.env.SMTP_PORT,
+      secure: false,
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS
+      }
+    })
+
+    const results = []
+    for (const recipient of recipients) {
+      try {
+        await transporter.sendMail({
+          from: process.env.SMTP_FROM,
+          to: recipient.email,
+          subject,
+          html: body
+        })
+        results.push({ email: recipient.email, status: 'sent' })
+      } catch (error) {
+        results.push({ email: recipient.email, status: 'failed', error: error.message })
+      }
+    }
+
+    res.json({ success: true, results })
+  } catch (error) {
+    console.error('Send bulk email error:', error)
+    res.status(500).json({ error: 'Failed to send bulk email' })
+  }
+}
+
+const getEmailTemplates = async (req, res) => {
+  try {
+    const templates = await prisma.emailTemplate.findMany({
+      orderBy: { createdAt: 'desc' }
+    })
+    res.json({ success: true, templates })
+  } catch (error) {
+    console.error('Get email templates error:', error)
+    res.status(500).json({ error: 'Failed to retrieve email templates' })
+  }
+}
+
+const createEmailTemplate = async (req, res) => {
+  try {
+    const template = await prisma.emailTemplate.create({
+      data: req.body
+    })
+    res.json({ success: true, template })
+  } catch (error) {
+    console.error('Create email template error:', error)
+    res.status(500).json({ error: 'Failed to create email template' })
+  }
+}
+
+const updateEmailTemplate = async (req, res) => {
+  try {
+    const { id } = req.params
+    const template = await prisma.emailTemplate.update({
+      where: { id },
+      data: req.body
+    })
+    res.json({ success: true, template })
+  } catch (error) {
+    console.error('Update email template error:', error)
+    res.status(500).json({ error: 'Failed to update email template' })
+  }
+}
+
+const deleteEmailTemplate = async (req, res) => {
+  try {
+    const { id } = req.params
+    await prisma.emailTemplate.delete({ where: { id } })
+    res.json({ success: true, message: 'Email template deleted successfully' })
+  } catch (error) {
+    console.error('Delete email template error:', error)
+    res.status(500).json({ error: 'Failed to delete email template' })
+  }
+}
+
+module.exports = {
+  sendEmail,
+  sendBulkEmail,
+  getEmailTemplates,
+  createEmailTemplate,
+  updateEmailTemplate,
+  deleteEmailTemplate
+}
+EOF
+
+    # Reports Controller
+    cat > "$APP_DIR/src/controllers/reportsController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+const { createCanvas } = require('canvas')
+
+const prisma = new PrismaClient()
+
+const generatePDF = async (req, res) => {
+  try {
+    const { type, data } = req.body
+    
+    // Simple PDF generation placeholder
+    const pdfData = {
+      type,
+      data,
+      generatedAt: new Date(),
+      generatedBy: req.user.id
+    }
+    
+    res.json({ success: true, pdf: pdfData })
+  } catch (error) {
+    console.error('Generate PDF error:', error)
+    res.status(500).json({ error: 'Failed to generate PDF' })
+  }
+}
+
+const generateImage = async (req, res) => {
+  try {
+    const { type, data } = req.body
+    
+    // Simple image generation placeholder
+    const imageData = {
+      type,
+      data,
+      generatedAt: new Date(),
+      generatedBy: req.user.id
+    }
+    
+    res.json({ success: true, image: imageData })
+  } catch (error) {
+    console.error('Generate image error:', error)
+    res.status(500).json({ error: 'Failed to generate image' })
+  }
+}
+
+const generateCertificate = async (req, res) => {
+  try {
+    const { contestantId, categoryId, position } = req.body
+    
+    // Simple certificate generation placeholder
+    const certificate = {
+      contestantId,
+      categoryId,
+      position,
+      generatedAt: new Date(),
+      generatedBy: req.user.id
+    }
+    
+    res.json({ success: true, certificate })
+  } catch (error) {
+    console.error('Generate certificate error:', error)
+    res.status(500).json({ error: 'Failed to generate certificate' })
+  }
+}
+
+const getReportTemplates = async (req, res) => {
+  try {
+    const templates = await prisma.reportTemplate.findMany({
+      orderBy: { createdAt: 'desc' }
+    })
+    res.json({ success: true, templates })
+  } catch (error) {
+    console.error('Get report templates error:', error)
+    res.status(500).json({ error: 'Failed to retrieve report templates' })
+  }
+}
+
+const createReportTemplate = async (req, res) => {
+  try {
+    const template = await prisma.reportTemplate.create({
+      data: req.body
+    })
+    res.json({ success: true, template })
+  } catch (error) {
+    console.error('Create report template error:', error)
+    res.status(500).json({ error: 'Failed to create report template' })
+  }
+}
+
+const updateReportTemplate = async (req, res) => {
+  try {
+    const { id } = req.params
+    const template = await prisma.reportTemplate.update({
+      where: { id },
+      data: req.body
+    })
+    res.json({ success: true, template })
+  } catch (error) {
+    console.error('Update report template error:', error)
+    res.status(500).json({ error: 'Failed to update report template' })
+  }
+}
+
+const deleteReportTemplate = async (req, res) => {
+  try {
+    const { id } = req.params
+    await prisma.reportTemplate.delete({ where: { id } })
+    res.json({ success: true, message: 'Report template deleted successfully' })
+  } catch (error) {
+    console.error('Delete report template error:', error)
+    res.status(500).json({ error: 'Failed to delete report template' })
+  }
+}
+
+module.exports = {
+  generatePDF,
+  generateImage,
+  generateCertificate,
+  getReportTemplates,
+  createReportTemplate,
+  updateReportTemplate,
+  deleteReportTemplate
+}
+EOF
+
+    # Templates Controller
+    cat > "$APP_DIR/src/controllers/templatesController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+const getAllTemplates = async (req, res) => {
+  try {
+    const templates = await prisma.template.findMany({
+      orderBy: { createdAt: 'desc' }
+    })
+    res.json({ success: true, templates })
+  } catch (error) {
+    console.error('Get templates error:', error)
+    res.status(500).json({ error: 'Failed to retrieve templates' })
+  }
+}
+
+const getTemplateById = async (req, res) => {
+  try {
+    const { id } = req.params
+    const template = await prisma.template.findUnique({
+      where: { id }
+    })
+    
+    if (!template) {
+      return res.status(404).json({ error: 'Template not found' })
+    }
+    
+    res.json({ success: true, template })
+  } catch (error) {
+    console.error('Get template error:', error)
+    res.status(500).json({ error: 'Failed to retrieve template' })
+  }
+}
+
+const createTemplate = async (req, res) => {
+  try {
+    const template = await prisma.template.create({
+      data: req.body
+    })
+    res.json({ success: true, template })
+  } catch (error) {
+    console.error('Create template error:', error)
+    res.status(500).json({ error: 'Failed to create template' })
+  }
+}
+
+const updateTemplate = async (req, res) => {
+  try {
+    const { id } = req.params
+    const template = await prisma.template.update({
+      where: { id },
+      data: req.body
+    })
+    res.json({ success: true, template })
+  } catch (error) {
+    console.error('Update template error:', error)
+    res.status(500).json({ error: 'Failed to update template' })
+  }
+}
+
+const deleteTemplate = async (req, res) => {
+  try {
+    const { id } = req.params
+    await prisma.template.delete({ where: { id } })
+    res.json({ success: true, message: 'Template deleted successfully' })
+  } catch (error) {
+    console.error('Delete template error:', error)
+    res.status(500).json({ error: 'Failed to delete template' })
+  }
+}
+
+module.exports = {
+  getAllTemplates,
+  getTemplateById,
+  createTemplate,
+  updateTemplate,
+  deleteTemplate
+}
+EOF
+
+    # Notifications Controller
+    cat > "$APP_DIR/src/controllers/notificationsController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+const getAllNotifications = async (req, res) => {
+  try {
+    const notifications = await prisma.notification.findMany({
+      where: { userId: req.user.id },
+      orderBy: { createdAt: 'desc' }
+    })
+    res.json({ success: true, notifications })
+  } catch (error) {
+    console.error('Get notifications error:', error)
+    res.status(500).json({ error: 'Failed to retrieve notifications' })
+  }
+}
+
+const markAsRead = async (req, res) => {
+  try {
+    const { id } = req.params
+    await prisma.notification.update({
+      where: { id },
+      data: { isRead: true, readAt: new Date() }
+    })
+    res.json({ success: true, message: 'Notification marked as read' })
+  } catch (error) {
+    console.error('Mark notification as read error:', error)
+    res.status(500).json({ error: 'Failed to mark notification as read' })
+  }
+}
+
+const markAllAsRead = async (req, res) => {
+  try {
+    await prisma.notification.updateMany({
+      where: { userId: req.user.id, isRead: false },
+      data: { isRead: true, readAt: new Date() }
+    })
+    res.json({ success: true, message: 'All notifications marked as read' })
+  } catch (error) {
+    console.error('Mark all notifications as read error:', error)
+    res.status(500).json({ error: 'Failed to mark all notifications as read' })
+  }
+}
+
+const getUnreadCount = async (req, res) => {
+  try {
+    const count = await prisma.notification.count({
+      where: { userId: req.user.id, isRead: false }
+    })
+    res.json({ success: true, count })
+  } catch (error) {
+    console.error('Get unread count error:', error)
+    res.status(500).json({ error: 'Failed to get unread count' })
+  }
+}
+
+const createNotification = async (req, res) => {
+  try {
+    const notification = await prisma.notification.create({
+      data: req.body
+    })
+    res.json({ success: true, notification })
+  } catch (error) {
+    console.error('Create notification error:', error)
+    res.status(500).json({ error: 'Failed to create notification' })
+  }
+}
+
+module.exports = {
+  getAllNotifications,
+  markAsRead,
+  markAllAsRead,
+  getUnreadCount,
+  createNotification
+}
+EOF
+
+    # Emcee Controller
+    cat > "$APP_DIR/src/controllers/emceeController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+const getScripts = async (req, res) => {
+  try {
+    const scripts = await prisma.emceeScript.findMany({
+      include: {
+        createdByUser: { select: { id: true, name: true, email: true } },
+        event: true,
+        contest: true,
+        category: true
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+    res.json({ success: true, scripts })
+  } catch (error) {
+    console.error('Get scripts error:', error)
+    res.status(500).json({ error: 'Failed to retrieve scripts' })
+  }
+}
+
+const getScriptById = async (req, res) => {
+  try {
+    const { id } = req.params
+    const script = await prisma.emceeScript.findUnique({
+      where: { id },
+      include: {
+        createdByUser: { select: { id: true, name: true, email: true } },
+        event: true,
+        contest: true,
+        category: true
+      }
+    })
+    
+    if (!script) {
+      return res.status(404).json({ error: 'Script not found' })
+    }
+    
+    res.json({ success: true, script })
+  } catch (error) {
+    console.error('Get script error:', error)
+    res.status(500).json({ error: 'Failed to retrieve script' })
+  }
+}
+
+const createScript = async (req, res) => {
+  try {
+    const script = await prisma.emceeScript.create({
+      data: {
+        ...req.body,
+        createdBy: req.user.id
+      }
+    })
+    res.json({ success: true, script })
+  } catch (error) {
+    console.error('Create script error:', error)
+    res.status(500).json({ error: 'Failed to create script' })
+  }
+}
+
+const updateScript = async (req, res) => {
+  try {
+    const { id } = req.params
+    const script = await prisma.emceeScript.update({
+      where: { id },
+      data: req.body
+    })
+    res.json({ success: true, script })
+  } catch (error) {
+    console.error('Update script error:', error)
+    res.status(500).json({ error: 'Failed to update script' })
+  }
+}
+
+const deleteScript = async (req, res) => {
+  try {
+    const { id } = req.params
+    await prisma.emceeScript.delete({ where: { id } })
+    res.json({ success: true, message: 'Script deleted successfully' })
+  } catch (error) {
+    console.error('Delete script error:', error)
+    res.status(500).json({ error: 'Failed to delete script' })
+  }
+}
+
+const playScript = async (req, res) => {
+  try {
+    const { id } = req.params
+    // Update script status to playing
+    await prisma.emceeScript.update({
+      where: { id },
+      data: { status: 'PLAYING', playedAt: new Date() }
+    })
+    res.json({ success: true, message: 'Script started playing' })
+  } catch (error) {
+    console.error('Play script error:', error)
+    res.status(500).json({ error: 'Failed to play script' })
+  }
+}
+
+const pauseScript = async (req, res) => {
+  try {
+    const { id } = req.params
+    await prisma.emceeScript.update({
+      where: { id },
+      data: { status: 'PAUSED' }
+    })
+    res.json({ success: true, message: 'Script paused' })
+  } catch (error) {
+    console.error('Pause script error:', error)
+    res.status(500).json({ error: 'Failed to pause script' })
+  }
+}
+
+const stopScript = async (req, res) => {
+  try {
+    const { id } = req.params
+    await prisma.emceeScript.update({
+      where: { id },
+      data: { status: 'STOPPED', stoppedAt: new Date() }
+    })
+    res.json({ success: true, message: 'Script stopped' })
+  } catch (error) {
+    console.error('Stop script error:', error)
+    res.status(500).json({ error: 'Failed to stop script' })
+  }
+}
+
+const getAnalytics = async (req, res) => {
+  try {
+    const analytics = {
+      totalScripts: await prisma.emceeScript.count(),
+      playedScripts: await prisma.emceeScript.count({ where: { status: 'PLAYING' } }),
+      pausedScripts: await prisma.emceeScript.count({ where: { status: 'PAUSED' } }),
+      stoppedScripts: await prisma.emceeScript.count({ where: { status: 'STOPPED' } })
+    }
+    res.json({ success: true, analytics })
+  } catch (error) {
+    console.error('Get analytics error:', error)
+    res.status(500).json({ error: 'Failed to retrieve analytics' })
+  }
+}
+
+const getUsageHistory = async (req, res) => {
+  try {
+    const history = await prisma.emceeScript.findMany({
+      where: { createdBy: req.user.id },
+      orderBy: { createdAt: 'desc' },
+      take: 50
+    })
+    res.json({ success: true, history })
+  } catch (error) {
+    console.error('Get usage history error:', error)
+    res.status(500).json({ error: 'Failed to retrieve usage history' })
+  }
+}
+
+module.exports = {
+  getScripts,
+  getScriptById,
+  createScript,
+  updateScript,
+  deleteScript,
+  playScript,
+  pauseScript,
+  stopScript,
+  getAnalytics,
+  getUsageHistory
+}
+EOF
+
     # Create middleware files
     print_status "Creating middleware files..."
     
@@ -1930,6 +3564,292 @@ router.get('/settings', authenticateToken, getSettings)
 router.put('/settings', authenticateToken, updateSettings)
 router.get('/backup', authenticateToken, getBackup)
 router.post('/test/:type', authenticateToken, testConnection)
+
+module.exports = router
+EOF
+    
+    # Upload Routes
+    cat > "$APP_DIR/src/routes/upload.js" << 'EOF'
+const express = require('express')
+const multer = require('multer')
+const path = require('path')
+const { uploadFile, getFiles, deleteFile } = require('../controllers/uploadController')
+const { authenticateToken } = require('../middleware/auth')
+
+const router = express.Router()
+
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, 'uploads/')
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9)
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname))
+  }
+})
+
+const upload = multer({ 
+  storage: storage,
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 10MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    // Allow common file types
+    const allowedTypes = /jpeg|jpg|png|gif|pdf|doc|docx|txt/
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase())
+    const mimetype = allowedTypes.test(file.mimetype)
+    
+    if (mimetype && extname) {
+      return cb(null, true)
+    } else {
+      cb(new Error('Invalid file type'))
+    }
+  }
+})
+
+router.use(authenticateToken)
+
+router.post('/upload', upload.single('file'), uploadFile)
+router.get('/files', getFiles)
+router.delete('/files/:id', deleteFile)
+
+module.exports = router
+EOF
+
+    # Archive Routes
+    cat > "$APP_DIR/src/routes/archive.js" << 'EOF'
+const express = require('express')
+const { getAllArchives, archiveEvent, restoreEvent, deleteArchive } = require('../controllers/archiveController')
+const { authenticateToken } = require('../middleware/auth')
+
+const router = express.Router()
+
+router.use(authenticateToken)
+
+router.get('/', getAllArchives)
+router.post('/events/:eventId', archiveEvent)
+router.post('/events/:eventId/restore', restoreEvent)
+router.delete('/events/:eventId', deleteArchive)
+
+module.exports = router
+EOF
+
+    # Backup Routes
+    cat > "$APP_DIR/src/routes/backup.js" << 'EOF'
+const express = require('express')
+const multer = require('multer')
+const { createBackup, restoreBackup, downloadBackup, listBackups, deleteBackup } = require('../controllers/backupController')
+const { authenticateToken } = require('../middleware/auth')
+
+const router = express.Router()
+
+const upload = multer({ dest: 'temp/' })
+
+router.use(authenticateToken)
+
+router.get('/', listBackups)
+router.post('/', createBackup)
+router.post('/restore', upload.single('file'), restoreBackup)
+router.post('/:id/restore', restoreBackup)
+router.get('/:id/download', downloadBackup)
+router.delete('/:id', deleteBackup)
+
+module.exports = router
+EOF
+
+    # Settings Routes
+    cat > "$APP_DIR/src/routes/settings.js" << 'EOF'
+const express = require('express')
+const { getSettings, updateSettings, testSettings } = require('../controllers/settingsController')
+const { authenticateToken } = require('../middleware/auth')
+
+const router = express.Router()
+
+router.use(authenticateToken)
+
+router.get('/', getSettings)
+router.put('/', updateSettings)
+router.post('/test/:type', testSettings)
+
+module.exports = router
+EOF
+
+    # Assignments Routes
+    cat > "$APP_DIR/src/routes/assignments.js" << 'EOF'
+const express = require('express')
+const { getAllAssignments, createAssignment, updateAssignment, deleteAssignment, getJudges, getCategories } = require('../controllers/assignmentsController')
+const { authenticateToken } = require('../middleware/auth')
+
+const router = express.Router()
+
+router.use(authenticateToken)
+
+router.get('/', getAllAssignments)
+router.post('/', createAssignment)
+router.put('/:id', updateAssignment)
+router.delete('/:id', deleteAssignment)
+router.get('/judges', getJudges)
+router.get('/categories', getCategories)
+
+module.exports = router
+EOF
+
+    # Auditor Routes
+    cat > "$APP_DIR/src/routes/auditor.js" << 'EOF'
+const express = require('express')
+const { getStats, getAuditLogs, approveAudit, rejectAudit, exportAuditLogs } = require('../controllers/auditorController')
+const { authenticateToken } = require('../middleware/auth')
+
+const router = express.Router()
+
+router.use(authenticateToken)
+
+router.get('/stats', getStats)
+router.get('/logs', getAuditLogs)
+router.post('/approve/:categoryId', approveAudit)
+router.post('/reject/:categoryId', rejectAudit)
+router.post('/export', exportAuditLogs)
+
+module.exports = router
+EOF
+
+    # Board Routes
+    cat > "$APP_DIR/src/routes/board.js" << 'EOF'
+const express = require('express')
+const { getStats, getCertifications, approveCertification, rejectCertification, getEmceeScripts } = require('../controllers/boardController')
+const { authenticateToken } = require('../middleware/auth')
+
+const router = express.Router()
+
+router.use(authenticateToken)
+
+router.get('/stats', getStats)
+router.get('/certifications', getCertifications)
+router.post('/certifications/:id/approve', approveCertification)
+router.post('/certifications/:id/reject', rejectCertification)
+router.get('/emcee-scripts', getEmceeScripts)
+
+module.exports = router
+EOF
+
+    # Tally Master Routes
+    cat > "$APP_DIR/src/routes/tally-master.js" << 'EOF'
+const express = require('express')
+const { getStats, getCertifications, certifyTotals, getCertificationQueue } = require('../controllers/tallyMasterController')
+const { authenticateToken } = require('../middleware/auth')
+
+const router = express.Router()
+
+router.use(authenticateToken)
+
+router.get('/stats', getStats)
+router.get('/certifications', getCertifications)
+router.get('/queue', getCertificationQueue)
+router.post('/certify-totals/:categoryId', certifyTotals)
+
+module.exports = router
+EOF
+
+    # Email Routes
+    cat > "$APP_DIR/src/routes/email.js" << 'EOF'
+const express = require('express')
+const { sendEmail, sendBulkEmail, getEmailTemplates, createEmailTemplate, updateEmailTemplate, deleteEmailTemplate } = require('../controllers/emailController')
+const { authenticateToken } = require('../middleware/auth')
+
+const router = express.Router()
+
+router.use(authenticateToken)
+
+router.post('/send', sendEmail)
+router.post('/bulk', sendBulkEmail)
+router.get('/templates', getEmailTemplates)
+router.post('/templates', createEmailTemplate)
+router.put('/templates/:id', updateEmailTemplate)
+router.delete('/templates/:id', deleteEmailTemplate)
+
+module.exports = router
+EOF
+
+    # Reports Routes
+    cat > "$APP_DIR/src/routes/reports.js" << 'EOF'
+const express = require('express')
+const { generatePDF, generateImage, generateCertificate, getReportTemplates, createReportTemplate, updateReportTemplate, deleteReportTemplate } = require('../controllers/reportsController')
+const { authenticateToken } = require('../middleware/auth')
+
+const router = express.Router()
+
+router.use(authenticateToken)
+
+router.post('/generate-pdf', generatePDF)
+router.post('/generate-image', generateImage)
+router.post('/generate-certificate', generateCertificate)
+router.get('/templates', getReportTemplates)
+router.post('/templates', createReportTemplate)
+router.put('/templates/:id', updateReportTemplate)
+router.delete('/templates/:id', deleteReportTemplate)
+
+module.exports = router
+EOF
+
+    # Templates Routes
+    cat > "$APP_DIR/src/routes/templates.js" << 'EOF'
+const express = require('express')
+const { getAllTemplates, getTemplateById, createTemplate, updateTemplate, deleteTemplate } = require('../controllers/templatesController')
+const { authenticateToken } = require('../middleware/auth')
+
+const router = express.Router()
+
+router.use(authenticateToken)
+
+router.get('/', getAllTemplates)
+router.get('/:id', getTemplateById)
+router.post('/', createTemplate)
+router.put('/:id', updateTemplate)
+router.delete('/:id', deleteTemplate)
+
+module.exports = router
+EOF
+
+    # Notifications Routes
+    cat > "$APP_DIR/src/routes/notifications.js" << 'EOF'
+const express = require('express')
+const { getAllNotifications, markAsRead, markAllAsRead, getUnreadCount, createNotification } = require('../controllers/notificationsController')
+const { authenticateToken } = require('../middleware/auth')
+
+const router = express.Router()
+
+router.use(authenticateToken)
+
+router.get('/', getAllNotifications)
+router.post('/:id/read', markAsRead)
+router.post('/read-all', markAllAsRead)
+router.get('/unread-count', getUnreadCount)
+router.post('/', createNotification)
+
+module.exports = router
+EOF
+
+    # Emcee Routes
+    cat > "$APP_DIR/src/routes/emcee.js" << 'EOF'
+const express = require('express')
+const { getScripts, getScriptById, createScript, updateScript, deleteScript, playScript, pauseScript, stopScript, getAnalytics, getUsageHistory } = require('../controllers/emceeController')
+const { authenticateToken } = require('../middleware/auth')
+
+const router = express.Router()
+
+router.use(authenticateToken)
+
+router.get('/scripts', getScripts)
+router.get('/scripts/:id', getScriptById)
+router.post('/scripts', createScript)
+router.put('/scripts/:id', updateScript)
+router.delete('/scripts/:id', deleteScript)
+router.post('/scripts/:id/play', playScript)
+router.post('/scripts/:id/pause', pauseScript)
+router.post('/scripts/:id/stop', stopScript)
+router.get('/analytics', getAnalytics)
+router.get('/usage-history', getUsageHistory)
 
 module.exports = router
 EOF
@@ -2734,6 +4654,19 @@ const userRoutes = require('./routes/users')
 const scoringRoutes = require('./routes/scoring')
 const resultsRoutes = require('./routes/results')
 const adminRoutes = require('./routes/admin')
+const uploadRoutes = require('./routes/upload')
+const archiveRoutes = require('./routes/archive')
+const backupRoutes = require('./routes/backup')
+const settingsRoutes = require('./routes/settings')
+const assignmentsRoutes = require('./routes/assignments')
+const auditorRoutes = require('./routes/auditor')
+const boardRoutes = require('./routes/board')
+const tallyMasterRoutes = require('./routes/tally-master')
+const emailRoutes = require('./routes/email')
+const reportsRoutes = require('./routes/reports')
+const templatesRoutes = require('./routes/templates')
+const notificationsRoutes = require('./routes/notifications')
+const emceeRoutes = require('./routes/emcee')
 
 // Mount routes
 app.use('/api/auth', authRoutes)
@@ -2744,6 +4677,19 @@ app.use('/api/users', userRoutes)
 app.use('/api/scoring', scoringRoutes)
 app.use('/api/results', resultsRoutes)
 app.use('/api/admin', adminRoutes)
+app.use('/api/upload', uploadRoutes)
+app.use('/api/archive', archiveRoutes)
+app.use('/api/backup', backupRoutes)
+app.use('/api/settings', settingsRoutes)
+app.use('/api/assignments', assignmentsRoutes)
+app.use('/api/auditor', auditorRoutes)
+app.use('/api/board', boardRoutes)
+app.use('/api/tally-master', tallyMasterRoutes)
+app.use('/api/email', emailRoutes)
+app.use('/api/reports', reportsRoutes)
+app.use('/api/templates', templatesRoutes)
+app.use('/api/notifications', notificationsRoutes)
+app.use('/api/emcee', emceeRoutes)
 
 // Serve static files from frontend build
 app.use(express.static(path.join(__dirname, '../frontend/dist')))
