@@ -1696,6 +1696,91 @@ app.get('/api/admin/stats', authenticateToken, async (req, res) => {
   }
 })
 
+// Admin logs endpoint
+app.get('/api/admin/logs', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'ORGANIZER' && req.user.role !== 'BOARD' && req.user.role !== 'AUDITOR') {
+      return res.status(403).json({ error: 'Insufficient permissions' })
+    }
+    
+    const logs = await prisma.activityLog.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+      include: {
+        user: {
+          select: { id: true, name: true, role: true }
+        }
+      }
+    })
+    
+    res.json(logs)
+  } catch (error) {
+    console.error('Logs fetch error:', error)
+    res.status(500).json({ error: 'Failed to fetch logs' })
+  }
+})
+
+// Admin active users endpoint
+app.get('/api/admin/active-users', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'ORGANIZER' && req.user.role !== 'BOARD') {
+      return res.status(403).json({ error: 'Insufficient permissions' })
+    }
+    
+    const activeUsers = await prisma.user.findMany({
+      where: {
+        isActive: true
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        lastLoginAt: true
+      },
+      take: 20
+    })
+    
+    res.json(activeUsers)
+  } catch (error) {
+    console.error('Active users fetch error:', error)
+    res.status(500).json({ error: 'Failed to fetch active users' })
+  }
+})
+
+// Admin settings endpoint
+app.get('/api/admin/settings', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'ORGANIZER' && req.user.role !== 'BOARD') {
+      return res.status(403).json({ error: 'Insufficient permissions' })
+    }
+    
+    const settings = await prisma.systemSetting.findMany()
+    res.json(settings)
+  } catch (error) {
+    console.error('Settings fetch error:', error)
+    res.status(500).json({ error: 'Failed to fetch settings' })
+  }
+})
+
+// Admin backup endpoint
+app.get('/api/admin/backup', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'ORGANIZER' && req.user.role !== 'BOARD') {
+      return res.status(403).json({ error: 'Insufficient permissions' })
+    }
+    
+    res.json({
+      message: 'Backup functionality will be implemented',
+      lastBackup: new Date().toISOString(),
+      status: 'available'
+    })
+  } catch (error) {
+    console.error('Backup fetch error:', error)
+    res.status(500).json({ error: 'Failed to fetch backup info' })
+  }
+})
+
 // Socket.IO connection handling
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id)
