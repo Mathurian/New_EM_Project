@@ -1508,7 +1508,7 @@ app.get('/api/auth/profile', authenticateToken, (req, res) => {
 })
 
 // Events API
-app.get('/api/events', authenticateToken, async (req, res) => {
+app.get('/events', authenticateToken, async (req, res) => {
   try {
     const events = await prisma.event.findMany({
       include: {
@@ -1527,7 +1527,7 @@ app.get('/api/events', authenticateToken, async (req, res) => {
   }
 })
 
-app.post('/api/events', authenticateToken, async (req, res) => {
+app.post('/events', authenticateToken, async (req, res) => {
   try {
     if (req.user.role !== 'ORGANIZER' && req.user.role !== 'BOARD') {
       return res.status(403).json({ error: 'Insufficient permissions' })
@@ -1588,7 +1588,7 @@ app.get('/api/categories/contest/:contestId', authenticateToken, async (req, res
 })
 
 // Users API
-app.get('/api/users', authenticateToken, async (req, res) => {
+app.get('/users', authenticateToken, async (req, res) => {
   try {
     if (req.user.role !== 'ORGANIZER' && req.user.role !== 'BOARD') {
       return res.status(403).json({ error: 'Insufficient permissions' })
@@ -2502,7 +2502,7 @@ fix_typescript_errors() {
 import axios from 'axios'
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || '',
+  baseURL: import.meta.env.VITE_API_URL || '/api',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
@@ -3451,7 +3451,7 @@ EOF
 import axios from 'axios'
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || '',
+  baseURL: import.meta.env.VITE_API_URL || '/api',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
@@ -4266,7 +4266,7 @@ EOF
 import axios from 'axios'
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || '',
+  baseURL: import.meta.env.VITE_API_URL || '/api',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
@@ -18004,7 +18004,7 @@ EOF
 import axios from 'axios'
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || '',
+  baseURL: import.meta.env.VITE_API_URL || '/api',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
