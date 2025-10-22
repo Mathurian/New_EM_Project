@@ -2306,7 +2306,7 @@ fix_heroicons_imports() {
     
     cd "$APP_DIR/frontend" || return 1
     
-    # Fix Layout.tsx - Add missing icon imports (only if not already present)
+    # Fix Layout.tsx - Add missing icon imports (only if not already present) - Heroicons v2 compatible
     if [[ -f "src/components/Layout.tsx" ]]; then
         print_status "Checking Layout.tsx icon imports..."
         if ! grep -q "HomeIcon" "src/components/Layout.tsx"; then
@@ -2322,7 +2322,7 @@ import {\
   MicrophoneIcon,\
   DocumentTextIcon,\
   XMarkIcon,\
-  PencilIcon,\
+  PencilSquareIcon,\
   CalculatorIcon\
 } from '\''@heroicons/react/24/outline'\''\
 ' "src/components/Layout.tsx"
@@ -2337,19 +2337,22 @@ import {\
         sed -i 's/import {.*DatabaseIcon.*}/import { CircleStackIcon }/g' "src/pages/AdminPage.tsx"
     fi
     
-    # Comprehensive fix for all reported TypeScript errors
-    print_status "Applying comprehensive TypeScript icon fixes..."
+    # Comprehensive fix for all reported TypeScript errors (Heroicons v2 compatible)
+    print_status "Applying comprehensive TypeScript icon fixes for Heroicons v2..."
     
-    # Fix AuditorPage.tsx - Add missing PencilIcon and CalculatorIcon imports
+    # Fix AuditorPage.tsx - Add missing PencilSquareIcon and CalculatorIcon imports (Heroicons v2 names)
     if [[ -f "src/pages/AuditorPage.tsx" ]]; then
-        # Check if PencilIcon is missing and add it
-        if ! grep -q "PencilIcon" "src/pages/AuditorPage.tsx"; then
+        # Replace PencilIcon with PencilSquareIcon (Heroicons v2 name)
+        sed -i 's/PencilIcon/PencilSquareIcon/g' "src/pages/AuditorPage.tsx"
+        
+        # Check if PencilSquareIcon is missing and add it
+        if ! grep -q "PencilSquareIcon" "src/pages/AuditorPage.tsx"; then
             # Find the import line and add the missing icons
             sed -i '/import {/,/} from/a\
-  PencilIcon,\
+  PencilSquareIcon,\
   CalculatorIcon,\
 ' "src/pages/AuditorPage.tsx"
-            print_status "Added PencilIcon and CalculatorIcon to AuditorPage.tsx"
+            print_status "Added PencilSquareIcon and CalculatorIcon to AuditorPage.tsx"
         fi
     fi
     
@@ -2358,7 +2361,7 @@ import {\
         # Remove duplicate DocumentTextIcon imports using a more reliable method
         awk '!seen[$0]++' "src/pages/ReportsPage.tsx" > "src/pages/ReportsPage.tsx.tmp" && mv "src/pages/ReportsPage.tsx.tmp" "src/pages/ReportsPage.tsx"
         
-        # Replace DownloadIcon with ArrowDownTrayIcon
+        # Replace DownloadIcon with ArrowDownTrayIcon (Heroicons v2 name)
         sed -i 's/DownloadIcon/ArrowDownTrayIcon/g' "src/pages/ReportsPage.tsx"
         
         # Add ArrowDownTrayIcon import if not present
@@ -2370,7 +2373,7 @@ import {\
         print_status "Fixed ReportsPage.tsx duplicate imports and DownloadIcon"
     fi
     
-    # Fix ResultsPage.tsx - Replace MedalIcon with TrophyIcon
+    # Fix ResultsPage.tsx - Replace MedalIcon with TrophyIcon (Heroicons v2 name)
     if [[ -f "src/pages/ResultsPage.tsx" ]]; then
         sed -i 's/MedalIcon/TrophyIcon/g' "src/pages/ResultsPage.tsx"
         
@@ -2383,7 +2386,7 @@ import {\
         print_status "Fixed ResultsPage.tsx MedalIcon -> TrophyIcon"
     fi
     
-    # Fix SettingsPage.tsx - Replace DatabaseIcon with CircleStackIcon
+    # Fix SettingsPage.tsx - Replace DatabaseIcon with CircleStackIcon (Heroicons v2 name)
     if [[ -f "src/pages/SettingsPage.tsx" ]]; then
         sed -i 's/DatabaseIcon/CircleStackIcon/g' "src/pages/SettingsPage.tsx"
         
