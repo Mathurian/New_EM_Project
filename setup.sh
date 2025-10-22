@@ -3979,7 +3979,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex">
       {/* Mobile sidebar */}
       <div className={`mobile-menu ${sidebarOpen ? 'block' : 'hidden'}`}>
         <div className="mobile-menu-overlay" onClick={() => setSidebarOpen(false)} />
@@ -4045,7 +4045,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       </div>
 
       {/* Main content */}
-      <div className="lg:pl-64 flex flex-col flex-1">
+      <div className="flex flex-col flex-1 min-w-0">
         {/* Top navigation */}
         <div className="sticky top-0 z-10 flex-shrink-0 flex h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
           <button
@@ -8254,6 +8254,18 @@ code {
 
   .sidebar-item-inactive {
     @apply sidebar-item text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white;
+  }
+
+  .mobile-menu {
+    @apply fixed inset-0 z-50 lg:hidden;
+  }
+
+  .mobile-menu-overlay {
+    @apply fixed inset-0 bg-black/50;
+  }
+
+  .mobile-menu-content {
+    @apply fixed top-0 right-0 h-full w-80 bg-background border-l shadow-lg;
   }
 
   .dropdown {
