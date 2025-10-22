@@ -18820,90 +18820,90 @@ fix_api_endpoints() {
     # Check if admin endpoints already exist
     if ! grep -q "app.get('/api/admin/logs'" "$server_file"; then
         print_status "Adding /api/admin/logs endpoint..."
-        sed -i '/\/\/ Admin API/a\
-\
-// Admin Activity Logs\
-app.get('\''/api/admin/logs'\'', authenticateToken, async (req, res) => {\
-  try {\
-    if (req.user.role !== '\''ORGANIZER'\'' && req.user.role !== '\''BOARD'\'' && req.user.role !== '\''AUDITOR'\'') {\
-      return res.status(403).json({ error: '\''Insufficient permissions'\'' })\
-    }\
-    \
-    const logs = await prisma.activityLog.findMany({\
-      orderBy: { createdAt: '\''desc'\'' },\
-      take: 100,\
-      include: {\
-        user: {\
-          select: {\
-            id: true,\
-            name: true,\
-            role: true\
-          }\
-        }\
-      }\
-    })\
-    \
-    res.json(logs)\
-  } catch (error) {\
-    console.error('\''Activity logs fetch error:'\'', error)\
-    res.status(500).json({ error: '\''Failed to fetch activity logs'\'' })\
-  }\
-})\
-' "$server_file"
+        cat >> "$server_file" << 'EOF'
+
+// Admin Activity Logs
+app.get('/api/admin/logs', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'ORGANIZER' && req.user.role !== 'BOARD' && req.user.role !== 'AUDITOR') {
+      return res.status(403).json({ error: 'Insufficient permissions' })
+    }
+    
+    const logs = await prisma.activityLog.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            role: true
+          }
+        }
+      }
+    })
+    
+    res.json(logs)
+  } catch (error) {
+    console.error('Activity logs fetch error:', error)
+    res.status(500).json({ error: 'Failed to fetch activity logs' })
+  }
+})
+EOF
     fi
     
     if ! grep -q "app.get('/api/admin/active-users'" "$server_file"; then
         print_status "Adding /api/admin/active-users endpoint..."
-        sed -i '/\/\/ Admin API/a\
-\
-// Admin Active Users\
-app.get('\''/api/admin/active-users'\'', authenticateToken, async (req, res) => {\
-  try {\
-    if (req.user.role !== '\''ORGANIZER'\'' && req.user.role !== '\''BOARD'\'') {\
-      return res.status(403).json({ error: '\''Insufficient permissions'\'' })\
-    }\
-    \
-    const activeUsers = await prisma.user.findMany({\
-      where: {\
-        isActive: true\
-      },\
-      select: {\
-        id: true,\
-        name: true,\
-        email: true,\
-        role: true,\
-        lastLoginAt: true\
-      }\
-    })\
-    \
-    res.json(activeUsers)\
-  } catch (error) {\
-    console.error('\''Active users fetch error:'\'', error)\
-    res.status(500).json({ error: '\''Failed to fetch active users'\'' })\
-  }\
-})\
-' "$server_file"
+        cat >> "$server_file" << 'EOF'
+
+// Admin Active Users
+app.get('/api/admin/active-users', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'ORGANIZER' && req.user.role !== 'BOARD') {
+      return res.status(403).json({ error: 'Insufficient permissions' })
+    }
+    
+    const activeUsers = await prisma.user.findMany({
+      where: {
+        isActive: true
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        lastLoginAt: true
+      }
+    })
+    
+    res.json(activeUsers)
+  } catch (error) {
+    console.error('Active users fetch error:', error)
+    res.status(500).json({ error: 'Failed to fetch active users' })
+  }
+})
+EOF
     fi
     
     if ! grep -q "app.get('/api/admin/settings'" "$server_file"; then
         print_status "Adding /api/admin/settings endpoint..."
-        sed -i '/\/\/ Admin API/a\
-\
-// Admin Settings\
-app.get('\''/api/admin/settings'\'', authenticateToken, async (req, res) => {\
-  try {\
-    if (req.user.role !== '\''ORGANIZER'\'' && req.user.role !== '\''BOARD'\'') {\
-      return res.status(403).json({ error: '\''Insufficient permissions'\'' })\
-    }\
-    \
-    const settings = await prisma.systemSetting.findMany()\
-    res.json(settings)\
-  } catch (error) {\
-    console.error('\''Settings fetch error:'\'', error)\
-    res.status(500).json({ error: '\''Failed to fetch settings'\'' })\
-  }\
-})\
-' "$server_file"
+        cat >> "$server_file" << 'EOF'
+
+// Admin Settings
+app.get('/api/admin/settings', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'ORGANIZER' && req.user.role !== 'BOARD') {
+      return res.status(403).json({ error: 'Insufficient permissions' })
+    }
+    
+    const settings = await prisma.systemSetting.findMany()
+    res.json(settings)
+  } catch (error) {
+    console.error('Settings fetch error:', error)
+    res.status(500).json({ error: 'Failed to fetch settings' })
+  }
+})
+EOF
     fi
     
     if ! grep -q "app.get('/api/admin/backup'" "$server_file"; then
@@ -18960,117 +18960,117 @@ app.get('\''/api/events'\'', authenticateToken, async (req, res) => {\
     fi
     if ! grep -q "app.get('/api/categories'" "$server_file"; then
         print_status "Adding /api/categories endpoint..."
-        sed -i '/\/\/ Categories API/a\
-\
-// Get all categories\
-app.get('\''/api/categories'\'', authenticateToken, async (req, res) => {\
-  try {\
-    const { contestId } = req.query\
-    \
-    const where = contestId ? { contestId } : {}\
-    \
-    const categories = await prisma.category.findMany({\
-      where,\
-      include: {\
-        contest: {\
-          select: {\
-            id: true,\
-            name: true\
-          }\
-        },\
-        _count: {\
-          select: {\
-            criteria: true,\
-            contestants: true,\
-            judges: true,\
-            scores: true\
-          }\
-        }\
-      },\
-      orderBy: { order: '\''asc'\'' }\
-    })\
-    \
-    res.json(categories)\
-  } catch (error) {\
-    console.error('\''Categories fetch error:'\'', error)\
-    res.status(500).json({ error: '\''Failed to fetch categories'\'' })\
-  }\
-})\
-' "$server_file"
+        cat >> "$server_file" << 'EOF'
+
+// Get all categories
+app.get('/api/categories', authenticateToken, async (req, res) => {
+  try {
+    const { contestId } = req.query
+    
+    const where = contestId ? { contestId } : {}
+    
+    const categories = await prisma.category.findMany({
+      where,
+      include: {
+        contest: {
+          select: {
+            id: true,
+            name: true
+          }
+        },
+        _count: {
+          select: {
+            criteria: true,
+            contestants: true,
+            judges: true,
+            scores: true
+          }
+        }
+      },
+      orderBy: { order: 'asc' }
+    })
+    
+    res.json(categories)
+  } catch (error) {
+    console.error('Categories fetch error:', error)
+    res.status(500).json({ error: 'Failed to fetch categories' })
+  }
+})
+EOF
     fi
     
     # Add missing results endpoint
     if ! grep -q "app.get('/api/results'" "$server_file"; then
         print_status "Adding /api/results endpoint..."
-        sed -i '/\/\/ Results API/a\
-\
-// Get results\
-app.get('\''/api/results'\'', authenticateToken, async (req, res) => {\
-  try {\
-    const { categoryId, contestId } = req.query\
-    \
-    let where = {}\
-    if (categoryId) {\
-      where.categoryId = categoryId\
-    } else if (contestId) {\
-      where.category = {\
-        contestId: contestId\
-      }\
-    }\
-    \
-    const results = await prisma.score.groupBy({\
-      by: ['\''contestantId'\'', '\''categoryId'\''],\
-      where,\
-      _sum: {\
-        score: true\
-      },\
-      _avg: {\
-        score: true\
-      },\
-      _count: {\
-        score: true\
-      }\
-    })\
-    \
-    // Get detailed results with contestant and category info\
-    const detailedResults = await Promise.all(results.map(async (result) => {\
-      const contestant = await prisma.contestant.findUnique({\
-        where: { id: result.contestantId },\
-        select: {\
-          id: true,\
-          name: true,\
-          email: true,\
-          contestantNumber: true\
-        }\
-      })\
-      \
-      const category = await prisma.category.findUnique({\
-        where: { id: result.categoryId },\
-        select: {\
-          id: true,\
-          name: true,\
-          maxScore: true\
-        }\
-      })\
-      \
-      return {\
-        contestantId: result.contestantId,\
-        categoryId: result.categoryId,\
-        totalScore: result._sum.score,\
-        averageScore: result._avg.score,\
-        scoreCount: result._count.score,\
-        contestant,\
-        category\
-      }\
-    }))\
-    \
-    res.json(detailedResults)\
-  } catch (error) {\
-    console.error('\''Results fetch error:'\'', error)\
-    res.status(500).json({ error: '\''Failed to fetch results'\'' })\
-  }\
-})\
-' "$server_file"
+        cat >> "$server_file" << 'EOF'
+
+// Get results
+app.get('/api/results', authenticateToken, async (req, res) => {
+  try {
+    const { categoryId, contestId } = req.query
+    
+    let where = {}
+    if (categoryId) {
+      where.categoryId = categoryId
+    } else if (contestId) {
+      where.category = {
+        contestId: contestId
+      }
+    }
+    
+    const results = await prisma.score.groupBy({
+      by: ['contestantId', 'categoryId'],
+      where,
+      _sum: {
+        score: true
+      },
+      _avg: {
+        score: true
+      },
+      _count: {
+        score: true
+      }
+    })
+    
+    // Get detailed results with contestant and category info
+    const detailedResults = await Promise.all(results.map(async (result) => {
+      const contestant = await prisma.contestant.findUnique({
+        where: { id: result.contestantId },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          contestantNumber: true
+        }
+      })
+      
+      const category = await prisma.category.findUnique({
+        where: { id: result.categoryId },
+        select: {
+          id: true,
+          name: true,
+          maxScore: true
+        }
+      })
+      
+      return {
+        contestantId: result.contestantId,
+        categoryId: result.categoryId,
+        totalScore: result._sum.score,
+        averageScore: result._avg.score,
+        scoreCount: result._count.score,
+        contestant,
+        category
+      }
+    }))
+    
+    res.json(detailedResults)
+  } catch (error) {
+    console.error('Results fetch error:', error)
+    res.status(500).json({ error: 'Failed to fetch results' })
+  }
+})
+EOF
     fi
     
     # Fix double /api/ issue in frontend
