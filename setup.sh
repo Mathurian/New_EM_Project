@@ -2300,6 +2300,18 @@ fix_heroicons_imports() {
     
     cd "$APP_DIR/frontend" || return 1
     
+    # Clean up any malformed files first
+    print_status "Cleaning up malformed files..."
+    
+    # Remove any stray ArrowDownTrayIcon, statements that may have been inserted incorrectly
+    find src -name "*.tsx" -type f -exec sed -i '/^[[:space:]]*ArrowDownTrayIcon,[[:space:]]*$/d' {} \;
+    find src -name "*.tsx" -type f -exec sed -i '/^[[:space:]]*PencilSquareIcon,[[:space:]]*$/d' {} \;
+    find src -name "*.tsx" -type f -exec sed -i '/^[[:space:]]*CalculatorIcon,[[:space:]]*$/d' {} \;
+    find src -name "*.tsx" -type f -exec sed -i '/^[[:space:]]*TrophyIcon,[[:space:]]*$/d' {} \;
+    find src -name "*.tsx" -type f -exec sed -i '/^[[:space:]]*CircleStackIcon,[[:space:]]*$/d' {} \;
+    
+    print_status "Cleaned up malformed icon statements"
+    
     # Fix Layout.tsx - Add missing icon imports (only if not already present) - Heroicons v2 compatible
     if [[ -f "src/components/Layout.tsx" ]]; then
         print_status "Checking Layout.tsx icon imports..."
@@ -2342,10 +2354,7 @@ import {\
         # Check if PencilSquareIcon is missing and add it
         if ! grep -q "PencilSquareIcon" "src/pages/AuditorPage.tsx"; then
             # Find the import line and add the missing icons
-            sed -i '/import {/,/} from/a\
-  PencilSquareIcon,\
-  CalculatorIcon,\
-' "src/pages/AuditorPage.tsx"
+            sed -i '/import {/,/} from/a\  PencilSquareIcon,\n  CalculatorIcon,' "src/pages/AuditorPage.tsx"
             print_status "Added PencilSquareIcon and CalculatorIcon to AuditorPage.tsx"
         fi
     fi
@@ -2358,11 +2367,9 @@ import {\
         # Replace DownloadIcon with ArrowDownTrayIcon (Heroicons v2 name)
         sed -i 's/DownloadIcon/ArrowDownTrayIcon/g' "src/pages/ReportsPage.tsx"
         
-        # Add ArrowDownTrayIcon import if not present
+        # Add ArrowDownTrayIcon import if not present - use proper sed syntax
         if ! grep -q "ArrowDownTrayIcon" "src/pages/ReportsPage.tsx"; then
-            sed -i '/import {/,/} from/a\
-  ArrowDownTrayIcon,\
-' "src/pages/ReportsPage.tsx"
+            sed -i '/import {/,/} from/a\  ArrowDownTrayIcon,' "src/pages/ReportsPage.tsx"
         fi
         print_status "Fixed ReportsPage.tsx duplicate imports and DownloadIcon"
     fi
@@ -2373,9 +2380,7 @@ import {\
         
         # Add TrophyIcon import if not present
         if ! grep -q "TrophyIcon" "src/pages/ResultsPage.tsx"; then
-            sed -i '/import {/,/} from/a\
-  TrophyIcon,\
-' "src/pages/ResultsPage.tsx"
+            sed -i '/import {/,/} from/a\  TrophyIcon,' "src/pages/ResultsPage.tsx"
         fi
         print_status "Fixed ResultsPage.tsx MedalIcon -> TrophyIcon"
     fi
@@ -2386,9 +2391,7 @@ import {\
         
         # Add CircleStackIcon import if not present
         if ! grep -q "CircleStackIcon" "src/pages/SettingsPage.tsx"; then
-            sed -i '/import {/,/} from/a\
-  CircleStackIcon,\
-' "src/pages/SettingsPage.tsx"
+            sed -i '/import {/,/} from/a\  CircleStackIcon,' "src/pages/SettingsPage.tsx"
         fi
         print_status "Fixed SettingsPage.tsx DatabaseIcon -> CircleStackIcon"
     fi
@@ -5368,12 +5371,6 @@ const LoginPage: React.FC = () => {
               </button>
             </div>
           </form>
-
-          <div className="mt-6">
-            <div className="text-center text-sm text-gray-600 dark:text-gray-400">
-              <p>Contact your administrator for login credentials</p>
-            </div>
-          </div>
         </div>
       </div>
     </div>
