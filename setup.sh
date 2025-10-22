@@ -158,54 +158,44 @@ safe_npm_install() {
             print_warning "Some canvas dependencies may not be installed properly"
         fi
         
-        # Fix node-pre-gyp compatibility with Node.js v20.19.5
-        print_status "Fixing node-pre-gyp compatibility for canvas module..."
+        # Install canvas separately before main npm install
+        print_status "Installing canvas module with system dependencies..."
         
-        # Strategy 1: Try installing canvas with build-from-source flag
-        print_status "Attempting canvas installation with build-from-source..."
-        if npm install canvas 2>/dev/null; then
-            print_success "Canvas installed successfully"
+        # Strategy 1: Install canvas with build-from-source
+        if npm install canvas --build-from-source --legacy-peer-deps --force 2>/dev/null; then
+            print_success "Canvas installed successfully with build-from-source"
         else
-            # Strategy 2: Try installing canvas with specific node-pre-gyp version
-            print_status "Attempting canvas installation with compatible node-pre-gyp..."
+            # Strategy 2: Install compatible node-pre-gyp version first
+            print_status "Installing compatible node-pre-gyp version..."
             npm install @mapbox/node-pre-gyp@1.0.10 --no-save --legacy-peer-deps --force 2>/dev/null || true
             
-            # Strategy 3: Try installing canvas with Python 2.7 compatibility
-            print_status "Setting up Python 2.7 compatibility..."
-            sudo apt-get install -y python2.7 python2.7-dev 2>/dev/null || true
-            sudo update-alternatives --install /usr/bin/python python /usr/bin/python2.7 1 2>/dev/null || true
-            
-            # Strategy 4: Try installing canvas with environment variables
-            print_status "Attempting canvas installation with compatibility flags..."
-            export PYTHON=/usr/bin/python2.7
-            export npm_config_python=/usr/bin/python2.7
-            export npm_config_build_from_source=true
-            
+            # Strategy 3: Try canvas installation again
             if npm install canvas --legacy-peer-deps --force 2>/dev/null; then
-                print_success "Canvas installed successfully with Python 2.7 compatibility"
+                print_success "Canvas installed successfully with compatible node-pre-gyp"
             else
-                print_warning "Canvas installation failed - will try alternative approach"
+                # Strategy 4: Try with environment variables
+                print_status "Attempting canvas installation with build flags..."
+                export npm_config_build_from_source=true
+                export npm_config_canvas_binary_host_mirror=https://github.com/Automattic/node-canvas/releases/download/
+                
+                if npm install canvas --legacy-peer-deps --force 2>/dev/null; then
+                    print_success "Canvas installed successfully with build flags"
+                else
+                    print_warning "Canvas installation failed - will continue without it"
+                    # Remove canvas from package.json to prevent main install failure
+                    if [ -f "package.json" ] && grep -q '"canvas"' package.json; then
+                        sed -i '/"canvas"/d' package.json
+                        print_status "Removed canvas from package.json to prevent install failure"
+                    fi
+                fi
             fi
         fi
         
-        # Verify canvas can be imported after system dependencies are installed
-        print_status "Testing canvas module compatibility..."
-        if node -e "console.log('Canvas test:', require('canvas').version)" 2>/dev/null; then
+        # Verify canvas installation
+        if node -e "console.log('Canvas version:', require('canvas').version)" 2>/dev/null; then
             print_success "Canvas module is working correctly"
         else
-            print_warning "Canvas module may need additional configuration"
-        fi
-        
-        # Strategy 5: If canvas still fails, remove it from package.json as it's not critical
-        print_status "Final canvas compatibility check..."
-        if ! node -e "console.log('Canvas test:', require('canvas').version)" 2>/dev/null; then
-            print_warning "Canvas module installation failed - removing from dependencies"
-            print_status "Canvas is not critical for core functionality, continuing without it..."
-            # Remove canvas from package.json if it exists
-            if [ -f "package.json" ] && grep -q '"canvas"' package.json; then
-                sed -i '/"canvas"/d' package.json
-                print_status "Removed canvas from package.json dependencies"
-            fi
+            print_warning "Canvas module installation failed - continuing without canvas"
         fi
     fi
     
@@ -5314,8 +5304,8 @@ EOF
   "devDependencies": {
     "nodemon": "^3.0.2",
     "jest": "^29.7.0",
-    "supertest": "^6.3.3",
-    "eslint": "^8.57.1"
+    "supertest": "^7.1.3",
+    "eslint": "^9.0.0"
   },
   "overrides": {
     "glob": "^10.3.10",
