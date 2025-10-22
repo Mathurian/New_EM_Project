@@ -1855,13 +1855,22 @@ EOF
     "playwright": "^1.40.0",
     "puppeteer": "^24.15.0",
     "supertest": "^7.1.3",
-    "superagent": "^10.2.2",
-    "npmlog": "^5.0.1"
+    "superagent": "^10.2.2"
   },
   "overrides": {
+    "glob": "^10.3.10",
+    "rimraf": "^5.0.5",
+    "inflight": "npm:lru-cache@^10.0.0",
+    "are-we-there-yet": "npm:@types/are-we-there-yet@^2.0.0",
     "lodash.pick": "npm:lodash@^4.17.21",
-    "gauge": "npm:gauge@^4.0.4",
-    "npmlog": "^5.0.1"
+    "gauge": "npm:@types/gauge@^2.7.2",
+    "npmlog": "npm:winston@^3.11.0",
+    "supertest": "^7.1.3",
+    "superagent": "^10.2.2",
+    "html-pdf-node": "npm:playwright@^1.40.0",
+    "@humanwhocodes/object-schema": "npm:@eslint/object-schema@^0.1.0",
+    "@humanwhocodes/config-array": "npm:@eslint/config-array@^0.18.0",
+    "eslint": "^9.0.0"
   }
 }
 EOF
@@ -2201,10 +2210,12 @@ fix_heroicons_imports() {
     
     cd "$APP_DIR/frontend" || return 1
     
-    # Fix Layout.tsx - Add missing icon imports
+    # Fix Layout.tsx - Add missing icon imports (only if not already present)
     if [[ -f "src/components/Layout.tsx" ]]; then
-        print_status "Fixing Layout.tsx icon imports..."
-        sed -i '/import React, { useState } from '\''react'\''/a\
+        print_status "Checking Layout.tsx icon imports..."
+        if ! grep -q "HomeIcon" "src/components/Layout.tsx"; then
+            print_status "Adding missing icon imports to Layout.tsx..."
+            sed -i '/import React, { useState } from '\''react'\''/a\
 import {\
   HomeIcon,\
   CalendarIcon,\
@@ -2217,6 +2228,9 @@ import {\
   XMarkIcon\
 } from '\''@heroicons/react/24/outline'\''\
 ' "src/components/Layout.tsx"
+        else
+            print_status "Layout.tsx already has icon imports, skipping..."
+        fi
     fi
     
     # Fix AdminPage.tsx
@@ -2230,8 +2244,13 @@ import {\
         sed -i 's/DocumentReportIcon/DocumentTextIcon/g' "src/pages/AuditorPage.tsx"
         sed -i 's/TrendingUpIcon/ArrowTrendingUpIcon/g' "src/pages/AuditorPage.tsx"
         sed -i 's/TrendingDownIcon/ArrowTrendingDownIcon/g' "src/pages/AuditorPage.tsx"
-        sed -i 's/PencilIcon/PencilIcon/g' "src/pages/AuditorPage.tsx"  # Keep as is
-        sed -i 's/CalculatorIcon/CalculatorIcon/g' "src/pages/AuditorPage.tsx"  # Keep as is
+        # Add missing icons if not present
+        if ! grep -q "PencilIcon" "src/pages/AuditorPage.tsx"; then
+            sed -i '/import {/a\
+  PencilIcon,\
+  CalculatorIcon,\
+' "src/pages/AuditorPage.tsx"
+        fi
     fi
     
     # Fix EmceePage.tsx
@@ -2249,6 +2268,10 @@ import {\
     if [[ -f "src/pages/ReportsPage.tsx" ]]; then
         sed -i 's/DownloadIcon/ArrowDownTrayIcon/g' "src/pages/ReportsPage.tsx"
         sed -i 's/DocumentReportIcon/DocumentTextIcon/g' "src/pages/ReportsPage.tsx"
+        # Add missing DownloadIcon if referenced
+        if grep -q "DownloadIcon" "src/pages/ReportsPage.tsx"; then
+            sed -i 's/DownloadIcon/ArrowDownTrayIcon/g' "src/pages/ReportsPage.tsx"
+        fi
     fi
     
     # Fix ResultsPage.tsx
@@ -2256,11 +2279,19 @@ import {\
         sed -i 's/MedalIcon/TrophyIcon/g' "src/pages/ResultsPage.tsx"
         sed -i 's/DownloadIcon/ArrowDownTrayIcon/g' "src/pages/ResultsPage.tsx"
         sed -i 's/import { TrophyIcon, MedalIcon, StarIcon, PrinterIcon, DownloadIcon }/import { TrophyIcon, StarIcon, PrinterIcon, ArrowDownTrayIcon }/g' "src/pages/ResultsPage.tsx"
+        # Add missing MedalIcon if referenced
+        if grep -q "MedalIcon" "src/pages/ResultsPage.tsx"; then
+            sed -i 's/MedalIcon/TrophyIcon/g' "src/pages/ResultsPage.tsx"
+        fi
     fi
     
     # Fix SettingsPage.tsx
     if [[ -f "src/pages/SettingsPage.tsx" ]]; then
         sed -i 's/DatabaseIcon/CircleStackIcon/g' "src/pages/SettingsPage.tsx"
+        # Add missing DatabaseIcon if referenced
+        if grep -q "DatabaseIcon" "src/pages/SettingsPage.tsx"; then
+            sed -i 's/DatabaseIcon/CircleStackIcon/g' "src/pages/SettingsPage.tsx"
+        fi
     fi
     
     # Fix TallyMasterPage.tsx
@@ -12274,7 +12305,6 @@ import {
   MagnifyingGlassIcon,
   FunnelIcon,
   EyeIcon,
-  ArrowDownTrayIcon,
   DocumentArrowDownIcon,
   TableCellsIcon,
   PresentationChartLineIcon,
@@ -13282,7 +13312,6 @@ import {
   DocumentDuplicateIcon,
   PresentationChartLineIcon,
   TableCellsIcon,
-  DocumentTextIcon,
   ClipboardDocumentCheckIcon,
   AcademicCapIcon,
   UserGroupIcon,
@@ -14569,7 +14598,6 @@ import {
   DocumentDuplicateIcon,
   PresentationChartLineIcon,
   TableCellsIcon,
-  DocumentTextIcon,
   ClipboardDocumentCheckIcon,
   AcademicCapIcon,
   UserGroupIcon,
