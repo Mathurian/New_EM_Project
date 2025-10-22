@@ -4772,7 +4772,7 @@ import {
   ArrowDownTrayIcon,
   ExclamationTriangleIcon,
   CheckCircleIcon,
-  InformationIcon,
+  InformationCircleIcon,
   XCircleIcon,
   PlusIcon,
   PencilIcon,
@@ -4822,7 +4822,7 @@ const AuditLog: React.FC = () => {
   const getSeverityIcon = (severity: string) => {
     switch (severity) {
       case 'LOW':
-        return <InformationIcon className="h-4 w-4 text-blue-500" />
+        return <InformationCircleIcon className="h-4 w-4 text-blue-500" />
       case 'MEDIUM':
         return <ExclamationTriangleIcon className="h-4 w-4 text-yellow-500" />
       case 'HIGH':
@@ -4830,7 +4830,7 @@ const AuditLog: React.FC = () => {
       case 'CRITICAL':
         return <XCircleIcon className="h-4 w-4 text-red-500" />
       default:
-        return <InformationIcon className="h-4 w-4 text-gray-500" />
+        return <InformationCircleIcon className="h-4 w-4 text-gray-500" />
     }
   }
 
@@ -5258,7 +5258,7 @@ const BackupManager: React.FC = () => {
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Database Backups</h2>
                 <button
-                  onClick={() => createBackupMutation.mutate({ type: 'FULL' })}
+                  onClick={() => createBackupMutation.mutate({ type: 'FULL' as const })}
                   disabled={createBackupMutation.isLoading}
                   className="btn-primary"
                 >
@@ -5520,8 +5520,8 @@ const CategoryTemplates: React.FC = () => {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    categoryType: 'PERFORMANCE' as const,
-    criteria: [] as Array<{ name: string; description: string; maxScore: number; weight: number }>,
+    categoryType: 'PERFORMANCE' as 'PERFORMANCE' | 'TECHNICAL' | 'CREATIVE' | 'SCHOLARSHIP' | 'CUSTOM',
+    criteria: [] as Array<{ id?: string; name: string; description: string; maxScore: number; weight: number }>,
     tags: [] as string[],
   })
 
@@ -5627,7 +5627,7 @@ const CategoryTemplates: React.FC = () => {
   const addCriterion = () => {
     setFormData(prev => ({
       ...prev,
-      criteria: [...prev.criteria, { name: '', description: '', maxScore: 10, weight: 1 }]
+      criteria: [...prev.criteria, { id: `temp-${Date.now()}`, name: '', description: '', maxScore: 10, weight: 1 }]
     }))
   }
 
@@ -6549,14 +6549,14 @@ const FileUpload: React.FC = () => {
 
   const { data: files, isLoading } = useQuery(
     'uploadedFiles',
-    () => uploadAPI.getAll().then((res: any) => res.data),
+    () => uploadAPI.getFiles().then((res: any) => res.data),
     {
       enabled: user?.role === 'ORGANIZER' || user?.role === 'BOARD' || user?.role === 'JUDGE',
     }
   )
 
   const uploadMutation = useMutation(
-    (formData: FormData) => uploadAPI.upload(formData),
+    (formData: FormData) => uploadAPI.uploadFileData(formData),
     {
       onSuccess: () => {
         queryClient.invalidateQueries('uploadedFiles')
@@ -6571,7 +6571,7 @@ const FileUpload: React.FC = () => {
   )
 
   const deleteMutation = useMutation(
-    (id: string) => uploadAPI.delete(id),
+    (id: string) => uploadAPI.deleteFile(id),
     {
       onSuccess: () => {
         queryClient.invalidateQueries('uploadedFiles')
@@ -6622,7 +6622,7 @@ const FileUpload: React.FC = () => {
   }
 
   const handleDownload = (file: UploadedFile) => {
-    uploadAPI.download(file.id).then((res: any) => {
+    api.get(`/api/upload/${file.id}/download`, { responseType: 'blob' }).then((res: any) => {
       const blob = new Blob([res.data])
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
