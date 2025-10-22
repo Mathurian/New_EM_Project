@@ -12447,14 +12447,12 @@ import {
   TableCellsIcon,
   PresentationChartLineIcon,
   DocumentChartBarIcon,
-  DocumentTextIcon,
   ClipboardDocumentCheckIcon,
   ExclamationTriangleIcon,
   CheckCircleIcon,
   ClockIcon,
   XCircleIcon,
-  InformationCircleIcon,
-  ArrowDownTrayIcon
+  InformationCircleIcon
 } from '@heroicons/react/24/outline'
 import { format } from 'date-fns'
 
