@@ -2633,7 +2633,7 @@ export const contestsAPI = {
     const events = await api.get('/events')
     const allContests: any[] = []
     for (const event of events.data) {
-      const contests = await api.get(`/api/contests/event/${event.id}`)
+      const contests = await api.get(`/contests/event/${event.id}`)
       allContests.push(...contests.data)
     }
     return { data: allContests }
@@ -3590,11 +3590,11 @@ export const authAPI = {
 
 export const eventsAPI = {
   getAll: () => api.get('/events'),
-  getByEvent: (eventId: string) => api.get(`/api/events/${eventId}`),
-  getById: (id: string) => api.get(`/api/events/${id}`),
+  getByEvent: (eventId: string) => api.get(`/events/${eventId}`),
+  getById: (id: string) => api.get(`/events/${id}`),
   create: (data: any) => api.post('/events', data),
-  update: (id: string, data: any) => api.put(`/api/events/${id}`, data),
-  delete: (id: string) => api.delete(`/api/events/${id}`),
+  update: (id: string, data: any) => api.put(`/events/${id}`, data),
+  delete: (id: string) => api.delete(`/events/${id}`),
 }
 
 export const contestsAPI = {
@@ -3603,7 +3603,7 @@ export const contestsAPI = {
     const events = await api.get('/events')
     const allContests: any[] = []
     for (const event of events.data) {
-      const contests = await api.get(`/api/contests/event/${event.id}`)
+      const contests = await api.get(`/contests/event/${event.id}`)
       allContests.push(...contests.data)
     }
     return { data: allContests }
@@ -4408,7 +4408,7 @@ export const contestsAPI = {
     const events = await api.get('/events')
     const allContests: any[] = []
     for (const event of events.data) {
-      const contests = await api.get(`/api/contests/event/${event.id}`)
+      const contests = await api.get(`/contests/event/${event.id}`)
       allContests.push(...contests.data)
     }
     return { data: allContests }
@@ -5646,7 +5646,7 @@ const CategoryTemplates: React.FC = () => {
 
   const updateTemplateMutation = useMutation(
     ({ id, data }: { id: string; data: Partial<CategoryTemplate> }) => 
-      api.put(`/api/category-templates/${id}`, data),
+      api.put(`/category-templates/${id}`, data),
     {
       onSuccess: () => {
         queryClient.invalidateQueries('categoryTemplates')
@@ -5657,7 +5657,7 @@ const CategoryTemplates: React.FC = () => {
   )
 
   const deleteTemplateMutation = useMutation(
-    (id: string) => api.delete(`/api/category-templates/${id}`),
+    (id: string) => api.delete(`/category-templates/${id}`),
     {
       onSuccess: () => {
         queryClient.invalidateQueries('categoryTemplates')
@@ -5666,7 +5666,7 @@ const CategoryTemplates: React.FC = () => {
   )
 
   const duplicateTemplateMutation = useMutation(
-    (id: string) => api.post(`/api/category-templates/${id}/duplicate`),
+    (id: string) => api.post(`/category-templates/${id}/duplicate`),
     {
       onSuccess: () => {
         queryClient.invalidateQueries('categoryTemplates')
@@ -6181,7 +6181,7 @@ const CertificationWorkflow: React.FC = () => {
 
   const updateStepMutation = useMutation(
     ({ workflowId, stepId, status, notes }: { workflowId: string; stepId: string; status: string; notes?: string }) =>
-      api.put(`/api/certification-workflows/${workflowId}/steps/${stepId}`, { status, notes }),
+      api.put(`/certification-workflows/${workflowId}/steps/${stepId}`, { status, notes }),
     {
       onSuccess: () => {
         queryClient.invalidateQueries('certificationWorkflows')
@@ -6726,7 +6726,7 @@ const FileUpload: React.FC = () => {
   }
 
   const handleDownload = (file: UploadedFile) => {
-    api.get(`/api/upload/${file.id}/download`, { responseType: 'blob' }).then((res: any) => {
+    api.get(`/upload/${file.id}/download`, { responseType: 'blob' }).then((res: any) => {
       const blob = new Blob([res.data])
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -18164,7 +18164,7 @@ export const contestsAPI = {
     const events = await api.get('/events')
     const allContests: any[] = []
     for (const event of events.data) {
-      const contests = await api.get(`/api/contests/event/${event.id}`)
+      const contests = await api.get(`/contests/event/${event.id}`)
       allContests.push(...contests.data)
     }
     return { data: allContests }
@@ -18896,7 +18896,34 @@ app.get('\''/api/admin/backup'\'', authenticateToken, async (req, res) => {\
 ' "$server_file"
     fi
     
-    # Add missing categories endpoint
+    # Add missing events endpoint
+    if ! grep -q "app.get('/api/events'" "$server_file"; then
+        print_status "Adding /api/events endpoint..."
+        sed -i '/\/\/ Events API/a\
+\
+// Get all events\
+app.get('\''/api/events'\'', authenticateToken, async (req, res) => {\
+  try {\
+    const events = await prisma.event.findMany({\
+      include: {\
+        contests: {\
+          include: {\
+            categories: true\
+          }\
+        }\
+      },\
+      orderBy: {\
+        createdAt: '\''desc'\''\
+      }\
+    })\
+    res.json(events)\
+  } catch (error) {\
+    console.error('\''Error fetching events:'\'', error)\
+    res.status(500).json({ error: '\''Failed to fetch events'\'' })\
+  }\
+})\
+' "$server_file"
+    fi
     if ! grep -q "app.get('/api/categories'" "$server_file"; then
         print_status "Adding /api/categories endpoint..."
         sed -i '/\/\/ Categories API/a\
