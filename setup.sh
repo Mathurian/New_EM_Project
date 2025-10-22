@@ -5140,11 +5140,14 @@ const BackupManager: React.FC = () => {
   const { data: backups, isLoading } = useQuery('backups', () => backupAPI.getAll().then((res: any) => res.data))
   const queryClient = useQueryClient()
 
-  const createBackupMutation = useMutation(backupAPI.create, {
-    onSuccess: () => {
-      queryClient.invalidateQueries('backups')
+  const createBackupMutation = useMutation(
+    (data: { type: 'FULL' | 'SCHEMA' | 'DATA' }) => backupAPI.create(data),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('backups')
+      }
     }
-  })
+  )
 
   const deleteBackupMutation = useMutation(backupAPI.delete, {
     onSuccess: () => {
@@ -5521,7 +5524,7 @@ const CategoryTemplates: React.FC = () => {
     name: '',
     description: '',
     categoryType: 'PERFORMANCE' as 'PERFORMANCE' | 'TECHNICAL' | 'CREATIVE' | 'SCHOLARSHIP' | 'CUSTOM',
-    criteria: [] as Array<{ id?: string; name: string; description: string; maxScore: number; weight: number }>,
+    criteria: [] as Array<{ id: string; name: string; description: string; maxScore: number; weight: number }>,
     tags: [] as string[],
   })
 
@@ -5598,7 +5601,13 @@ const CategoryTemplates: React.FC = () => {
       name: template.name,
       description: template.description,
       categoryType: template.categoryType,
-      criteria: template.criteria.map(c => ({ name: c.name, description: c.description, maxScore: c.maxScore, weight: c.weight })),
+      criteria: template.criteria.map(c => ({ 
+        id: c.id, 
+        name: c.name, 
+        description: c.description, 
+        maxScore: c.maxScore, 
+        weight: c.weight 
+      })),
       tags: template.tags,
     })
     setSelectedTemplate(template)
