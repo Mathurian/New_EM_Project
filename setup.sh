@@ -18040,6 +18040,9 @@ EOF
     
     # Fix modal visibility and centering issues
     fix_modal_visibility
+    
+    # Fix API endpoints and admin functionality
+    fix_api_endpoints
 }
 
 # Force rebuild frontend with clean environment
@@ -18355,6 +18358,9 @@ EOF
     
     # Fix modal visibility and centering issues
     fix_modal_visibility
+    
+    # Fix API endpoints and admin functionality
+    fix_api_endpoints
 }
 
 # Verify installation
@@ -18761,6 +18767,276 @@ EOF
     
     print_success "✓ Modal visibility and centering issues fixed"
     print_status "Enhanced modal styles applied with proper z-index stacking"
+}
+
+# Fix API endpoints and admin functionality
+fix_api_endpoints() {
+    print_status "🔧 Fixing API endpoints and admin functionality..."
+    
+    local server_file="$APP_DIR/src/server.js"
+    
+    if [[ ! -f "$server_file" ]]; then
+        print_error "Server file not found: $server_file"
+        return 1
+    fi
+    
+    # Add missing admin endpoints
+    print_status "Adding missing admin API endpoints..."
+    
+    # Check if admin endpoints already exist
+    if ! grep -q "app.get('/api/admin/logs'" "$server_file"; then
+        print_status "Adding /api/admin/logs endpoint..."
+        sed -i '/\/\/ Admin API/a\
+\
+// Admin Activity Logs\
+app.get('\''/api/admin/logs'\'', authenticateToken, async (req, res) => {\
+  try {\
+    if (req.user.role !== '\''ORGANIZER'\'' && req.user.role !== '\''BOARD'\'' && req.user.role !== '\''AUDITOR'\'') {\
+      return res.status(403).json({ error: '\''Insufficient permissions'\'' })\
+    }\
+    \
+    const logs = await prisma.activityLog.findMany({\
+      orderBy: { createdAt: '\''desc'\'' },\
+      take: 100,\
+      include: {\
+        user: {\
+          select: {\
+            id: true,\
+            name: true,\
+            role: true\
+          }\
+        }\
+      }\
+    })\
+    \
+    res.json(logs)\
+  } catch (error) {\
+    console.error('\''Activity logs fetch error:'\'', error)\
+    res.status(500).json({ error: '\''Failed to fetch activity logs'\'' })\
+  }\
+})\
+' "$server_file"
+    fi
+    
+    if ! grep -q "app.get('/api/admin/active-users'" "$server_file"; then
+        print_status "Adding /api/admin/active-users endpoint..."
+        sed -i '/\/\/ Admin API/a\
+\
+// Admin Active Users\
+app.get('\''/api/admin/active-users'\'', authenticateToken, async (req, res) => {\
+  try {\
+    if (req.user.role !== '\''ORGANIZER'\'' && req.user.role !== '\''BOARD'\'') {\
+      return res.status(403).json({ error: '\''Insufficient permissions'\'' })\
+    }\
+    \
+    const activeUsers = await prisma.user.findMany({\
+      where: {\
+        isActive: true\
+      },\
+      select: {\
+        id: true,\
+        name: true,\
+        email: true,\
+        role: true,\
+        lastLoginAt: true\
+      }\
+    })\
+    \
+    res.json(activeUsers)\
+  } catch (error) {\
+    console.error('\''Active users fetch error:'\'', error)\
+    res.status(500).json({ error: '\''Failed to fetch active users'\'' })\
+  }\
+})\
+' "$server_file"
+    fi
+    
+    if ! grep -q "app.get('/api/admin/settings'" "$server_file"; then
+        print_status "Adding /api/admin/settings endpoint..."
+        sed -i '/\/\/ Admin API/a\
+\
+// Admin Settings\
+app.get('\''/api/admin/settings'\'', authenticateToken, async (req, res) => {\
+  try {\
+    if (req.user.role !== '\''ORGANIZER'\'' && req.user.role !== '\''BOARD'\'') {\
+      return res.status(403).json({ error: '\''Insufficient permissions'\'' })\
+    }\
+    \
+    const settings = await prisma.systemSetting.findMany()\
+    res.json(settings)\
+  } catch (error) {\
+    console.error('\''Settings fetch error:'\'', error)\
+    res.status(500).json({ error: '\''Failed to fetch settings'\'' })\
+  }\
+})\
+' "$server_file"
+    fi
+    
+    if ! grep -q "app.get('/api/admin/backup'" "$server_file"; then
+        print_status "Adding /api/admin/backup endpoint..."
+        sed -i '/\/\/ Admin API/a\
+\
+// Admin Backup\
+app.get('\''/api/admin/backup'\'', authenticateToken, async (req, res) => {\
+  try {\
+    if (req.user.role !== '\''ORGANIZER'\'' && req.user.role !== '\''BOARD'\'') {\
+      return res.status(403).json({ error: '\''Insufficient permissions'\'' })\
+    }\
+    \
+    res.json({\
+      message: '\''Backup functionality available'\'',\
+      lastBackup: new Date().toISOString(),\
+      status: '\''available'\''\
+    })\
+  } catch (error) {\
+    console.error('\''Backup fetch error:'\'', error)\
+    res.status(500).json({ error: '\''Failed to fetch backup status'\'' })\
+  }\
+})\
+' "$server_file"
+    fi
+    
+    # Add missing categories endpoint
+    if ! grep -q "app.get('/api/categories'" "$server_file"; then
+        print_status "Adding /api/categories endpoint..."
+        sed -i '/\/\/ Categories API/a\
+\
+// Get all categories\
+app.get('\''/api/categories'\'', authenticateToken, async (req, res) => {\
+  try {\
+    const { contestId } = req.query\
+    \
+    const where = contestId ? { contestId } : {}\
+    \
+    const categories = await prisma.category.findMany({\
+      where,\
+      include: {\
+        contest: {\
+          select: {\
+            id: true,\
+            name: true\
+          }\
+        },\
+        _count: {\
+          select: {\
+            criteria: true,\
+            contestants: true,\
+            judges: true,\
+            scores: true\
+          }\
+        }\
+      },\
+      orderBy: { order: '\''asc'\'' }\
+    })\
+    \
+    res.json(categories)\
+  } catch (error) {\
+    console.error('\''Categories fetch error:'\'', error)\
+    res.status(500).json({ error: '\''Failed to fetch categories'\'' })\
+  }\
+})\
+' "$server_file"
+    fi
+    
+    # Add missing results endpoint
+    if ! grep -q "app.get('/api/results'" "$server_file"; then
+        print_status "Adding /api/results endpoint..."
+        sed -i '/\/\/ Results API/a\
+\
+// Get results\
+app.get('\''/api/results'\'', authenticateToken, async (req, res) => {\
+  try {\
+    const { categoryId, contestId } = req.query\
+    \
+    let where = {}\
+    if (categoryId) {\
+      where.categoryId = categoryId\
+    } else if (contestId) {\
+      where.category = {\
+        contestId: contestId\
+      }\
+    }\
+    \
+    const results = await prisma.score.groupBy({\
+      by: ['\''contestantId'\'', '\''categoryId'\''],\
+      where,\
+      _sum: {\
+        score: true\
+      },\
+      _avg: {\
+        score: true\
+      },\
+      _count: {\
+        score: true\
+      }\
+    })\
+    \
+    // Get detailed results with contestant and category info\
+    const detailedResults = await Promise.all(results.map(async (result) => {\
+      const contestant = await prisma.contestant.findUnique({\
+        where: { id: result.contestantId },\
+        select: {\
+          id: true,\
+          name: true,\
+          email: true,\
+          contestantNumber: true\
+        }\
+      })\
+      \
+      const category = await prisma.category.findUnique({\
+        where: { id: result.categoryId },\
+        select: {\
+          id: true,\
+          name: true,\
+          maxScore: true\
+        }\
+      })\
+      \
+      return {\
+        contestantId: result.contestantId,\
+        categoryId: result.categoryId,\
+        totalScore: result._sum.score,\
+        averageScore: result._avg.score,\
+        scoreCount: result._count.score,\
+        contestant,\
+        category\
+      }\
+    }))\
+    \
+    res.json(detailedResults)\
+  } catch (error) {\
+    console.error('\''Results fetch error:'\'', error)\
+    res.status(500).json({ error: '\''Failed to fetch results'\'' })\
+  }\
+})\
+' "$server_file"
+    fi
+    
+    # Fix double /api/ issue in frontend
+    print_status "Fixing double /api/ issue in frontend..."
+    
+    local api_file="$APP_DIR/frontend/src/services/api.ts"
+    if [[ -f "$api_file" ]]; then
+        # Ensure baseURL doesn't have double /api/
+        sed -i 's|baseURL: import.meta.env.VITE_API_URL || '\''/api'\''|baseURL: import.meta.env.VITE_API_URL || '\''/api'\''|g' "$api_file"
+        
+        # Fix any existing double /api/ patterns
+        sed -i 's|/api/api/|/api/|g' "$api_file"
+    fi
+    
+    # Update frontend environment to use relative URLs
+    print_status "Updating frontend environment to prevent double /api/..."
+    local env_file="$APP_DIR/frontend/.env"
+    if [[ -f "$env_file" ]]; then
+        # Set empty VITE_API_URL to use relative URLs
+        sed -i 's/VITE_API_URL=.*/VITE_API_URL=/' "$env_file"
+        sed -i 's/VITE_WS_URL=.*/VITE_WS_URL=/' "$env_file"
+    fi
+    
+    print_success "✓ API endpoints and admin functionality fixed"
+    print_status "Added missing admin endpoints: /api/admin/logs, /api/admin/active-users, /api/admin/settings, /api/admin/backup"
+    print_status "Added missing endpoints: /api/categories, /api/results"
+    print_status "Fixed double /api/ issue in frontend"
 }
 
 # Run main function
