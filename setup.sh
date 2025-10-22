@@ -164,7 +164,7 @@ safe_npm_install() {
         # Strategy 1: Try installing canvas with build-from-source flag
         print_status "Attempting canvas installation with build-from-source..."
         if npm install canvas 2>/dev/null; then
-            print_success "Canvas installed successfully with build-from-source"
+            print_success "Canvas installed successfully"
         else
             # Strategy 2: Try installing canvas with specific node-pre-gyp version
             print_status "Attempting canvas installation with compatible node-pre-gyp..."
@@ -213,26 +213,29 @@ safe_npm_install() {
     npm config set legacy-peer-deps true
     npm config set fund false
     npm config set audit-level moderate
+    npm config set update-notifier false
+    npm config set audit false
+    npm config set fund false
     
     # Try multiple installation strategies
     local install_success=false
     
     # Strategy 1: Standard install with legacy peer deps
-    if npm install --legacy-peer-deps --force --no-fund --no-audit; then
+    if npm install --legacy-peer-deps --force --no-fund --no-audit --silent; then
         install_success=true
         print_success "Standard installation successful"
     else
         print_warning "Standard install failed, trying alternative strategies..."
         
         # Strategy 2: Install without optional dependencies
-        if npm install --legacy-peer-deps --force --no-optional --no-fund --no-audit; then
+        if npm install --legacy-peer-deps --force --no-optional --no-fund --no-audit --silent; then
             install_success=true
             print_success "Installation successful (without optional dependencies)"
         else
             print_warning "Second strategy failed, trying with ignore-scripts..."
             
             # Strategy 3: Install ignoring scripts
-            if npm install --legacy-peer-deps --force --no-optional --ignore-scripts --no-fund --no-audit; then
+            if npm install --legacy-peer-deps --force --no-optional --ignore-scripts --no-fund --no-audit --silent; then
                 install_success=true
                 print_success "Installation successful (ignoring scripts)"
             else
@@ -1956,7 +1959,14 @@ EOF
     "html-pdf-node": "npm:playwright@^1.40.0",
     "@humanwhocodes/object-schema": "npm:@eslint/object-schema@^0.1.0",
     "@humanwhocodes/config-array": "npm:@eslint/config-array@^0.18.0",
-    "eslint": "^9.0.0"
+    "eslint": "^9.0.0",
+    "@npmcli/move-file": "npm:@npmcli/fs@^3.0.0",
+    "glob@7.2.3": "npm:glob@^10.3.10",
+    "rimraf@3.0.2": "npm:rimraf@^5.0.5",
+    "inflight@1.0.6": "npm:lru-cache@^10.0.0",
+    "@humanwhocodes/object-schema@2.0.3": "npm:@eslint/object-schema@^0.1.0",
+    "@humanwhocodes/config-array@0.13.0": "npm:@eslint/config-array@^0.18.0",
+    "eslint@8.57.1": "npm:eslint@^9.0.0"
   }
 }
 EOF
