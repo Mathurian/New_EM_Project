@@ -1409,23 +1409,44 @@ app.use(morgan('combined'))
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true }))
 
-// Rate limiting - Fixed configuration
-const limiter = rateLimit({
+// Rate limiting - Enhanced configuration with separate limits for auth endpoints
+// Strategy: 
+// - Auth endpoints: 10,000 requests per 15 minutes (very high for login/profile)
+// - General API: 5,000 requests per 15 minutes (high for dashboard usage)
+// - Admin endpoints: Skipped from general limiter (handled separately)
+const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 1000, // Increased from 100 to 1000 requests per 15 minutes
+  max: 5000, // Increased to 5000 requests per 15 minutes for general API
   standardHeaders: true,
   legacyHeaders: false,
   trustProxy: true,
   skip: (req) => {
-    // Skip rate limiting for health checks
-    return req.path === '/health'
+    // Skip rate limiting for health checks and auth endpoints
+    return req.path === '/health' || 
+           req.path.startsWith('/api/auth/') ||
+           req.path.startsWith('/api/admin/')
   },
   keyGenerator: (req) => {
     // Use IP address for rate limiting, handling proxy headers properly
     return req.ip || req.connection.remoteAddress
   }
 })
-app.use('/api/', limiter)
+
+// Separate, more lenient rate limiter for authentication endpoints
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10000, // Very high limit for auth endpoints (login, profile, etc.)
+  standardHeaders: true,
+  legacyHeaders: false,
+  trustProxy: true,
+  keyGenerator: (req) => {
+    return req.ip || req.connection.remoteAddress
+  }
+})
+
+// Apply different rate limiters to different route groups
+app.use('/api/auth/', authLimiter)
+app.use('/api/', generalLimiter)
 
 // Auth middleware
 const authenticateToken = async (req, res, next) => {
