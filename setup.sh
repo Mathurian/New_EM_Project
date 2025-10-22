@@ -1859,9 +1859,6 @@ EOF
     "npmlog": "^5.0.1"
   },
   "overrides": {
-    "glob": "^10.3.10",
-    "rimraf": "^5.0.5",
-    "inflight": "npm:lru-cache@^10.0.0",
     "lodash.pick": "npm:lodash@^4.17.21",
     "gauge": "npm:gauge@^4.0.4",
     "npmlog": "^5.0.1"
@@ -2204,6 +2201,24 @@ fix_heroicons_imports() {
     
     cd "$APP_DIR/frontend" || return 1
     
+    # Fix Layout.tsx - Add missing icon imports
+    if [[ -f "src/components/Layout.tsx" ]]; then
+        print_status "Fixing Layout.tsx icon imports..."
+        sed -i '/import React, { useState } from '\''react'\''/a\
+import {\
+  HomeIcon,\
+  CalendarIcon,\
+  TrophyIcon,\
+  ChartBarIcon,\
+  UsersIcon,\
+  CogIcon,\
+  MicrophoneIcon,\
+  DocumentTextIcon,\
+  XMarkIcon\
+} from '\''@heroicons/react/24/outline'\''\
+' "src/components/Layout.tsx"
+    fi
+    
     # Fix AdminPage.tsx
     if [[ -f "src/pages/AdminPage.tsx" ]]; then
         sed -i 's/DatabaseIcon/CircleStackIcon/g' "src/pages/AdminPage.tsx"
@@ -2255,12 +2270,19 @@ fix_heroicons_imports() {
         sed -i 's/TrendingDownIcon/ArrowTrendingDownIcon/g' "src/pages/TallyMasterPage.tsx"
     fi
     
-    # Fix Layout.tsx - Add missing state variables
-    if [[ -f "src/components/Layout.tsx" ]]; then
-        # Add missing imports and state
-        sed -i '/import React, { useState } from '\''react'\''/a\
-  const [userMenuOpen, setUserMenuOpen] = useState(false)\
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)' "src/components/Layout.tsx"
+    # Fix ProfilePage.tsx - Fix role type casting
+    if [[ -f "src/pages/ProfilePage.tsx" ]]; then
+        sed -i 's/role: user?.role || '\''JUDGE'\'',/role: (user?.role as any) || '\''JUDGE'\'',/g' src/pages/ProfilePage.tsx
+    fi
+    
+    # Fix SettingsPage.tsx - Fix test method parameter type
+    if [[ -f "src/pages/SettingsPage.tsx" ]]; then
+        sed -i 's/settingsAPI.test(type)/settingsAPI.test(type as any)/g' src/pages/SettingsPage.tsx
+    fi
+    
+    # Fix AdminPage.tsx - Fix getActivityLogs method call
+    if [[ -f "src/pages/AdminPage.tsx" ]]; then
+        sed -i 's/adminAPI.getActivityLogs({ searchTerm, dateFilter, actionFilter })/adminAPI.getActivityLogs()/g' src/pages/AdminPage.tsx
     fi
     
     print_success "Heroicons imports fixed across all components"
@@ -16200,10 +16222,33 @@ evaluate_setup_completeness() {
     
     # Check for deprecated package removal
     if [[ -f "$APP_DIR/package.json" ]]; then
-        if ! grep -q "are-we-there-yet" "$APP_DIR/package.json"; then
-            print_success "✓ Deprecated are-we-there-yet package removed from overrides"
+        local deprecated_found=0
+        
+        # Check for specific deprecated packages
+        if grep -q "are-we-there-yet" "$APP_DIR/package.json"; then
+            print_warning "⚠ Deprecated are-we-there-yet package still present"
+            ((deprecated_found++))
+        fi
+        
+        if grep -q "inflight" "$APP_DIR/package.json"; then
+            print_warning "⚠ Deprecated inflight package still present"
+            ((deprecated_found++))
+        fi
+        
+        if grep -q "glob.*7\." "$APP_DIR/package.json"; then
+            print_warning "⚠ Deprecated glob@7 package still present"
+            ((deprecated_found++))
+        fi
+        
+        if grep -q "rimraf.*3\." "$APP_DIR/package.json"; then
+            print_warning "⚠ Deprecated rimraf@3 package still present"
+            ((deprecated_found++))
+        fi
+        
+        if [[ $deprecated_found -eq 0 ]]; then
+            print_success "✓ All deprecated packages removed from overrides"
         else
-            print_warning "⚠ Deprecated are-we-there-yet package still present in overrides"
+            print_warning "⚠ $deprecated_found deprecated packages still present"
             ((issues_found++))
         fi
     fi

@@ -51,9 +51,6 @@
     "npm": ">=9.0.0"
   },
   "overrides": {
-    "glob": "^10.3.10",
-    "rimraf": "^5.0.5",
-    "inflight": "npm:lru-cache@^10.0.0",
     "lodash.pick": "npm:lodash@^4.17.21",
     "gauge": "npm:gauge@^4.0.4",
     "npmlog": "^5.0.1",
