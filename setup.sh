@@ -2436,6 +2436,57 @@ import {\
         sed -i 's/adminAPI.getActivityLogs({ searchTerm, dateFilter, actionFilter })/adminAPI.getActivityLogs()/g' src/pages/AdminPage.tsx
     fi
     
+    # Add missing icon imports to components that need them
+    print_status "Adding missing icon imports to components..."
+    
+    # Fix AuditLog.tsx
+    if [[ -f "src/components/AuditLog.tsx" ]]; then
+        if ! grep -q "TrophyIcon" "src/components/AuditLog.tsx"; then
+            sed -i '/import {/,/} from/a\  TrophyIcon,' "src/components/AuditLog.tsx"
+        fi
+        if ! grep -q "ArrowDownTrayIcon" "src/components/AuditLog.tsx"; then
+            sed -i '/import {/,/} from/a\  ArrowDownTrayIcon,' "src/components/AuditLog.tsx"
+        fi
+    fi
+    
+    # Fix BackupManager.tsx
+    if [[ -f "src/components/BackupManager.tsx" ]]; then
+        if ! grep -q "ArrowDownTrayIcon" "src/components/BackupManager.tsx"; then
+            sed -i '/import {/,/} from/a\  ArrowDownTrayIcon,' "src/components/BackupManager.tsx"
+        fi
+    fi
+    
+    # Fix CategoryTemplates.tsx
+    if [[ -f "src/components/CategoryTemplates.tsx" ]]; then
+        if ! grep -q "TrophyIcon" "src/components/CategoryTemplates.tsx"; then
+            sed -i '/import {/,/} from/a\  TrophyIcon,' "src/components/CategoryTemplates.tsx"
+        fi
+    fi
+    
+    # Fix CertificationWorkflow.tsx
+    if [[ -f "src/components/CertificationWorkflow.tsx" ]]; then
+        if ! grep -q "TrophyIcon" "src/components/CertificationWorkflow.tsx"; then
+            sed -i '/import {/,/} from/a\  TrophyIcon,' "src/components/CertificationWorkflow.tsx"
+        fi
+    fi
+    
+    # Fix FileUpload.tsx
+    if [[ -f "src/components/FileUpload.tsx" ]]; then
+        if ! grep -q "TrophyIcon" "src/components/FileUpload.tsx"; then
+            sed -i '/import {/,/} from/a\  TrophyIcon,' "src/components/FileUpload.tsx"
+        fi
+        if ! grep -q "ArrowDownTrayIcon" "src/components/FileUpload.tsx"; then
+            sed -i '/import {/,/} from/a\  ArrowDownTrayIcon,' "src/components/FileUpload.tsx"
+        fi
+    fi
+    
+    # Fix Layout.tsx
+    if [[ -f "src/components/Layout.tsx" ]]; then
+        if ! grep -q "TrophyIcon" "src/components/Layout.tsx"; then
+            sed -i '/import {/,/} from/a\  TrophyIcon,' "src/components/Layout.tsx"
+        fi
+    fi
+    
     print_success "Heroicons imports fixed across all components"
 }
 
@@ -3857,6 +3908,7 @@ import {
   DocumentTextIcon,
   XMarkIcon,
   PencilSquareIcon,
+  ArrowDownTrayIcon,
   CalculatorIcon
 } from '@heroicons/react/24/outline'
 
