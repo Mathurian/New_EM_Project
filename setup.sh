@@ -19022,7 +19022,7 @@ app.get('\''/api/results'\'', authenticateToken, async (req, res) => {\
         mv "${api_file}.tmp" "$api_file"
         
         # Ensure baseURL uses relative path correctly
-        sed -i 's|baseURL: import.meta.env.VITE_API_URL || /api|baseURL: import.meta.env.VITE_API_URL || "/api"|g' "$api_file"
+        sed -i 's#baseURL: import.meta.env.VITE_API_URL || /api#baseURL: import.meta.env.VITE_API_URL || "/api"#g' "$api_file"
     fi
     
     # Update frontend environment to use relative URLs
