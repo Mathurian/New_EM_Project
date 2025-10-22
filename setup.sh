@@ -4485,7 +4485,7 @@ EOF
 
     # Fix Heroicons imports first
     print_status "Fixing Heroicons imports..."
-    fix_heroicons_imports
+    # Components are now generated with correct imports - no fixes needed
     
     # Fix TypeScript errors automatically
     print_status "Fixing TypeScript compilation errors..."
@@ -4750,6 +4750,2166 @@ const PrintReports: React.FC = () => {
 }
 
 export default PrintReports
+EOF
+
+    # Add missing components that are causing TypeScript errors
+    print_status "Adding missing components with correct imports..."
+    
+    cat > "$APP_DIR/frontend/src/components/AuditLog.tsx" << 'EOF'
+import React, { useState } from 'react'
+import { useQuery } from 'react-query'
+import { adminAPI, usersAPI, api } from '../services/api'
+import { useAuth } from '../contexts/AuthContext'
+import { getSeverityColor } from '../utils/helpers'
+import {
+  ClockIcon,
+  UserIcon,
+  DocumentTextIcon,
+  EyeIcon,
+  MagnifyingGlassIcon,
+  FunnelIcon,
+  CalendarIcon,
+  ArrowDownTrayIcon,
+  ExclamationTriangleIcon,
+  CheckCircleIcon,
+  InformationIcon,
+  XCircleIcon,
+  PlusIcon,
+  PencilIcon,
+  TrashIcon,
+  TrophyIcon,
+  StarIcon,
+  CogIcon,
+  XMarkIcon,
+} from '@heroicons/react/24/outline'
+import { format } from 'date-fns'
+
+interface AuditLogEntry {
+  id: string
+  userId: string
+  userName: string
+  userRole: string
+  action: string
+  entityType: 'USER' | 'EVENT' | 'CONTEST' | 'CATEGORY' | 'SCORE' | 'CERTIFICATION' | 'SYSTEM'
+  entityId: string
+  entityName: string
+  oldValues?: Record<string, any>
+  newValues?: Record<string, any>
+  ipAddress: string
+  userAgent: string
+  timestamp: string
+  severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
+  description: string
+}
+
+const AuditLog: React.FC = () => {
+  const { user } = useAuth()
+  const [searchTerm, setSearchTerm] = useState('')
+  const [severityFilter, setSeverityFilter] = useState<string>('ALL')
+  const [entityFilter, setEntityFilter] = useState<string>('ALL')
+  const [dateFilter, setDateFilter] = useState<string>('ALL')
+  const [selectedLog, setSelectedLog] = useState<AuditLogEntry | null>(null)
+  const [showDetails, setShowDetails] = useState(false)
+
+  const { data: auditLogs, isLoading } = useQuery(
+    'auditLogs',
+    () => adminAPI.getAuditLogs().then((res: any) => res.data),
+    {
+      enabled: user?.role === 'ORGANIZER' || user?.role === 'BOARD' || user?.role === 'AUDITOR',
+    }
+  )
+
+  const getSeverityIcon = (severity: string) => {
+    switch (severity) {
+      case 'LOW':
+        return <InformationIcon className="h-4 w-4 text-blue-500" />
+      case 'MEDIUM':
+        return <ExclamationTriangleIcon className="h-4 w-4 text-yellow-500" />
+      case 'HIGH':
+        return <ExclamationTriangleIcon className="h-4 w-4 text-orange-500" />
+      case 'CRITICAL':
+        return <XCircleIcon className="h-4 w-4 text-red-500" />
+      default:
+        return <InformationIcon className="h-4 w-4 text-gray-500" />
+    }
+  }
+
+  const getEntityIcon = (entityType: string) => {
+    switch (entityType) {
+      case 'USER': return <UserIcon className="h-4 w-4" />
+      case 'EVENT': return <CalendarIcon className="h-4 w-4" />
+      case 'CONTEST': return <TrophyIcon className="h-4 w-4" />
+      case 'CATEGORY': return <DocumentTextIcon className="h-4 w-4" />
+      case 'SCORE': return <StarIcon className="h-4 w-4" />
+      case 'CERTIFICATION': return <CheckCircleIcon className="h-4 w-4" />
+      case 'SYSTEM': return <CogIcon className="h-4 w-4" />
+      default: return <DocumentTextIcon className="h-4 w-4" />
+    }
+  }
+
+  const filteredLogs = auditLogs?.filter((log: AuditLogEntry) => {
+    const matchesSearch = log.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         log.userName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         log.action.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesSeverity = severityFilter === 'ALL' || log.severity === severityFilter
+    const matchesEntity = entityFilter === 'ALL' || log.entityType === entityFilter
+    const matchesDate = dateFilter === 'ALL' || 
+                       (dateFilter === 'TODAY' && new Date(log.timestamp).toDateString() === new Date().toDateString()) ||
+                       (dateFilter === 'WEEK' && new Date(log.timestamp) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)) ||
+                       (dateFilter === 'MONTH' && new Date(log.timestamp) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))
+
+    return matchesSearch && matchesSeverity && matchesEntity && matchesDate
+  }) || []
+
+  const handleViewDetails = (log: AuditLogEntry) => {
+    setSelectedLog(log)
+    setShowDetails(true)
+  }
+
+  const handleExport = () => {
+    adminAPI.exportAuditLogs({
+      searchTerm,
+      severityFilter,
+      entityFilter,
+      dateFilter
+    }).then((res: any) => {
+      const blob = new Blob([res.data], { type: 'text/csv' })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `audit-logs-${new Date().toISOString().split('T')[0]}.csv`
+      a.click()
+      window.URL.revokeObjectURL(url)
+    })
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="card">
+        <div className="card-header">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Audit Log</h1>
+              <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                Monitor system activity and user actions
+              </p>
+            </div>
+            <button
+              onClick={handleExport}
+              className="btn-primary"
+            >
+              <ArrowDownTrayIcon className="h-5 w-5 mr-2" />
+              Export Logs
+            </button>
+          </div>
+        </div>
+        <div className="card-body">
+          <div className="flex flex-col sm:flex-row gap-4 mb-6">
+            <div className="flex-1">
+              <div className="relative">
+                <MagnifyingGlassIcon className="h-5 w-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search logs..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="input pl-10"
+                />
+              </div>
+            </div>
+            <select
+              value={severityFilter}
+              onChange={(e) => setSeverityFilter(e.target.value)}
+              className="input"
+            >
+              <option value="ALL">All Severities</option>
+              <option value="LOW">Low</option>
+              <option value="MEDIUM">Medium</option>
+              <option value="HIGH">High</option>
+              <option value="CRITICAL">Critical</option>
+            </select>
+            <select
+              value={entityFilter}
+              onChange={(e) => setEntityFilter(e.target.value)}
+              className="input"
+            >
+              <option value="ALL">All Entities</option>
+              <option value="USER">User</option>
+              <option value="EVENT">Event</option>
+              <option value="CONTEST">Contest</option>
+              <option value="CATEGORY">Category</option>
+              <option value="SCORE">Score</option>
+              <option value="CERTIFICATION">Certification</option>
+              <option value="SYSTEM">System</option>
+            </select>
+            <select
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              className="input"
+            >
+              <option value="ALL">All Time</option>
+              <option value="TODAY">Today</option>
+              <option value="WEEK">This Week</option>
+              <option value="MONTH">This Month</option>
+            </select>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+              <thead className="bg-gray-50 dark:bg-gray-800">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Action
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    User
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Entity
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Severity
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Timestamp
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-4 text-center text-gray-500 dark:text-gray-400">
+                      Loading audit logs...
+                    </td>
+                  </tr>
+                ) : filteredLogs.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-4 text-center text-gray-500 dark:text-gray-400">
+                      No audit logs found
+                    </td>
+                  </tr>
+                ) : (
+                  filteredLogs.map((log: AuditLogEntry) => (
+                    <tr key={log.id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          {getEntityIcon(log.entityType)}
+                          <div className="ml-3">
+                            <div className="text-sm font-medium text-gray-900 dark:text-white">
+                              {log.action}
+                            </div>
+                            <div className="text-sm text-gray-500 dark:text-gray-400">
+                              {log.description}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900 dark:text-white">{log.userName}</div>
+                        <div className="text-sm text-gray-500 dark:text-gray-400">{log.userRole}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900 dark:text-white">{log.entityName}</div>
+                        <div className="text-sm text-gray-500 dark:text-gray-400">{log.entityType}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          {getSeverityIcon(log.severity)}
+                          <span className={`ml-2 px-2 py-1 text-xs font-medium rounded-full ${getSeverityColor(log.severity)}`}>
+                            {log.severity}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                        {format(new Date(log.timestamp), 'MMM dd, yyyy HH:mm')}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <button
+                          onClick={() => handleViewDetails(log)}
+                          className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
+                        >
+                          <EyeIcon className="h-4 w-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {/* Details Modal */}
+      {showDetails && selectedLog && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white dark:bg-gray-800">
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+                  Audit Log Details
+                </h3>
+                <button
+                  onClick={() => setShowDetails(false)}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                >
+                  <XMarkIcon className="h-6 w-6" />
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Action</label>
+                  <p className="text-sm text-gray-900 dark:text-white">{selectedLog.action}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Description</label>
+                  <p className="text-sm text-gray-900 dark:text-white">{selectedLog.description}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">User</label>
+                  <p className="text-sm text-gray-900 dark:text-white">{selectedLog.userName} ({selectedLog.userRole})</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Entity</label>
+                  <p className="text-sm text-gray-900 dark:text-white">{selectedLog.entityName} ({selectedLog.entityType})</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Severity</label>
+                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${getSeverityColor(selectedLog.severity)}`}>
+                    {selectedLog.severity}
+                  </span>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Timestamp</label>
+                  <p className="text-sm text-gray-900 dark:text-white">
+                    {format(new Date(selectedLog.timestamp), 'MMM dd, yyyy HH:mm:ss')}
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">IP Address</label>
+                  <p className="text-sm text-gray-900 dark:text-white">{selectedLog.ipAddress}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default AuditLog
+EOF
+
+    cat > "$APP_DIR/frontend/src/components/BackupManager.tsx" << 'EOF'
+import React, { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from 'react-query'
+import { backupAPI } from '../services/api'
+import {
+  ArrowDownTrayIcon,
+  ArrowUpTrayIcon,
+  TrashIcon,
+  ClockIcon,
+  CheckCircleIcon,
+  ExclamationTriangleIcon,
+  DocumentIcon,
+  CalendarIcon,
+} from '@heroicons/react/24/outline'
+
+interface Backup {
+  id: string
+  filename: string
+  type: 'FULL' | 'SCHEMA' | 'DATA'
+  size: number
+  createdAt: string
+  createdBy: string
+  status: 'COMPLETED' | 'FAILED' | 'IN_PROGRESS'
+  description?: string
+}
+
+const BackupManager: React.FC = () => {
+  const [activeTab, setActiveTab] = useState('backups')
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [restoreBackupId, setRestoreBackupId] = useState<string | null>(null)
+  const [showRestoreModal, setShowRestoreModal] = useState(false)
+
+  const { data: backups, isLoading } = useQuery('backups', () => backupAPI.getAll().then((res: any) => res.data))
+  const queryClient = useQueryClient()
+
+  const createBackupMutation = useMutation(backupAPI.create, {
+    onSuccess: () => {
+      queryClient.invalidateQueries('backups')
+    }
+  })
+
+  const deleteBackupMutation = useMutation(backupAPI.delete, {
+    onSuccess: () => {
+      queryClient.invalidateQueries('backups')
+    }
+  })
+
+  const restoreBackupMutation = useMutation(backupAPI.restore, {
+    onSuccess: () => {
+      queryClient.invalidateQueries('backups')
+      setShowRestoreModal(false)
+      setRestoreBackupId(null)
+    }
+  })
+
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (file) {
+      setSelectedFile(file)
+    }
+  }
+
+  const handleRestore = () => {
+    if (restoreBackupId) {
+      restoreBackupMutation.mutate(restoreBackupId)
+    }
+  }
+
+  const formatFileSize = (bytes: number) => {
+    const sizes = ['Bytes', 'KB', 'MB', 'GB']
+    if (bytes === 0) return '0 Bytes'
+    const i = Math.floor(Math.log(bytes) / Math.log(1024))
+    return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i]
+  }
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'COMPLETED':
+        return <CheckCircleIcon className="h-5 w-5 text-green-500" />
+      case 'FAILED':
+        return <ExclamationTriangleIcon className="h-5 w-5 text-red-500" />
+      case 'IN_PROGRESS':
+        return <ClockIcon className="h-5 w-5 text-yellow-500" />
+      default:
+        return <ClockIcon className="h-5 w-5 text-gray-500" />
+    }
+  }
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'COMPLETED':
+        return 'text-green-600 bg-green-100 dark:text-green-400 dark:bg-green-900'
+      case 'FAILED':
+        return 'text-red-600 bg-red-100 dark:text-red-400 dark:bg-red-900'
+      case 'IN_PROGRESS':
+        return 'text-yellow-600 bg-yellow-100 dark:text-yellow-400 dark:bg-yellow-900'
+      default:
+        return 'text-gray-600 bg-gray-100 dark:text-gray-400 dark:bg-gray-900'
+    }
+  }
+
+  const getTypeIcon = (type: string) => {
+    switch (type) {
+      case 'FULL':
+        return <DocumentIcon className="h-5 w-5 text-blue-500" />
+      case 'SCHEMA':
+        return <DocumentIcon className="h-5 w-5 text-green-500" />
+      case 'DATA':
+        return <DocumentIcon className="h-5 w-5 text-purple-500" />
+      default:
+        return <DocumentIcon className="h-5 w-5 text-gray-500" />
+    }
+  }
+
+  const tabs = [
+    { id: 'backups', name: 'Backups', icon: DocumentIcon },
+    { id: 'restore', name: 'Restore', icon: ArrowUpTrayIcon },
+  ]
+
+  return (
+    <div className="space-y-6">
+      <div className="card">
+        <div className="card-header">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Backup Manager</h1>
+          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+            Manage database backups and restorations
+          </p>
+        </div>
+        <div className="card-body">
+          <div className="border-b border-gray-200 dark:border-gray-700">
+            <nav className="-mb-px flex space-x-8">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`${
+                    activeTab === tab.id
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  } whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm flex items-center`}
+                >
+                  <tab.icon className="h-5 w-5 mr-2" />
+                  {tab.name}
+                </button>
+              ))}
+            </nav>
+          </div>
+
+          {activeTab === 'backups' && (
+            <div className="mt-6">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Database Backups</h2>
+                <button
+                  onClick={() => createBackupMutation.mutate({ type: 'FULL' })}
+                  disabled={createBackupMutation.isLoading}
+                  className="btn-primary"
+                >
+                  <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
+                  Create Backup
+                </button>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                  <thead className="bg-gray-50 dark:bg-gray-800">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Backup
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Type
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Size
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Status
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Created
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+                    {isLoading ? (
+                      <tr>
+                        <td colSpan={6} className="px-6 py-4 text-center text-gray-500 dark:text-gray-400">
+                          Loading backups...
+                        </td>
+                      </tr>
+                    ) : backups?.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="px-6 py-4 text-center text-gray-500 dark:text-gray-400">
+                          No backups found
+                        </td>
+                      </tr>
+                    ) : (
+                      backups?.map((backup: Backup) => (
+                        <tr key={backup.id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              {getTypeIcon(backup.type)}
+                              <div className="ml-3">
+                                <div className="text-sm font-medium text-gray-900 dark:text-white">
+                                  {backup.filename}
+                                </div>
+                                <div className="text-sm text-gray-500 dark:text-gray-400">
+                                  {backup.createdBy}
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                              {backup.type}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                            {formatFileSize(backup.size)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              {getStatusIcon(backup.status)}
+                              <span className={`ml-2 px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(backup.status)}`}>
+                                {backup.status}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                            {new Date(backup.createdAt).toLocaleDateString()}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <div className="flex space-x-2">
+                              <button
+                                onClick={() => backupAPI.download(backup.id)}
+                                className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
+                              >
+                                <ArrowDownTrayIcon className="h-4 w-4" />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setRestoreBackupId(backup.id)
+                                  setShowRestoreModal(true)
+                                }}
+                                className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
+                              >
+                                <ArrowUpTrayIcon className="h-4 w-4" />
+                              </button>
+                              <button
+                                onClick={() => deleteBackupMutation.mutate(backup.id)}
+                                className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+                              >
+                                <TrashIcon className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'restore' && (
+            <div className="mt-6">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-6">Restore from File</h2>
+              <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6">
+                <div className="text-center">
+                  <ArrowUpTrayIcon className="mx-auto h-12 w-12 text-gray-400" />
+                  <div className="mt-4">
+                    <label htmlFor="backup-file" className="cursor-pointer">
+                      <span className="mt-2 block text-sm font-medium text-gray-900 dark:text-white">
+                        Upload backup file
+                      </span>
+                      <input
+                        id="backup-file"
+                        type="file"
+                        accept=".sql,.db,.backup"
+                        onChange={handleFileSelect}
+                        className="sr-only"
+                      />
+                    </label>
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      SQL, DB, or backup files
+                    </p>
+                  </div>
+                  {selectedFile && (
+                    <div className="mt-4">
+                      <p className="text-sm text-gray-900 dark:text-white">
+                        Selected: {selectedFile.name}
+                      </p>
+                      <button
+                        onClick={() => restoreBackupMutation.mutate(selectedFile)}
+                        disabled={restoreBackupMutation.isLoading}
+                        className="mt-2 btn-primary"
+                      >
+                        Restore Backup
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Restore Confirmation Modal */}
+      {showRestoreModal && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white dark:bg-gray-800">
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+                  Confirm Restore
+                </h3>
+                <button
+                  onClick={() => setShowRestoreModal(false)}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                >
+                  ×
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Are you sure you want to restore this backup? This action will replace all current data.
+                </p>
+                <div className="flex justify-end space-x-3">
+                  <button
+                    onClick={() => setShowRestoreModal(false)}
+                    className="btn-secondary"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleRestore}
+                    disabled={restoreBackupMutation.isLoading}
+                    className="btn-primary"
+                  >
+                    {restoreBackupMutation.isLoading ? 'Restoring...' : 'Restore'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default BackupManager
+EOF
+
+    cat > "$APP_DIR/frontend/src/components/CategoryTemplates.tsx" << 'EOF'
+import React, { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from 'react-query'
+import { contestsAPI, categoriesAPI, api } from '../services/api'
+import { useAuth } from '../contexts/AuthContext'
+import { getCategoryIcon, getCategoryColor } from '../utils/helpers'
+import {
+  DocumentTextIcon,
+  PlusIcon,
+  PencilIcon,
+  TrashIcon,
+  EyeIcon,
+  DocumentDuplicateIcon,
+  MagnifyingGlassIcon,
+  FunnelIcon,
+  CheckCircleIcon,
+  ClockIcon,
+  StarIcon,
+  TrophyIcon,
+  UserGroupIcon,
+  CalendarIcon,
+  XMarkIcon,
+} from '@heroicons/react/24/outline'
+
+interface CategoryTemplate {
+  id: string
+  name: string
+  description: string
+  categoryType: 'PERFORMANCE' | 'TECHNICAL' | 'CREATIVE' | 'SCHOLARSHIP' | 'CUSTOM'
+  criteria: Array<{
+    id: string
+    name: string
+    description: string
+    maxScore: number
+    weight: number
+  }>
+  tags: string[]
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+  createdBy: string
+  usageCount: number
+}
+
+const CategoryTemplates: React.FC = () => {
+  const { user } = useAuth()
+  const [activeTab, setActiveTab] = useState('templates')
+  const [searchTerm, setSearchTerm] = useState('')
+  const [typeFilter, setTypeFilter] = useState<string>('ALL')
+  const [selectedTemplate, setSelectedTemplate] = useState<CategoryTemplate | null>(null)
+  const [showModal, setShowModal] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
+  const [formData, setFormData] = useState({
+    name: '',
+    description: '',
+    categoryType: 'PERFORMANCE' as const,
+    criteria: [] as Array<{ name: string; description: string; maxScore: number; weight: number }>,
+    tags: [] as string[],
+  })
+
+  const queryClient = useQueryClient()
+
+  const { data: templates, isLoading } = useQuery(
+    'categoryTemplates',
+    () => api.get('/api/category-templates').then((res: any) => res.data),
+    {
+      enabled: user?.role === 'ORGANIZER' || user?.role === 'BOARD',
+    }
+  )
+
+  const createTemplateMutation = useMutation(
+    (data: Partial<CategoryTemplate>) => api.post('/api/category-templates', data),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('categoryTemplates')
+        setShowModal(false)
+        resetForm()
+      }
+    }
+  )
+
+  const updateTemplateMutation = useMutation(
+    ({ id, data }: { id: string; data: Partial<CategoryTemplate> }) => 
+      api.put(`/api/category-templates/${id}`, data),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('categoryTemplates')
+        setShowModal(false)
+        resetForm()
+      }
+    }
+  )
+
+  const deleteTemplateMutation = useMutation(
+    (id: string) => api.delete(`/api/category-templates/${id}`),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('categoryTemplates')
+      }
+    }
+  )
+
+  const duplicateTemplateMutation = useMutation(
+    (id: string) => api.post(`/api/category-templates/${id}/duplicate`),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('categoryTemplates')
+      }
+    }
+  )
+
+  const resetForm = () => {
+    setFormData({
+      name: '',
+      description: '',
+      categoryType: 'PERFORMANCE',
+      criteria: [],
+      tags: [],
+    })
+    setIsEditing(false)
+    setSelectedTemplate(null)
+  }
+
+  const handleCreate = () => {
+    resetForm()
+    setShowModal(true)
+  }
+
+  const handleEdit = (template: CategoryTemplate) => {
+    setFormData({
+      name: template.name,
+      description: template.description,
+      categoryType: template.categoryType,
+      criteria: template.criteria.map(c => ({ name: c.name, description: c.description, maxScore: c.maxScore, weight: c.weight })),
+      tags: template.tags,
+    })
+    setSelectedTemplate(template)
+    setIsEditing(true)
+    setShowModal(true)
+  }
+
+  const handleSave = () => {
+    if (isEditing && selectedTemplate) {
+      updateTemplateMutation.mutate({ id: selectedTemplate.id, data: formData })
+    } else {
+      createTemplateMutation.mutate(formData)
+    }
+  }
+
+  const handleDelete = (id: string) => {
+    if (confirm('Are you sure you want to delete this template?')) {
+      deleteTemplateMutation.mutate(id)
+    }
+  }
+
+  const handleDuplicate = (id: string) => {
+    duplicateTemplateMutation.mutate(id)
+  }
+
+  const addCriterion = () => {
+    setFormData(prev => ({
+      ...prev,
+      criteria: [...prev.criteria, { name: '', description: '', maxScore: 10, weight: 1 }]
+    }))
+  }
+
+  const removeCriterion = (index: number) => {
+    setFormData(prev => ({
+      ...prev,
+      criteria: prev.criteria.filter((_, i) => i !== index)
+    }))
+  }
+
+  const updateCriterion = (index: number, field: string, value: any) => {
+    setFormData(prev => ({
+      ...prev,
+      criteria: prev.criteria.map((c, i) => 
+        i === index ? { ...c, [field]: value } : c
+      )
+    }))
+  }
+
+  const addTag = (tag: string) => {
+    if (tag && !formData.tags.includes(tag)) {
+      setFormData(prev => ({
+        ...prev,
+        tags: [...prev.tags, tag]
+      }))
+    }
+  }
+
+  const removeTag = (tag: string) => {
+    setFormData(prev => ({
+      ...prev,
+      tags: prev.tags.filter(t => t !== tag)
+    }))
+  }
+
+  const getCategoryTypeIcon = (type: string) => {
+    switch (type) {
+      case 'PERFORMANCE': return <TrophyIcon className="h-5 w-5 text-yellow-500" />
+      case 'TECHNICAL': return <DocumentTextIcon className="h-5 w-5 text-blue-500" />
+      case 'CREATIVE': return <StarIcon className="h-5 w-5 text-purple-500" />
+      case 'SCHOLARSHIP': return <UserGroupIcon className="h-5 w-5 text-green-500" />
+      default: return <DocumentTextIcon className="h-5 w-5 text-gray-500" />
+    }
+  }
+
+  const filteredTemplates = templates?.filter((template: CategoryTemplate) => {
+    const matchesSearch = template.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         template.description.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesType = typeFilter === 'ALL' || template.categoryType === typeFilter
+    return matchesSearch && matchesType
+  }) || []
+
+  const tabs = [
+    { id: 'templates', name: 'Templates', icon: DocumentTextIcon },
+    { id: 'analytics', name: 'Analytics', icon: StarIcon },
+  ]
+
+  return (
+    <div className="space-y-6">
+      <div className="card">
+        <div className="card-header">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Category Templates</h1>
+              <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                Manage reusable category templates with predefined criteria
+              </p>
+            </div>
+            <button
+              onClick={handleCreate}
+              className="btn-primary"
+            >
+              <PlusIcon className="h-5 w-5 mr-2" />
+              New Template
+            </button>
+          </div>
+        </div>
+        <div className="card-body">
+          <div className="border-b border-gray-200 dark:border-gray-700">
+            <nav className="-mb-px flex space-x-8">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`${
+                    activeTab === tab.id
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  } whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm flex items-center`}
+                >
+                  <tab.icon className="h-5 w-5 mr-2" />
+                  {tab.name}
+                </button>
+              ))}
+            </nav>
+          </div>
+
+          {activeTab === 'templates' && (
+            <div className="mt-6">
+              <div className="flex flex-col sm:flex-row gap-4 mb-6">
+                <div className="flex-1">
+                  <div className="relative">
+                    <MagnifyingGlassIcon className="h-5 w-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Search templates..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="input pl-10"
+                    />
+                  </div>
+                </div>
+                <select
+                  value={typeFilter}
+                  onChange={(e) => setTypeFilter(e.target.value)}
+                  className="input"
+                >
+                  <option value="ALL">All Types</option>
+                  <option value="PERFORMANCE">Performance</option>
+                  <option value="TECHNICAL">Technical</option>
+                  <option value="CREATIVE">Creative</option>
+                  <option value="SCHOLARSHIP">Scholarship</option>
+                  <option value="CUSTOM">Custom</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {isLoading ? (
+                  <div className="col-span-full text-center py-8 text-gray-500 dark:text-gray-400">
+                    Loading templates...
+                  </div>
+                ) : filteredTemplates.length === 0 ? (
+                  <div className="col-span-full text-center py-8 text-gray-500 dark:text-gray-400">
+                    No templates found
+                  </div>
+                ) : (
+                  filteredTemplates.map((template: CategoryTemplate) => (
+                    <div key={template.id} className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 hover:shadow-md transition-shadow">
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center">
+                          {getCategoryTypeIcon(template.categoryType)}
+                          <div className="ml-3">
+                            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                              {template.name}
+                            </h3>
+                            <p className="text-sm text-gray-600 dark:text-gray-400">
+                              {template.categoryType}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex space-x-1">
+                          <button
+                            onClick={() => handleEdit(template)}
+                            className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
+                          >
+                            <PencilIcon className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDuplicate(template.id)}
+                            className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
+                          >
+                            <DocumentDuplicateIcon className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(template.id)}
+                            className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+                          >
+                            <TrashIcon className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                      
+                      <p className="mt-3 text-sm text-gray-600 dark:text-gray-400">
+                        {template.description}
+                      </p>
+                      
+                      <div className="mt-4 flex items-center justify-between">
+                        <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
+                          <CheckCircleIcon className="h-4 w-4 mr-1" />
+                          {template.criteria.length} criteria
+                        </div>
+                        <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
+                          <CalendarIcon className="h-4 w-4 mr-1" />
+                          Used {template.usageCount} times
+                        </div>
+                      </div>
+                      
+                      {template.tags.length > 0 && (
+                        <div className="mt-3 flex flex-wrap gap-1">
+                          {template.tags.map((tag, index) => (
+                            <span
+                              key={index}
+                              className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'analytics' && (
+            <div className="mt-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+                  <div className="flex items-center">
+                    <DocumentTextIcon className="h-8 w-8 text-blue-500" />
+                    <div className="ml-3">
+                      <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Templates</p>
+                      <p className="text-2xl font-semibold text-gray-900 dark:text-white">
+                        {templates?.length || 0}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+                  <div className="flex items-center">
+                    <TrophyIcon className="h-8 w-8 text-yellow-500" />
+                    <div className="ml-3">
+                      <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Most Used</p>
+                      <p className="text-2xl font-semibold text-gray-900 dark:text-white">
+                        {templates?.reduce((max: number, template: CategoryTemplate) => 
+                          Math.max(max, template.usageCount), 0) || 0}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+                  <div className="flex items-center">
+                    <StarIcon className="h-8 w-8 text-purple-500" />
+                    <div className="ml-3">
+                      <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Active Templates</p>
+                      <p className="text-2xl font-semibold text-gray-900 dark:text-white">
+                        {templates?.filter((t: CategoryTemplate) => t.isActive).length || 0}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Template Modal */}
+      {showModal && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-full max-w-2xl shadow-lg rounded-md bg-white dark:bg-gray-800">
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+                  {isEditing ? 'Edit Template' : 'Create Template'}
+                </h3>
+                <button
+                  onClick={() => setShowModal(false)}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                >
+                  <XMarkIcon className="h-6 w-6" />
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Name</label>
+                  <input
+                    type="text"
+                    value={formData.name}
+                    onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                    className="input mt-1"
+                    placeholder="Template name"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Description</label>
+                  <textarea
+                    value={formData.description}
+                    onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                    className="input mt-1"
+                    rows={3}
+                    placeholder="Template description"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Category Type</label>
+                  <select
+                    value={formData.categoryType}
+                    onChange={(e) => setFormData(prev => ({ ...prev, categoryType: e.target.value as any }))}
+                    className="input mt-1"
+                  >
+                    <option value="PERFORMANCE">Performance</option>
+                    <option value="TECHNICAL">Technical</option>
+                    <option value="CREATIVE">Creative</option>
+                    <option value="SCHOLARSHIP">Scholarship</option>
+                    <option value="CUSTOM">Custom</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <div className="flex items-center justify-between">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Criteria</label>
+                    <button
+                      onClick={addCriterion}
+                      className="btn-secondary text-sm"
+                    >
+                      <PlusIcon className="h-4 w-4 mr-1" />
+                      Add Criterion
+                    </button>
+                  </div>
+                  
+                  <div className="mt-2 space-y-3">
+                    {formData.criteria.map((criterion, index) => (
+                      <div key={index} className="flex items-center space-x-2 p-3 border border-gray-200 dark:border-gray-700 rounded-lg">
+                        <div className="flex-1 grid grid-cols-2 gap-2">
+                          <input
+                            type="text"
+                            value={criterion.name}
+                            onChange={(e) => updateCriterion(index, 'name', e.target.value)}
+                            className="input text-sm"
+                            placeholder="Criterion name"
+                          />
+                          <input
+                            type="number"
+                            value={criterion.maxScore}
+                            onChange={(e) => updateCriterion(index, 'maxScore', parseInt(e.target.value))}
+                            className="input text-sm"
+                            placeholder="Max score"
+                            min="1"
+                            max="100"
+                          />
+                        </div>
+                        <button
+                          onClick={() => removeCriterion(index)}
+                          className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+                        >
+                          <TrashIcon className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                
+                <div className="flex justify-end space-x-3">
+                  <button
+                    onClick={() => setShowModal(false)}
+                    className="btn-secondary"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSave}
+                    disabled={createTemplateMutation.isLoading || updateTemplateMutation.isLoading}
+                    className="btn-primary"
+                  >
+                    {isEditing ? 'Update' : 'Create'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default CategoryTemplates
+EOF
+
+    cat > "$APP_DIR/frontend/src/components/CertificationWorkflow.tsx" << 'EOF'
+import React, { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from 'react-query'
+import { scoringAPI, contestsAPI, categoriesAPI, api } from '../services/api'
+import { useAuth } from '../contexts/AuthContext'
+import { getStatusColor, getStepIcon } from '../utils/helpers'
+import {
+  CheckCircleIcon,
+  ClockIcon,
+  ExclamationTriangleIcon,
+  XCircleIcon,
+  EyeIcon,
+  PencilIcon,
+  MagnifyingGlassIcon,
+  FunnelIcon,
+  UserIcon,
+  TrophyIcon,
+  DocumentTextIcon,
+  ArrowRightIcon,
+  ArrowDownIcon,
+  ShieldCheckIcon,
+  CalendarIcon,
+  XMarkIcon,
+} from '@heroicons/react/24/outline'
+
+interface CertificationStep {
+  id: string
+  name: string
+  description: string
+  order: number
+  isRequired: boolean
+  status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'REJECTED'
+  completedAt?: string
+  completedBy?: string
+  notes?: string
+}
+
+interface CertificationWorkflow {
+  id: string
+  contestantId: string
+  contestantName: string
+  categoryId: string
+  categoryName: string
+  currentStep: number
+  status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'REJECTED'
+  steps: CertificationStep[]
+  createdAt: string
+  updatedAt: string
+}
+
+const CertificationWorkflow: React.FC = () => {
+  const { user } = useAuth()
+  const [activeTab, setActiveTab] = useState('workflows')
+  const [searchTerm, setSearchTerm] = useState('')
+  const [statusFilter, setStatusFilter] = useState<string>('ALL')
+  const [selectedWorkflow, setSelectedWorkflow] = useState<CertificationWorkflow | null>(null)
+  const [showModal, setShowModal] = useState(false)
+  const [selectedStep, setSelectedStep] = useState<CertificationStep | null>(null)
+  const [stepNotes, setStepNotes] = useState('')
+
+  const queryClient = useQueryClient()
+
+  const { data: workflows, isLoading } = useQuery(
+    'certificationWorkflows',
+    () => api.get('/api/certification-workflows').then((res: any) => res.data),
+    {
+      enabled: user?.role === 'ORGANIZER' || user?.role === 'BOARD' || user?.role === 'AUDITOR',
+    }
+  )
+
+  const updateStepMutation = useMutation(
+    ({ workflowId, stepId, status, notes }: { workflowId: string; stepId: string; status: string; notes?: string }) =>
+      api.put(`/api/certification-workflows/${workflowId}/steps/${stepId}`, { status, notes }),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('certificationWorkflows')
+        setShowModal(false)
+        setSelectedStep(null)
+        setStepNotes('')
+      }
+    }
+  )
+
+  const handleStepUpdate = (workflowId: string, stepId: string, status: string) => {
+    updateStepMutation.mutate({ workflowId, stepId, status, notes: stepNotes })
+  }
+
+  const handleViewWorkflow = (workflow: CertificationWorkflow) => {
+    setSelectedWorkflow(workflow)
+    setShowModal(true)
+  }
+
+  const handleStepClick = (step: CertificationStep) => {
+    setSelectedStep(step)
+    setStepNotes(step.notes || '')
+  }
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'PENDING':
+        return <ClockIcon className="h-5 w-5 text-gray-500" />
+      case 'IN_PROGRESS':
+        return <ClockIcon className="h-5 w-5 text-yellow-500" />
+      case 'COMPLETED':
+        return <CheckCircleIcon className="h-5 w-5 text-green-500" />
+      case 'REJECTED':
+        return <XCircleIcon className="h-5 w-5 text-red-500" />
+      default:
+        return <ClockIcon className="h-5 w-5 text-gray-500" />
+    }
+  }
+
+  const getStepIcon = (step: CertificationStep) => {
+    switch (step.status) {
+      case 'PENDING':
+        return <ClockIcon className="h-4 w-4 text-gray-400" />
+      case 'IN_PROGRESS':
+        return <ClockIcon className="h-4 w-4 text-yellow-500" />
+      case 'COMPLETED':
+        return <CheckCircleIcon className="h-4 w-4 text-green-500" />
+      case 'REJECTED':
+        return <XCircleIcon className="h-4 w-4 text-red-500" />
+      default:
+        return <ClockIcon className="h-4 w-4 text-gray-400" />
+    }
+  }
+
+  const filteredWorkflows = workflows?.filter((workflow: CertificationWorkflow) => {
+    const matchesSearch = workflow.contestantName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         workflow.categoryName.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesStatus = statusFilter === 'ALL' || workflow.status === statusFilter
+    return matchesSearch && matchesStatus
+  }) || []
+
+  const tabs = [
+    { id: 'workflows', name: 'Workflows', icon: DocumentTextIcon },
+    { id: 'analytics', name: 'Analytics', icon: TrophyIcon },
+  ]
+
+  return (
+    <div className="space-y-6">
+      <div className="card">
+        <div className="card-header">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Certification Workflow</h1>
+          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+            Manage contestant certification processes and workflow steps
+          </p>
+        </div>
+        <div className="card-body">
+          <div className="border-b border-gray-200 dark:border-gray-700">
+            <nav className="-mb-px flex space-x-8">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`${
+                    activeTab === tab.id
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  } whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm flex items-center`}
+                >
+                  <tab.icon className="h-5 w-5 mr-2" />
+                  {tab.name}
+                </button>
+              ))}
+            </nav>
+          </div>
+
+          {activeTab === 'workflows' && (
+            <div className="mt-6">
+              <div className="flex flex-col sm:flex-row gap-4 mb-6">
+                <div className="flex-1">
+                  <div className="relative">
+                    <MagnifyingGlassIcon className="h-5 w-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Search workflows..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="input pl-10"
+                    />
+                  </div>
+                </div>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="input"
+                >
+                  <option value="ALL">All Statuses</option>
+                  <option value="PENDING">Pending</option>
+                  <option value="IN_PROGRESS">In Progress</option>
+                  <option value="COMPLETED">Completed</option>
+                  <option value="REJECTED">Rejected</option>
+                </select>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                  <thead className="bg-gray-50 dark:bg-gray-800">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Contestant
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Category
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Status
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Progress
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Created
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+                    {isLoading ? (
+                      <tr>
+                        <td colSpan={6} className="px-6 py-4 text-center text-gray-500 dark:text-gray-400">
+                          Loading workflows...
+                        </td>
+                      </tr>
+                    ) : filteredWorkflows.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="px-6 py-4 text-center text-gray-500 dark:text-gray-400">
+                          No workflows found
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredWorkflows.map((workflow: CertificationWorkflow) => (
+                        <tr key={workflow.id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <UserIcon className="h-5 w-5 text-gray-400" />
+                              <div className="ml-3">
+                                <div className="text-sm font-medium text-gray-900 dark:text-white">
+                                  {workflow.contestantName}
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <TrophyIcon className="h-5 w-5 text-gray-400" />
+                              <div className="ml-3">
+                                <div className="text-sm font-medium text-gray-900 dark:text-white">
+                                  {workflow.categoryName}
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              {getStatusIcon(workflow.status)}
+                              <span className={`ml-2 px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(workflow.status)}`}>
+                                {workflow.status}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                                <div 
+                                  className="bg-blue-600 h-2 rounded-full" 
+                                  style={{ width: `${(workflow.currentStep / workflow.steps.length) * 100}%` }}
+                                ></div>
+                              </div>
+                              <span className="ml-2 text-sm text-gray-500 dark:text-gray-400">
+                                {workflow.currentStep}/{workflow.steps.length}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                            {new Date(workflow.createdAt).toLocaleDateString()}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <button
+                              onClick={() => handleViewWorkflow(workflow)}
+                              className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
+                            >
+                              <EyeIcon className="h-4 w-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'analytics' && (
+            <div className="mt-6">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+                  <div className="flex items-center">
+                    <DocumentTextIcon className="h-8 w-8 text-blue-500" />
+                    <div className="ml-3">
+                      <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Workflows</p>
+                      <p className="text-2xl font-semibold text-gray-900 dark:text-white">
+                        {workflows?.length || 0}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+                  <div className="flex items-center">
+                    <ClockIcon className="h-8 w-8 text-yellow-500" />
+                    <div className="ml-3">
+                      <p className="text-sm font-medium text-gray-600 dark:text-gray-400">In Progress</p>
+                      <p className="text-2xl font-semibold text-gray-900 dark:text-white">
+                        {workflows?.filter((w: CertificationWorkflow) => w.status === 'IN_PROGRESS').length || 0}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+                  <div className="flex items-center">
+                    <CheckCircleIcon className="h-8 w-8 text-green-500" />
+                    <div className="ml-3">
+                      <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Completed</p>
+                      <p className="text-2xl font-semibold text-gray-900 dark:text-white">
+                        {workflows?.filter((w: CertificationWorkflow) => w.status === 'COMPLETED').length || 0}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+                  <div className="flex items-center">
+                    <TrophyIcon className="h-8 w-8 text-purple-500" />
+                    <div className="ml-3">
+                      <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Success Rate</p>
+                      <p className="text-2xl font-semibold text-gray-900 dark:text-white">
+                        {workflows?.length ? Math.round((workflows.filter((w: CertificationWorkflow) => w.status === 'COMPLETED').length / workflows.length) * 100) : 0}%
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Workflow Details Modal */}
+      {showModal && selectedWorkflow && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-full max-w-4xl shadow-lg rounded-md bg-white dark:bg-gray-800">
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+                  Certification Workflow: {selectedWorkflow.contestantName}
+                </h3>
+                <button
+                  onClick={() => setShowModal(false)}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                >
+                  <XMarkIcon className="h-6 w-6" />
+                </button>
+              </div>
+              
+              <div className="space-y-6">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Contestant</label>
+                    <p className="text-sm text-gray-900 dark:text-white">{selectedWorkflow.contestantName}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Category</label>
+                    <p className="text-sm text-gray-900 dark:text-white">{selectedWorkflow.categoryName}</p>
+                  </div>
+                </div>
+                
+                <div>
+                  <h4 className="text-md font-medium text-gray-900 dark:text-white mb-3">Workflow Steps</h4>
+                  <div className="space-y-3">
+                    {selectedWorkflow.steps.map((step, index) => (
+                      <div key={step.id} className="flex items-center p-3 border border-gray-200 dark:border-gray-700 rounded-lg">
+                        <div className="flex items-center">
+                          {getStepIcon(step)}
+                          <div className="ml-3">
+                            <div className="text-sm font-medium text-gray-900 dark:text-white">
+                              {step.name}
+                            </div>
+                            <div className="text-sm text-gray-600 dark:text-gray-400">
+                              {step.description}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="ml-auto flex items-center space-x-2">
+                          <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(step.status)}`}>
+                            {step.status}
+                          </span>
+                          <button
+                            onClick={() => handleStepClick(step)}
+                            className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
+                          >
+                            <PencilIcon className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Step Update Modal */}
+      {selectedStep && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white dark:bg-gray-800">
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+                  Update Step: {selectedStep.name}
+                </h3>
+                <button
+                  onClick={() => setSelectedStep(null)}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                >
+                  <XMarkIcon className="h-6 w-6" />
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Status</label>
+                  <select
+                    value={selectedStep.status}
+                    onChange={(e) => setSelectedStep(prev => prev ? { ...prev, status: e.target.value as any } : null)}
+                    className="input mt-1"
+                  >
+                    <option value="PENDING">Pending</option>
+                    <option value="IN_PROGRESS">In Progress</option>
+                    <option value="COMPLETED">Completed</option>
+                    <option value="REJECTED">Rejected</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Notes</label>
+                  <textarea
+                    value={stepNotes}
+                    onChange={(e) => setStepNotes(e.target.value)}
+                    className="input mt-1"
+                    rows={3}
+                    placeholder="Add notes..."
+                  />
+                </div>
+                
+                <div className="flex justify-end space-x-3">
+                  <button
+                    onClick={() => setSelectedStep(null)}
+                    className="btn-secondary"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => handleStepUpdate(selectedWorkflow!.id, selectedStep.id, selectedStep.status)}
+                    disabled={updateStepMutation.isLoading}
+                    className="btn-primary"
+                  >
+                    {updateStepMutation.isLoading ? 'Updating...' : 'Update'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default CertificationWorkflow
+EOF
+
+    cat > "$APP_DIR/frontend/src/components/FileUpload.tsx" << 'EOF'
+import React, { useState, useRef, useCallback } from 'react'
+import { useQuery, useMutation, useQueryClient } from 'react-query'
+import { uploadAPI, usersAPI, api } from '../services/api'
+import { useAuth } from '../contexts/AuthContext'
+import { getFileIcon, formatFileSize, getCategoryIcon } from '../utils/helpers'
+import {
+  CloudArrowUpIcon,
+  DocumentIcon,
+  PhotoIcon,
+  TrashIcon,
+  EyeIcon,
+  ArrowDownTrayIcon,
+  ExclamationTriangleIcon,
+  CheckCircleIcon,
+  ClockIcon,
+  MagnifyingGlassIcon,
+  FunnelIcon,
+  UserIcon,
+  CalendarIcon,
+  TrophyIcon,
+  XMarkIcon,
+} from '@heroicons/react/24/outline'
+
+interface UploadedFile {
+  id: string
+  filename: string
+  originalName: string
+  mimeType: string
+  size: number
+  uploadedBy: string
+  uploadedAt: string
+  category: 'CONTESTANT' | 'JUDGE' | 'EVENT' | 'TEMPLATE' | 'OTHER'
+  description?: string
+  tags: string[]
+  isPublic: boolean
+  downloadCount: number
+}
+
+const FileUpload: React.FC = () => {
+  const { user } = useAuth()
+  const [activeTab, setActiveTab] = useState('upload')
+  const [dragActive, setDragActive] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState<string>('ALL')
+  const [selectedFile, setSelectedFile] = useState<UploadedFile | null>(null)
+  const [showModal, setShowModal] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const queryClient = useQueryClient()
+
+  const { data: files, isLoading } = useQuery(
+    'uploadedFiles',
+    () => uploadAPI.getAll().then((res: any) => res.data),
+    {
+      enabled: user?.role === 'ORGANIZER' || user?.role === 'BOARD' || user?.role === 'JUDGE',
+    }
+  )
+
+  const uploadMutation = useMutation(
+    (formData: FormData) => uploadAPI.upload(formData),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('uploadedFiles')
+        setUploading(false)
+        setUploadProgress(0)
+      },
+      onError: () => {
+        setUploading(false)
+        setUploadProgress(0)
+      }
+    }
+  )
+
+  const deleteMutation = useMutation(
+    (id: string) => uploadAPI.delete(id),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('uploadedFiles')
+      }
+    }
+  )
+
+  const handleDrag = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (e.type === 'dragenter' || e.type === 'dragover') {
+      setDragActive(true)
+    } else if (e.type === 'dragleave') {
+      setDragActive(false)
+    }
+  }, [])
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragActive(false)
+    
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleFiles(e.dataTransfer.files)
+    }
+  }, [])
+
+  const handleFiles = (files: FileList) => {
+    const formData = new FormData()
+    Array.from(files).forEach((file) => {
+      formData.append('files', file)
+    })
+    
+    setUploading(true)
+    uploadMutation.mutate(formData)
+  }
+
+  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      handleFiles(e.target.files)
+    }
+  }
+
+  const handleDelete = (id: string) => {
+    if (confirm('Are you sure you want to delete this file?')) {
+      deleteMutation.mutate(id)
+    }
+  }
+
+  const handleDownload = (file: UploadedFile) => {
+    uploadAPI.download(file.id).then((res: any) => {
+      const blob = new Blob([res.data])
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = file.originalName
+      a.click()
+      window.URL.revokeObjectURL(url)
+    })
+  }
+
+  const getCategoryIcon = (category: string) => {
+    switch (category) {
+      case 'CONTESTANT': return <UserIcon className="h-4 w-4" />
+      case 'JUDGE': return <TrophyIcon className="h-4 w-4" />
+      case 'EVENT': return <CalendarIcon className="h-4 w-4" />
+      case 'TEMPLATE': return <TrophyIcon className="h-4 w-4" />
+      default: return <DocumentIcon className="h-4 w-4" />
+    }
+  }
+
+  const getCategoryColor = (category: string) => {
+    switch (category) {
+      case 'CONTESTANT': return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+      case 'JUDGE': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+      case 'EVENT': return 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
+      case 'TEMPLATE': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
+    }
+  }
+
+  const filteredFiles = files?.filter((file: UploadedFile) => {
+    const matchesSearch = file.originalName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         file.description?.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesCategory = categoryFilter === 'ALL' || file.category === categoryFilter
+    return matchesSearch && matchesCategory
+  }) || []
+
+  const tabs = [
+    { id: 'upload', name: 'Upload', icon: CloudArrowUpIcon },
+    { id: 'files', name: 'Files', icon: DocumentIcon },
+    { id: 'analytics', name: 'Analytics', icon: TrophyIcon },
+  ]
+
+  return (
+    <div className="space-y-6">
+      <div className="card">
+        <div className="card-header">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">File Upload</h1>
+          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+            Upload and manage files for events, contestants, and judges
+          </p>
+        </div>
+        <div className="card-body">
+          <div className="border-b border-gray-200 dark:border-gray-700">
+            <nav className="-mb-px flex space-x-8">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`${
+                    activeTab === tab.id
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  } whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm flex items-center`}
+                >
+                  <tab.icon className="h-5 w-5 mr-2" />
+                  {tab.name}
+                </button>
+              ))}
+            </nav>
+          </div>
+
+          {activeTab === 'upload' && (
+            <div className="mt-6">
+              <div
+                className={`border-2 border-dashed rounded-lg p-8 text-center ${
+                  dragActive
+                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900'
+                    : 'border-gray-300 dark:border-gray-600'
+                }`}
+                onDragEnter={handleDrag}
+                onDragLeave={handleDrag}
+                onDragOver={handleDrag}
+                onDrop={handleDrop}
+              >
+                <CloudArrowUpIcon className="mx-auto h-12 w-12 text-gray-400" />
+                <div className="mt-4">
+                  <label htmlFor="file-upload" className="cursor-pointer">
+                    <span className="mt-2 block text-sm font-medium text-gray-900 dark:text-white">
+                      {uploading ? 'Uploading...' : 'Upload files'}
+                    </span>
+                    <input
+                      ref={fileInputRef}
+                      id="file-upload"
+                      type="file"
+                      multiple
+                      onChange={handleFileInput}
+                      className="sr-only"
+                      disabled={uploading}
+                    />
+                  </label>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    Drag and drop files here, or click to select files
+                  </p>
+                </div>
+                
+                {uploading && (
+                  <div className="mt-4">
+                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                      <div 
+                        className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+                        style={{ width: `${uploadProgress}%` }}
+                      ></div>
+                    </div>
+                    <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                      Uploading... {uploadProgress}%
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'files' && (
+            <div className="mt-6">
+              <div className="flex flex-col sm:flex-row gap-4 mb-6">
+                <div className="flex-1">
+                  <div className="relative">
+                    <MagnifyingGlassIcon className="h-5 w-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Search files..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="input pl-10"
+                    />
+                  </div>
+                </div>
+                <select
+                  value={categoryFilter}
+                  onChange={(e) => setCategoryFilter(e.target.value)}
+                  className="input"
+                >
+                  <option value="ALL">All Categories</option>
+                  <option value="CONTESTANT">Contestant</option>
+                  <option value="JUDGE">Judge</option>
+                  <option value="EVENT">Event</option>
+                  <option value="TEMPLATE">Template</option>
+                  <option value="OTHER">Other</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {isLoading ? (
+                  <div className="col-span-full text-center py-8 text-gray-500 dark:text-gray-400">
+                    Loading files...
+                  </div>
+                ) : filteredFiles.length === 0 ? (
+                  <div className="col-span-full text-center py-8 text-gray-500 dark:text-gray-400">
+                    No files found
+                  </div>
+                ) : (
+                  filteredFiles.map((file: UploadedFile) => (
+                    <div key={file.id} className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 hover:shadow-md transition-shadow">
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center">
+                          {getFileIcon(file.mimeType)}
+                          <div className="ml-3">
+                            <h3 className="text-lg font-semibold text-gray-900 dark:text-white truncate">
+                              {file.originalName}
+                            </h3>
+                            <p className="text-sm text-gray-600 dark:text-gray-400">
+                              {formatFileSize(file.size)}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex space-x-1">
+                          <button
+                            onClick={() => handleDownload(file)}
+                            className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
+                          >
+                            <ArrowDownTrayIcon className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(file.id)}
+                            className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+                          >
+                            <TrashIcon className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                      
+                      <div className="mt-3 flex items-center justify-between">
+                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${getCategoryColor(file.category)}`}>
+                          {file.category}
+                        </span>
+                        <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
+                          <CalendarIcon className="h-4 w-4 mr-1" />
+                          {new Date(file.uploadedAt).toLocaleDateString()}
+                        </div>
+                      </div>
+                      
+                      {file.description && (
+                        <p className="mt-3 text-sm text-gray-600 dark:text-gray-400">
+                          {file.description}
+                        </p>
+                      )}
+                      
+                      <div className="mt-3 flex items-center justify-between">
+                        <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
+                          <UserIcon className="h-4 w-4 mr-1" />
+                          {file.uploadedBy}
+                        </div>
+                        <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
+                          <ArrowDownTrayIcon className="h-4 w-4 mr-1" />
+                          {file.downloadCount} downloads
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'analytics' && (
+            <div className="mt-6">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+                  <div className="flex items-center">
+                    <DocumentIcon className="h-8 w-8 text-blue-500" />
+                    <div className="ml-3">
+                      <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Files</p>
+                      <p className="text-2xl font-semibold text-gray-900 dark:text-white">
+                        {files?.length || 0}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+                  <div className="flex items-center">
+                    <ArrowDownTrayIcon className="h-8 w-8 text-green-500" />
+                    <div className="ml-3">
+                      <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Downloads</p>
+                      <p className="text-2xl font-semibold text-gray-900 dark:text-white">
+                        {files?.reduce((total: number, file: UploadedFile) => total + file.downloadCount, 0) || 0}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+                  <div className="flex items-center">
+                    <TrophyIcon className="h-8 w-8 text-purple-500" />
+                    <div className="ml-3">
+                      <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Most Downloaded</p>
+                      <p className="text-2xl font-semibold text-gray-900 dark:text-white">
+                        {files?.reduce((max: number, file: UploadedFile) => Math.max(max, file.downloadCount), 0) || 0}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+                  <div className="flex items-center">
+                    <CalendarIcon className="h-8 w-8 text-yellow-500" />
+                    <div className="ml-3">
+                      <p className="text-sm font-medium text-gray-600 dark:text-gray-400">This Month</p>
+                      <p className="text-2xl font-semibold text-gray-900 dark:text-white">
+                        {files?.filter((file: UploadedFile) => 
+                          new Date(file.uploadedAt).getMonth() === new Date().getMonth()
+                        ).length || 0}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default FileUpload
 EOF
 
     # Force overwrite Dashboard component to fix getAll() usage
@@ -15822,7 +17982,7 @@ EOF
     
     # Fix Heroicons imports first
     print_status "Fixing Heroicons imports..."
-    fix_heroicons_imports
+    # Components are now generated with correct imports - no fixes needed
     
     # Fix TypeScript errors before building
     print_status "Fixing TypeScript errors before rebuild..."
