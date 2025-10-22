@@ -18520,6 +18520,290 @@ EOF
     fix_api_endpoints
 }
 
+# Install backend dependencies
+install_backend_dependencies() {
+    print_status "Installing backend dependencies..."
+    
+    cd "$APP_DIR"
+    
+    # Install dependencies with enhanced compatibility
+    if safe_npm_install; then
+        print_success "Backend dependencies installed successfully"
+    else
+        print_error "Failed to install backend dependencies"
+        return 1
+    fi
+    
+    # Generate Prisma client
+    print_status "Generating Prisma client..."
+    if npx prisma generate; then
+        print_success "Prisma client generated successfully"
+    else
+        print_error "Failed to generate Prisma client"
+        return 1
+    fi
+}
+
+# Create frontend files
+create_frontend_files() {
+    print_status "Creating frontend files..."
+    
+    # Create frontend directory structure
+    mkdir -p "$APP_DIR/frontend/src/components"
+    mkdir -p "$APP_DIR/frontend/src/pages"
+    mkdir -p "$APP_DIR/frontend/src/contexts"
+    mkdir -p "$APP_DIR/frontend/src/services"
+    mkdir -p "$APP_DIR/frontend/src/utils"
+    mkdir -p "$APP_DIR/frontend/src/hooks"
+    mkdir -p "$APP_DIR/frontend/public"
+    
+    # Create package.json
+    cat > "$APP_DIR/frontend/package.json" << 'EOF'
+{
+  "name": "event-manager-frontend",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.8.1",
+    "react-query": "^3.39.3",
+    "axios": "^1.6.2",
+    "socket.io-client": "^4.7.4",
+    "@heroicons/react": "^2.0.18",
+    "clsx": "^2.0.0",
+    "tailwind-merge": "^2.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.43",
+    "@types/react-dom": "^18.2.17",
+    "@vitejs/plugin-react": "^4.2.1",
+    "typescript": "^5.2.2",
+    "vite": "^5.0.8",
+    "tailwindcss": "^3.3.6",
+    "autoprefixer": "^10.4.16",
+    "postcss": "^8.4.32"
+  }
+}
+EOF
+
+    # Create Vite config
+    cat > "$APP_DIR/frontend/vite.config.ts" << 'EOF'
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    port: 3001,
+    proxy: {
+      '/api': 'http://localhost:3000'
+    }
+  },
+  build: {
+    outDir: 'dist',
+    sourcemap: false
+  }
+})
+EOF
+
+    # Create TypeScript config
+    cat > "$APP_DIR/frontend/tsconfig.json" << 'EOF'
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitAny": false,
+    "noImplicitReturns": false,
+    "noImplicitThis": false,
+    "strictNullChecks": false,
+    "strictFunctionTypes": false,
+    "strictBindCallApply": false,
+    "strictPropertyInitialization": false,
+    "noImplicitOverride": false
+  },
+  "include": ["src"],
+  "references": [{ "path": "./tsconfig.node.json" }]
+}
+EOF
+
+    # Create Tailwind config
+    cat > "$APP_DIR/frontend/tailwind.config.js" << 'EOF'
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: [
+    "./index.html",
+    "./src/**/*.{js,ts,jsx,tsx}",
+  ],
+  theme: {
+    extend: {},
+  },
+  plugins: [],
+}
+EOF
+
+    # Create PostCSS config
+    cat > "$APP_DIR/frontend/postcss.config.js" << 'EOF'
+export default {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
+  },
+}
+EOF
+
+    # Create index.html
+    cat > "$APP_DIR/frontend/index.html" << 'EOF'
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Event Manager</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+EOF
+
+    print_success "Frontend files created successfully"
+}
+
+# Install frontend dependencies
+install_frontend_dependencies() {
+    print_status "Installing frontend dependencies..."
+    
+    cd "$APP_DIR/frontend"
+    
+    # Install dependencies
+    if npm install --legacy-peer-deps --force --no-fund --no-audit --silent; then
+        print_success "Frontend dependencies installed successfully"
+    else
+        print_error "Failed to install frontend dependencies"
+        return 1
+    fi
+}
+
+# Setup system services
+setup_system_services() {
+    print_status "Setting up system services..."
+    
+    # Check if PM2 is available
+    if check_pm2; then
+        setup_pm2_services
+    else
+        setup_systemd_service
+    fi
+    
+    print_success "System services configured successfully"
+}
+
+# Setup PM2 services
+setup_pm2_services() {
+    print_status "Setting up PM2 services..."
+    
+    # Create PM2 ecosystem file
+    cat > "$APP_DIR/ecosystem.config.js" << 'EOF'
+module.exports = {
+  apps: [
+    {
+      name: 'event-manager-backend',
+      script: 'src/server.js',
+      cwd: '/opt/event-manager',
+      instances: 1,
+      exec_mode: 'fork',
+      env: {
+        NODE_ENV: 'production',
+        PORT: 3000
+      },
+      error_file: '/var/log/event-manager/backend-error.log',
+      out_file: '/var/log/event-manager/backend-out.log',
+      log_file: '/var/log/event-manager/backend-combined.log',
+      time: true,
+      max_memory_restart: '1G',
+      restart_delay: 4000,
+      max_restarts: 10,
+      min_uptime: '10s'
+    },
+    {
+      name: 'event-manager-frontend',
+      script: 'serve',
+      args: '-s frontend/dist -l 3001',
+      cwd: '/opt/event-manager',
+      instances: 1,
+      exec_mode: 'fork',
+      env: {
+        NODE_ENV: 'production'
+      },
+      error_file: '/var/log/event-manager/frontend-error.log',
+      out_file: '/var/log/event-manager/frontend-out.log',
+      log_file: '/var/log/event-manager/frontend-combined.log',
+      time: true,
+      max_memory_restart: '512M',
+      restart_delay: 4000,
+      max_restarts: 10,
+      min_uptime: '10s'
+    }
+  ]
+}
+EOF
+
+    print_success "PM2 ecosystem configuration created"
+}
+
+# Start services
+start_services() {
+    print_status "Starting services..."
+    
+    # Check if PM2 is available
+    if command -v pm2 >/dev/null 2>&1; then
+        print_status "Starting services with PM2..."
+        pm2 start ecosystem.config.js
+        pm2 save
+    else
+        print_status "Starting services with systemd..."
+        sudo systemctl start event-manager-backend
+        sudo systemctl start event-manager-frontend
+        sudo systemctl enable event-manager-backend
+        sudo systemctl enable event-manager-frontend
+    fi
+    
+    # Wait a moment for services to start
+    sleep 5
+    
+    # Check service status
+    if command -v pm2 >/dev/null 2>&1; then
+        pm2 status
+    else
+        sudo systemctl status event-manager-backend --no-pager -l
+        sudo systemctl status event-manager-frontend --no-pager -l
+    fi
+    
+    print_success "Services started successfully"
+}
+
 # Verify installation
 verify_installation() {
     print_status "Verifying installation..."
