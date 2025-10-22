@@ -162,7 +162,7 @@ safe_npm_install() {
         print_status "Installing canvas module with system dependencies..."
         
         # Strategy 1: Install canvas with build-from-source
-        if npm install canvas --build-from-source --legacy-peer-deps --force 2>/dev/null; then
+        if npm install canvas 2>/dev/null; then
             print_success "Canvas installed successfully with build-from-source"
         else
             # Strategy 2: Install compatible node-pre-gyp version first
