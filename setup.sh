@@ -12458,6 +12458,49 @@ interface ReportInstance {
   createdAt: string
 }
 
+interface ReportData {
+  summary: {
+    totalContestants: number
+    totalJudges: number
+    totalCategories: number
+    averageScore: number
+    highestScore: number
+    lowestScore: number
+  }
+  rankings: Array<{
+    rank: number
+    contestantId: string
+    contestantName: string
+    totalScore: number
+    averageScore: number
+    categoryScores: Array<{
+      categoryId: string
+      categoryName: string
+      score: number
+    }>
+  }>
+  categories: Array<{
+    id: string
+    name: string
+    maxScore: number
+    averageScore: number
+    contestantCount: number
+    criteria: Array<{
+      id: string
+      name: string
+      maxScore: number
+      averageScore: number
+    }>
+  }>
+  judges: Array<{
+    id: string
+    name: string
+    categoriesAssigned: number
+    scoresSubmitted: number
+    averageScore: number
+  }>
+}
+
 const ReportsPage: React.FC = () => {
   const { user } = useAuth()
   const [activeTab, setActiveTab] = useState('templates')
@@ -12495,75 +12538,6 @@ const ReportsPage: React.FC = () => {
       isPublic: true,
       createdAt: '2024-01-01T00:00:00Z',
       updatedAt: '2024-01-01T00:00:00Z'
-    },
-    {
-      id: '2',
-      name: 'Contest Results Report',
-      description: 'Detailed results for a specific contest with scoring breakdown',
-      type: 'CONTEST',
-      format: 'EXCEL',
-      parameters: [
-        { name: 'contestId', label: 'Contest', type: 'select', required: true, options: contests || [] },
-        { name: 'includeScores', label: 'Include Individual Scores', type: 'boolean', required: false },
-        { name: 'includeRankings', label: 'Include Rankings', type: 'boolean', required: false }
-      ],
-      isPublic: true,
-      createdAt: '2024-01-01T00:00:00Z',
-      updatedAt: '2024-01-01T00:00:00Z'
-    },
-    {
-      id: '3',
-      name: 'Judge Score Report',
-      description: 'Scores submitted by judges for a specific category',
-      type: 'SCORE',
-      format: 'CSV',
-      parameters: [
-        { name: 'categoryId', label: 'Category', type: 'select', required: true, options: categories || [] },
-        { name: 'judgeId', label: 'Judge (Optional)', type: 'select', required: false, options: [] },
-        { name: 'dateRange', label: 'Date Range', type: 'daterange', required: false }
-      ],
-      isPublic: false,
-      createdAt: '2024-01-01T00:00:00Z',
-      updatedAt: '2024-01-01T00:00:00Z'
-    },
-    {
-      id: '4',
-      name: 'Certification Status Report',
-      description: 'Current certification status for all categories',
-      type: 'CERTIFICATION',
-      format: 'HTML',
-      parameters: [
-        { name: 'eventId', label: 'Event (Optional)', type: 'select', required: false, options: events || [] },
-        { name: 'status', label: 'Status Filter', type: 'select', required: false, options: [
-          { value: 'PENDING', label: 'Pending' },
-          { value: 'IN_PROGRESS', label: 'In Progress' },
-          { value: 'CERTIFIED', label: 'Certified' },
-          { value: 'REJECTED', label: 'Rejected' }
-        ]}
-      ],
-      isPublic: true,
-      createdAt: '2024-01-01T00:00:00Z',
-      updatedAt: '2024-01-01T00:00:00Z'
-    },
-    {
-      id: '5',
-      name: 'User Activity Report',
-      description: 'User login and activity logs for administrative purposes',
-      type: 'USER',
-      format: 'PDF',
-      parameters: [
-        { name: 'dateRange', label: 'Date Range', type: 'daterange', required: true },
-        { name: 'userId', label: 'User (Optional)', type: 'select', required: false, options: [] },
-        { name: 'activityType', label: 'Activity Type', type: 'select', required: false, options: [
-          { value: 'LOGIN', label: 'Login' },
-          { value: 'SCORE_SUBMISSION', label: 'Score Submission' },
-          { value: 'CERTIFICATION', label: 'Certification' },
-          { value: 'ADMIN_ACTION', label: 'Admin Action' }
-        ]}
-      ],
-      isPublic: false,
-      createdAt: '2024-01-01T00:00:00Z',
-      updatedAt: '2024-01-01T00:00:00Z'
     }
   ]
 
@@ -12578,30 +12552,11 @@ const ReportsPage: React.FC = () => {
       generatedAt: '2024-01-15T10:30:00Z',
       generatedBy: 'admin@eventmanager.com',
       createdAt: '2024-01-15T10:25:00Z'
-    },
-    {
-      id: '2',
-      templateId: '2',
-      name: 'Contest Results - Vocal Solo',
-      status: 'GENERATING',
-      parameters: { contestId: '2', includeScores: true, includeRankings: true },
-      generatedBy: 'judge@eventmanager.com',
-      createdAt: '2024-01-15T11:00:00Z'
-    },
-    {
-      id: '3',
-      templateId: '3',
-      name: 'Judge Scores - Piano Category',
-      status: 'FAILED',
-      parameters: { categoryId: '3', dateRange: { start: '2024-01-01', end: '2024-01-15' } },
-      generatedBy: 'tallymaster@eventmanager.com',
-      createdAt: '2024-01-15T09:45:00Z'
     }
   ]
 
   const filteredTemplates = reportTemplates.filter(template => {
-    const matchesSearch = template.name.toLowerCase().includes(filters.search.toLowerCase()) ||
-                         template.description.toLowerCase().includes(filters.search.toLowerCase())
+    const matchesSearch = template.name.toLowerCase().includes(filters.search.toLowerCase())
     const matchesType = !filters.type || template.type === filters.type
     const matchesFormat = !filters.format || template.format === filters.format
     const matchesPublic = user?.role === 'ORGANIZER' || user?.role === 'BOARD' || template.isPublic
@@ -12960,61 +12915,6 @@ const ReportsPage: React.FC = () => {
                   </div>
                 </div>
               </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="card">
-                  <div className="card-header">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Report Types</h3>
-                  </div>
-                  <div className="card-body">
-                    <div className="space-y-4">
-                      {['EVENT', 'CONTEST', 'CATEGORY', 'USER', 'SCORE', 'CERTIFICATION', 'AUDIT'].map((type) => {
-                        const count = reportTemplates.filter(t => t.type === type).length
-                        return (
-                          <div key={type} className="flex items-center justify-between">
-                            <span className="text-sm text-gray-600 dark:text-gray-400 capitalize">{type.toLowerCase()}</span>
-                            <div className="flex items-center">
-                              <div className="w-32 bg-gray-200 dark:bg-gray-700 rounded-full h-2 mr-3">
-                                <div 
-                                  className="bg-blue-500 h-2 rounded-full" 
-                                  style={{ width: `${(count / reportTemplates.length) * 100}%` }}
-                                ></div>
-                              </div>
-                              <span className="text-sm font-medium text-gray-900 dark:text-white">{count}</span>
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="card">
-                  <div className="card-header">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Recent Activity</h3>
-                  </div>
-                  <div className="card-body">
-                    <div className="space-y-3">
-                      {reportInstances.slice(0, 5).map((instance) => (
-                        <div key={instance.id} className="flex items-center justify-between">
-                          <div className="flex items-center">
-                            {getStatusIcon(instance.status)}
-                            <div className="ml-3">
-                              <p className="text-sm font-medium text-gray-900 dark:text-white">{instance.name}</p>
-                              <p className="text-xs text-gray-500 dark:text-gray-400">
-                                {format(new Date(instance.createdAt), 'MMM dd, HH:mm')}
-                              </p>
-                            </div>
-                          </div>
-                          <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(instance.status)}`}>
-                            {instance.status}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
             </div>
           )}
         </div>
@@ -13062,43 +12962,18 @@ const ReportsPage: React.FC = () => {
                         ))}
                       </select>
                     ) : param.type === 'boolean' ? (
-                      <div className="flex items-center">
+                      <label className="flex items-center">
                         <input
                           type="checkbox"
                           checked={reportParameters[param.name] || false}
                           onChange={(e) => handleParameterChange(param.name, e.target.checked)}
-                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                          className="mr-2"
                         />
-                        <label className="ml-2 block text-sm text-gray-700 dark:text-gray-300">
-                          {param.label}
-                        </label>
-                      </div>
-                    ) : param.type === 'daterange' ? (
-                      <div className="grid grid-cols-2 gap-2">
-                        <input
-                          type="date"
-                          value={reportParameters[param.name]?.start || ''}
-                          onChange={(e) => handleParameterChange(param.name, {
-                            ...reportParameters[param.name],
-                            start: e.target.value
-                          })}
-                          className="input"
-                          required={param.required}
-                        />
-                        <input
-                          type="date"
-                          value={reportParameters[param.name]?.end || ''}
-                          onChange={(e) => handleParameterChange(param.name, {
-                            ...reportParameters[param.name],
-                            end: e.target.value
-                          })}
-                          className="input"
-                          required={param.required}
-                        />
-                      </div>
+                        {param.label}
+                      </label>
                     ) : (
                       <input
-                        type={param.type}
+                        type={param.type === 'daterange' ? 'date' : 'text'}
                         value={reportParameters[param.name] || ''}
                         onChange={(e) => handleParameterChange(param.name, e.target.value)}
                         className="input"
@@ -13134,7 +13009,6 @@ const ReportsPage: React.FC = () => {
 
 export default ReportsPage
 EOF
-
     # Add AssignmentsPage
     cat > "$APP_DIR/frontend/src/pages/AssignmentsPage.tsx" << 'EOF'
 import React, { useState } from 'react'
