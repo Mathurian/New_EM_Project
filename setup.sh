@@ -8265,7 +8265,7 @@ code {
   }
 
   .mobile-menu-content {
-    @apply fixed top-0 right-0 h-full w-80 bg-background border-l shadow-lg;
+    @apply fixed top-0 right-0 h-full w-80 bg-white dark:bg-gray-800 border-l shadow-lg;
   }
 
   .dropdown {
