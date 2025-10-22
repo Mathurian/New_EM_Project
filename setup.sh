@@ -19017,11 +19017,12 @@ app.get('\''/api/results'\'', authenticateToken, async (req, res) => {\
     
     local api_file="$APP_DIR/frontend/src/services/api.ts"
     if [[ -f "$api_file" ]]; then
-        # Ensure baseURL doesn't have double /api/
-        sed -i 's|baseURL: import.meta.env.VITE_API_URL || '\''/api'\''|baseURL: import.meta.env.VITE_API_URL || '\''/api'\''|g' "$api_file"
+        # Create a temporary file with corrected content
+        sed 's|/api/api/|/api/|g' "$api_file" > "${api_file}.tmp"
+        mv "${api_file}.tmp" "$api_file"
         
-        # Fix any existing double /api/ patterns
-        sed -i 's|/api/api/|/api/|g' "$api_file"
+        # Ensure baseURL uses relative path correctly
+        sed -i 's|baseURL: import.meta.env.VITE_API_URL || /api|baseURL: import.meta.env.VITE_API_URL || "/api"|g' "$api_file"
     fi
     
     # Update frontend environment to use relative URLs
