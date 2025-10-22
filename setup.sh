@@ -3179,6 +3179,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     initAuth()
   }, [])
 
+  // Handle redirects based on authentication state
+  useEffect(() => {
+    if (!isLoading) {
+      if (isAuthenticated && window.location.pathname === '/login') {
+        navigate('/dashboard')
+      } else if (!isAuthenticated && window.location.pathname !== '/login') {
+        navigate('/login')
+      }
+    }
+  }, [isAuthenticated, isLoading, navigate])
+
   const login = async (email: string, password: string) => {
     try {
       const response = await api.post('/auth/login', { email, password })
@@ -3196,7 +3207,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     localStorage.removeItem('token')
     delete api.defaults.headers.common['Authorization']
     setUser(null)
-    navigate('/login')
   }
 
   const value = {
