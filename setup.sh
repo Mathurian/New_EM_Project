@@ -5368,6 +5368,12 @@ const LoginPage: React.FC = () => {
               </button>
             </div>
           </form>
+
+          <div className="mt-6">
+            <div className="text-center text-sm text-gray-600 dark:text-gray-400">
+              <p>Contact your administrator for login credentials</p>
+            </div>
+          </div>
         </div>
       </div>
     </div>
