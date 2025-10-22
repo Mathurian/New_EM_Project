@@ -57,7 +57,7 @@
     "lodash.pick": "npm:lodash@^4.17.21",
     "gauge": "npm:@types/gauge@^2.7.2",
     "npmlog": "npm:winston@^3.11.0",
-    "supertest": "^7.1.3",
+    "supertest": "$supertest",
     "superagent": "^10.2.2",
     "html-pdf-node": "npm:playwright@^1.40.0",
     "@humanwhocodes/object-schema": "npm:@eslint/object-schema@^0.1.0",

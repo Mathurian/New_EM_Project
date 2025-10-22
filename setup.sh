@@ -5318,18 +5318,19 @@ EOF
     "eslint": "^8.57.1"
   },
   "overrides": {
-    "glob": "npm:@eslint/glob@^0.1.0",
-    "rimraf": "npm:@eslint/rimraf@^0.1.0",
+    "glob": "^10.3.10",
+    "rimraf": "^5.0.5",
     "inflight": "npm:lru-cache@^10.0.0",
-    "are-we-there-yet": "npm:@eslint/are-we-there-yet@^0.1.0",
-    "lodash.pick": "npm:@eslint/lodash.pick@^0.1.0",
-    "gauge": "npm:@eslint/gauge@^0.1.0",
-    "npmlog": "npm:@eslint/npmlog@^0.1.0",
-    "supertest": "npm:@eslint/supertest@^0.1.0",
-    "superagent": "npm:@eslint/superagent@^0.1.0",
-    "@humanwhocodes/object-schema@2.0.3": "npm:@eslint/object-schema@^0.1.0",
-    "@humanwhocodes/config-array@0.13.0": "npm:@eslint/config-array@^0.18.0",
-    "eslint@8.57.1": "npm:eslint@^9.0.0"
+    "are-we-there-yet": "npm:@types/are-we-there-yet@^2.0.0",
+    "lodash.pick": "npm:lodash@^4.17.21",
+    "gauge": "npm:@types/gauge@^2.7.2",
+    "npmlog": "npm:winston@^3.11.0",
+    "supertest": "$supertest",
+    "superagent": "^10.2.2",
+    "html-pdf-node": "npm:playwright@^1.40.0",
+    "@humanwhocodes/object-schema": "npm:@eslint/object-schema@^0.1.0",
+    "@humanwhocodes/config-array": "npm:@eslint/config-array@^0.18.0",
+    "eslint@8.57.1": "$eslint"
   }
 }
 EOF
