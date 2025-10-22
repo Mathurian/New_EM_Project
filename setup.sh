@@ -18037,6 +18037,9 @@ EOF
     fi
     
     print_success "Comprehensive frontend built successfully"
+    
+    # Fix modal visibility and centering issues
+    fix_modal_visibility
 }
 
 # Force rebuild frontend with clean environment
@@ -18349,6 +18352,9 @@ EOF
         print_error "Frontend rebuild failed"
         return 1
     fi
+    
+    # Fix modal visibility and centering issues
+    fix_modal_visibility
 }
 
 # Verify installation
@@ -18641,6 +18647,120 @@ evaluate_setup_completeness() {
     fi
     
     return $issues_found
+}
+
+# Fix modal visibility and centering issues
+fix_modal_visibility() {
+    print_status "🔧 Fixing modal visibility and centering issues..."
+    
+    local css_file="$APP_DIR/frontend/src/index.css"
+    
+    if [[ ! -f "$css_file" ]]; then
+        print_error "CSS file not found: $css_file"
+        return 1
+    fi
+    
+    # Backup the original CSS file
+    cp "$css_file" "${css_file}.bak"
+    
+    # Update modal styles for better visibility and centering
+    print_status "Updating modal CSS for proper z-index and centering..."
+    
+    # Replace existing modal styles with enhanced versions
+    sed -i '/\.modal {/,/}/c\
+  .modal {\
+    @apply fixed inset-0 z-[9999] flex items-center justify-center;\
+  }' "$css_file"
+    
+    sed -i '/\.modal-content {/,/}/c\
+  .modal-content {\
+    @apply bg-background p-6 shadow-lg border rounded-lg max-w-md w-full mx-4 relative z-[10000];\
+  }' "$css_file"
+    
+    sed -i '/\.modal-overlay {/,/}/c\
+  .modal-overlay {\
+    @apply fixed inset-0 bg-black/50 z-[9998];\
+  }' "$css_file"
+    
+    # Add enhanced modal styles if they don't exist
+    if ! grep -q "modal-container" "$css_file"; then
+        print_status "Adding enhanced modal styles..."
+        cat >> "$css_file" << 'EOF'
+
+  /* Enhanced modal styles for better visibility and centering */
+  .modal-container {
+    @apply fixed inset-0 z-[9999] flex items-center justify-center p-4;
+  }
+
+  .modal-dialog {
+    @apply relative bg-background rounded-lg shadow-xl border max-w-lg w-full max-h-[90vh] overflow-y-auto;
+  }
+
+  .modal-header {
+    @apply flex items-center justify-between p-6 border-b;
+  }
+
+  .modal-body {
+    @apply p-6;
+  }
+
+  .modal-footer {
+    @apply flex items-center justify-end gap-3 p-6 border-t;
+  }
+
+  /* Ensure modals are always on top */
+  .modal-backdrop {
+    @apply fixed inset-0 bg-black/50 z-[9998] backdrop-blur-sm;
+  }
+EOF
+    fi
+    
+    # Update modal components to use enhanced structure
+    print_status "Updating modal components to use enhanced structure..."
+    
+    # Find and update ContestsPage modal
+    local contests_file="$APP_DIR/frontend/src/pages/ContestsPage.tsx"
+    if [[ -f "$contests_file" ]]; then
+        # Add XMarkIcon import if not present
+        if ! grep -q "XMarkIcon" "$contests_file"; then
+            sed -i '/ArrowLeftIcon,/a\  XMarkIcon,' "$contests_file"
+        fi
+        
+        # Update modal structure
+        sed -i 's/<div className="modal">/<div className="modal-container">/g' "$contests_file"
+        sed -i 's/<div className="modal-overlay"/<div className="modal-backdrop"/g' "$contests_file"
+        sed -i 's/<div className="modal-content/<div className="modal-dialog"/g' "$contests_file"
+        
+        # Add close button to modal header
+        sed -i '/modal-dialog">/a\        <div className="modal-header">\
+          <h2 className="text-xl font-semibold">\
+            {contest ? '\''Edit Contest'\'' : '\''Create Contest'\''}\
+          </h2>\
+          <button\
+            onClick={onClose}\
+            className="btn btn-ghost btn-sm"\
+          >\
+            <XMarkIcon className="h-5 w-5" />\
+          </button>\
+        </div>\
+        <div className="modal-body">' "$contests_file"
+    fi
+    
+    # Apply similar fixes to other modal components
+    local pages_dir="$APP_DIR/frontend/src/pages"
+    if [[ -d "$pages_dir" ]]; then
+        for page_file in "$pages_dir"/*.tsx; do
+            if [[ -f "$page_file" ]]; then
+                # Update modal classes in all page files
+                sed -i 's/className="modal"/className="modal-container"/g' "$page_file"
+                sed -i 's/className="modal-overlay"/className="modal-backdrop"/g' "$page_file"
+                sed -i 's/className="modal-content"/className="modal-dialog"/g' "$page_file"
+            fi
+        done
+    fi
+    
+    print_success "✓ Modal visibility and centering issues fixed"
+    print_status "Enhanced modal styles applied with proper z-index stacking"
 }
 
 # Run main function
