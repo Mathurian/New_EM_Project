@@ -2351,12 +2351,8 @@ import {\
         # Replace PencilIcon with PencilSquareIcon (Heroicons v2 name)
         sed -i 's/PencilIcon/PencilSquareIcon/g' "src/pages/AuditorPage.tsx"
         
-        # Check if PencilSquareIcon is missing and add it
-        if ! grep -q "PencilSquareIcon" "src/pages/AuditorPage.tsx"; then
-            # Find the import line and add the missing icons
-            sed -i '/import {/,/} from/a\  PencilSquareIcon,\n  CalculatorIcon,' "src/pages/AuditorPage.tsx"
-            print_status "Added PencilSquareIcon and CalculatorIcon to AuditorPage.tsx"
-        fi
+        # No need to add imports - they're already included in the generated file
+        print_status "Fixed AuditorPage.tsx PencilIcon -> PencilSquareIcon"
     fi
     
     # Fix ReportsPage.tsx - Remove duplicate DocumentTextIcon and fix DownloadIcon
@@ -2367,10 +2363,7 @@ import {\
         # Replace DownloadIcon with ArrowDownTrayIcon (Heroicons v2 name)
         sed -i 's/DownloadIcon/ArrowDownTrayIcon/g' "src/pages/ReportsPage.tsx"
         
-        # Add ArrowDownTrayIcon import if not present - use proper sed syntax
-        if ! grep -q "ArrowDownTrayIcon" "src/pages/ReportsPage.tsx"; then
-            sed -i '/import {/,/} from/a\  ArrowDownTrayIcon,' "src/pages/ReportsPage.tsx"
-        fi
+        # No need to add ArrowDownTrayIcon import - it's already included in the generated file
         print_status "Fixed ReportsPage.tsx duplicate imports and DownloadIcon"
     fi
     
@@ -2378,10 +2371,7 @@ import {\
     if [[ -f "src/pages/ResultsPage.tsx" ]]; then
         sed -i 's/MedalIcon/TrophyIcon/g' "src/pages/ResultsPage.tsx"
         
-        # Add TrophyIcon import if not present
-        if ! grep -q "TrophyIcon" "src/pages/ResultsPage.tsx"; then
-            sed -i '/import {/,/} from/a\  TrophyIcon,' "src/pages/ResultsPage.tsx"
-        fi
+        # No need to add TrophyIcon import - it's already included in the generated file
         print_status "Fixed ResultsPage.tsx MedalIcon -> TrophyIcon"
     fi
     
@@ -2389,10 +2379,7 @@ import {\
     if [[ -f "src/pages/SettingsPage.tsx" ]]; then
         sed -i 's/DatabaseIcon/CircleStackIcon/g' "src/pages/SettingsPage.tsx"
         
-        # Add CircleStackIcon import if not present
-        if ! grep -q "CircleStackIcon" "src/pages/SettingsPage.tsx"; then
-            sed -i '/import {/,/} from/a\  CircleStackIcon,' "src/pages/SettingsPage.tsx"
-        fi
+        # No need to add CircleStackIcon import - it's already included in the generated file
         print_status "Fixed SettingsPage.tsx DatabaseIcon -> CircleStackIcon"
     fi
     
