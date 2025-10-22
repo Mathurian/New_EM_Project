@@ -2840,7 +2840,7 @@ EOF
     "react-query": "^3.39.3",
     "axios": "^1.6.2",
     "socket.io-client": "^4.7.4",
-    "@heroicons/react": "^2.0.18",
+    "@heroicons/react": "^2.1.1",
     "date-fns": "^2.30.0",
     "clsx": "^2.0.0",
     "tailwind-merge": "^2.0.0"
@@ -3695,6 +3695,17 @@ import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useSocket } from '../contexts/SocketContext'
 import { useTheme } from '../contexts/ThemeContext'
+import {
+  HomeIcon,
+  CalendarIcon,
+  TrophyIcon,
+  ChartBarIcon,
+  UsersIcon,
+  CogIcon,
+  MicrophoneIcon,
+  DocumentTextIcon,
+  XMarkIcon
+} from '@heroicons/react/24/outline'
 
 interface LayoutProps {
   children: React.ReactNode
@@ -3703,6 +3714,8 @@ interface LayoutProps {
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [profileMenuOpen, setProfileMenuOpen] = useState(false)
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const { user, logout } = useAuth()
   const { theme, setTheme, actualTheme } = useTheme()
   const { isConnected } = useSocket()
@@ -3805,7 +3818,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                           : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white'
                       } group flex items-center px-2 py-2 text-sm font-medium rounded-md`}
                     >
-                      <span className="mr-3 text-lg">{item.icon}</span>
+                      <item.icon className="h-5 w-5 mr-3" />
                       {item.name}
                     </Link>
                   )
@@ -4458,7 +4471,7 @@ EOF
 import React, { useState } from 'react'
 import { useQuery } from 'react-query'
 import { eventsAPI, contestsAPI } from '../services/api'
-import { DocumentIcon, PrinterIcon, DownloadIcon } from '@heroicons/react/24/outline'
+import { DocumentIcon, PrinterIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline'
 
 const PrintReports: React.FC = () => {
   const [activeTab, setActiveTab] = useState('generate')
@@ -7498,7 +7511,7 @@ import { useAuth } from '../contexts/AuthContext'
 import DataTable from '../components/DataTable'
 import SearchFilter from '../components/SearchFilter'
 import PrintReports from '../components/PrintReports'
-import { TrophyIcon, MedalIcon, StarIcon, PrinterIcon, DownloadIcon } from '@heroicons/react/24/outline'
+import { TrophyIcon, StarIcon, PrinterIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline'
 import { format } from 'date-fns'
 
 interface Result {
@@ -8396,7 +8409,7 @@ import SearchFilter from '../components/SearchFilter'
 import { 
   ShieldCheckIcon, 
   ServerIcon, 
-  DatabaseIcon, 
+  CircleStackIcon, 
   ChartBarIcon,
   ExclamationTriangleIcon,
   CheckCircleIcon,
@@ -8455,7 +8468,7 @@ const AdminPage: React.FC = () => {
 
   const { data: activityLogs, isLoading: logsLoading } = useQuery(
     ['activityLogs', { searchTerm, dateFilter, actionFilter }],
-    () => adminAPI.getActivityLogs({ searchTerm, dateFilter, actionFilter }).then((res: any) => res.data),
+    () => adminAPI.getActivityLogs().then((res: any) => res.data),
     { refetchInterval: 10000 }
   )
 
@@ -8543,7 +8556,7 @@ const AdminPage: React.FC = () => {
     { id: 'overview', name: 'Overview', icon: ChartBarIcon },
     { id: 'logs', name: 'Activity Logs', icon: ClockIcon },
     { id: 'security', name: 'Security', icon: ShieldCheckIcon },
-    { id: 'backup', name: 'Backup', icon: DatabaseIcon },
+    { id: 'backup', name: 'Backup', icon: CircleStackIcon },
     { id: 'system', name: 'System', icon: ServerIcon }
   ]
 
@@ -8745,7 +8758,7 @@ const AdminPage: React.FC = () => {
                         className="btn-outline"
                         disabled={testConnectionMutation.isLoading}
                       >
-                        <DatabaseIcon className="h-5 w-5 mr-2" />
+                        <CircleStackIcon className="h-5 w-5 mr-2" />
                         Test Database
                       </button>
                       <button
@@ -8761,7 +8774,7 @@ const AdminPage: React.FC = () => {
                         className="btn-outline"
                         disabled={testConnectionMutation.isLoading}
                       >
-                        <DatabaseIcon className="h-5 w-5 mr-2" />
+                        <CircleStackIcon className="h-5 w-5 mr-2" />
                         Test Backup
                       </button>
                     </div>
@@ -8893,7 +8906,7 @@ import {
   ServerIcon,
   EnvelopeIcon,
   ShieldCheckIcon,
-  DatabaseIcon,
+  CircleStackIcon,
   BellIcon,
   KeyIcon,
   GlobeAltIcon,
@@ -8969,7 +8982,7 @@ const SettingsPage: React.FC = () => {
   )
 
   const testMutation = useMutation(
-    (type: string) => settingsAPI.test(type),
+    (type: string) => settingsAPI.test(type as any),
     {
       onSuccess: (data, type) => {
         setTestResults(prev => ({ ...prev, [type]: data.data }))
@@ -9008,7 +9021,7 @@ const SettingsPage: React.FC = () => {
     { id: 'general', name: 'General', icon: CogIcon },
     { id: 'email', name: 'Email', icon: EnvelopeIcon },
     { id: 'security', name: 'Security', icon: ShieldCheckIcon },
-    { id: 'database', name: 'Database', icon: DatabaseIcon },
+    { id: 'database', name: 'Database', icon: CircleStackIcon },
     { id: 'notifications', name: 'Notifications', icon: BellIcon },
     { id: 'backup', name: 'Backup', icon: CloudIcon },
   ]
@@ -9657,7 +9670,7 @@ const ProfilePage: React.FC = () => {
     state: 'CA',
     zipCode: '12345',
     country: 'United States',
-    role: user?.role || 'JUDGE',
+    role: (user?.role as any) || 'JUDGE',
     status: 'ACTIVE',
     lastLoginAt: '2024-01-15T10:30:00Z',
     createdAt: '2024-01-01T00:00:00Z',
@@ -10418,7 +10431,6 @@ import {
   PlayIcon,
   PauseIcon,
   StopIcon,
-  VolumeUpIcon,
   DocumentDuplicateIcon,
   TagIcon,
   StarIcon,
@@ -12253,7 +12265,7 @@ import { eventsAPI, contestsAPI, categoriesAPI, resultsAPI, adminAPI } from '../
 import {
   DocumentTextIcon,
   PrinterIcon,
-  DownloadIcon,
+  ArrowDownTrayIcon,
   CalendarIcon,
   ChartBarIcon,
   UserGroupIcon,
@@ -12267,7 +12279,7 @@ import {
   TableCellsIcon,
   PresentationChartLineIcon,
   DocumentChartBarIcon,
-  DocumentReportIcon,
+  DocumentTextIcon,
   ClipboardDocumentCheckIcon,
   ExclamationTriangleIcon,
   CheckCircleIcon,
@@ -12601,7 +12613,7 @@ const ReportsPage: React.FC = () => {
                           {template.type === 'USER' && <UserGroupIcon className="h-6 w-6 text-purple-500 mr-2" />}
                           {template.type === 'SCORE' && <ChartBarIcon className="h-6 w-6 text-indigo-500 mr-2" />}
                           {template.type === 'CERTIFICATION' && <CheckCircleIcon className="h-6 w-6 text-green-500 mr-2" />}
-                          {template.type === 'AUDIT' && <DocumentReportIcon className="h-6 w-6 text-red-500 mr-2" />}
+                          {template.type === 'AUDIT' && <DocumentTextIcon className="h-6 w-6 text-red-500 mr-2" />}
                           <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
                             {template.name}
                           </h3>
@@ -13270,13 +13282,13 @@ import {
   DocumentDuplicateIcon,
   PresentationChartLineIcon,
   TableCellsIcon,
-  DocumentReportIcon,
+  DocumentTextIcon,
   ClipboardDocumentCheckIcon,
   AcademicCapIcon,
   UserGroupIcon,
   ChartPieIcon,
-  TrendingUpIcon,
-  TrendingDownIcon,
+  ArrowTrendingUpIcon,
+  ArrowTrendingDownIcon,
   LockClosedIcon,
   KeyIcon,
   ExclamationCircleIcon
@@ -14557,13 +14569,13 @@ import {
   DocumentDuplicateIcon,
   PresentationChartLineIcon,
   TableCellsIcon,
-  DocumentReportIcon,
+  DocumentTextIcon,
   ClipboardDocumentCheckIcon,
   AcademicCapIcon,
   UserGroupIcon,
   ChartPieIcon,
-  TrendingUpIcon,
-  TrendingDownIcon
+  ArrowTrendingUpIcon,
+  ArrowTrendingDownIcon
 } from '@heroicons/react/24/outline'
 import { format } from 'date-fns'
 
