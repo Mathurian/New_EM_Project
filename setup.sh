@@ -2321,7 +2321,9 @@ import {\
   CogIcon,\
   MicrophoneIcon,\
   DocumentTextIcon,\
-  XMarkIcon\
+  XMarkIcon,\
+  PencilIcon,\
+  CalculatorIcon\
 } from '\''@heroicons/react/24/outline'\''\
 ' "src/components/Layout.tsx"
         else
@@ -2335,61 +2337,63 @@ import {\
         sed -i 's/import {.*DatabaseIcon.*}/import { CircleStackIcon }/g' "src/pages/AdminPage.tsx"
     fi
     
-    # Fix AuditorPage.tsx - Add missing PencilIcon and CalculatorIcon
+    # Comprehensive fix for all reported TypeScript errors
+    print_status "Applying comprehensive TypeScript icon fixes..."
+    
+    # Fix AuditorPage.tsx - Add missing PencilIcon and CalculatorIcon imports
     if [[ -f "src/pages/AuditorPage.tsx" ]]; then
-        sed -i 's/DocumentReportIcon/DocumentTextIcon/g' "src/pages/AuditorPage.tsx"
-        sed -i 's/TrendingUpIcon/ArrowTrendingUpIcon/g' "src/pages/AuditorPage.tsx"
-        sed -i 's/TrendingDownIcon/ArrowTrendingDownIcon/g' "src/pages/AuditorPage.tsx"
-        # Add missing icons if not present
+        # Check if PencilIcon is missing and add it
         if ! grep -q "PencilIcon" "src/pages/AuditorPage.tsx"; then
-            sed -i '/import {/a\
+            # Find the import line and add the missing icons
+            sed -i '/import {/,/} from/a\
   PencilIcon,\
   CalculatorIcon,\
 ' "src/pages/AuditorPage.tsx"
-        fi
-    fi
-    
-    # Fix PrintReports.tsx - Replace DownloadIcon with ArrowDownTrayIcon
-    if [[ -f "src/components/PrintReports.tsx" ]]; then
-        sed -i 's/DownloadIcon/ArrowDownTrayIcon/g' "src/components/PrintReports.tsx"
-        if ! grep -q "ArrowDownTrayIcon" "src/components/PrintReports.tsx"; then
-            sed -i '/import {/a\
-  ArrowDownTrayIcon,\
-' "src/components/PrintReports.tsx"
+            print_status "Added PencilIcon and CalculatorIcon to AuditorPage.tsx"
         fi
     fi
     
     # Fix ReportsPage.tsx - Remove duplicate DocumentTextIcon and fix DownloadIcon
     if [[ -f "src/pages/ReportsPage.tsx" ]]; then
-        # Remove duplicate DocumentTextIcon imports
-        sed -i '/DocumentTextIcon,/N;s/DocumentTextIcon,\n  DocumentTextIcon,/DocumentTextIcon,/g' "src/pages/ReportsPage.tsx"
+        # Remove duplicate DocumentTextIcon imports using a more reliable method
+        awk '!seen[$0]++' "src/pages/ReportsPage.tsx" > "src/pages/ReportsPage.tsx.tmp" && mv "src/pages/ReportsPage.tsx.tmp" "src/pages/ReportsPage.tsx"
+        
         # Replace DownloadIcon with ArrowDownTrayIcon
         sed -i 's/DownloadIcon/ArrowDownTrayIcon/g' "src/pages/ReportsPage.tsx"
+        
+        # Add ArrowDownTrayIcon import if not present
         if ! grep -q "ArrowDownTrayIcon" "src/pages/ReportsPage.tsx"; then
-            sed -i '/import {/a\
+            sed -i '/import {/,/} from/a\
   ArrowDownTrayIcon,\
 ' "src/pages/ReportsPage.tsx"
         fi
+        print_status "Fixed ReportsPage.tsx duplicate imports and DownloadIcon"
     fi
     
     # Fix ResultsPage.tsx - Replace MedalIcon with TrophyIcon
     if [[ -f "src/pages/ResultsPage.tsx" ]]; then
         sed -i 's/MedalIcon/TrophyIcon/g' "src/pages/ResultsPage.tsx"
+        
+        # Add TrophyIcon import if not present
         if ! grep -q "TrophyIcon" "src/pages/ResultsPage.tsx"; then
-            sed -i '/import {/a\
+            sed -i '/import {/,/} from/a\
   TrophyIcon,\
 ' "src/pages/ResultsPage.tsx"
         fi
+        print_status "Fixed ResultsPage.tsx MedalIcon -> TrophyIcon"
     fi
     
     # Fix SettingsPage.tsx - Replace DatabaseIcon with CircleStackIcon
     if [[ -f "src/pages/SettingsPage.tsx" ]]; then
         sed -i 's/DatabaseIcon/CircleStackIcon/g' "src/pages/SettingsPage.tsx"
+        
+        # Add CircleStackIcon import if not present
         if ! grep -q "CircleStackIcon" "src/pages/SettingsPage.tsx"; then
-            sed -i '/import {/a\
+            sed -i '/import {/,/} from/a\
   CircleStackIcon,\
 ' "src/pages/SettingsPage.tsx"
         fi
+        print_status "Fixed SettingsPage.tsx DatabaseIcon -> CircleStackIcon"
     fi
     
     # Fix EmceePage.tsx
