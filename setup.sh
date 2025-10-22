@@ -2409,17 +2409,7 @@ import {\
         sed -i 's/DownloadIcon/ArrowDownTrayIcon/g' "src/components/PrintReports.tsx"
         sed -i 's/import { DocumentIcon, PrinterIcon, DownloadIcon }/import { DocumentIcon, PrinterIcon, ArrowDownTrayIcon }/g' "src/components/PrintReports.tsx"
     fi
-    
-    # Fix ReportsPage.tsx
-    if [[ -f "src/pages/ReportsPage.tsx" ]]; then
-        sed -i 's/DownloadIcon/ArrowDownTrayIcon/g' "src/pages/ReportsPage.tsx"
-        sed -i 's/DocumentReportIcon/DocumentTextIcon/g' "src/pages/ReportsPage.tsx"
-        # Add missing DownloadIcon if referenced
-        if grep -q "DownloadIcon" "src/pages/ReportsPage.tsx"; then
-            sed -i 's/DownloadIcon/ArrowDownTrayIcon/g' "src/pages/ReportsPage.tsx"
-        fi
-    fi
-    
+
     # Fix ResultsPage.tsx
     if [[ -f "src/pages/ResultsPage.tsx" ]]; then
         sed -i 's/MedalIcon/TrophyIcon/g' "src/pages/ResultsPage.tsx"
@@ -3881,7 +3871,9 @@ import {
   CogIcon,
   MicrophoneIcon,
   DocumentTextIcon,
-  XMarkIcon
+  XMarkIcon,
+  PencilSquareIcon,
+  CalculatorIcon
 } from '@heroicons/react/24/outline'
 
 interface LayoutProps {
@@ -4660,7 +4652,7 @@ const PrintReports: React.FC = () => {
   const tabs = [
     { id: 'generate', name: 'Generate Report', icon: DocumentIcon },
     { id: 'templates', name: 'Templates', icon: PrinterIcon },
-    { id: 'history', name: 'History', icon: DownloadIcon },
+    { id: 'history', name: 'History', icon: ArrowDownTrayIcon },
   ]
 
   return (
@@ -4709,7 +4701,7 @@ const PrintReports: React.FC = () => {
             )}
             {activeTab === 'history' && (
               <div className="text-center py-12">
-                <DownloadIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <ArrowDownTrayIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                 <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Report History</h3>
                 <p className="text-gray-600 dark:text-gray-400">Report history functionality will be implemented here</p>
               </div>
@@ -7786,8 +7778,8 @@ const ResultsPage: React.FC = () => {
 
   const getRankIcon = (rank: number) => {
     if (rank === 1) return <TrophyIcon className="h-6 w-6 text-yellow-500" />
-    if (rank === 2) return <MedalIcon className="h-6 w-6 text-gray-400" />
-    if (rank === 3) return <MedalIcon className="h-6 w-6 text-amber-600" />
+    if (rank === 2) return <TrophyIcon className="h-6 w-6 text-gray-400" />
+    if (rank === 3) return <TrophyIcon className="h-6 w-6 text-amber-600" />
     return <span className="text-lg font-bold text-gray-600 dark:text-gray-400">#{rank}</span>
   }
 
@@ -9566,7 +9558,7 @@ const SettingsPage: React.FC = () => {
                     className="btn-outline"
                     disabled={isTesting}
                   >
-                    <DatabaseIcon className="h-5 w-5 mr-2" />
+                    <CircleStackIcon className="h-5 w-5 mr-2" />
                     Test Database Connection
                   </button>
                   {testResults.database && (
@@ -12461,7 +12453,8 @@ import {
   CheckCircleIcon,
   ClockIcon,
   XCircleIcon,
-  InformationCircleIcon
+  InformationCircleIcon,
+  ArrowDownTrayIcon
 } from '@heroicons/react/24/outline'
 import { format } from 'date-fns'
 
@@ -12917,7 +12910,7 @@ const ReportsPage: React.FC = () => {
                                   <EyeIcon className="h-4 w-4" />
                                 </button>
                                 <button className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300">
-                                  <DownloadIcon className="h-4 w-4" />
+                                  <ArrowDownTrayIcon className="h-4 w-4" />
                                 </button>
                                 <button className="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-300">
                                   <PrinterIcon className="h-4 w-4" />
@@ -13466,7 +13459,9 @@ import {
   ArrowTrendingDownIcon,
   LockClosedIcon,
   KeyIcon,
-  ExclamationCircleIcon
+  ExclamationCircleIcon,
+  CalculatorIcon,
+  PencilSquareIcon
 } from '@heroicons/react/24/outline'
 import { format } from 'date-fns'
 
@@ -13782,7 +13777,7 @@ const AuditorPage: React.FC = () => {
       case 'SCORE_SUBMITTED':
         return <DocumentTextIcon className="h-5 w-5 text-blue-500" />
       case 'SCORE_MODIFIED':
-        return <PencilIcon className="h-5 w-5 text-orange-500" />
+        return <PencilSquareIcon className="h-5 w-5 text-orange-500" />
       case 'CERTIFICATION_REQUESTED':
         return <AcademicCapIcon className="h-5 w-5 text-purple-500" />
       case 'CERTIFICATION_APPROVED':
