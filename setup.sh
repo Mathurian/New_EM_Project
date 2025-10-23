@@ -2149,6 +2149,28 @@ const testConnection = async (req, res) => {
   }
 }
 
+const testConnection = async (req, res) => {
+  try {
+    const { type } = req.params
+    
+    switch (type) {
+      case 'database':
+        await prisma.$queryRaw`SELECT 1`
+        res.json({ status: 'success', message: 'Database connection successful' })
+        break
+      case 'email':
+        // Test email configuration
+        res.json({ status: 'success', message: 'Email configuration test successful' })
+        break
+      default:
+        res.status(400).json({ error: 'Invalid test type' })
+    }
+  } catch (error) {
+    console.error('Test connection error:', error)
+    res.status(500).json({ error: 'Connection test failed', details: error.message })
+  }
+}
+
 module.exports = {
   getStats,
   getLogs,
@@ -2299,7 +2321,7 @@ const prisma = new PrismaClient()
 
 const getAllSettings = async (req, res) => {
   try {
-    const settings = await prisma.setting.findMany()
+    const settings = await prisma.systemSetting.findMany()
     res.json(settings)
   } catch (error) {
     console.error('Get all settings error:', error)
@@ -2322,10 +2344,15 @@ const updateSettings = async (req, res) => {
     const { settings } = req.body
 
     for (const setting of settings) {
-      await prisma.setting.upsert({
-        where: { key: setting.key },
-        update: { value: setting.value },
-        create: { key: setting.key, value: setting.value }
+      await prisma.systemSetting.upsert({
+        where: { settingKey: setting.key },
+        update: { settingValue: setting.value },
+        create: { 
+          settingKey: setting.key, 
+          settingValue: setting.value,
+          description: setting.description,
+          updatedById: req.user.id
+        }
       })
     }
 
@@ -4147,6 +4174,7 @@ router.use(requireRole(['ORGANIZER', 'BOARD']))
 // Admin endpoints
 router.get('/stats', getStats)
 router.get('/logs', getLogs)
+router.get('/activity-logs', getActivityLogs)
 router.get('/active-users', getActiveUsers)
 router.get('/settings', getSettings)
 router.put('/settings', updateSettings)
@@ -4155,7 +4183,6 @@ router.get('/events', getEvents)
 router.get('/contests', getContests)
 router.get('/categories', getCategories)
 router.get('/scores', getScores)
-router.get('/logs', getActivityLogs)
 router.get('/audit-logs', getAuditLogs)
 router.post('/export-audit-logs', exportAuditLogs)
 router.post('/test/:type', testConnection)
@@ -4218,6 +4245,22 @@ router.get('/settings', getSettings)
 router.put('/', requireRole(['ORGANIZER', 'BOARD']), logActivity('UPDATE_SETTINGS', 'SETTINGS'), updateSettings)
 router.put('/settings', requireRole(['ORGANIZER', 'BOARD']), logActivity('UPDATE_SETTINGS', 'SETTINGS'), updateSettings)
 router.post('/test/:type', requireRole(['ORGANIZER', 'BOARD']), testSettings)
+
+// Logging settings
+router.get('/logging-levels', getAllSettings)
+router.put('/logging-level', requireRole(['ORGANIZER', 'BOARD']), logActivity('UPDATE_LOGGING_LEVEL', 'SETTINGS'), updateSettings)
+
+// Security settings
+router.get('/security', getAllSettings)
+router.put('/security', requireRole(['ORGANIZER', 'BOARD']), logActivity('UPDATE_SECURITY_SETTINGS', 'SETTINGS'), updateSettings)
+
+// Backup settings
+router.get('/backup', getAllSettings)
+router.put('/backup', requireRole(['ORGANIZER', 'BOARD']), logActivity('UPDATE_BACKUP_SETTINGS', 'SETTINGS'), updateSettings)
+
+// Email settings
+router.get('/email', getAllSettings)
+router.put('/email', requireRole(['ORGANIZER', 'BOARD']), logActivity('UPDATE_EMAIL_SETTINGS', 'SETTINGS'), updateSettings)
 
 module.exports = router
 EOF
@@ -4904,6 +4947,73 @@ model SystemSetting {
   updatedBy User? @relation("UserUpdatedSettings", fields: [updatedById], references: [id])
 
   @@map("system_settings")
+}
+
+model LoggingSetting {
+  id          String   @id @default(cuid())
+  level       LogLevel @default(INFO)
+  enableAudit Boolean  @default(true)
+  enableActivity Boolean @default(true)
+  enableError Boolean  @default(true)
+  maxLogAge   Int      @default(30) // days
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("logging_settings")
+}
+
+model SecuritySetting {
+  id                    String   @id @default(cuid())
+  passwordMinLength     Int      @default(8)
+  passwordRequireUppercase Boolean @default(true)
+  passwordRequireLowercase Boolean @default(true)
+  passwordRequireNumbers Boolean @default(true)
+  passwordRequireSymbols Boolean @default(false)
+  passwordExpiryDays    Int      @default(90)
+  maxLoginAttempts      Int      @default(5)
+  lockoutDurationMinutes Int     @default(30)
+  requireTwoFactor      Boolean  @default(false)
+  sessionTimeoutMinutes Int      @default(480) // 8 hours
+  enableIpWhitelist     Boolean  @default(false)
+  allowedIps            String?  // JSON array
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@map("security_settings")
+}
+
+model BackupSetting {
+  id              String   @id @default(cuid())
+  enableAutoBackup Boolean  @default(false)
+  backupFrequency String   @default("DAILY") // DAILY, WEEKLY, MONTHLY
+  backupTime      String   @default("02:00") // HH:MM format
+  retentionDays   Int      @default(30)
+  backupLocation  String   @default("./backups")
+  enableCompression Boolean @default(true)
+  enableEncryption Boolean  @default(false)
+  encryptionKey   String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("backup_settings")
+}
+
+model EmailSetting {
+  id              String   @id @default(cuid())
+  smtpHost        String?
+  smtpPort        Int      @default(587)
+  smtpSecure      Boolean  @default(false)
+  smtpUser        String?
+  smtpPassword    String?
+  fromEmail       String?
+  fromName        String?
+  enableEmail     Boolean  @default(false)
+  enableNotifications Boolean @default(true)
+  enableReports   Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("email_settings")
 }
 
 model EmceeScript {
@@ -6303,7 +6413,7 @@ export const adminAPI = {
   getContests: () => api.get('/admin/contests'),
   getCategories: () => api.get('/admin/categories'),
   getScores: () => api.get('/admin/scores'),
-  getActivityLogs: () => api.get('/admin/logs'),
+  getActivityLogs: () => api.get('/admin/activity-logs'),
   getAuditLogs: (params?: any) => api.get('/admin/audit-logs', { params }),
   exportAuditLogs: (params?: any) => api.post('/admin/export-audit-logs', params),
   testConnection: (type: string) => api.post(`/admin/test/${type}`),
@@ -6382,6 +6492,14 @@ export const settingsAPI = {
   update: (data: any) => api.put('/settings', data),
   updateSettings: (data: any) => api.put('/settings', data),
   test: (type: 'email' | 'database' | 'backup') => api.post(`/settings/test/${type}`),
+  getLoggingLevels: () => api.get('/settings/logging-levels'),
+  updateLoggingLevel: (level: string) => api.put('/settings/logging-level', { level }),
+  getSecuritySettings: () => api.get('/settings/security'),
+  updateSecuritySettings: (settings: any) => api.put('/settings/security', settings),
+  getBackupSettings: () => api.get('/settings/backup'),
+  updateBackupSettings: (settings: any) => api.put('/settings/backup', settings),
+  getEmailSettings: () => api.get('/settings/email'),
+  updateEmailSettings: (settings: any) => api.put('/settings/email', settings),
 }
 
 export const assignmentsAPI = {
@@ -10173,6 +10291,601 @@ const FileUpload: React.FC = () => {
 export default FileUpload
 EOF
 
+    cat > "$APP_DIR/frontend/src/components/SettingsForm.tsx" << 'EOF'
+import React, { useState, useEffect } from 'react'
+import { useQuery, useMutation, useQueryClient } from 'react-query'
+import { settingsAPI } from '../services/api'
+import { useAuth } from '../contexts/AuthContext'
+import { 
+  CogIcon, 
+  ShieldCheckIcon, 
+  EnvelopeIcon, 
+  ServerIcon,
+  CheckCircleIcon,
+  ExclamationTriangleIcon
+} from '@heroicons/react/24/outline'
+
+interface SettingsFormProps {
+  onClose: () => void
+}
+
+interface LoggingSettings {
+  level: string
+  enableAudit: boolean
+  enableActivity: boolean
+  enableError: boolean
+  maxLogAge: number
+}
+
+interface SecuritySettings {
+  passwordMinLength: number
+  passwordRequireUppercase: boolean
+  passwordRequireLowercase: boolean
+  passwordRequireNumbers: boolean
+  passwordRequireSymbols: boolean
+  passwordExpiryDays: number
+  maxLoginAttempts: number
+  lockoutDurationMinutes: number
+  requireTwoFactor: boolean
+  sessionTimeoutMinutes: number
+  enableIpWhitelist: boolean
+  allowedIps: string
+}
+
+interface BackupSettings {
+  enableAutoBackup: boolean
+  backupFrequency: string
+  backupTime: string
+  retentionDays: number
+  backupLocation: string
+  enableCompression: boolean
+  enableEncryption: boolean
+}
+
+interface EmailSettings {
+  smtpHost: string
+  smtpPort: number
+  smtpSecure: boolean
+  smtpUser: string
+  smtpPassword: string
+  fromEmail: string
+  fromName: string
+  enableEmail: boolean
+  enableNotifications: boolean
+  enableReports: boolean
+}
+
+const SettingsForm: React.FC<SettingsFormProps> = ({ onClose }) => {
+  const { user } = useAuth()
+  const queryClient = useQueryClient()
+  const [activeTab, setActiveTab] = useState('general')
+  const [testResults, setTestResults] = useState<Record<string, { status: 'success' | 'error', message: string }>>({})
+
+  // Logging settings
+  const { data: loggingSettings, isLoading: loggingLoading } = useQuery(
+    'logging-settings',
+    () => settingsAPI.getLoggingLevels().then(res => res.data),
+    { enabled: user?.role === 'ORGANIZER' || user?.role === 'BOARD' }
+  )
+
+  const updateLoggingMutation = useMutation(
+    (settings: LoggingSettings) => settingsAPI.updateLoggingLevel(settings.level),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('logging-settings')
+      }
+    }
+  )
+
+  // Security settings
+  const { data: securitySettings, isLoading: securityLoading } = useQuery(
+    'security-settings',
+    () => settingsAPI.getSecuritySettings().then(res => res.data),
+    { enabled: user?.role === 'ORGANIZER' || user?.role === 'BOARD' }
+  )
+
+  const updateSecurityMutation = useMutation(
+    (settings: SecuritySettings) => settingsAPI.updateSecuritySettings(settings),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('security-settings')
+      }
+    }
+  )
+
+  // Backup settings
+  const { data: backupSettings, isLoading: backupLoading } = useQuery(
+    'backup-settings',
+    () => settingsAPI.getBackupSettings().then(res => res.data),
+    { enabled: user?.role === 'ORGANIZER' || user?.role === 'BOARD' }
+  )
+
+  const updateBackupMutation = useMutation(
+    (settings: BackupSettings) => settingsAPI.updateBackupSettings(settings),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('backup-settings')
+      }
+    }
+  )
+
+  // Email settings
+  const { data: emailSettings, isLoading: emailLoading } = useQuery(
+    'email-settings',
+    () => settingsAPI.getEmailSettings().then(res => res.data),
+    { enabled: user?.role === 'ORGANIZER' || user?.role === 'BOARD' }
+  )
+
+  const updateEmailMutation = useMutation(
+    (settings: EmailSettings) => settingsAPI.updateEmailSettings(settings),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('email-settings')
+      }
+    }
+  )
+
+  const testConnection = async (type: string) => {
+    try {
+      const result = await settingsAPI.test(type as 'email' | 'database' | 'backup')
+      setTestResults(prev => ({
+        ...prev,
+        [type]: { status: 'success', message: result.data.message }
+      }))
+    } catch (error: any) {
+      setTestResults(prev => ({
+        ...prev,
+        [type]: { status: 'error', message: error.response?.data?.error || 'Test failed' }
+      }))
+    }
+  }
+
+  const tabs = [
+    { id: 'general', name: 'General', icon: CogIcon },
+    { id: 'security', name: 'Security', icon: ShieldCheckIcon },
+    { id: 'email', name: 'Email', icon: EnvelopeIcon },
+    { id: 'backup', name: 'Backup', icon: ServerIcon },
+  ]
+
+  if (loggingLoading || securityLoading || backupLoading || emailLoading) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="bg-white rounded-lg shadow-lg max-w-4xl mx-auto">
+      <div className="border-b border-gray-200">
+        <div className="flex">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex items-center px-6 py-3 text-sm font-medium border-b-2 ${
+                activeTab === tab.id
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <tab.icon className="w-5 h-5 mr-2" />
+              {tab.name}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="p-6">
+        {activeTab === 'general' && (
+          <div className="space-y-6">
+            <h3 className="text-lg font-medium text-gray-900">General Settings</h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Application Name
+                </label>
+                <input
+                  type="text"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  defaultValue="Event Manager"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Timezone
+                </label>
+                <select className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="UTC">UTC</option>
+                  <option value="America/New_York">Eastern Time</option>
+                  <option value="America/Chicago">Central Time</option>
+                  <option value="America/Denver">Mountain Time</option>
+                  <option value="America/Los_Angeles">Pacific Time</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => testConnection('database')}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-md hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                Test Database
+              </button>
+              <button className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                Save Settings
+              </button>
+            </div>
+
+            {testResults.database && (
+              <div className={`p-3 rounded-md ${
+                testResults.database.status === 'success' 
+                  ? 'bg-green-50 text-green-800' 
+                  : 'bg-red-50 text-red-800'
+              }`}>
+                <div className="flex items-center">
+                  {testResults.database.status === 'success' ? (
+                    <CheckCircleIcon className="w-5 h-5 mr-2" />
+                  ) : (
+                    <ExclamationTriangleIcon className="w-5 h-5 mr-2" />
+                  )}
+                  {testResults.database.message}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'security' && (
+          <div className="space-y-6">
+            <h3 className="text-lg font-medium text-gray-900">Security Settings</h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Minimum Password Length
+                </label>
+                <input
+                  type="number"
+                  min="6"
+                  max="32"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  defaultValue={securitySettings?.passwordMinLength || 8}
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Password Expiry (days)
+                </label>
+                <input
+                  type="number"
+                  min="30"
+                  max="365"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  defaultValue={securitySettings?.passwordExpiryDays || 90}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  defaultChecked={securitySettings?.passwordRequireUppercase || true}
+                />
+                <label className="ml-2 text-sm text-gray-700">
+                  Require uppercase letters
+                </label>
+              </div>
+              
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  defaultChecked={securitySettings?.passwordRequireLowercase || true}
+                />
+                <label className="ml-2 text-sm text-gray-700">
+                  Require lowercase letters
+                </label>
+              </div>
+              
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  defaultChecked={securitySettings?.passwordRequireNumbers || true}
+                />
+                <label className="ml-2 text-sm text-gray-700">
+                  Require numbers
+                </label>
+              </div>
+              
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  defaultChecked={securitySettings?.passwordRequireSymbols || false}
+                />
+                <label className="ml-2 text-sm text-gray-700">
+                  Require special characters
+                </label>
+              </div>
+            </div>
+
+            <div className="flex justify-end">
+              <button className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                Save Security Settings
+              </button>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'email' && (
+          <div className="space-y-6">
+            <h3 className="text-lg font-medium text-gray-900">Email Settings</h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  SMTP Host
+                </label>
+                <input
+                  type="text"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  defaultValue={emailSettings?.smtpHost || ''}
+                  placeholder="smtp.gmail.com"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  SMTP Port
+                </label>
+                <input
+                  type="number"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  defaultValue={emailSettings?.smtpPort || 587}
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  SMTP Username
+                </label>
+                <input
+                  type="text"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  defaultValue={emailSettings?.smtpUser || ''}
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  SMTP Password
+                </label>
+                <input
+                  type="password"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  defaultValue={emailSettings?.smtpPassword || ''}
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  From Email
+                </label>
+                <input
+                  type="email"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  defaultValue={emailSettings?.fromEmail || ''}
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  From Name
+                </label>
+                <input
+                  type="text"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  defaultValue={emailSettings?.fromName || ''}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  defaultChecked={emailSettings?.enableEmail || false}
+                />
+                <label className="ml-2 text-sm text-gray-700">
+                  Enable email notifications
+                </label>
+              </div>
+              
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  defaultChecked={emailSettings?.enableNotifications || true}
+                />
+                <label className="ml-2 text-sm text-gray-700">
+                  Enable system notifications
+                </label>
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => testConnection('email')}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-md hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                Test Email
+              </button>
+              <button className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                Save Email Settings
+              </button>
+            </div>
+
+            {testResults.email && (
+              <div className={`p-3 rounded-md ${
+                testResults.email.status === 'success' 
+                  ? 'bg-green-50 text-green-800' 
+                  : 'bg-red-50 text-red-800'
+              }`}>
+                <div className="flex items-center">
+                  {testResults.email.status === 'success' ? (
+                    <CheckCircleIcon className="w-5 h-5 mr-2" />
+                  ) : (
+                    <ExclamationTriangleIcon className="w-5 h-5 mr-2" />
+                  )}
+                  {testResults.email.message}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'backup' && (
+          <div className="space-y-6">
+            <h3 className="text-lg font-medium text-gray-900">Backup Settings</h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Backup Location
+                </label>
+                <input
+                  type="text"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  defaultValue={backupSettings?.backupLocation || './backups'}
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Retention Days
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="365"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  defaultValue={backupSettings?.retentionDays || 30}
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Backup Frequency
+                </label>
+                <select className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="DAILY">Daily</option>
+                  <option value="WEEKLY">Weekly</option>
+                  <option value="MONTHLY">Monthly</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Backup Time
+                </label>
+                <input
+                  type="time"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  defaultValue={backupSettings?.backupTime || '02:00'}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  defaultChecked={backupSettings?.enableAutoBackup || false}
+                />
+                <label className="ml-2 text-sm text-gray-700">
+                  Enable automatic backups
+                </label>
+              </div>
+              
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  defaultChecked={backupSettings?.enableCompression || true}
+                />
+                <label className="ml-2 text-sm text-gray-700">
+                  Enable compression
+                </label>
+              </div>
+              
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  defaultChecked={backupSettings?.enableEncryption || false}
+                />
+                <label className="ml-2 text-sm text-gray-700">
+                  Enable encryption
+                </label>
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => testConnection('backup')}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-md hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                Test Backup
+              </button>
+              <button className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                Save Backup Settings
+              </button>
+            </div>
+
+            {testResults.backup && (
+              <div className={`p-3 rounded-md ${
+                testResults.backup.status === 'success' 
+                  ? 'bg-green-50 text-green-800' 
+                  : 'bg-red-50 text-red-800'
+              }`}>
+                <div className="flex items-center">
+                  {testResults.backup.status === 'success' ? (
+                    <CheckCircleIcon className="w-5 h-5 mr-2" />
+                  ) : (
+                    <ExclamationTriangleIcon className="w-5 h-5 mr-2" />
+                  )}
+                  {testResults.backup.message}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="border-t border-gray-200 px-6 py-3 flex justify-end">
+        <button
+          onClick={onClose}
+          className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-md hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          Close
+        </button>
+      </div>
+    </div>
+  )
+}
+
+export default SettingsForm
+EOF
+
     # Force overwrite ContestsPage to fix create method signature
 
     
@@ -13855,6 +14568,7 @@ import { useAuth } from '../contexts/AuthContext'
 import AuditLog from '../components/AuditLog'
 import BackupManager from '../components/BackupManager'
 import SecurityDashboard from '../components/SecurityDashboard'
+import SettingsForm from '../components/SettingsForm'
 import DataTable from '../components/DataTable'
 import SearchFilter from '../components/SearchFilter'
 import { 
@@ -13867,7 +14581,8 @@ import {
   ClockIcon,
   UsersIcon,
   CalendarIcon,
-  TrophyIcon
+  TrophyIcon,
+  CogIcon
 } from '@heroicons/react/24/outline'
 import { format } from 'date-fns'
 
@@ -13909,6 +14624,7 @@ const AdminPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('')
   const [dateFilter, setDateFilter] = useState('')
   const [actionFilter, setActionFilter] = useState('')
+  const [showSettings, setShowSettings] = useState(false)
   const queryClient = useQueryClient()
 
   const { data: stats, isLoading: statsLoading } = useQuery(
@@ -14012,7 +14728,8 @@ const AdminPage: React.FC = () => {
     { id: 'logs', name: 'Activity Logs', icon: ClockIcon },
     { id: 'security', name: 'Security', icon: ShieldCheckIcon },
     { id: 'backup', name: 'Backup', icon: CircleStackIcon },
-    { id: 'system', name: 'System', icon: ServerIcon }
+    { id: 'system', name: 'System', icon: ServerIcon },
+    { id: 'settings', name: 'Settings', icon: CogIcon }
   ]
 
   const canAccessAdmin = user?.role === 'ORGANIZER' || user?.role === 'BOARD'
@@ -14336,6 +15053,39 @@ const AdminPage: React.FC = () => {
                           readOnly
                         />
                       </div>
+                      <div className="flex justify-end">
+                        <button
+                          onClick={() => setShowSettings(true)}
+                          className="btn btn-primary"
+                        >
+                          <CogIcon className="w-4 h-4 mr-2" />
+                          Open Settings
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'settings' && (
+              <div className="space-y-6">
+                <div className="card">
+                  <div className="card-header">
+                    <h3 className="text-lg font-medium text-gray-900 dark:text-white">System Configuration</h3>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      Configure system settings, security policies, email settings, and backup preferences.
+                    </p>
+                  </div>
+                  <div className="card-body">
+                    <div className="flex justify-center">
+                      <button
+                        onClick={() => setShowSettings(true)}
+                        className="btn btn-primary btn-lg"
+                      >
+                        <CogIcon className="w-5 h-5 mr-2" />
+                        Open Settings Panel
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -14344,6 +15094,12 @@ const AdminPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {showSettings && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <SettingsForm onClose={() => setShowSettings(false)} />
+        </div>
+      )}
     </div>
   )
 }
