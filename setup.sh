@@ -25011,7 +25011,7 @@ import { useAuth } from '../contexts/AuthContext'
 import DataTable from '../components/DataTable'
 import SearchFilter from '../components/SearchFilter'
 import ArchiveManager from '../components/ArchiveManager'
-import { PlusIcon, PencilIcon, TrashIcon, ArchiveBoxIcon, EyeIcon } from '@heroicons/react/24/outline'
+import { PlusIcon, PencilIcon, TrashIcon, ArchiveBoxIcon, EyeIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import { format } from 'date-fns'
 
 interface Event {
@@ -26439,7 +26439,7 @@ import { useAuth } from '../contexts/AuthContext'
 import DataTable from '../components/DataTable'
 import SearchFilter from '../components/SearchFilter'
 import PrintReports from '../components/PrintReports'
-import { TrophyIcon, StarIcon, PrinterIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline'
+import { TrophyIcon, StarIcon, PrinterIcon, ArrowDownTrayIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import { format } from 'date-fns'
 
 interface Result {
@@ -26845,7 +26845,7 @@ import { usersAPI, adminAPI } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 import DataTable from '../components/DataTable'
 import SearchFilter from '../components/SearchFilter'
-import { PlusIcon, PencilIcon, TrashIcon, UserIcon, ShieldCheckIcon, KeyIcon } from '@heroicons/react/24/outline'
+import { PlusIcon, PencilIcon, TrashIcon, UserIcon, ShieldCheckIcon, KeyIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import { format } from 'date-fns'
 
 interface User {
@@ -26854,6 +26854,9 @@ interface User {
   email: string
   role: 'ORGANIZER' | 'BOARD' | 'JUDGE' | 'TALLY_MASTER' | 'AUDITOR' | 'CONTESTANT'
   status: 'ACTIVE' | 'INACTIVE' | 'PENDING'
+  preferredName?: string
+  pronouns?: string
+  phone?: string
   createdAt: string
   updatedAt: string
   lastLoginAt?: string
@@ -34902,7 +34905,7 @@ const WinnersPage: React.FC = () => {
               className="input"
             >
               <option value="">Select Event</option>
-              {events.map((event: any) => (
+              {events.data?.map((event: any) => (
                 <option key={event.id} value={event.id}>{event.name}</option>
               ))}
             </select>
@@ -34920,7 +34923,7 @@ const WinnersPage: React.FC = () => {
               disabled={!selectedEvent}
             >
               <option value="">Select Contest</option>
-              {contests.map((contest: any) => (
+              {contests.data?.map((contest: any) => (
                 <option key={contest.id} value={contest.id}>{contest.name}</option>
               ))}
             </select>
@@ -34936,7 +34939,7 @@ const WinnersPage: React.FC = () => {
                 disabled={!selectedContest}
               >
                 <option value="">Select Category</option>
-                {categories.map((category: any) => (
+                {categories.data?.map((category: any) => (
                   <option key={category.id} value={category.id}>{category.name}</option>
                 ))}
               </select>
