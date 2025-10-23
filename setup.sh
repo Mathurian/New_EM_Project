@@ -18423,8 +18423,7 @@ EOF
     "csv-writer": "^1.6.0",
     "xml2js": "^0.6.2",
     "pdfkit": "^0.14.0",
-    "jspdf": "^2.5.1",
-    "html-pdf-node": "^1.0.8"
+    "jspdf": "^2.5.1"
   },
   "overrides": {
     "glob": "^10.3.10",
@@ -18436,7 +18435,6 @@ EOF
     "npmlog": "npm:winston@^3.11.0",
     "supertest": "^7.1.3",
     "superagent": "^10.2.2",
-    "html-pdf-node": "npm:playwright@^1.40.0",
     "@humanwhocodes/object-schema": "npm:@eslint/object-schema@^0.1.0",
     "@humanwhocodes/config-array": "npm:@eslint/config-array@^0.18.0",
     "eslint": "^9.0.0",
