@@ -4306,7 +4306,7 @@ EOF
     # Email Routes
     cat > "$APP_DIR/src/routes/emailRoutes.js" << 'EOF'
 const express = require('express')
-const { getTemplates, sendEmail, sendCampaign, getLogs } = require('../controllers/emailController')
+const { getTemplates, createTemplate, updateTemplate, deleteTemplate, getCampaigns, createCampaign, sendCampaign, getLogs } = require('../controllers/emailController')
 const { authenticateToken, requireRole } = require('../middleware/auth')
 const { logActivity } = require('../middleware/errorHandler')
 
@@ -4317,8 +4317,12 @@ router.use(authenticateToken)
 
 // Email endpoints
 router.get('/templates', getTemplates)
-router.post('/send', requireRole(['ORGANIZER', 'BOARD']), logActivity('SEND_EMAIL', 'EMAIL'), sendEmail)
-router.post('/campaign', requireRole(['ORGANIZER', 'BOARD']), logActivity('SEND_CAMPAIGN', 'EMAIL'), sendCampaign)
+router.post('/templates', requireRole(['ORGANIZER', 'BOARD']), logActivity('CREATE_EMAIL_TEMPLATE', 'EMAIL'), createTemplate)
+router.put('/templates/:id', requireRole(['ORGANIZER', 'BOARD']), logActivity('UPDATE_EMAIL_TEMPLATE', 'EMAIL'), updateTemplate)
+router.delete('/templates/:id', requireRole(['ORGANIZER', 'BOARD']), logActivity('DELETE_EMAIL_TEMPLATE', 'EMAIL'), deleteTemplate)
+router.get('/campaigns', getCampaigns)
+router.post('/campaigns', requireRole(['ORGANIZER', 'BOARD']), logActivity('CREATE_EMAIL_CAMPAIGN', 'EMAIL'), createCampaign)
+router.post('/campaigns/:id/send', requireRole(['ORGANIZER', 'BOARD']), logActivity('SEND_CAMPAIGN', 'EMAIL'), sendCampaign)
 router.get('/logs', getLogs)
 
 module.exports = router
