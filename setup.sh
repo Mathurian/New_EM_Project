@@ -114,10 +114,10 @@ safe_npm_install() {
     print_status "Cleaning up problematic modules..."
     rm -rf node_modules package-lock.json 2>/dev/null || true
     
-    # Strategy 0: Fix node-pre-gyp compatibility and install canvas system dependencies
+    # Install system dependencies for native modules (useful for various packages)
     if [[ "$install_type" == "backend" ]]; then
-        print_status "Installing ALL canvas system dependencies..."
-        # Install ALL required system dependencies for canvas (from GitHub guide)
+        print_status "Installing system dependencies for native modules..."
+        # Install system dependencies that may be needed for various native modules
         sudo apt-get update -qq
         sudo apt-get install -y \
             build-essential \
@@ -150,43 +150,12 @@ safe_npm_install() {
             make \
             2>/dev/null || true
         
-        # Verify canvas dependencies are installed
-        print_status "Verifying canvas dependencies..."
+        # Verify key dependencies are installed
+        print_status "Verifying system dependencies..."
         if dpkg -l | grep -q libcairo2-dev && dpkg -l | grep -q libpango1.0-dev; then
-            print_success "Canvas system dependencies installed successfully"
+            print_success "System dependencies installed successfully"
         else
-            print_warning "Some canvas dependencies may not be installed properly"
-        fi
-        
-        # Fix node-pre-gyp compatibility with Node.js v20.19.5
-        print_status "Fixing node-pre-gyp compatibility for canvas module..."
-        
-        # Strategy 1: Try installing canvas with build-from-source flag
-        print_status "Attempting canvas installation with build-from-source..."
-        if npm install canvas 2>/dev/null; then
-            print_success "Canvas installed successfully"
-        else
-                print_warning "Canvas installation failed - will try alternative approach"
-            fi
-        
-        # Verify canvas can be imported after system dependencies are installed
-        print_status "Testing canvas module compatibility..."
-        if node -e "console.log('Canvas test:', require('canvas').version)" 2>/dev/null; then
-            print_success "Canvas module is working correctly"
-        else
-            print_warning "Canvas module may need additional configuration"
-        fi
-        
-        # Strategy 5: If canvas still fails, remove it from package.json as it's not critical
-        print_status "Final canvas compatibility check..."
-        if ! node -e "console.log('Canvas test:', require('canvas').version)" 2>/dev/null; then
-            print_warning "Canvas module installation failed - removing from dependencies"
-            print_status "Canvas is not critical for core functionality, continuing without it..."
-            # Remove canvas from package.json if it exists
-            if [ -f "package.json" ] && grep -q '"canvas"' package.json; then
-                sed -i '/"canvas"/d' package.json
-                print_status "Removed canvas from package.json dependencies"
-            fi
+            print_warning "Some system dependencies may not be installed properly"
         fi
     fi
     
@@ -228,20 +197,6 @@ safe_npm_install() {
     
     # Fix permissions for problematic modules
     if [[ "$install_type" == "backend" ]]; then
-        # Fix canvas module specifically
-        if [[ -d "node_modules/canvas" ]]; then
-            print_status "Fixing canvas module permissions..."
-            chmod -R 755 node_modules/canvas 2>/dev/null || true
-            rm -rf node_modules/canvas/build/Release 2>/dev/null || true
-            
-            # Try to rebuild canvas if it failed
-            if [[ ! -f "node_modules/canvas/build/Release/canvas.node" ]]; then
-                print_status "Attempting to rebuild canvas module..."
-                cd node_modules/canvas && npm run build 2>/dev/null || true
-                cd "$install_dir"
-            fi
-        fi
-        
         # Fix puppeteer/playwright permissions
         if [[ -d "node_modules/puppeteer" ]]; then
             chmod -R 755 node_modules/puppeteer 2>/dev/null || true
@@ -21387,24 +21342,11 @@ evaluate_setup_completeness() {
         ((issues_found++))
     fi
     
-    # Check for canvas module installation
-    if [[ -d "$APP_DIR/node_modules/canvas" ]]; then
-        if [[ -f "$APP_DIR/node_modules/canvas/build/Release/canvas.node" ]]; then
-            print_success "✓ Canvas module installed and built successfully"
-        else
-            print_warning "⚠ Canvas module installed but not built properly"
-            ((issues_found++))
-        fi
-    else
-        print_error "✗ Canvas module not installed"
-        ((issues_found++))
-    fi
-    
     # Check for npmlog dependency
     if [[ -d "$APP_DIR/node_modules/npmlog" ]]; then
         print_success "✓ npmlog dependency installed"
     else
-        print_warning "⚠ npmlog dependency missing (may cause canvas issues)"
+        print_warning "⚠ npmlog dependency missing (may cause native module issues)"
         ((issues_found++))
     fi
     
