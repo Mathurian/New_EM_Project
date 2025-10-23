@@ -610,13 +610,833 @@ setup_application_directory() {
     print_success "Application directory created at $APP_DIR"
 }
 
+# Create modular middleware files
+create_middleware_files() {
+    print_status "Creating middleware files..."
+    
+    # Authentication middleware
+    cat > "$APP_DIR/src/middleware/auth.js" << 'EOF'
+const jwt = require('jsonwebtoken')
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
+
+const authenticateToken = async (req, res, next) => {
+  const authHeader = req.headers['authorization']
+  const token = authHeader && authHeader.split(' ')[1]
+
+  if (!token) {
+    return res.status(401).json({ error: 'Access token required' })
+  }
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET)
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId },
+      include: {
+        judge: true,
+        contestant: true
+      }
+    })
+
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid token' })
+    }
+
+    req.user = user
+    next()
+  } catch (error) {
+    return res.status(403).json({ error: 'Invalid or expired token' })
+  }
+}
+
+const requireRole = (roles) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' })
+    }
+
+    if (!roles.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Insufficient permissions' })
+    }
+
+    next()
+  }
+}
+
+module.exports = {
+  authenticateToken,
+  requireRole
+}
+EOF
+
+    # Rate limiting middleware
+    cat > "$APP_DIR/src/middleware/rateLimiting.js" << 'EOF'
+const rateLimit = require('express-rate-limit')
+
+// General API rate limiter
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5000, // 5000 requests per 15 minutes
+  standardHeaders: true,
+  legacyHeaders: false,
+  trustProxy: true,
+  skip: (req) => {
+    return req.path === '/health' || 
+           req.path.startsWith('/api/auth/') ||
+           req.path.startsWith('/api/admin/')
+  },
+  keyGenerator: (req) => {
+    return req.ip || req.connection.remoteAddress
+  }
+})
+
+// Auth endpoints rate limiter
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10000, // 10000 requests per 15 minutes for auth
+  standardHeaders: true,
+  legacyHeaders: false,
+  trustProxy: true,
+  keyGenerator: (req) => {
+    return req.ip || req.connection.remoteAddress
+  }
+})
+
+module.exports = {
+  generalLimiter,
+  authLimiter
+}
+EOF
+
+    # Error handling middleware
+    cat > "$APP_DIR/src/middleware/errorHandler.js" << 'EOF'
+const logActivity = (action, resourceType = null, resourceId = null) => {
+  return async (req, res, next) => {
+    const originalSend = res.send
+    
+    res.send = function(data) {
+      // Log activity after response is sent
+      if (req.user && res.statusCode < 400) {
+        // Log to database asynchronously
+        setImmediate(async () => {
+          try {
+            await prisma.activityLog.create({
+              data: {
+                userId: req.user.id,
+                action: action,
+                resourceType: resourceType,
+                resourceId: resourceId,
+                ipAddress: req.ip || req.connection.remoteAddress,
+                userAgent: req.get('User-Agent') || 'Unknown',
+                details: {
+                  method: req.method,
+                  path: req.path,
+                  timestamp: new Date().toISOString()
+                }
+              }
+            })
+          } catch (error) {
+            console.error('Failed to log activity:', error)
+          }
+        })
+      }
+      
+      return originalSend.call(this, data)
+    }
+    
+    next()
+  }
+}
+
+const errorHandler = (err, req, res, next) => {
+  console.error('Error:', err)
+  
+  if (err.name === 'ValidationError') {
+    return res.status(400).json({ error: 'Validation error', details: err.message })
+  }
+  
+  if (err.name === 'UnauthorizedError') {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  
+  if (err.name === 'ForbiddenError') {
+    return res.status(403).json({ error: 'Forbidden' })
+  }
+  
+  if (err.name === 'NotFoundError') {
+    return res.status(404).json({ error: 'Not found' })
+  }
+  
+  res.status(500).json({ error: 'Internal server error' })
+}
+
+module.exports = {
+  logActivity,
+  errorHandler
+}
+EOF
+
+    # Validation middleware
+    cat > "$APP_DIR/src/middleware/validation.js" << 'EOF'
+const validateEvent = (req, res, next) => {
+  const { name, description, startDate, endDate, location, maxContestants } = req.body
+  
+  if (!name || !description || !startDate || !endDate || !location) {
+    return res.status(400).json({ error: 'Missing required fields' })
+  }
+  
+  if (new Date(startDate) >= new Date(endDate)) {
+    return res.status(400).json({ error: 'End date must be after start date' })
+  }
+  
+  if (maxContestants && maxContestants < 1) {
+    return res.status(400).json({ error: 'Max contestants must be at least 1' })
+  }
+  
+  next()
+}
+
+const validateContest = (req, res, next) => {
+  const { name, description, startDate, endDate, maxContestants, eventId } = req.body
+  
+  if (!name || !description || !startDate || !endDate || !eventId) {
+    return res.status(400).json({ error: 'Missing required fields' })
+  }
+  
+  if (new Date(startDate) >= new Date(endDate)) {
+    return res.status(400).json({ error: 'End date must be after start date' })
+  }
+  
+  if (maxContestants && maxContestants < 1) {
+    return res.status(400).json({ error: 'Max contestants must be at least 1' })
+  }
+  
+  next()
+}
+
+const validateCategory = (req, res, next) => {
+  const { name, description, maxScore, contestId } = req.body
+  
+  if (!name || !description || !maxScore || !contestId) {
+    return res.status(400).json({ error: 'Missing required fields' })
+  }
+  
+  if (maxScore < 1) {
+    return res.status(400).json({ error: 'Max score must be at least 1' })
+  }
+  
+  next()
+}
+
+const validateUser = (req, res, next) => {
+  const { name, email, role } = req.body
+  
+  if (!name || !email || !role) {
+    return res.status(400).json({ error: 'Missing required fields' })
+  }
+  
+  const validRoles = ['ORGANIZER', 'JUDGE', 'CONTESTANT', 'EMCEE', 'TALLY_MASTER', 'AUDITOR', 'BOARD']
+  if (!validRoles.includes(role)) {
+    return res.status(400).json({ error: 'Invalid role' })
+  }
+  
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  if (!emailRegex.test(email)) {
+    return res.status(400).json({ error: 'Invalid email format' })
+  }
+  
+  next()
+}
+
+module.exports = {
+  validateEvent,
+  validateContest,
+  validateCategory,
+  validateUser
+}
+EOF
+
+    print_success "Middleware files created successfully"
+}
+
+# Create modular controller files
+create_controller_files() {
+    print_status "Creating controller files..."
+    
+    # Auth Controller
+    cat > "$APP_DIR/src/controllers/authController.js" << 'EOF'
+const bcrypt = require('bcryptjs')
+const jwt = require('jsonwebtoken')
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
+
+const login = async (req, res) => {
+  try {
+    const { email, password } = req.body
+
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' })
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { email },
+      include: {
+        judge: true,
+        contestant: true
+      }
+    })
+
+    if (!user || !await bcrypt.compare(password, user.password)) {
+      return res.status(401).json({ error: 'Invalid credentials' })
+    }
+
+    const token = jwt.sign(
+      { userId: user.id, email: user.email, role: user.role },
+      JWT_SECRET,
+      { expiresIn: '24h' }
+    )
+
+    res.json({
+      token,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        judge: user.judge,
+        contestant: user.contestant
+      }
+    })
+  } catch (error) {
+    console.error('Login error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getProfile = async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      include: {
+        judge: true,
+        contestant: true
+      }
+    })
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' })
+    }
+
+    res.json({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      judge: user.judge,
+      contestant: user.contestant
+    })
+  } catch (error) {
+    console.error('Profile error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+module.exports = {
+  login,
+  getProfile
+}
+EOF
+
+    # Events Controller
+    cat > "$APP_DIR/src/controllers/eventsController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+const getAllEvents = async (req, res) => {
+  try {
+    const events = await prisma.event.findMany({
+      include: {
+        _count: {
+          select: {
+            contests: true,
+            contestants: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    res.json(events)
+  } catch (error) {
+    console.error('Get events error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getEventById = async (req, res) => {
+  try {
+    const { id } = req.params
+
+    const event = await prisma.event.findUnique({
+      where: { id },
+      include: {
+        contests: {
+          include: {
+            _count: {
+              select: {
+                categories: true,
+                contestants: true
+              }
+            }
+          }
+        },
+        _count: {
+          select: {
+            contests: true,
+            contestants: true
+          }
+        }
+      }
+    })
+
+    if (!event) {
+      return res.status(404).json({ error: 'Event not found' })
+    }
+
+    res.json(event)
+  } catch (error) {
+    console.error('Get event error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const createEvent = async (req, res) => {
+  try {
+    const { name, description, startDate, endDate, location, maxContestants } = req.body
+
+    const event = await prisma.event.create({
+      data: {
+        name,
+        description,
+        startDate: new Date(startDate),
+        endDate: new Date(endDate),
+        location,
+        maxContestants: maxContestants || null,
+        createdBy: req.user.id
+      }
+    })
+
+    res.status(201).json(event)
+  } catch (error) {
+    console.error('Create event error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const updateEvent = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { name, description, startDate, endDate, location, maxContestants } = req.body
+
+    const event = await prisma.event.update({
+      where: { id },
+      data: {
+        name,
+        description,
+        startDate: new Date(startDate),
+        endDate: new Date(endDate),
+        location,
+        maxContestants: maxContestants || null
+      }
+    })
+
+    res.json(event)
+  } catch (error) {
+    console.error('Update event error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const deleteEvent = async (req, res) => {
+  try {
+    const { id } = req.params
+
+    await prisma.event.delete({
+      where: { id }
+    })
+
+    res.status(204).send()
+  } catch (error) {
+    console.error('Delete event error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+module.exports = {
+  getAllEvents,
+  getEventById,
+  createEvent,
+  updateEvent,
+  deleteEvent
+}
+EOF
+
+    # Contests Controller
+    cat > "$APP_DIR/src/controllers/contestsController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+const getContestById = async (req, res) => {
+  try {
+    const { id } = req.params
+
+    const contest = await prisma.contest.findUnique({
+      where: { id },
+      include: {
+        event: true,
+        categories: {
+          include: {
+            _count: {
+              select: {
+                criteria: true,
+                contestants: true,
+                judges: true,
+                scores: true
+              }
+            }
+          }
+        },
+        _count: {
+          select: {
+            categories: true,
+            contestants: true
+          }
+        }
+      }
+    })
+
+    if (!contest) {
+      return res.status(404).json({ error: 'Contest not found' })
+    }
+
+    res.json(contest)
+  } catch (error) {
+    console.error('Get contest error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getContestsByEvent = async (req, res) => {
+  try {
+    const { eventId } = req.params
+
+    const contests = await prisma.contest.findMany({
+      where: { eventId },
+      include: {
+        _count: {
+          select: {
+            categories: true,
+            contestants: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    res.json(contests)
+  } catch (error) {
+    console.error('Get contests by event error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const createContest = async (req, res) => {
+  try {
+    const { eventId } = req.params
+    const { name, description, startDate, endDate, maxContestants } = req.body
+
+    const contest = await prisma.contest.create({
+      data: {
+        name,
+        description,
+        startDate: new Date(startDate),
+        endDate: new Date(endDate),
+        maxContestants: maxContestants || null,
+        eventId,
+        createdBy: req.user.id
+      }
+    })
+
+    res.status(201).json(contest)
+  } catch (error) {
+    console.error('Create contest error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const updateContest = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { name, description, startDate, endDate, maxContestants } = req.body
+
+    const contest = await prisma.contest.update({
+      where: { id },
+      data: {
+        name,
+        description,
+        startDate: new Date(startDate),
+        endDate: new Date(endDate),
+        maxContestants: maxContestants || null
+      }
+    })
+
+    res.json(contest)
+  } catch (error) {
+    console.error('Update contest error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const deleteContest = async (req, res) => {
+  try {
+    const { id } = req.params
+
+    await prisma.contest.delete({
+      where: { id }
+    })
+
+    res.status(204).send()
+  } catch (error) {
+    console.error('Delete contest error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+module.exports = {
+  getContestById,
+  getContestsByEvent,
+  createContest,
+  updateContest,
+  deleteContest
+}
+EOF
+
+    print_success "Controller files created successfully"
+}
+
+# Create modular route files
+create_route_files() {
+    print_status "Creating route files..."
+    
+    # Auth Routes
+    cat > "$APP_DIR/src/routes/authRoutes.js" << 'EOF'
+const express = require('express')
+const { login, getProfile } = require('../controllers/authController')
+const { authenticateToken } = require('../middleware/auth')
+const { authLimiter } = require('../middleware/rateLimiting')
+
+const router = express.Router()
+
+// Apply rate limiting to auth routes
+router.use(authLimiter)
+
+// Auth endpoints
+router.post('/login', login)
+router.get('/profile', authenticateToken, getProfile)
+
+module.exports = router
+EOF
+
+    # Events Routes
+    cat > "$APP_DIR/src/routes/eventsRoutes.js" << 'EOF'
+const express = require('express')
+const { getAllEvents, getEventById, createEvent, updateEvent, deleteEvent } = require('../controllers/eventsController')
+const { authenticateToken } = require('../middleware/auth')
+const { validateEvent } = require('../middleware/validation')
+const { logActivity } = require('../middleware/errorHandler')
+
+const router = express.Router()
+
+// Apply authentication to all routes
+router.use(authenticateToken)
+
+// Events endpoints
+router.get('/', getAllEvents)
+router.get('/:id', getEventById)
+router.post('/', validateEvent, logActivity('CREATE_EVENT', 'EVENT'), createEvent)
+router.put('/:id', validateEvent, logActivity('UPDATE_EVENT', 'EVENT'), updateEvent)
+router.delete('/:id', logActivity('DELETE_EVENT', 'EVENT'), deleteEvent)
+
+module.exports = router
+EOF
+
+    # Contests Routes
+    cat > "$APP_DIR/src/routes/contestsRoutes.js" << 'EOF'
+const express = require('express')
+const { getContestById, getContestsByEvent, createContest, updateContest, deleteContest } = require('../controllers/contestsController')
+const { authenticateToken } = require('../middleware/auth')
+const { validateContest } = require('../middleware/validation')
+const { logActivity } = require('../middleware/errorHandler')
+
+const router = express.Router()
+
+// Apply authentication to all routes
+router.use(authenticateToken)
+
+// Contests endpoints
+router.get('/event/:eventId', getContestsByEvent)
+router.get('/:id', getContestById)
+router.post('/event/:eventId', validateContest, logActivity('CREATE_CONTEST', 'CONTEST'), createContest)
+router.put('/:id', validateContest, logActivity('UPDATE_CONTEST', 'CONTEST'), updateContest)
+router.delete('/:id', logActivity('DELETE_CONTEST', 'CONTEST'), deleteContest)
+
+module.exports = router
+EOF
+
+    print_success "Route files created successfully"
+}
+
+# Create modular server.js
+create_modular_server() {
+    print_status "Creating modular server.js..."
+    
+    cat > "$APP_DIR/src/server.js" << 'EOF'
+const express = require('express')
+const cors = require('cors')
+const helmet = require('helmet')
+const morgan = require('morgan')
+const compression = require('compression')
+const { Server } = require('socket.io')
+const http = require('http')
+const { PrismaClient } = require('@prisma/client')
+
+// Import middleware
+const { generalLimiter, authLimiter } = require('./middleware/rateLimiting')
+const { errorHandler } = require('./middleware/errorHandler')
+
+// Import routes
+const authRoutes = require('./routes/authRoutes')
+const eventsRoutes = require('./routes/eventsRoutes')
+const contestsRoutes = require('./routes/contestsRoutes')
+
+const app = express()
+const server = http.createServer(app)
+const prisma = new PrismaClient()
+const PORT = process.env.PORT || 3000
+
+// Socket.IO setup
+const io = new Server(server, {
+  cors: {
+    origin: function (origin, callback) {
+      if (!origin) return callback(null, true)
+      if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
+        return callback(null, true)
+      }
+      if (origin.match(/^https?:\/\/\d+\.\d+\.\d+\.\d+/)) {
+        return callback(null, true)
+      }
+      return callback(null, true)
+    },
+    methods: ["GET", "POST"],
+    credentials: true
+  }
+})
+
+// CORS configuration
+const corsOptions = {
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true)
+    if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
+      return callback(null, true)
+    }
+    if (origin.match(/^https?:\/\/\d+\.\d+\.\d+\.\d+/)) {
+      return callback(null, true)
+    }
+    return callback(null, true)
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+}
+
+// Middleware
+app.use(helmet())
+app.use(cors(corsOptions))
+app.use(compression())
+app.use(morgan('combined'))
+app.use(express.json({ limit: '10mb' }))
+app.use(express.urlencoded({ extended: true }))
+
+// Rate limiting
+app.use('/api/auth/', authLimiter)
+app.use('/api/', generalLimiter)
+
+// Health check
+app.get('/health', (req, res) => {
+  res.json({ status: 'OK', timestamp: new Date().toISOString() })
+})
+
+// API Routes
+app.use('/api/auth', authRoutes)
+app.use('/api/events', eventsRoutes)
+app.use('/api/contests', contestsRoutes)
+
+// Socket.IO connection handling
+io.on('connection', (socket) => {
+  console.log('User connected:', socket.id)
+  
+  socket.on('disconnect', () => {
+    console.log('User disconnected:', socket.id)
+  })
+})
+
+// Error handling middleware
+app.use(errorHandler)
+
+// Start server
+server.listen(PORT, () => {
+  console.log(`🚀 Event Manager API server running on port ${PORT}`)
+})
+
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+  console.log('SIGTERM received, shutting down gracefully')
+  await prisma.$disconnect()
+  process.exit(0)
+})
+
+process.on('SIGINT', async () => {
+  console.log('SIGINT received, shutting down gracefully')
+  await prisma.$disconnect()
+  process.exit(0)
+})
+EOF
+
+    print_success "Modular server.js created successfully"
+}
+
 # Create essential backend files
 create_backend_files() {
     print_status "Creating essential backend files..."
     
     # Create directories
     mkdir -p "$APP_DIR/src/database" "$APP_DIR/src/controllers" "$APP_DIR/src/middleware" \
-             "$APP_DIR/src/routes" "$APP_DIR/src/socket" "$APP_DIR/src/utils" "$APP_DIR/prisma"
+        "$APP_DIR/src/routes" "$APP_DIR/src/socket" "$APP_DIR/src/utils"
+    
+    # Create modular middleware files
+    create_middleware_files
+    
+    # Create modular controller files
+    create_controller_files
+    
+    # Create modular route files
+    create_route_files
     
     # Create Prisma schema (overwrite if exists to ensure correct relations)
     print_status "Creating Prisma schema..."
@@ -1332,514 +2152,9 @@ if (require.main === module) {
 module.exports = { seed }
 EOF
     
-    # Create complete server.js with full API (force overwrite to ensure complete functionality)
-    print_status "Creating complete server.js with full API..."
-    cat > "$APP_DIR/src/server.js" << 'EOF'
-const express = require('express')
-const cors = require('cors')
-const helmet = require('helmet')
-const morgan = require('morgan')
-const compression = require('compression')
-const rateLimit = require('express-rate-limit')
-const bcrypt = require('bcryptjs')
-const jwt = require('jsonwebtoken')
-const { PrismaClient } = require('@prisma/client')
-const { Server } = require('socket.io')
-const http = require('http')
+    # Create modular server.js
+    create_modular_server
 
-const app = express()
-const server = http.createServer(app)
-const io = new Server(server, {
-  cors: {
-    origin: function (origin, callback) {
-      // Allow requests with no origin
-      if (!origin) return callback(null, true)
-      
-      // Allow localhost for development
-      if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
-        return callback(null, true)
-      }
-      
-      // Allow any IP address (for remote server deployment)
-      if (origin.match(/^https?:\/\/\d+\.\d+\.\d+\.\d+/)) {
-        return callback(null, true)
-      }
-      
-      // Allow any domain (for production with domain names)
-      return callback(null, true)
-    },
-    methods: ["GET", "POST"],
-    credentials: true
-  }
-})
-
-const prisma = new PrismaClient()
-const PORT = process.env.PORT || 3000
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
-
-// Middleware
-app.use(helmet())
-// CORS configuration
-const corsOptions = {
-  origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true)
-    
-    // Allow localhost for development
-    if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
-      return callback(null, true)
-    }
-    
-    // Allow any IP address (for remote server deployment)
-    if (origin.match(/^https?:\/\/\d+\.\d+\.\d+\.\d+/)) {
-      return callback(null, true)
-    }
-    
-    // Allow any domain (for production with domain names)
-    return callback(null, true)
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
-}
-
-app.use(cors(corsOptions))
-app.use(compression())
-app.use(morgan('combined'))
-app.use(express.json({ limit: '10mb' }))
-app.use(express.urlencoded({ extended: true }))
-
-// Rate limiting - Enhanced configuration with separate limits for auth endpoints
-// Strategy: 
-// - Auth endpoints: 10,000 requests per 15 minutes (very high for login/profile)
-// - General API: 5,000 requests per 15 minutes (high for dashboard usage)
-// - Admin endpoints: Skipped from general limiter (handled separately)
-const generalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5000, // Increased to 5000 requests per 15 minutes for general API
-  standardHeaders: true,
-  legacyHeaders: false,
-  trustProxy: true,
-  skip: (req) => {
-    // Skip rate limiting for health checks and auth endpoints
-    return req.path === '/health' || 
-           req.path.startsWith('/api/auth/') ||
-           req.path.startsWith('/api/admin/')
-  },
-  keyGenerator: (req) => {
-    // Use IP address for rate limiting, handling proxy headers properly
-    return req.ip || req.connection.remoteAddress
-  }
-})
-
-// Separate, more lenient rate limiter for authentication endpoints
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10000, // Very high limit for auth endpoints (login, profile, etc.)
-  standardHeaders: true,
-  legacyHeaders: false,
-  trustProxy: true,
-  keyGenerator: (req) => {
-    return req.ip || req.connection.remoteAddress
-  }
-})
-
-// Apply different rate limiters to different route groups
-app.use('/api/auth/', authLimiter)
-app.use('/api/', generalLimiter)
-
-// Auth middleware
-const authenticateToken = async (req, res, next) => {
-  const authHeader = req.headers['authorization']
-  const token = authHeader && authHeader.split(' ')[1]
-
-  if (!token) {
-    return res.status(401).json({ error: 'Access token required' })
-  }
-
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET)
-    const user = await prisma.user.findUnique({
-      where: { id: decoded.userId },
-      include: { judge: true, contestant: true }
-    })
-    
-    if (!user) {
-      return res.status(401).json({ error: 'Invalid token' })
-    }
-    
-    req.user = user
-    next()
-  } catch (error) {
-    return res.status(403).json({ error: 'Invalid token' })
-  }
-}
-
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({ status: 'OK', timestamp: new Date().toISOString() })
-})
-
-// Auth routes
-app.post('/api/auth/login', async (req, res) => {
-  try {
-    const { email, password } = req.body
-    
-    const user = await prisma.user.findUnique({
-      where: { email },
-      include: { judge: true, contestant: true }
-    })
-    
-    if (!user || !await bcrypt.compare(password, user.password)) {
-      return res.status(401).json({ error: 'Invalid credentials' })
-    }
-    
-    const token = jwt.sign(
-      { userId: user.id, email: user.email, role: user.role },
-      JWT_SECRET,
-      { expiresIn: '24h' }
-    )
-    
-    res.json({
-      token,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        judge: user.judge,
-        contestant: user.contestant
-      }
-    })
-  } catch (error) {
-    console.error('Login error:', error)
-    res.status(500).json({ error: 'Login failed' })
-  }
-})
-
-app.get('/api/auth/profile', authenticateToken, (req, res) => {
-  res.json({
-    id: req.user.id,
-    name: req.user.name,
-    email: req.user.email,
-    role: req.user.role,
-    judge: req.user.judge,
-    contestant: req.user.contestant
-  })
-})
-
-// Events API
-app.get('/events', authenticateToken, async (req, res) => {
-  try {
-    const events = await prisma.event.findMany({
-      include: {
-        contests: {
-          include: {
-            categories: true
-          }
-        }
-      },
-      orderBy: { createdAt: 'desc' }
-    })
-    res.json(events)
-  } catch (error) {
-    console.error('Events fetch error:', error)
-    res.status(500).json({ error: 'Failed to fetch events' })
-  }
-})
-
-app.post('/events', authenticateToken, async (req, res) => {
-  try {
-    if (req.user.role !== 'ORGANIZER' && req.user.role !== 'BOARD') {
-      return res.status(403).json({ error: 'Insufficient permissions' })
-    }
-    
-    const event = await prisma.event.create({
-      data: req.body
-    })
-    res.json(event)
-  } catch (error) {
-    console.error('Event creation error:', error)
-    res.status(500).json({ error: 'Failed to create event' })
-  }
-})
-
-// Contests API
-app.get('/api/contests/event/:eventId', authenticateToken, async (req, res) => {
-  try {
-    const contests = await prisma.contest.findMany({
-      where: { eventId: req.params.eventId },
-      include: {
-        categories: true,
-        contestants: {
-          include: { contestant: true }
-        },
-        judges: {
-          include: { judge: true }
-        }
-      }
-    })
-    res.json(contests)
-  } catch (error) {
-    console.error('Contests fetch error:', error)
-    res.status(500).json({ error: 'Failed to fetch contests' })
-  }
-})
-
-// Categories API
-app.get('/api/categories/contest/:contestId', authenticateToken, async (req, res) => {
-  try {
-    const categories = await prisma.category.findMany({
-      where: { contestId: req.params.contestId },
-      include: {
-        criteria: true,
-        contestants: {
-          include: { contestant: true }
-        },
-        judges: {
-          include: { judge: true }
-        }
-      }
-    })
-    res.json(categories)
-  } catch (error) {
-    console.error('Categories fetch error:', error)
-    res.status(500).json({ error: 'Failed to fetch categories' })
-  }
-})
-
-// Users API
-app.get('/users', authenticateToken, async (req, res) => {
-  try {
-    if (req.user.role !== 'ORGANIZER' && req.user.role !== 'BOARD') {
-      return res.status(403).json({ error: 'Insufficient permissions' })
-    }
-    
-    const users = await prisma.user.findMany({
-      include: { judge: true, contestant: true },
-      orderBy: { createdAt: 'desc' }
-    })
-    res.json(users)
-  } catch (error) {
-    console.error('Users fetch error:', error)
-    res.status(500).json({ error: 'Failed to fetch users' })
-  }
-})
-
-// Scoring API
-app.get('/api/scoring/category/:categoryId/contestant/:contestantId', authenticateToken, async (req, res) => {
-  try {
-    const scores = await prisma.score.findMany({
-      where: {
-        categoryId: req.params.categoryId,
-        contestantId: req.params.contestantId
-      },
-      include: {
-        criterion: true,
-        judge: true
-      }
-    })
-    res.json(scores)
-  } catch (error) {
-    console.error('Scores fetch error:', error)
-    res.status(500).json({ error: 'Failed to fetch scores' })
-  }
-})
-
-app.post('/api/scoring/category/:categoryId/contestant/:contestantId', authenticateToken, async (req, res) => {
-  try {
-    const { criterionId, score } = req.body
-    
-    const existingScore = await prisma.score.findFirst({
-      where: {
-        categoryId: req.params.categoryId,
-        contestantId: req.params.contestantId,
-        judgeId: req.user.id,
-        criterionId
-      }
-    })
-    
-    if (existingScore) {
-      const updatedScore = await prisma.score.update({
-        where: { id: existingScore.id },
-        data: { score }
-      })
-      res.json(updatedScore)
-    } else {
-      const newScore = await prisma.score.create({
-        data: {
-          categoryId: req.params.categoryId,
-          contestantId: req.params.contestantId,
-          judgeId: req.user.id,
-          criterionId,
-          score
-        }
-      })
-      res.json(newScore)
-    }
-    
-    // Emit real-time update
-    io.emit('scoreUpdate', {
-      categoryId: req.params.categoryId,
-      contestantId: req.params.contestantId,
-      judgeId: req.user.id,
-      score
-    })
-  } catch (error) {
-    console.error('Score submission error:', error)
-    res.status(500).json({ error: 'Failed to submit score' })
-  }
-})
-
-// Admin API
-app.get('/api/admin/stats', authenticateToken, async (req, res) => {
-  try {
-    if (req.user.role !== 'ORGANIZER' && req.user.role !== 'BOARD') {
-      return res.status(403).json({ error: 'Insufficient permissions' })
-    }
-    
-    const [eventCount, contestCount, userCount, scoreCount] = await Promise.all([
-      prisma.event.count(),
-      prisma.contest.count(),
-      prisma.user.count(),
-      prisma.score.count()
-    ])
-    
-    res.json({
-      events: eventCount,
-      contests: contestCount,
-      users: userCount,
-      scores: scoreCount
-    })
-  } catch (error) {
-    console.error('Stats fetch error:', error)
-    res.status(500).json({ error: 'Failed to fetch stats' })
-  }
-})
-
-// Admin logs endpoint
-app.get('/api/admin/logs', authenticateToken, async (req, res) => {
-  try {
-    if (req.user.role !== 'ORGANIZER' && req.user.role !== 'BOARD' && req.user.role !== 'AUDITOR') {
-      return res.status(403).json({ error: 'Insufficient permissions' })
-    }
-    
-    const logs = await prisma.activityLog.findMany({
-      orderBy: { createdAt: 'desc' },
-      take: 100,
-      include: {
-        user: {
-          select: { id: true, name: true, role: true }
-        }
-      }
-    })
-    
-    res.json(logs)
-  } catch (error) {
-    console.error('Logs fetch error:', error)
-    res.status(500).json({ error: 'Failed to fetch logs' })
-  }
-})
-
-// Admin active users endpoint
-app.get('/api/admin/active-users', authenticateToken, async (req, res) => {
-  try {
-    if (req.user.role !== 'ORGANIZER' && req.user.role !== 'BOARD') {
-      return res.status(403).json({ error: 'Insufficient permissions' })
-    }
-    
-    const activeUsers = await prisma.user.findMany({
-      where: {
-        isActive: true
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        lastLoginAt: true
-      },
-      take: 20
-    })
-    
-    res.json(activeUsers)
-  } catch (error) {
-    console.error('Active users fetch error:', error)
-    res.status(500).json({ error: 'Failed to fetch active users' })
-  }
-})
-
-// Admin settings endpoint
-app.get('/api/admin/settings', authenticateToken, async (req, res) => {
-  try {
-    if (req.user.role !== 'ORGANIZER' && req.user.role !== 'BOARD') {
-      return res.status(403).json({ error: 'Insufficient permissions' })
-    }
-    
-    const settings = await prisma.systemSetting.findMany()
-    res.json(settings)
-  } catch (error) {
-    console.error('Settings fetch error:', error)
-    res.status(500).json({ error: 'Failed to fetch settings' })
-  }
-})
-
-// Admin backup endpoint
-app.get('/api/admin/backup', authenticateToken, async (req, res) => {
-  try {
-    if (req.user.role !== 'ORGANIZER' && req.user.role !== 'BOARD') {
-      return res.status(403).json({ error: 'Insufficient permissions' })
-    }
-    
-    res.json({
-      message: 'Backup functionality will be implemented',
-      lastBackup: new Date().toISOString(),
-      status: 'available'
-    })
-  } catch (error) {
-    console.error('Backup fetch error:', error)
-    res.status(500).json({ error: 'Failed to fetch backup info' })
-  }
-})
-
-// Socket.IO connection handling
-io.on('connection', (socket) => {
-  console.log('User connected:', socket.id)
-  
-  socket.on('disconnect', () => {
-    console.log('User disconnected:', socket.id)
-  })
-})
-
-// Error handling middleware
-app.use((err, req, res, next) => {
-  console.error(err.stack)
-  res.status(500).json({ error: 'Something went wrong!' })
-})
-
-// 404 handler
-app.use('*', (req, res) => {
-  res.status(404).json({ error: 'Route not found' })
-})
-
-// Start server
-server.listen(PORT, () => {
-  console.log(`🚀 Event Manager API server running on port ${PORT}`)
-})
-
-// Graceful shutdown
-process.on('SIGTERM', async () => {
-  console.log('SIGTERM received, shutting down gracefully')
-  await prisma.$disconnect()
-  process.exit(0)
-})
-
-process.on('SIGINT', async () => {
-  console.log('SIGINT received, shutting down gracefully')
-  await prisma.$disconnect()
-  process.exit(0)
-})
-EOF
     
     print_success "Essential backend files created!"
 }
