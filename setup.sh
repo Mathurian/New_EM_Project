@@ -5069,7 +5069,7 @@ module.exports = { seed }
 EOF
     
     # Create modular server.js
-    create_modular_server
+    create_modular_server()
 
     
     print_success "Essential backend files created!"
