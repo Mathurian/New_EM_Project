@@ -923,7 +923,7 @@ const getAllEvents = async (req, res) => {
         _count: {
           select: {
             contests: true,
-            contestants: true
+            archivedEvents: true
           }
         }
       },
@@ -1861,20 +1861,15 @@ const getLogs = async (req, res) => {
 const getActiveUsers = async (req, res) => {
   try {
     const activeUsers = await prisma.user.findMany({
-      where: {
-        lastLoginAt: {
-          gte: new Date(Date.now() - 24 * 60 * 60 * 1000) // Last 24 hours
-        }
-      },
       select: {
         id: true,
         name: true,
         email: true,
         role: true,
-        lastLoginAt: true
+        createdAt: true
       }
     })
-
+    
     res.json(activeUsers)
   } catch (error) {
     console.error('Get active users error:', error)
@@ -1884,7 +1879,7 @@ const getActiveUsers = async (req, res) => {
 
 const getSettings = async (req, res) => {
   try {
-    const settings = await prisma.setting.findMany()
+    const settings = await prisma.systemSetting.findMany()
     res.json(settings)
   } catch (error) {
     console.error('Get settings error:', error)
@@ -2275,7 +2270,7 @@ const getAllSettings = async (req, res) => {
 
 const getSettings = async (req, res) => {
   try {
-    const settings = await prisma.setting.findMany()
+    const settings = await prisma.systemSetting.findMany()
     res.json(settings)
   } catch (error) {
     console.error('Get settings error:', error)
@@ -4500,6 +4495,9 @@ const corsOptions = {
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }
+
+// Trust proxy for rate limiting behind Nginx
+app.set('trust proxy', 1)
 
 // Middleware
 app.use(helmet())
