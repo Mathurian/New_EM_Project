@@ -5165,10 +5165,10 @@ const seed = async () => {
           password: hashedPassword
         }
       })
-      console.log(\`✅ \${userData.role} user created:\`, user.email)
+      console.log(`✅ ${userData.role} user created:`, user.email)
     }
     
-    console.log(\`🎉 Successfully created \${defaultUsers.length} default users!\`)
+    console.log(`🎉 Successfully created ${defaultUsers.length} default users!`)
     
     // Create sample event
     const sampleEvent = await prisma.event.create({
