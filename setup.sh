@@ -19008,7 +19008,7 @@ fix_typescript_errors() {
     
     # 1. Fix API service - add missing methods and export api
     print_status "Updating API service with missing methods..."
-    cat > src/services/api.ts << 'APIEOF'
+    cat > "$APP_DIR/frontend/src/services/api.ts" << 'APIEOF'
 import axios from 'axios'
 
 const api = axios.create({
@@ -34905,7 +34905,9 @@ const WinnersPage: React.FC = () => {
               className="input"
             >
               <option value="">Select Event</option>
-              {events.data?.map((event: any) => (
+              {Array.isArray(events) ? events.map((event: any) => (
+                <option key={event.id} value={event.id}>{event.name}</option>
+              )) : events?.data?.map((event: any) => (
                 <option key={event.id} value={event.id}>{event.name}</option>
               ))}
             </select>
@@ -34923,7 +34925,9 @@ const WinnersPage: React.FC = () => {
               disabled={!selectedEvent}
             >
               <option value="">Select Contest</option>
-              {contests.data?.map((contest: any) => (
+              {Array.isArray(contests) ? contests.map((contest: any) => (
+                <option key={contest.id} value={contest.id}>{contest.name}</option>
+              )) : contests?.data?.map((contest: any) => (
                 <option key={contest.id} value={contest.id}>{contest.name}</option>
               ))}
             </select>
@@ -34939,7 +34943,9 @@ const WinnersPage: React.FC = () => {
                 disabled={!selectedContest}
               >
                 <option value="">Select Category</option>
-                {categories.data?.map((category: any) => (
+                {Array.isArray(categories) ? categories.map((category: any) => (
+                  <option key={category.id} value={category.id}>{category.name}</option>
+                )) : categories?.data?.map((category: any) => (
                   <option key={category.id} value={category.id}>{category.name}</option>
                 ))}
               </select>
