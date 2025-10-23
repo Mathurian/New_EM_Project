@@ -686,9 +686,6 @@ const generalLimiter = rateLimit({
     return req.path === '/health' || 
            req.path.startsWith('/api/auth/') ||
            req.path.startsWith('/api/admin/')
-  },
-  keyGenerator: (req) => {
-    return req.ip || req.connection.remoteAddress
   }
 })
 
@@ -698,10 +695,7 @@ const authLimiter = rateLimit({
   max: 10000, // 10000 requests per 15 minutes for auth
   standardHeaders: true,
   legacyHeaders: false,
-  trustProxy: true,
-  keyGenerator: (req) => {
-    return req.ip || req.connection.remoteAddress
-  }
+  trustProxy: true
 })
 
 module.exports = {
@@ -5313,7 +5307,9 @@ EOF
     "playwright": "^1.40.0",
     "puppeteer": "^24.15.0",
     "supertest": "^7.1.3",
-    "superagent": "^10.2.2"
+    "superagent": "^10.2.2",
+    "compression": "^1.7.4",
+    "express-rate-limit": "^8.1.0",
   },
   "overrides": {
     "glob": "^10.3.10",
@@ -10702,37 +10698,79 @@ export default LoginPage
 EOF
 
     cat > "$APP_DIR/frontend/src/pages/Dashboard.tsx" << 'EOF'
-import React from 'react'
+import React, { useState } from 'react'
 import { useQuery } from 'react-query'
 import { useAuth } from '../contexts/AuthContext'
 import { useSocket } from '../contexts/SocketContext'
-import { adminAPI, eventsAPI } from '../services/api'
+import { adminAPI, eventsAPI, contestsAPI, usersAPI } from '../services/api'
+import {
+  ChartBarIcon,
+  UsersIcon,
+  CalendarIcon,
+  TrophyIcon,
+  DocumentTextIcon,
+  ClockIcon,
+  CheckCircleIcon,
+  ExclamationTriangleIcon,
+  ArrowUpIcon,
+  ArrowDownIcon,
+  EyeIcon,
+  PencilIcon,
+  TrashIcon,
+  PlusIcon,
+  DocumentArrowDownIcon,
+  PrinterIcon,
+} from '@heroicons/react/24/outline'
+import { format, subDays, subWeeks, subMonths } from 'date-fns'
 
 const Dashboard: React.FC = () => {
-  const { user } = useAuth()
+  const { user, isLoading: authLoading } = useAuth()
   const { isConnected } = useSocket()
+  const [timeRange, setTimeRange] = useState<'7d' | '30d' | '90d' | '1y'>('30d')
 
-  // Fetch admin statistics
+  // Admin/Board queries
   const { data: stats, isLoading: statsLoading } = useQuery(
-    'adminStats',
+    'admin-stats',
     () => adminAPI.getStats().then(res => res.data),
     {
-      enabled: user?.role === 'ORGANIZER' || user?.role === 'BOARD',
-      refetchInterval: 300000, // Refresh every 5 minutes (reduced from 30 seconds)
-      refetchOnWindowFocus: false, // Don't refetch on window focus
-      staleTime: 120000, // Consider data stale after 2 minutes
+      enabled: !authLoading && (user?.role === 'ORGANIZER' || user?.role === 'BOARD'),
+      refetchInterval: 30000, // Refresh every 30 seconds
     }
   )
 
-  // Fetch recent events
-  const { data: recentEvents, isLoading: eventsLoading } = useQuery(
-    'recentEvents',
+  const { data: events, isLoading: eventsLoading } = useQuery(
+    'recent-events',
     () => eventsAPI.getAll().then(res => res.data.slice(0, 5)),
     {
-      enabled: user?.role === 'ORGANIZER' || user?.role === 'BOARD',
-      refetchInterval: 300000, // Refresh every 5 minutes (reduced from 1 minute)
-      refetchOnWindowFocus: false, // Don't refetch on window focus
-      staleTime: 120000, // Consider data stale after 2 minutes
+      enabled: !authLoading && (user?.role === 'ORGANIZER' || user?.role === 'BOARD'),
+      refetchInterval: 60000, // Refresh every minute
+    }
+  )
+
+  const { data: contests, isLoading: contestsLoading } = useQuery(
+    'recent-contests',
+    () => contestsAPI.getAll().then(res => res.data.slice(0, 5)),
+    {
+      enabled: !authLoading && (user?.role === 'ORGANIZER' || user?.role === 'BOARD'),
+      refetchInterval: 60000,
+    }
+  )
+
+  const { data: users, isLoading: usersLoading } = useQuery(
+    'recent-users',
+    () => usersAPI.getAll().then(res => res.data.slice(0, 5)),
+    {
+      enabled: !authLoading && (user?.role === 'ORGANIZER' || user?.role === 'BOARD'),
+      refetchInterval: 120000, // Refresh every 2 minutes
+    }
+  )
+
+  const { data: activityLogs, isLoading: activityLoading } = useQuery(
+    'activity-logs',
+    () => adminAPI.getActivityLogs().then(res => res.data.slice(0, 10)),
+    {
+      enabled: !authLoading && (user?.role === 'ORGANIZER' || user?.role === 'BOARD'),
+      refetchInterval: 30000,
     }
   )
 
@@ -11051,30 +11089,38 @@ const Dashboard: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Welcome Header */}
-      <div className="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg">
-        <div className="px-4 py-5 sm:p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-                Welcome back, {user?.preferredName || user?.name}!
-              </h1>
-              <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                Here's what's happening with your contests today.
-              </p>
-            </div>
-            <div className="flex items-center space-x-2">
-              <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-green-400' : 'bg-red-400'}`}></div>
-              <span className="text-sm text-gray-500 dark:text-gray-400">
-                {isConnected ? 'Live' : 'Offline'}
-              </span>
+      {authLoading ? (
+        <div className="flex items-center justify-center h-64">
+          <div className="loading-spinner"></div>
+        </div>
+      ) : (
+        <>
+          {/* Welcome Header */}
+          <div className="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg">
+            <div className="px-4 py-5 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+                    Welcome back, {user?.preferredName || user?.name}!
+                  </h1>
+                  <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                    Here's what's happening with your contests today.
+                  </p>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-green-400' : 'bg-red-400'}`}></div>
+                  <span className="text-sm text-gray-500 dark:text-gray-400">
+                    {isConnected ? 'Live' : 'Offline'}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      </div>
 
-      {/* Role-specific content */}
-      {getRoleSpecificContent()}
+          {/* Role-specific content */}
+          {getRoleSpecificContent()}
+        </>
+      )}
     </div>
   )
 }
