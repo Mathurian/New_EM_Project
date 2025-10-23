@@ -159,7 +159,7 @@ safe_npm_install() {
         fi
         
         # Install canvas separately before main npm install
-        print_status "Installing canvas module with system dependencies..."
+        print_status "Installing canvas..."
         
         # Strategy 1: Install canvas with build-from-source
         if npm install canvas 2>/dev/null; then
@@ -5133,6 +5133,7 @@ DB_PORT=$DB_PORT
 DB_NAME=$DB_NAME
 DB_USER=$DB_USER
 DB_PASSWORD=$DB_PASSWORD
+DATABASE_URL=postgresql://$DB_USER:$DB_PASSWORD@$DB_HOST:$DB_PORT/$DB_NAME
 
 # Security Configuration
 JWT_SECRET=$JWT_SECRET
@@ -5279,33 +5280,22 @@ EOF
     "lint:fix": "eslint src/ --fix"
   },
   "dependencies": {
-    "@prisma/client": "^5.7.1",
     "express": "^4.18.2",
     "cors": "^2.8.5",
     "helmet": "^7.1.0",
     "morgan": "^1.10.0",
-    "compression": "^1.7.4",
-    "express-rate-limit": "^7.1.5",
+    "dotenv": "^16.3.1",
     "bcryptjs": "^2.4.3",
     "jsonwebtoken": "^9.0.2",
-    "socket.io": "^4.7.4",
+    "multer": "^2.0.0",
     "nodemailer": "^6.9.7",
-    "multer": "^1.4.5-lts.1",
-    "sharp": "^0.33.0",
-    "pdfkit": "^0.14.0",
-    "jspdf": "^2.5.1",
+    "socket.io": "^4.7.4",
+    "prisma": "^5.22.0",
+    "@prisma/client": "^5.22.0",
     "playwright": "^1.40.0",
     "puppeteer": "^24.15.0",
-    "canvas": "^2.11.2",
-    "winston": "^3.11.0",
-    "dotenv": "^16.3.1",
-    "prisma": "^5.7.1"
-  },
-  "devDependencies": {
-    "nodemon": "^3.0.2",
-    "jest": "^29.7.0",
     "supertest": "^7.1.3",
-    "eslint": "^9.0.0"
+    "superagent": "^10.2.2"
   },
   "overrides": {
     "glob": "^10.3.10",
@@ -5315,12 +5305,19 @@ EOF
     "lodash.pick": "npm:lodash@^4.17.21",
     "gauge": "npm:@types/gauge@^2.7.2",
     "npmlog": "npm:winston@^3.11.0",
-    "supertest": "$supertest",
+    "supertest": "^7.1.3",
     "superagent": "^10.2.2",
     "html-pdf-node": "npm:playwright@^1.40.0",
     "@humanwhocodes/object-schema": "npm:@eslint/object-schema@^0.1.0",
     "@humanwhocodes/config-array": "npm:@eslint/config-array@^0.18.0",
-    "eslint@8.57.1": "$eslint"
+    "eslint": "^9.0.0",
+    "@npmcli/move-file": "npm:@npmcli/fs@^3.0.0",
+    "glob@7.2.3": "npm:glob@^10.3.10",
+    "rimraf@3.0.2": "npm:rimraf@^5.0.5",
+    "inflight@1.0.6": "npm:lru-cache@^10.0.0",
+    "@humanwhocodes/object-schema@2.0.3": "npm:@eslint/object-schema@^0.1.0",
+    "@humanwhocodes/config-array@0.13.0": "npm:@eslint/config-array@^0.18.0",
+    "eslint@8.57.1": "npm:eslint@^9.0.0"
   }
 }
 EOF
@@ -21899,14 +21896,14 @@ install_application() {
     # Setup application directory
     setup_application_directory
     
+    # Setup database FIRST (before any Prisma operations)
+    setup_database
+    
     # Create backend files
     create_backend_files
     
     # Install backend dependencies
     install_backend_dependencies
-    
-    # Setup database
-    setup_database
 
     # Start application
     start_application
