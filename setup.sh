@@ -5950,6 +5950,261 @@ module.exports = {
   getUserFileAccess
 }
 EOF
+
+    # File Encryption Middleware
+    cat > "$APP_DIR/src/middleware/fileEncryption.js" << 'EOF'
+const crypto = require('crypto')
+const fs = require('fs').promises
+const path = require('path')
+
+// Encryption configuration
+const ENCRYPTION_ALGORITHM = 'aes-256-gcm'
+const KEY_LENGTH = 32 // 256 bits
+const IV_LENGTH = 16 // 128 bits
+const TAG_LENGTH = 16 // 128 bits
+
+// Generate encryption key from password
+const generateKey = (password, salt) => {
+  return crypto.pbkdf2Sync(password, salt, 100000, KEY_LENGTH, 'sha512')
+}
+
+// Generate random salt
+const generateSalt = () => {
+  return crypto.randomBytes(16)
+}
+
+// Encrypt file content
+const encryptFile = async (filePath, password) => {
+  try {
+    // Read file content
+    const fileContent = await fs.readFile(filePath)
+    
+    // Generate salt and key
+    const salt = generateSalt()
+    const key = generateKey(password, salt)
+    
+    // Generate random IV
+    const iv = crypto.randomBytes(IV_LENGTH)
+    
+    // Create cipher
+    const cipher = crypto.createCipher(ENCRYPTION_ALGORITHM, key)
+    cipher.setAAD(salt)
+    
+    // Encrypt content
+    let encrypted = cipher.update(fileContent)
+    encrypted = Buffer.concat([encrypted, cipher.final()])
+    
+    // Get authentication tag
+    const tag = cipher.getAuthTag()
+    
+    // Combine salt + iv + tag + encrypted content
+    const encryptedData = Buffer.concat([salt, iv, tag, encrypted])
+    
+    return encryptedData
+  } catch (error) {
+    console.error('File encryption error:', error)
+    throw new Error('Failed to encrypt file')
+  }
+}
+
+// Decrypt file content
+const decryptFile = async (encryptedData, password) => {
+  try {
+    // Extract components
+    const salt = encryptedData.slice(0, 16)
+    const iv = encryptedData.slice(16, 32)
+    const tag = encryptedData.slice(32, 48)
+    const encrypted = encryptedData.slice(48)
+    
+    // Generate key
+    const key = generateKey(password, salt)
+    
+    // Create decipher
+    const decipher = crypto.createDecipher(ENCRYPTION_ALGORITHM, key)
+    decipher.setAAD(salt)
+    decipher.setAuthTag(tag)
+    
+    // Decrypt content
+    let decrypted = decipher.update(encrypted)
+    decrypted = Buffer.concat([decrypted, decipher.final()])
+    
+    return decrypted
+  } catch (error) {
+    console.error('File decryption error:', error)
+    throw new Error('Failed to decrypt file')
+  }
+}
+
+// Encrypt file and save to secure location
+const encryptAndStoreFile = async (originalPath, encryptedPath, password) => {
+  try {
+    // Encrypt file
+    const encryptedData = await encryptFile(originalPath, password)
+    
+    // Create secure directory if it doesn't exist
+    const secureDir = path.dirname(encryptedPath)
+    await fs.mkdir(secureDir, { recursive: true, mode: 0o700 })
+    
+    // Write encrypted file
+    await fs.writeFile(encryptedPath, encryptedData, { mode: 0o600 })
+    
+    // Remove original file
+    await fs.unlink(originalPath)
+    
+    return {
+      success: true,
+      encryptedPath,
+      originalSize: (await fs.stat(originalPath)).size,
+      encryptedSize: encryptedData.length
+    }
+  } catch (error) {
+    console.error('Encrypt and store error:', error)
+    throw new Error('Failed to encrypt and store file')
+  }
+}
+
+// Decrypt file from secure location
+const decryptAndRetrieveFile = async (encryptedPath, outputPath, password) => {
+  try {
+    // Read encrypted file
+    const encryptedData = await fs.readFile(encryptedPath)
+    
+    // Decrypt content
+    const decryptedData = await decryptFile(encryptedData, password)
+    
+    // Create output directory if it doesn't exist
+    const outputDir = path.dirname(outputPath)
+    await fs.mkdir(outputDir, { recursive: true, mode: 0o755 })
+    
+    // Write decrypted file
+    await fs.writeFile(outputPath, decryptedData, { mode: 0o644 })
+    
+    return {
+      success: true,
+      outputPath,
+      size: decryptedData.length
+    }
+  } catch (error) {
+    console.error('Decrypt and retrieve error:', error)
+    throw new Error('Failed to decrypt and retrieve file')
+  }
+}
+
+// Generate secure password for file encryption
+const generateSecurePassword = () => {
+  return crypto.randomBytes(32).toString('hex')
+}
+
+// Hash password for storage
+const hashPassword = (password, salt) => {
+  return crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha512').toString('hex')
+}
+
+// Verify password hash
+const verifyPassword = (password, hash, salt) => {
+  const hashedPassword = crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha512').toString('hex')
+  return hashedPassword === hash
+}
+
+// Secure file metadata encryption
+const encryptMetadata = (metadata, password) => {
+  try {
+    const salt = generateSalt()
+    const key = generateKey(password, salt)
+    const iv = crypto.randomBytes(IV_LENGTH)
+    
+    const cipher = crypto.createCipher(ENCRYPTION_ALGORITHM, key)
+    cipher.setAAD(salt)
+    
+    const metadataString = JSON.stringify(metadata)
+    let encrypted = cipher.update(metadataString, 'utf8')
+    encrypted = Buffer.concat([encrypted, cipher.final()])
+    
+    const tag = cipher.getAuthTag()
+    
+    return Buffer.concat([salt, iv, tag, encrypted]).toString('base64')
+  } catch (error) {
+    console.error('Metadata encryption error:', error)
+    throw new Error('Failed to encrypt metadata')
+  }
+}
+
+// Decrypt file metadata
+const decryptMetadata = (encryptedMetadata, password) => {
+  try {
+    const encryptedData = Buffer.from(encryptedMetadata, 'base64')
+    
+    const salt = encryptedData.slice(0, 16)
+    const iv = encryptedData.slice(16, 32)
+    const tag = encryptedData.slice(32, 48)
+    const encrypted = encryptedData.slice(48)
+    
+    const key = generateKey(password, salt)
+    
+    const decipher = crypto.createDecipher(ENCRYPTION_ALGORITHM, key)
+    decipher.setAAD(salt)
+    decipher.setAuthTag(tag)
+    
+    let decrypted = decipher.update(encrypted)
+    decrypted = Buffer.concat([decrypted, decipher.final()])
+    
+    return JSON.parse(decrypted.toString('utf8'))
+  } catch (error) {
+    console.error('Metadata decryption error:', error)
+    throw new Error('Failed to decrypt metadata')
+  }
+}
+
+// File integrity verification
+const verifyFileIntegrity = async (filePath, expectedChecksum) => {
+  try {
+    const fileContent = await fs.readFile(filePath)
+    const actualChecksum = crypto.createHash('sha256').update(fileContent).digest('hex')
+    return actualChecksum === expectedChecksum
+  } catch (error) {
+    console.error('File integrity verification error:', error)
+    return false
+  }
+}
+
+// Secure file deletion
+const secureDeleteFile = async (filePath) => {
+  try {
+    // Overwrite file with random data multiple times
+    const stats = await fs.stat(filePath)
+    const fileSize = stats.size
+    
+    // Write random data 3 times
+    for (let i = 0; i < 3; i++) {
+      const randomData = crypto.randomBytes(fileSize)
+      await fs.writeFile(filePath, randomData)
+    }
+    
+    // Delete file
+    await fs.unlink(filePath)
+    
+    return { success: true }
+  } catch (error) {
+    console.error('Secure delete error:', error)
+    throw new Error('Failed to securely delete file')
+  }
+}
+
+module.exports = {
+  encryptFile,
+  decryptFile,
+  encryptAndStoreFile,
+  decryptAndRetrieveFile,
+  generateSecurePassword,
+  hashPassword,
+  verifyPassword,
+  encryptMetadata,
+  decryptMetadata,
+  verifyFileIntegrity,
+  secureDeleteFile
+}
+EOF
+
 const { PrismaClient } = require('@prisma/client')
 
 const prisma = new PrismaClient()
@@ -6632,6 +6887,8 @@ module.exports = {
 EOF
     cat > "$APP_DIR/src/controllers/reportsController.js" << 'EOF'
 const { PrismaClient } = require('@prisma/client')
+const fs = require('fs').promises
+const path = require('path')
 
 const prisma = new PrismaClient()
 
@@ -6757,13 +7014,831 @@ const getHistory = async (req, res) => {
   }
 }
 
+// Generate comprehensive event report
+const generateEventReport = async (req, res) => {
+  try {
+    const { eventId, includeDetails = false, format = 'JSON' } = req.body
+
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      include: {
+        contests: {
+          include: {
+            categories: {
+              include: {
+                scores: {
+                  include: {
+                    judge: {
+                      select: {
+                        id: true,
+                        name: true,
+                        preferredName: true,
+                        email: true
+                      }
+                    },
+                    contestant: {
+                      select: {
+                        id: true,
+                        name: true,
+                        preferredName: true,
+                        email: true,
+                        contestantNumber: true
+                      }
+                    },
+                    criterion: {
+                      select: {
+                        id: true,
+                        name: true,
+                        description: true,
+                        maxScore: true
+                      }
+                    }
+                  }
+                },
+                contestants: {
+                  include: {
+                    user: {
+                      select: {
+                        id: true,
+                        name: true,
+                        preferredName: true,
+                        email: true,
+                        contestantNumber: true,
+                        contestantAge: true,
+                        contestantSchool: true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    })
+
+    if (!event) {
+      return res.status(404).json({ error: 'Event not found' })
+    }
+
+    // Calculate comprehensive statistics
+    const eventStats = {
+      totalContests: event.contests.length,
+      totalCategories: event.contests.reduce((sum, contest) => sum + contest.categories.length, 0),
+      totalContestants: event.contests.reduce((sum, contest) => 
+        sum + contest.categories.reduce((catSum, category) => catSum + category.contestants.length, 0), 0),
+      totalScores: event.contests.reduce((sum, contest) => 
+        sum + contest.categories.reduce((catSum, category) => catSum + category.scores.length, 0), 0)
+    }
+
+    // Generate contest summaries
+    const contestSummaries = event.contests.map(contest => {
+      const contestStats = {
+        id: contest.id,
+        name: contest.name,
+        description: contest.description,
+        totalCategories: contest.categories.length,
+        totalContestants: contest.categories.reduce((sum, category) => sum + category.contestants.length, 0),
+        totalScores: contest.categories.reduce((sum, category) => sum + category.scores.length, 0)
+      }
+
+      if (includeDetails) {
+        contestStats.categories = contest.categories.map(category => {
+          const categoryStats = {
+            id: category.id,
+            name: category.name,
+            description: category.description,
+            maxScore: category.maxScore,
+            totalContestants: category.contestants.length,
+            totalScores: category.scores.length,
+            averageScore: category.scores.length > 0 ? 
+              category.scores.reduce((sum, score) => sum + score.score, 0) / category.scores.length : 0
+          }
+
+          // Calculate contestant rankings
+          const contestantScores = category.scores.reduce((acc, score) => {
+            const key = score.contestantId
+            if (!acc[key]) {
+              acc[key] = {
+                contestant: score.contestant,
+                scores: [],
+                totalScore: 0
+              }
+            }
+            acc[key].scores.push(score)
+            acc[key].totalScore += score.score
+            return acc
+          }, {})
+
+          categoryStats.contestantRankings = Object.values(contestantScores)
+            .map(group => ({
+              contestant: group.contestant,
+              totalScore: group.totalScore,
+              averageScore: group.totalScore / group.scores.length,
+              scoreCount: group.scores.length
+            }))
+            .sort((a, b) => b.totalScore - a.totalScore)
+            .map((ranking, index) => ({ ...ranking, rank: index + 1 }))
+
+          return categoryStats
+        })
+      }
+
+      return contestStats
+    })
+
+    const report = {
+      event: {
+        id: event.id,
+        name: event.name,
+        description: event.description,
+        startDate: event.startDate,
+        endDate: event.endDate,
+        location: event.location,
+        maxContestants: event.maxContestants,
+        status: event.status
+      },
+      statistics: eventStats,
+      contests: contestSummaries,
+      generatedAt: new Date().toISOString(),
+      generatedBy: req.user.id,
+      format: format
+    }
+
+    // Save report to database
+    const savedReport = await prisma.report.create({
+      data: {
+        name: `Event Report - ${event.name}`,
+        type: 'EVENT_REPORT',
+        parameters: JSON.stringify({ eventId, includeDetails, format }),
+        format: format,
+        generatedBy: req.user.id,
+        status: 'GENERATED'
+      }
+    })
+
+    res.json({
+      report,
+      reportId: savedReport.id,
+      message: 'Event report generated successfully'
+    })
+  } catch (error) {
+    console.error('Generate event report error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Generate contest results report
+const generateContestResultsReport = async (req, res) => {
+  try {
+    const { contestId, includeDetails = false, format = 'JSON' } = req.body
+
+    const contest = await prisma.contest.findUnique({
+      where: { id: contestId },
+      include: {
+        event: true,
+        categories: {
+          include: {
+            scores: {
+              include: {
+                judge: {
+                  select: {
+                    id: true,
+                    name: true,
+                    preferredName: true,
+                    email: true
+                  }
+                },
+                contestant: {
+                  select: {
+                    id: true,
+                    name: true,
+                    preferredName: true,
+                    email: true,
+                    contestantNumber: true
+                  }
+                },
+                criterion: {
+                  select: {
+                    id: true,
+                    name: true,
+                    description: true,
+                    maxScore: true
+                  }
+                }
+              }
+            },
+            contestants: {
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    name: true,
+                    preferredName: true,
+                    email: true,
+                    contestantNumber: true,
+                    contestantAge: true,
+                    contestantSchool: true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    })
+
+    if (!contest) {
+      return res.status(404).json({ error: 'Contest not found' })
+    }
+
+    // Calculate contest statistics
+    const contestStats = {
+      totalCategories: contest.categories.length,
+      totalContestants: contest.categories.reduce((sum, category) => sum + category.contestants.length, 0),
+      totalScores: contest.categories.reduce((sum, category) => sum + category.scores.length, 0)
+    }
+
+    // Generate category results
+    const categoryResults = contest.categories.map(category => {
+      const categoryStats = {
+        id: category.id,
+        name: category.name,
+        description: category.description,
+        maxScore: category.maxScore,
+        totalContestants: category.contestants.length,
+        totalScores: category.scores.length
+      }
+
+      // Calculate contestant rankings
+      const contestantScores = category.scores.reduce((acc, score) => {
+        const key = score.contestantId
+        if (!acc[key]) {
+          acc[key] = {
+            contestant: score.contestant,
+            scores: [],
+            totalScore: 0
+          }
+        }
+        acc[key].scores.push(score)
+        acc[key].totalScore += score.score
+        return acc
+      }, {})
+
+      categoryStats.contestantRankings = Object.values(contestantScores)
+        .map(group => ({
+          contestant: group.contestant,
+          totalScore: group.totalScore,
+          averageScore: group.totalScore / group.scores.length,
+          scoreCount: group.scores.length
+        }))
+        .sort((a, b) => b.totalScore - a.totalScore)
+        .map((ranking, index) => ({ ...ranking, rank: index + 1 }))
+
+      if (includeDetails) {
+        categoryStats.scoreDetails = category.scores.map(score => ({
+          id: score.id,
+          judge: score.judge,
+          contestant: score.contestant,
+          criterion: score.criterion,
+          score: score.score,
+          comments: score.comments,
+          createdAt: score.createdAt
+        }))
+      }
+
+      return categoryStats
+    })
+
+    const report = {
+      contest: {
+        id: contest.id,
+        name: contest.name,
+        description: contest.description,
+        eventName: contest.event.name,
+        startDate: contest.startDate,
+        endDate: contest.endDate
+      },
+      statistics: contestStats,
+      categories: categoryResults,
+      generatedAt: new Date().toISOString(),
+      generatedBy: req.user.id,
+      format: format
+    }
+
+    // Save report to database
+    const savedReport = await prisma.report.create({
+      data: {
+        name: `Contest Results Report - ${contest.name}`,
+        type: 'CONTEST_RESULTS',
+        parameters: JSON.stringify({ contestId, includeDetails, format }),
+        format: format,
+        generatedBy: req.user.id,
+        status: 'GENERATED'
+      }
+    })
+
+    res.json({
+      report,
+      reportId: savedReport.id,
+      message: 'Contest results report generated successfully'
+    })
+  } catch (error) {
+    console.error('Generate contest results report error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Generate judge performance report
+const generateJudgePerformanceReport = async (req, res) => {
+  try {
+    const { judgeId, eventId, includeDetails = false, format = 'JSON' } = req.body
+
+    const judge = await prisma.user.findUnique({
+      where: { id: judgeId },
+      select: {
+        id: true,
+        name: true,
+        preferredName: true,
+        email: true,
+        role: true,
+        judgeBio: true,
+        judgeSpecialties: true,
+        judgeCertifications: true
+      }
+    })
+
+    if (!judge) {
+      return res.status(404).json({ error: 'Judge not found' })
+    }
+
+    // Get judge's scores
+    const scores = await prisma.score.findMany({
+      where: {
+        judgeId: judgeId,
+        ...(eventId && {
+          event: { id: eventId }
+        })
+      },
+      include: {
+        category: {
+          include: {
+            contest: {
+              include: {
+                event: true
+              }
+            }
+          }
+        },
+        contestant: {
+          select: {
+            id: true,
+            name: true,
+            preferredName: true,
+            email: true,
+            contestantNumber: true
+          }
+        },
+        criterion: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            maxScore: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    // Calculate judge statistics
+    const judgeStats = {
+      totalScores: scores.length,
+      averageScore: scores.length > 0 ? scores.reduce((sum, score) => sum + score.score, 0) / scores.length : 0,
+      maxScore: Math.max(...scores.map(s => s.score), 0),
+      minScore: Math.min(...scores.map(s => s.score), 0),
+      uniqueCategories: new Set(scores.map(s => s.categoryId)).size,
+      uniqueContestants: new Set(scores.map(s => s.contestantId)).size
+    }
+
+    // Group scores by category
+    const categoryPerformance = scores.reduce((acc, score) => {
+      const categoryId = score.categoryId
+      if (!acc[categoryId]) {
+        acc[categoryId] = {
+          category: score.category,
+          scores: [],
+          totalScore: 0,
+          averageScore: 0
+        }
+      }
+      acc[categoryId].scores.push(score)
+      acc[categoryId].totalScore += score.score
+      return acc
+    }, {})
+
+    // Calculate averages for each category
+    Object.values(categoryPerformance).forEach(category => {
+      category.averageScore = category.scores.length > 0 ? category.totalScore / category.scores.length : 0
+    })
+
+    const report = {
+      judge: {
+        id: judge.id,
+        name: judge.name,
+        preferredName: judge.preferredName,
+        email: judge.email,
+        role: judge.role,
+        bio: judge.judgeBio,
+        specialties: judge.judgeSpecialties ? JSON.parse(judge.judgeSpecialties) : [],
+        certifications: judge.judgeCertifications ? JSON.parse(judge.judgeCertifications) : []
+      },
+      statistics: judgeStats,
+      categoryPerformance: Object.values(categoryPerformance),
+      generatedAt: new Date().toISOString(),
+      generatedBy: req.user.id,
+      format: format
+    }
+
+    if (includeDetails) {
+      report.scoreDetails = scores.map(score => ({
+        id: score.id,
+        category: score.category,
+        contestant: score.contestant,
+        criterion: score.criterion,
+        score: score.score,
+        comments: score.comments,
+        createdAt: score.createdAt
+      }))
+    }
+
+    // Save report to database
+    const savedReport = await prisma.report.create({
+      data: {
+        name: `Judge Performance Report - ${judge.preferredName || judge.name}`,
+        type: 'JUDGE_PERFORMANCE',
+        parameters: JSON.stringify({ judgeId, eventId, includeDetails, format }),
+        format: format,
+        generatedBy: req.user.id,
+        status: 'GENERATED'
+      }
+    })
+
+    res.json({
+      report,
+      reportId: savedReport.id,
+      message: 'Judge performance report generated successfully'
+    })
+  } catch (error) {
+    console.error('Generate judge performance report error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Generate system analytics report
+const generateSystemAnalyticsReport = async (req, res) => {
+  try {
+    const { startDate, endDate, includeDetails = false, format = 'JSON' } = req.body
+
+    const dateFilter = {
+      ...(startDate && { gte: new Date(startDate) }),
+      ...(endDate && { lte: new Date(endDate) })
+    }
+
+    // Get system statistics
+    const [
+      totalUsers,
+      totalEvents,
+      totalContests,
+      totalCategories,
+      totalScores,
+      totalFiles,
+      userActivity,
+      eventActivity,
+      scoreActivity
+    ] = await Promise.all([
+      prisma.user.count(),
+      prisma.event.count({ where: { createdAt: dateFilter } }),
+      prisma.contest.count({ where: { createdAt: dateFilter } }),
+      prisma.category.count({ where: { createdAt: dateFilter } }),
+      prisma.score.count({ where: { createdAt: dateFilter } }),
+      prisma.file.count({ where: { uploadedAt: dateFilter } }),
+      prisma.activityLog.count({ where: { createdAt: dateFilter } }),
+      prisma.event.count({ where: { createdAt: dateFilter } }),
+      prisma.score.count({ where: { createdAt: dateFilter } })
+    ])
+
+    // Get user role distribution
+    const userRoles = await prisma.user.groupBy({
+      by: ['role'],
+      _count: { role: true },
+      where: { createdAt: dateFilter }
+    })
+
+    // Get event status distribution
+    const eventStatuses = await prisma.event.groupBy({
+      by: ['status'],
+      _count: { status: true },
+      where: { createdAt: dateFilter }
+    })
+
+    // Get file category distribution
+    const fileCategories = await prisma.file.groupBy({
+      by: ['category'],
+      _count: { category: true },
+      where: { uploadedAt: dateFilter }
+    })
+
+    const analytics = {
+      overview: {
+        totalUsers,
+        totalEvents,
+        totalContests,
+        totalCategories,
+        totalScores,
+        totalFiles,
+        userActivity,
+        eventActivity,
+        scoreActivity
+      },
+      distributions: {
+        userRoles: userRoles.map(role => ({
+          role: role.role,
+          count: role._count.role
+        })),
+        eventStatuses: eventStatuses.map(status => ({
+          status: status.status,
+          count: status._count.status
+        })),
+        fileCategories: fileCategories.map(category => ({
+          category: category.category,
+          count: category._count.category
+        }))
+      },
+      period: {
+        startDate: startDate || null,
+        endDate: endDate || null
+      }
+    }
+
+    if (includeDetails) {
+      // Get detailed activity logs
+      const activityLogs = await prisma.activityLog.findMany({
+        where: { createdAt: dateFilter },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              preferredName: true,
+              email: true,
+              role: true
+            }
+          }
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 1000
+      })
+
+      analytics.activityLogs = activityLogs.map(log => ({
+        id: log.id,
+        action: log.action,
+        entityType: log.entityType,
+        entityId: log.entityId,
+        details: log.details,
+        user: log.user,
+        createdAt: log.createdAt
+      }))
+    }
+
+    const report = {
+      analytics,
+      generatedAt: new Date().toISOString(),
+      generatedBy: req.user.id,
+      format: format
+    }
+
+    // Save report to database
+    const savedReport = await prisma.report.create({
+      data: {
+        name: `System Analytics Report - ${startDate || 'All Time'}`,
+        type: 'SYSTEM_ANALYTICS',
+        parameters: JSON.stringify({ startDate, endDate, includeDetails, format }),
+        format: format,
+        generatedBy: req.user.id,
+        status: 'GENERATED'
+      }
+    })
+
+    res.json({
+      report,
+      reportId: savedReport.id,
+      message: 'System analytics report generated successfully'
+    })
+  } catch (error) {
+    console.error('Generate system analytics report error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Get all reports
+const getAllReports = async (req, res) => {
+  try {
+    const { page = 1, limit = 10, type, status } = req.query
+
+    const whereClause = {
+      ...(type && { type }),
+      ...(status && { status })
+    }
+
+    const reports = await prisma.report.findMany({
+      where: whereClause,
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            preferredName: true,
+            email: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' },
+      skip: (page - 1) * limit,
+      take: parseInt(limit)
+    })
+
+    const totalReports = await prisma.report.count({ where: whereClause })
+
+    res.json({
+      reports,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total: totalReports,
+        pages: Math.ceil(totalReports / limit)
+      }
+    })
+  } catch (error) {
+    console.error('Get all reports error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Get report by ID
+const getReportById = async (req, res) => {
+  try {
+    const { id } = req.params
+
+    const report = await prisma.report.findUnique({
+      where: { id },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            preferredName: true,
+            email: true
+          }
+        }
+      }
+    })
+
+    if (!report) {
+      return res.status(404).json({ error: 'Report not found' })
+    }
+
+    res.json(report)
+  } catch (error) {
+    console.error('Get report by ID error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Delete report
+const deleteReport = async (req, res) => {
+  try {
+    const { id } = req.params
+
+    const report = await prisma.report.findUnique({
+      where: { id }
+    })
+
+    if (!report) {
+      return res.status(404).json({ error: 'Report not found' })
+    }
+
+    // Delete associated file if exists
+    if (report.filePath) {
+      try {
+        await fs.unlink(report.filePath)
+      } catch (error) {
+        console.error('Error deleting report file:', error)
+      }
+    }
+
+    await prisma.report.delete({
+      where: { id }
+    })
+
+    res.json({ message: 'Report deleted successfully' })
+  } catch (error) {
+    console.error('Delete report error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Export report to file
+const exportReport = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { format = 'JSON' } = req.body
+
+    const report = await prisma.report.findUnique({
+      where: { id }
+    })
+
+    if (!report) {
+      return res.status(404).json({ error: 'Report not found' })
+    }
+
+    // Generate file path
+    const fileName = `${report.name.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.${format.toLowerCase()}`
+    const filePath = path.join(__dirname, '..', '..', 'reports', fileName)
+
+    // Create reports directory if it doesn't exist
+    await fs.mkdir(path.dirname(filePath), { recursive: true })
+
+    // Export based on format
+    let fileContent
+    switch (format.toUpperCase()) {
+      case 'JSON':
+        fileContent = JSON.stringify(report, null, 2)
+        break
+      case 'CSV':
+        // Convert report to CSV format
+        fileContent = convertToCSV(report)
+        break
+      case 'XML':
+        // Convert report to XML format
+        fileContent = convertToXML(report)
+        break
+      default:
+        return res.status(400).json({ error: 'Unsupported export format' })
+    }
+
+    // Write file
+    await fs.writeFile(filePath, fileContent, 'utf8')
+
+    // Update report with file path
+    await prisma.report.update({
+      where: { id },
+      data: {
+        filePath,
+        fileSize: fileContent.length,
+        status: 'EXPORTED'
+      }
+    })
+
+    res.json({
+      message: 'Report exported successfully',
+      filePath,
+      fileName,
+      fileSize: fileContent.length
+    })
+  } catch (error) {
+    console.error('Export report error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Helper function to convert report to CSV
+const convertToCSV = (report) => {
+  // Implementation for CSV conversion
+  return 'CSV conversion not implemented yet'
+}
+
+// Helper function to convert report to XML
+const convertToXML = (report) => {
+  // Implementation for XML conversion
+  return 'XML conversion not implemented yet'
+}
+
 module.exports = {
   getTemplates,
   createTemplate,
   updateTemplate,
   deleteTemplate,
   generateReport,
-  getHistory
+  getHistory,
+  generateEventReport,
+  generateContestResultsReport,
+  generateJudgePerformanceReport,
+  generateSystemAnalyticsReport,
+  getAllReports,
+  getReportById,
+  deleteReport,
+  exportReport
 }
 EOF
 
@@ -8991,7 +10066,19 @@ EOF
     # Reports Routes
     cat > "$APP_DIR/src/routes/reportsRoutes.js" << 'EOF'
 const express = require('express')
-const { getTemplates, generateReport, getHistory } = require('../controllers/reportsController')
+const { 
+  getTemplates, 
+  generateReport, 
+  getHistory,
+  generateEventReport,
+  generateContestResultsReport,
+  generateJudgePerformanceReport,
+  generateSystemAnalyticsReport,
+  getAllReports,
+  getReportById,
+  deleteReport,
+  exportReport
+} = require('../controllers/reportsController')
 const { authenticateToken, requireRole } = require('../middleware/auth')
 const { logActivity } = require('../middleware/errorHandler')
 
@@ -9000,10 +10087,22 @@ const router = express.Router()
 // Apply authentication to all routes
 router.use(authenticateToken)
 
-// Reports endpoints
+// Report templates and basic reports
 router.get('/templates', getTemplates)
 router.post('/generate', requireRole(['ORGANIZER', 'BOARD', 'JUDGE']), logActivity('GENERATE_REPORT', 'REPORT'), generateReport)
 router.get('/history', getHistory)
+
+// Advanced reporting endpoints
+router.post('/event', requireRole(['ORGANIZER', 'BOARD']), logActivity('GENERATE_EVENT_REPORT', 'REPORT'), generateEventReport)
+router.post('/contest-results', requireRole(['ORGANIZER', 'BOARD', 'AUDITOR']), logActivity('GENERATE_CONTEST_RESULTS_REPORT', 'REPORT'), generateContestResultsReport)
+router.post('/judge-performance', requireRole(['ORGANIZER', 'BOARD', 'AUDITOR']), logActivity('GENERATE_JUDGE_PERFORMANCE_REPORT', 'REPORT'), generateJudgePerformanceReport)
+router.post('/system-analytics', requireRole(['ORGANIZER', 'BOARD']), logActivity('GENERATE_SYSTEM_ANALYTICS_REPORT', 'REPORT'), generateSystemAnalyticsReport)
+
+// Report management
+router.get('/', getAllReports)
+router.get('/:id', getReportById)
+router.delete('/:id', requireRole(['ORGANIZER', 'BOARD']), logActivity('DELETE_REPORT', 'REPORT'), deleteReport)
+router.post('/:id/export', requireRole(['ORGANIZER', 'BOARD', 'AUDITOR']), logActivity('EXPORT_REPORT', 'REPORT'), exportReport)
 
 module.exports = router
 EOF
