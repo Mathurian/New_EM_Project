@@ -167,29 +167,43 @@ safe_npm_install() {
     npm config set audit false
     npm config set fund false
     
+    # Debug information
+    print_status "Debug information:"
+    print_status "  Current directory: $(pwd)"
+    print_status "  Node.js version: $(node --version)"
+    print_status "  npm version: $(npm --version)"
+    print_status "  Package.json exists: $([ -f "package.json" ] && echo "Yes" || echo "No")"
+    if [[ -f "package.json" ]]; then
+        print_status "  Package.json size: $(wc -l < package.json) lines"
+    fi
+    
     # Try multiple installation strategies
     local install_success=false
     
     # Strategy 1: Standard install with legacy peer deps
-    if npm install --legacy-peer-deps --force --no-fund --no-audit --silent; then
+    print_status "Attempting standard npm install..."
+    if npm install --legacy-peer-deps --force --no-fund --no-audit; then
         install_success=true
         print_success "Standard installation successful"
     else
         print_warning "Standard install failed, trying alternative strategies..."
         
         # Strategy 2: Install without optional dependencies
-        if npm install --legacy-peer-deps --force --no-optional --no-fund --no-audit --silent; then
+        print_status "Attempting install without optional dependencies..."
+        if npm install --legacy-peer-deps --force --no-optional --no-fund --no-audit; then
             install_success=true
             print_success "Installation successful (without optional dependencies)"
         else
             print_warning "Second strategy failed, trying with ignore-scripts..."
             
             # Strategy 3: Install ignoring scripts
-            if npm install --legacy-peer-deps --force --no-optional --ignore-scripts --no-fund --no-audit --silent; then
+            print_status "Attempting install ignoring scripts..."
+            if npm install --legacy-peer-deps --force --no-optional --ignore-scripts --no-fund --no-audit; then
                 install_success=true
                 print_success "Installation successful (ignoring scripts)"
             else
                 print_error "All installation strategies failed"
+                print_status "Last npm install attempt failed. Check the error messages above."
                 return 1
             fi
         fi
