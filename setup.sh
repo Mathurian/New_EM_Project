@@ -148,6 +148,9 @@ safe_npm_install() {
             python3-pip \
             g++ \
             make \
+            clamav \
+            clamav-daemon \
+            clamav-freshclam \
             2>/dev/null || true
         
         # Verify key dependencies are installed
@@ -156,6 +159,25 @@ safe_npm_install() {
             print_success "System dependencies installed successfully"
         else
             print_warning "Some system dependencies may not be installed properly"
+        fi
+        
+        # Configure ClamAV for virus scanning
+        print_status "Configuring ClamAV virus scanner..."
+        if command -v clamscan &> /dev/null; then
+            # Update virus definitions
+            sudo freshclam
+            
+            # Start ClamAV daemon
+            sudo systemctl start clamav-daemon
+            sudo systemctl enable clamav-daemon
+            
+            # Start freshclam daemon for automatic updates
+            sudo systemctl start clamav-freshclam
+            sudo systemctl enable clamav-freshclam
+            
+            print_success "ClamAV configured successfully"
+        else
+            print_warning "ClamAV not available - virus scanning will be skipped"
         fi
     fi
     
@@ -2794,26 +2816,58 @@ const prisma = new PrismaClient()
 
 const getAllAssignments = async (req, res) => {
   try {
+    const { status, judgeId, categoryId, contestId, eventId } = req.query
+    
     const assignments = await prisma.assignment.findMany({
+      where: {
+        ...(status && { status }),
+        ...(judgeId && { judgeId }),
+        ...(categoryId && { categoryId }),
+        ...(contestId && { contestId }),
+        ...(eventId && { eventId }),
+      },
       include: {
         judge: {
-          include: {
-            user: true
+          select: {
+            id: true,
+            name: true,
+            preferredName: true,
+            email: true,
+            role: true,
+            judgeBio: true,
+            judgeSpecialties: true,
           }
         },
         category: {
-          include: {
-            contest: {
-              include: {
-                event: true
-              }
-            }
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            scoreCap: true,
+          }
+        },
+        contest: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+          }
+        },
+        event: {
+          select: {
+            id: true,
+            name: true,
+            startDate: true,
+            endDate: true,
           }
         }
       },
-      orderBy: { createdAt: 'desc' }
+      orderBy: [
+        { priority: 'desc' },
+        { assignedAt: 'desc' }
+      ]
     })
-
+    
     res.json(assignments)
   } catch (error) {
     console.error('Get assignments error:', error)
@@ -2821,11 +2875,135 @@ const getAllAssignments = async (req, res) => {
   }
 }
 
+const createAssignment = async (req, res) => {
+  try {
+    const { judgeId, categoryId, contestId, eventId, notes, priority } = req.body
+    
+    // Validate assignment doesn't already exist
+    const existingAssignment = await prisma.assignment.findUnique({
+      where: {
+        judgeId_categoryId: {
+          judgeId,
+          categoryId
+        }
+      }
+    })
+    
+    if (existingAssignment) {
+      return res.status(400).json({ error: 'Assignment already exists' })
+    }
+    
+    const assignment = await prisma.assignment.create({
+      data: {
+        judgeId,
+        categoryId,
+        contestId,
+        eventId,
+        assignedBy: req.user.id,
+        notes,
+        priority: priority || 1,
+        status: 'PENDING'
+      },
+      include: {
+        judge: true,
+        category: true,
+        contest: true,
+        event: true
+      }
+    })
+    
+    res.status(201).json(assignment)
+  } catch (error) {
+    console.error('Create assignment error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const updateAssignment = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { status, notes, priority } = req.body
+    
+    const assignment = await prisma.assignment.update({
+      where: { id },
+      data: {
+        ...(status && { status }),
+        ...(notes !== undefined && { notes }),
+        ...(priority !== undefined && { priority }),
+      },
+      include: {
+        judge: true,
+        category: true,
+        contest: true,
+        event: true
+      }
+    })
+    
+    res.json(assignment)
+  } catch (error) {
+    console.error('Update assignment error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const deleteAssignment = async (req, res) => {
+  try {
+    const { id } = req.params
+    
+    await prisma.assignment.delete({
+      where: { id }
+    })
+    
+    res.json({ message: 'Assignment deleted successfully' })
+  } catch (error) {
+    console.error('Delete assignment error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getJudgeAssignments = async (req, res) => {
+  try {
+    const { judgeId } = req.params
+    
+    const assignments = await prisma.assignment.findMany({
+      where: { judgeId },
+      include: {
+        category: {
+          include: {
+            criteria: true,
+            contestants: true
+          }
+        },
+        contest: true,
+        event: true
+      },
+      orderBy: [
+        { priority: 'desc' },
+        { assignedAt: 'desc' }
+      ]
+    })
+    
+    res.json(assignments)
+  } catch (error) {
+    console.error('Get judge assignments error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
 const getJudges = async (req, res) => {
   try {
-    const judges = await prisma.judge.findMany({
-      include: {
-        user: true
+    const judges = await prisma.user.findMany({
+      where: { role: 'JUDGE' },
+      select: {
+        id: true,
+        name: true,
+        preferredName: true,
+        email: true,
+        judgeBio: true,
+        judgeSpecialties: true,
+        judgeCertifications: true,
+        isActive: true,
+        createdAt: true
       }
     })
 
@@ -2838,13 +3016,26 @@ const getJudges = async (req, res) => {
 
 const getCategories = async (req, res) => {
   try {
+    const { contestId, eventId } = req.query
+    
     const categories = await prisma.category.findMany({
+      where: {
+        ...(contestId && { contestId }),
+        ...(eventId && { 
+          contest: {
+            eventId
+          }
+        })
+      },
       include: {
         contest: {
           include: {
             event: true
           }
-        }
+        },
+        criteria: true,
+        contestants: true,
+        judges: true
       }
     })
 
@@ -2857,13 +3048,24 @@ const getCategories = async (req, res) => {
 
 const assignJudge = async (req, res) => {
   try {
-    const { judgeId, categoryId } = req.body
+    const { judgeId, categoryId, contestId, eventId, notes, priority } = req.body
 
     const assignment = await prisma.assignment.create({
       data: {
         judgeId,
         categoryId,
-        assignedBy: req.user.id
+        contestId,
+        eventId,
+        assignedBy: req.user.id,
+        notes,
+        priority: priority || 1,
+        status: 'PENDING'
+      },
+      include: {
+        judge: true,
+        category: true,
+        contest: true,
+        event: true
       }
     })
 
@@ -2889,28 +3091,16 @@ const removeAssignment = async (req, res) => {
   }
 }
 
-const deleteAssignment = async (req, res) => {
-  try {
-    const { id } = req.params
-
-    await prisma.assignment.delete({
-      where: { id }
-    })
-
-    res.status(204).send()
-  } catch (error) {
-    console.error('Delete assignment error:', error)
-    res.status(500).json({ error: 'Internal server error' })
-  }
-}
-
 module.exports = {
   getAllAssignments,
+  createAssignment,
+  updateAssignment,
+  deleteAssignment,
+  getJudgeAssignments,
   getJudges,
   getCategories,
   assignJudge,
-  removeAssignment,
-  deleteAssignment
+  removeAssignment
 }
 EOF
 
@@ -3029,12 +3219,434 @@ const rejectAudit = async (req, res) => {
   }
 }
 
+const getScoreVerification = async (req, res) => {
+  try {
+    const { categoryId, contestantId } = req.params
+
+    const scores = await prisma.score.findMany({
+      where: {
+        categoryId,
+        ...(contestantId && { contestantId })
+      },
+      include: {
+        judge: {
+          select: {
+            id: true,
+            name: true,
+            preferredName: true,
+            email: true,
+            role: true
+          }
+        },
+        contestant: {
+          select: {
+            id: true,
+            name: true,
+            preferredName: true,
+            email: true,
+            contestantNumber: true
+          }
+        },
+        criterion: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            maxScore: true
+          }
+        },
+        category: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            maxScore: true
+          }
+        }
+      },
+      orderBy: [
+        { contestant: { name: 'asc' } },
+        { criterion: { order: 'asc' } }
+      ]
+    })
+
+    // Group scores by contestant for easier verification
+    const groupedScores = scores.reduce((acc, score) => {
+      const key = score.contestantId
+      if (!acc[key]) {
+        acc[key] = {
+          contestant: score.contestant,
+          scores: [],
+          totalScore: 0,
+          averageScore: 0
+        }
+      }
+      acc[key].scores.push(score)
+      acc[key].totalScore += score.score
+      return acc
+    }, {})
+
+    // Calculate averages
+    Object.values(groupedScores).forEach(group => {
+      group.averageScore = group.scores.length > 0 ? group.totalScore / group.scores.length : 0
+    })
+
+    res.json({
+      categoryId,
+      scores: Object.values(groupedScores),
+      totalScores: scores.length,
+      uniqueContestants: Object.keys(groupedScores).length
+    })
+  } catch (error) {
+    console.error('Get score verification error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const verifyScore = async (req, res) => {
+  try {
+    const { scoreId } = req.params
+    const { verified, comments, issues } = req.body
+
+    const score = await prisma.score.findUnique({
+      where: { id: scoreId },
+      include: {
+        judge: true,
+        contestant: true,
+        criterion: true,
+        category: true
+      }
+    })
+
+    if (!score) {
+      return res.status(404).json({ error: 'Score not found' })
+    }
+
+    // Update score with verification data
+    const updatedScore = await prisma.score.update({
+      where: { id: scoreId },
+      data: {
+        verified,
+        verificationComments: comments,
+        verificationIssues: issues,
+        verifiedBy: req.user.id,
+        verifiedAt: new Date()
+      }
+    })
+
+    res.json(updatedScore)
+  } catch (error) {
+    console.error('Verify score error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getTallyMasterStatus = async (req, res) => {
+  try {
+    const { categoryId } = req.params
+
+    const category = await prisma.category.findUnique({
+      where: { id: categoryId },
+      include: {
+        contest: {
+          include: {
+            event: true
+          }
+        },
+        scores: {
+          include: {
+            judge: true,
+            contestant: true,
+            criterion: true
+          }
+        }
+      }
+    })
+
+    if (!category) {
+      return res.status(404).json({ error: 'Category not found' })
+    }
+
+    // Calculate tally master status
+    const totalScores = category.scores.length
+    const verifiedScores = category.scores.filter(s => s.verified).length
+    const pendingVerification = totalScores - verifiedScores
+
+    const tallyStatus = {
+      categoryId: category.id,
+      categoryName: category.name,
+      totalScores,
+      verifiedScores,
+      pendingVerification,
+      verificationProgress: totalScores > 0 ? (verifiedScores / totalScores * 100).toFixed(2) : 0,
+      totalsCertified: category.totalsCertified,
+      finalCertified: category.finalCertified,
+      tallyMasterCertified: category.tallyMasterCertified,
+      auditorCertified: category.auditorCertified
+    }
+
+    res.json(tallyStatus)
+  } catch (error) {
+    console.error('Get tally master status error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getCertificationWorkflow = async (req, res) => {
+  try {
+    const { categoryId } = req.params
+
+    const category = await prisma.category.findUnique({
+      where: { id: categoryId },
+      include: {
+        contest: {
+          include: {
+            event: true
+          }
+        },
+        scores: {
+          include: {
+            judge: true,
+            contestant: true,
+            criterion: true
+          }
+        }
+      }
+    })
+
+    if (!category) {
+      return res.status(404).json({ error: 'Category not found' })
+    }
+
+    const workflow = {
+      categoryId: category.id,
+      categoryName: category.name,
+      contestName: category.contest.name,
+      eventName: category.contest.event.name,
+      steps: [
+        {
+          name: 'Judge Scoring',
+          status: category.scores.length > 0 ? 'COMPLETED' : 'PENDING',
+          completedAt: category.scores.length > 0 ? category.scores[0].createdAt : null,
+          details: `${category.scores.length} scores submitted`
+        },
+        {
+          name: 'Tally Master Review',
+          status: category.tallyMasterCertified ? 'COMPLETED' : 'PENDING',
+          completedAt: category.tallyMasterCertifiedAt,
+          details: category.tallyMasterCertified ? 'Totals certified' : 'Pending tally review'
+        },
+        {
+          name: 'Auditor Verification',
+          status: category.auditorCertified ? 'COMPLETED' : 'PENDING',
+          completedAt: category.auditorCertifiedAt,
+          details: category.auditorCertified ? 'Final certification completed' : 'Pending auditor review'
+        },
+        {
+          name: 'Board Approval',
+          status: category.boardApproved ? 'COMPLETED' : 'PENDING',
+          completedAt: category.boardApprovedAt,
+          details: category.boardApproved ? 'Board approved' : 'Pending board approval'
+        }
+      ],
+      currentStep: category.auditorCertified ? 3 : category.tallyMasterCertified ? 2 : 1,
+      overallStatus: category.boardApproved ? 'APPROVED' : category.auditorCertified ? 'AUDITOR_CERTIFIED' : category.tallyMasterCertified ? 'TALLY_CERTIFIED' : 'PENDING'
+    }
+
+    res.json(workflow)
+  } catch (error) {
+    console.error('Get certification workflow error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const generateSummaryReport = async (req, res) => {
+  try {
+    const { categoryId, includeDetails = false } = req.body
+
+    const category = await prisma.category.findUnique({
+      where: { id: categoryId },
+      include: {
+        contest: {
+          include: {
+            event: true
+          }
+        },
+        scores: {
+          include: {
+            judge: {
+              select: {
+                id: true,
+                name: true,
+                preferredName: true,
+                email: true
+              }
+            },
+            contestant: {
+              select: {
+                id: true,
+                name: true,
+                preferredName: true,
+                email: true,
+                contestantNumber: true
+              }
+            },
+            criterion: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+                maxScore: true
+              }
+            }
+          }
+        }
+      }
+    })
+
+    if (!category) {
+      return res.status(404).json({ error: 'Category not found' })
+    }
+
+    // Calculate summary statistics
+    const totalScores = category.scores.length
+    const uniqueContestants = new Set(category.scores.map(s => s.contestantId)).size
+    const uniqueJudges = new Set(category.scores.map(s => s.judgeId)).size
+    const averageScore = totalScores > 0 ? category.scores.reduce((sum, s) => sum + s.score, 0) / totalScores : 0
+    const maxScore = Math.max(...category.scores.map(s => s.score), 0)
+    const minScore = Math.min(...category.scores.map(s => s.score), 0)
+
+    // Group by contestant for rankings
+    const contestantScores = category.scores.reduce((acc, score) => {
+      const key = score.contestantId
+      if (!acc[key]) {
+        acc[key] = {
+          contestant: score.contestant,
+          scores: [],
+          totalScore: 0,
+          averageScore: 0
+        }
+      }
+      acc[key].scores.push(score)
+      acc[key].totalScore += score.score
+      return acc
+    }, {})
+
+    // Calculate averages and rankings
+    const rankings = Object.values(contestantScores).map(group => {
+      group.averageScore = group.scores.length > 0 ? group.totalScore / group.scores.length : 0
+      return group
+    }).sort((a, b) => b.averageScore - a.averageScore)
+
+    // Add rank to each contestant
+    rankings.forEach((contestant, index) => {
+      contestant.rank = index + 1
+    })
+
+    const summaryReport = {
+      category: {
+        id: category.id,
+        name: category.name,
+        description: category.description,
+        maxScore: category.maxScore
+      },
+      contest: {
+        id: category.contest.id,
+        name: category.contest.name,
+        eventName: category.contest.event.name
+      },
+      statistics: {
+        totalScores,
+        uniqueContestants,
+        uniqueJudges,
+        averageScore: parseFloat(averageScore.toFixed(2)),
+        maxScore,
+        minScore,
+        scoreRange: maxScore - minScore
+      },
+      rankings: includeDetails ? rankings : rankings.map(r => ({
+        rank: r.rank,
+        contestant: r.contestant,
+        totalScore: r.totalScore,
+        averageScore: parseFloat(r.averageScore.toFixed(2)),
+        scoreCount: r.scores.length
+      })),
+      certification: {
+        totalsCertified: category.totalsCertified,
+        finalCertified: category.finalCertified,
+        tallyMasterCertified: category.tallyMasterCertified,
+        auditorCertified: category.auditorCertified,
+        boardApproved: category.boardApproved
+      },
+      generatedAt: new Date().toISOString(),
+      generatedBy: req.user.id
+    }
+
+    res.json(summaryReport)
+  } catch (error) {
+    console.error('Generate summary report error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getAuditHistory = async (req, res) => {
+  try {
+    const { categoryId, page = 1, limit = 20 } = req.query
+
+    const whereClause = {
+      ...(categoryId && { categoryId }),
+      resourceType: 'CATEGORY'
+    }
+
+    const auditLogs = await prisma.activityLog.findMany({
+      where: whereClause,
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            preferredName: true,
+            email: true,
+            role: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' },
+      skip: (parseInt(page) - 1) * parseInt(limit),
+      take: parseInt(limit)
+    })
+
+    const total = await prisma.activityLog.count({
+      where: whereClause
+    })
+
+    res.json({
+      auditLogs,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / parseInt(limit))
+      }
+    })
+  } catch (error) {
+    console.error('Get audit history error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
 module.exports = {
   getStats,
   getPendingAudits,
   getCompletedAudits,
   finalCertification,
-  rejectAudit
+  rejectAudit,
+  getScoreVerification,
+  verifyScore,
+  getTallyMasterStatus,
+  getCertificationWorkflow,
+  generateSummaryReport,
+  getAuditHistory
 }
 EOF
 
@@ -3163,13 +3775,434 @@ const getEmceeScripts = async (req, res) => {
   }
 }
 
+const getEmceeScripts = async (req, res) => {
+  try {
+    const scripts = await prisma.emceeScript.findMany({
+      where: { isActive: true },
+      include: {
+        event: true,
+        contest: true,
+        category: true
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    res.json(scripts)
+  } catch (error) {
+    console.error('Get emcee scripts error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const createEmceeScript = async (req, res) => {
+  try {
+    const { title, content, type, eventId, contestId, categoryId, order, notes } = req.body
+
+    const script = await prisma.emceeScript.create({
+      data: {
+        title,
+        content,
+        type,
+        eventId,
+        contestId,
+        categoryId,
+        order: order || 0,
+        notes,
+        isActive: true,
+        createdBy: req.user.id
+      }
+    })
+
+    res.status(201).json(script)
+  } catch (error) {
+    console.error('Create emcee script error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const updateEmceeScript = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { title, content, type, eventId, contestId, categoryId, order, notes, isActive } = req.body
+
+    const script = await prisma.emceeScript.update({
+      where: { id },
+      data: {
+        title,
+        content,
+        type,
+        eventId,
+        contestId,
+        categoryId,
+        order,
+        notes,
+        isActive
+      }
+    })
+
+    res.json(script)
+  } catch (error) {
+    console.error('Update emcee script error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const deleteEmceeScript = async (req, res) => {
+  try {
+    const { id } = req.params
+
+    await prisma.emceeScript.delete({
+      where: { id }
+    })
+
+    res.json({ message: 'Emcee script deleted successfully' })
+  } catch (error) {
+    console.error('Delete emcee script error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const generateReport = async (req, res) => {
+  try {
+    const { type, parameters } = req.body
+
+    let reportData = null
+
+    switch (type) {
+      case 'CERTIFICATION_SUMMARY':
+        reportData = await generateCertificationSummary(parameters)
+        break
+      case 'CONTEST_SUMMARY':
+        reportData = await generateContestSummary(parameters)
+        break
+      case 'SCORE_REMOVAL_REQUESTS':
+        reportData = await generateScoreRemovalRequests(parameters)
+        break
+      case 'EMCEE_SCRIPT_USAGE':
+        reportData = await generateEmceeScriptUsage(parameters)
+        break
+      default:
+        return res.status(400).json({ error: 'Invalid report type' })
+    }
+
+    res.json(reportData)
+  } catch (error) {
+    console.error('Generate report error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const generateCertificationSummary = async (parameters) => {
+  const { eventId, contestId, categoryId, dateFrom, dateTo } = parameters
+
+  const whereClause = {
+    ...(eventId && { event: { id: eventId } }),
+    ...(contestId && { contest: { id: contestId } }),
+    ...(categoryId && { id: categoryId }),
+    ...(dateFrom && dateTo && {
+      createdAt: {
+        gte: new Date(dateFrom),
+        lte: new Date(dateTo)
+      }
+    })
+  }
+
+  const certifications = await prisma.certification.findMany({
+    where: whereClause,
+    include: {
+      category: {
+        include: {
+          contest: {
+            include: {
+              event: true
+            }
+          }
+        }
+      }
+    },
+    orderBy: { createdAt: 'desc' }
+  })
+
+  const stats = {
+    total: certifications.length,
+    certified: certifications.filter(c => c.status === 'CERTIFIED').length,
+    pending: certifications.filter(c => c.status === 'PENDING').length,
+    rejected: certifications.filter(c => c.status === 'REJECTED').length
+  }
+
+  return {
+    type: 'CERTIFICATION_SUMMARY',
+    stats,
+    certifications,
+    generatedAt: new Date().toISOString(),
+    generatedBy: 'BOARD'
+  }
+}
+
+const generateContestSummary = async (parameters) => {
+  const { eventId, contestId } = parameters
+
+  const whereClause = {
+    ...(eventId && { eventId }),
+    ...(contestId && { id: contestId })
+  }
+
+  const contests = await prisma.contest.findMany({
+    where: whereClause,
+    include: {
+      event: true,
+      categories: {
+        include: {
+          scores: {
+            include: {
+              judge: true,
+              contestant: true
+            }
+          }
+        }
+      },
+      contestants: true,
+      judges: true
+    }
+  })
+
+  const summary = contests.map(contest => ({
+    id: contest.id,
+    name: contest.name,
+    eventName: contest.event.name,
+    categoriesCount: contest.categories.length,
+    contestantsCount: contest.contestants.length,
+    judgesCount: contest.judges.length,
+    totalScores: contest.categories.reduce((sum, cat) => sum + cat.scores.length, 0),
+    averageScore: contest.categories.reduce((sum, cat) => {
+      const avg = cat.scores.length > 0 ? cat.scores.reduce((s, score) => s + score.score, 0) / cat.scores.length : 0
+      return sum + avg
+    }, 0) / contest.categories.length
+  }))
+
+  return {
+    type: 'CONTEST_SUMMARY',
+    summary,
+    generatedAt: new Date().toISOString(),
+    generatedBy: 'BOARD'
+  }
+}
+
+const generateScoreRemovalRequests = async (parameters) => {
+  const { status, dateFrom, dateTo } = parameters
+
+  const whereClause = {
+    ...(status && { status }),
+    ...(dateFrom && dateTo && {
+      createdAt: {
+        gte: new Date(dateFrom),
+        lte: new Date(dateTo)
+      }
+    })
+  }
+
+  const requests = await prisma.judgeScoreRemovalRequest.findMany({
+    where: whereClause,
+    include: {
+      judge: true,
+      category: {
+        include: {
+          contest: {
+            include: {
+              event: true
+            }
+          }
+        }
+      },
+      score: {
+        include: {
+          contestant: true
+        }
+      }
+    },
+    orderBy: { createdAt: 'desc' }
+  })
+
+  const stats = {
+    total: requests.length,
+    pending: requests.filter(r => r.status === 'PENDING').length,
+    approved: requests.filter(r => r.status === 'APPROVED').length,
+    rejected: requests.filter(r => r.status === 'REJECTED').length
+  }
+
+  return {
+    type: 'SCORE_REMOVAL_REQUESTS',
+    stats,
+    requests,
+    generatedAt: new Date().toISOString(),
+    generatedBy: 'BOARD'
+  }
+}
+
+const generateEmceeScriptUsage = async (parameters) => {
+  const { eventId, contestId, dateFrom, dateTo } = parameters
+
+  const whereClause = {
+    ...(eventId && { eventId }),
+    ...(contestId && { contestId }),
+    ...(dateFrom && dateTo && {
+      createdAt: {
+        gte: new Date(dateFrom),
+        lte: new Date(dateTo)
+      }
+    })
+  }
+
+  const scripts = await prisma.emceeScript.findMany({
+    where: whereClause,
+    include: {
+      event: true,
+      contest: true,
+      category: true
+    },
+    orderBy: { usageCount: 'desc' }
+  })
+
+  const stats = {
+    totalScripts: scripts.length,
+    activeScripts: scripts.filter(s => s.isActive).length,
+    totalUsage: scripts.reduce((sum, s) => sum + s.usageCount, 0),
+    averageUsage: scripts.length > 0 ? scripts.reduce((sum, s) => sum + s.usageCount, 0) / scripts.length : 0
+  }
+
+  return {
+    type: 'EMCEE_SCRIPT_USAGE',
+    stats,
+    scripts,
+    generatedAt: new Date().toISOString(),
+    generatedBy: 'BOARD'
+  }
+}
+
+const getScoreRemovalRequests = async (req, res) => {
+  try {
+    const { status, page = 1, limit = 20 } = req.query
+
+    const whereClause = {
+      ...(status && { status })
+    }
+
+    const requests = await prisma.judgeScoreRemovalRequest.findMany({
+      where: whereClause,
+      include: {
+        judge: true,
+        category: {
+          include: {
+            contest: {
+              include: {
+                event: true
+              }
+            }
+          }
+        },
+        score: {
+          include: {
+            contestant: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' },
+      skip: (parseInt(page) - 1) * parseInt(limit),
+      take: parseInt(limit)
+    })
+
+    const total = await prisma.judgeScoreRemovalRequest.count({
+      where: whereClause
+    })
+
+    res.json({
+      requests,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / parseInt(limit))
+      }
+    })
+  } catch (error) {
+    console.error('Get score removal requests error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const approveScoreRemoval = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { reason } = req.body
+
+    const request = await prisma.judgeScoreRemovalRequest.findUnique({
+      where: { id },
+      include: { score: true }
+    })
+
+    if (!request) {
+      return res.status(404).json({ error: 'Request not found' })
+    }
+
+    // Delete the score
+    await prisma.score.delete({
+      where: { id: request.scoreId }
+    })
+
+    // Update the request status
+    const updatedRequest = await prisma.judgeScoreRemovalRequest.update({
+      where: { id },
+      data: {
+        status: 'APPROVED',
+        approvedBy: req.user.id,
+        approvedAt: new Date(),
+        reason
+      }
+    })
+
+    res.json(updatedRequest)
+  } catch (error) {
+    console.error('Approve score removal error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const rejectScoreRemoval = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { reason } = req.body
+
+    const updatedRequest = await prisma.judgeScoreRemovalRequest.update({
+      where: { id },
+      data: {
+        status: 'REJECTED',
+        rejectedBy: req.user.id,
+        rejectedAt: new Date(),
+        reason
+      }
+    })
+
+    res.json(updatedRequest)
+  } catch (error) {
+    console.error('Reject score removal error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
 module.exports = {
   getStats,
   getCertifications,
   approveCertification,
   rejectCertification,
   getCertificationStatus,
-  getEmceeScripts
+  getEmceeScripts,
+  createEmceeScript,
+  updateEmceeScript,
+  deleteEmceeScript,
+  generateReport,
+  getScoreRemovalRequests,
+  approveScoreRemoval,
+  rejectScoreRemoval
 }
 EOF
 
@@ -3281,16 +4314,377 @@ const getPendingCertifications = async (req, res) => {
 
 const certifyTotals = async (req, res) => {
   try {
-    const { categoryId } = req.params
+    const { categoryId } = req.body
 
-    await prisma.category.update({
+    const category = await prisma.category.update({
       where: { id: categoryId },
-      data: { totalsCertified: true }
+      data: { 
+        totalsCertified: true,
+        tallyMasterCertified: true
+      }
     })
 
-    res.json({ message: 'Totals certified successfully' })
+    res.json(category)
   } catch (error) {
     console.error('Certify totals error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Get score review interface
+const getScoreReview = async (req, res) => {
+  try {
+    const { categoryId } = req.params
+
+    const category = await prisma.category.findUnique({
+      where: { id: categoryId },
+      include: {
+        contest: {
+          include: {
+            event: true
+          }
+        },
+        scores: {
+          include: {
+            judge: {
+              select: {
+                id: true,
+                name: true,
+                preferredName: true,
+                email: true,
+                role: true
+              }
+            },
+            contestant: {
+              select: {
+                id: true,
+                name: true,
+                preferredName: true,
+                email: true,
+                contestantNumber: true
+              }
+            },
+            criterion: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+                maxScore: true,
+                order: true
+              }
+            }
+          },
+          orderBy: [
+            { contestant: { name: 'asc' } },
+            { criterion: { order: 'asc' } }
+          ]
+        }
+      }
+    })
+
+    if (!category) {
+      return res.status(404).json({ error: 'Category not found' })
+    }
+
+    // Group scores by contestant for review
+    const contestantScores = category.scores.reduce((acc, score) => {
+      const key = score.contestantId
+      if (!acc[key]) {
+        acc[key] = {
+          contestant: score.contestant,
+          scores: [],
+          totalScore: 0,
+          averageScore: 0,
+          scoreCount: 0
+        }
+      }
+      acc[key].scores.push(score)
+      acc[key].totalScore += score.score
+      acc[key].scoreCount += 1
+      return acc
+    }, {})
+
+    // Calculate averages
+    Object.values(contestantScores).forEach(group => {
+      group.averageScore = group.scoreCount > 0 ? group.totalScore / group.scoreCount : 0
+    })
+
+    // Sort by average score (descending)
+    const sortedContestants = Object.values(contestantScores).sort((a, b) => b.averageScore - a.averageScore)
+
+    res.json({
+      category: {
+        id: category.id,
+        name: category.name,
+        description: category.description,
+        maxScore: category.maxScore
+      },
+      contest: {
+        id: category.contest.id,
+        name: category.contest.name,
+        eventName: category.contest.event.name
+      },
+      contestants: sortedContestants,
+      totalScores: category.scores.length,
+      uniqueContestants: Object.keys(contestantScores).length
+    })
+  } catch (error) {
+    console.error('Get score review error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Get certification workflow
+const getCertificationWorkflow = async (req, res) => {
+  try {
+    const { categoryId } = req.params
+
+    const category = await prisma.category.findUnique({
+      where: { id: categoryId },
+      include: {
+        contest: {
+          include: {
+            event: true
+          }
+        },
+        scores: {
+          include: {
+            judge: {
+              select: {
+                id: true,
+                name: true,
+                preferredName: true,
+                email: true
+              }
+            },
+            contestant: {
+              select: {
+                id: true,
+                name: true,
+                preferredName: true,
+                email: true,
+                contestantNumber: true
+              }
+            },
+            criterion: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+                maxScore: true
+              }
+            }
+          }
+        }
+      }
+    })
+
+    if (!category) {
+      return res.status(404).json({ error: 'Category not found' })
+    }
+
+    // Calculate certification status
+    const certificationStatus = {
+      totalsCertified: category.totalsCertified,
+      finalCertified: category.finalCertified,
+      tallyMasterCertified: category.tallyMasterCertified,
+      auditorCertified: category.auditorCertified,
+      boardApproved: category.boardApproved,
+      currentStep: 1,
+      totalSteps: 4,
+      canProceed: false,
+      nextStep: null
+    }
+
+    // Determine current step and next action
+    if (!category.totalsCertified) {
+      certificationStatus.currentStep = 1
+      certificationStatus.nextStep = 'CERTIFY_TOTALS'
+      certificationStatus.canProceed = true
+    } else if (!category.finalCertified) {
+      certificationStatus.currentStep = 2
+      certificationStatus.nextStep = 'AUDITOR_REVIEW'
+      certificationStatus.canProceed = false
+    } else if (!category.boardApproved) {
+      certificationStatus.currentStep = 3
+      certificationStatus.nextStep = 'BOARD_APPROVAL'
+      certificationStatus.canProceed = false
+    } else {
+      certificationStatus.currentStep = 4
+      certificationStatus.nextStep = 'COMPLETED'
+      certificationStatus.canProceed = false
+    }
+
+    res.json({
+      category: {
+        id: category.id,
+        name: category.name,
+        description: category.description,
+        maxScore: category.maxScore
+      },
+      contest: {
+        id: category.contest.id,
+        name: category.contest.name,
+        eventName: category.contest.event.name
+      },
+      certificationStatus,
+      totalScores: category.scores.length,
+      uniqueContestants: new Set(category.scores.map(s => s.contestantId)).size
+    })
+  } catch (error) {
+    console.error('Get certification workflow error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Get bias checking tools
+const getBiasCheckingTools = async (req, res) => {
+  try {
+    const { categoryId } = req.params
+
+    const category = await prisma.category.findUnique({
+      where: { id: categoryId },
+      include: {
+        scores: {
+          include: {
+            judge: {
+              select: {
+                id: true,
+                name: true,
+                preferredName: true,
+                email: true,
+                role: true
+              }
+            },
+            contestant: {
+              select: {
+                id: true,
+                name: true,
+                preferredName: true,
+                email: true,
+                contestantNumber: true
+              }
+            },
+            criterion: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+                maxScore: true
+              }
+            }
+          }
+        }
+      }
+    })
+
+    if (!category) {
+      return res.status(404).json({ error: 'Category not found' })
+    }
+
+    // Analyze scores for potential bias
+    const judgeScores = category.scores.reduce((acc, score) => {
+      const key = score.judgeId
+      if (!acc[key]) {
+        acc[key] = {
+          judge: score.judge,
+          scores: [],
+          totalScore: 0,
+          averageScore: 0,
+          scoreCount: 0
+        }
+      }
+      acc[key].scores.push(score)
+      acc[key].totalScore += score.score
+      acc[key].scoreCount += 1
+      return acc
+    }, {})
+
+    // Calculate judge averages
+    Object.values(judgeScores).forEach(group => {
+      group.averageScore = group.scoreCount > 0 ? group.totalScore / group.scoreCount : 0
+    })
+
+    // Calculate overall average
+    const overallAverage = category.scores.length > 0 
+      ? category.scores.reduce((sum, s) => sum + s.score, 0) / category.scores.length 
+      : 0
+
+    // Identify potential bias (judges with significantly different averages)
+    const biasAnalysis = Object.values(judgeScores).map(judge => {
+      const deviation = Math.abs(judge.averageScore - overallAverage)
+      const deviationPercentage = overallAverage > 0 ? (deviation / overallAverage) * 100 : 0
+      
+      return {
+        judge: judge.judge,
+        averageScore: parseFloat(judge.averageScore.toFixed(2)),
+        scoreCount: judge.scoreCount,
+        deviation: parseFloat(deviation.toFixed(2)),
+        deviationPercentage: parseFloat(deviationPercentage.toFixed(2)),
+        potentialBias: deviationPercentage > 20 // Flag if deviation is more than 20%
+      }
+    }).sort((a, b) => b.deviationPercentage - a.deviationPercentage)
+
+    res.json({
+      category: {
+        id: category.id,
+        name: category.name,
+        description: category.description,
+        maxScore: category.maxScore
+      },
+      overallAverage: parseFloat(overallAverage.toFixed(2)),
+      totalScores: category.scores.length,
+      uniqueJudges: Object.keys(judgeScores).length,
+      biasAnalysis,
+      recommendations: biasAnalysis.filter(j => j.potentialBias).map(j => 
+        `Judge ${j.judge.preferredName || j.judge.name} shows potential bias with ${j.deviationPercentage}% deviation from average`
+      )
+    })
+  } catch (error) {
+    console.error('Get bias checking tools error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Get tally master history
+const getTallyMasterHistory = async (req, res) => {
+  try {
+    const { page = 1, limit = 10 } = req.query
+    const offset = (page - 1) * limit
+
+    const categories = await prisma.category.findMany({
+      where: { 
+        tallyMasterCertified: true
+      },
+      include: {
+        contest: {
+          include: {
+            event: true
+          }
+        }
+      },
+      orderBy: { updatedAt: 'desc' },
+      skip: offset,
+      take: parseInt(limit)
+    })
+
+    const total = await prisma.category.count({
+      where: { 
+        tallyMasterCertified: true
+      }
+    })
+
+    res.json({
+      categories,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / limit)
+      }
+    })
+  } catch (error) {
+    console.error('Get tally master history error:', error)
     res.status(500).json({ error: 'Internal server error' })
   }
 }
@@ -3300,12 +4694,1262 @@ module.exports = {
   getCertifications,
   getCertificationQueue,
   getPendingCertifications,
-  certifyTotals
+  certifyTotals,
+  getScoreReview,
+  getCertificationWorkflow,
+  getBiasCheckingTools,
+  getTallyMasterHistory
 }
 EOF
 
-    # Email Controller
-    cat > "$APP_DIR/src/controllers/emailController.js" << 'EOF'
+    # Judge Controller
+    cat > "$APP_DIR/src/controllers/judgeController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+// Get judge dashboard stats
+const getStats = async (req, res) => {
+  try {
+    const judgeId = req.user.id
+
+    const totalAssignments = await prisma.assignment.count({
+      where: { judgeId }
+    })
+
+    const pendingAssignments = await prisma.assignment.count({
+      where: { 
+        judgeId,
+        status: 'PENDING'
+      }
+    })
+
+    const activeAssignments = await prisma.assignment.count({
+      where: { 
+        judgeId,
+        status: 'ACTIVE'
+      }
+    })
+
+    const completedAssignments = await prisma.assignment.count({
+      where: { 
+        judgeId,
+        status: 'COMPLETED'
+      }
+    })
+
+    const totalScores = await prisma.score.count({
+      where: { judgeId }
+    })
+
+    res.json({
+      totalAssignments,
+      pendingAssignments,
+      activeAssignments,
+      completedAssignments,
+      totalScores
+    })
+  } catch (error) {
+    console.error('Get judge stats error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Get assignment management
+const getAssignments = async (req, res) => {
+  try {
+    const judgeId = req.user.id
+
+    const assignments = await prisma.assignment.findMany({
+      where: { judgeId },
+      include: {
+        category: {
+          include: {
+            contest: {
+              include: {
+                event: true
+              }
+            }
+          }
+        }
+      },
+      orderBy: { assignedAt: 'desc' }
+    })
+
+    res.json(assignments)
+  } catch (error) {
+    console.error('Get assignments error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Update assignment status
+const updateAssignmentStatus = async (req, res) => {
+  try {
+    const { assignmentId } = req.params
+    const { status } = req.body
+    const judgeId = req.user.id
+
+    const assignment = await prisma.assignment.findFirst({
+      where: { 
+        id: assignmentId,
+        judgeId
+      }
+    })
+
+    if (!assignment) {
+      return res.status(404).json({ error: 'Assignment not found' })
+    }
+
+    const updatedAssignment = await prisma.assignment.update({
+      where: { id: assignmentId },
+      data: { status },
+      include: {
+        category: {
+          include: {
+            contest: {
+              include: {
+                event: true
+              }
+            }
+          }
+        }
+      }
+    })
+
+    res.json(updatedAssignment)
+  } catch (error) {
+    console.error('Update assignment status error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Get scoring interface
+const getScoringInterface = async (req, res) => {
+  try {
+    const { categoryId } = req.params
+    const judgeId = req.user.id
+
+    // Check if judge is assigned to this category
+    const assignment = await prisma.assignment.findFirst({
+      where: {
+        judgeId,
+        categoryId,
+        status: { in: ['ACTIVE', 'COMPLETED'] }
+      }
+    })
+
+    if (!assignment) {
+      return res.status(403).json({ error: 'Not assigned to this category' })
+    }
+
+    const category = await prisma.category.findUnique({
+      where: { id: categoryId },
+      include: {
+        contest: {
+          include: {
+            event: true
+          }
+        },
+        criteria: {
+          orderBy: { order: 'asc' }
+        },
+        contestants: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                preferredName: true,
+                email: true
+              }
+            }
+          }
+        },
+        scores: {
+          where: { judgeId },
+          include: {
+            criterion: true,
+            contestant: {
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    name: true,
+                    preferredName: true,
+                    email: true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    })
+
+    if (!category) {
+      return res.status(404).json({ error: 'Category not found' })
+    }
+
+    res.json({
+      category: {
+        id: category.id,
+        name: category.name,
+        description: category.description,
+        maxScore: category.maxScore
+      },
+      contest: {
+        id: category.contest.id,
+        name: category.contest.name,
+        eventName: category.contest.event.name
+      },
+      criteria: category.criteria,
+      contestants: category.contestants,
+      scores: category.scores,
+      assignment: {
+        id: assignment.id,
+        status: assignment.status,
+        assignedAt: assignment.assignedAt
+      }
+    })
+  } catch (error) {
+    console.error('Get scoring interface error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Submit score
+const submitScore = async (req, res) => {
+  try {
+    const { categoryId, contestantId, criterionId, score } = req.body
+    const judgeId = req.user.id
+
+    // Check if judge is assigned to this category
+    const assignment = await prisma.assignment.findFirst({
+      where: {
+        judgeId,
+        categoryId,
+        status: { in: ['ACTIVE', 'COMPLETED'] }
+      }
+    })
+
+    if (!assignment) {
+      return res.status(403).json({ error: 'Not assigned to this category' })
+    }
+
+    // Validate score
+    const criterion = await prisma.criterion.findUnique({
+      where: { id: criterionId }
+    })
+
+    if (!criterion) {
+      return res.status(404).json({ error: 'Criterion not found' })
+    }
+
+    if (score < 0 || score > criterion.maxScore) {
+      return res.status(400).json({ error: `Score must be between 0 and ${criterion.maxScore}` })
+    }
+
+    // Upsert score
+    const scoreRecord = await prisma.score.upsert({
+      where: {
+        judgeId_categoryId_contestantId_criterionId: {
+          judgeId,
+          categoryId,
+          contestantId,
+          criterionId
+        }
+      },
+      update: { score },
+      create: {
+        judgeId,
+        categoryId,
+        contestantId,
+        criterionId,
+        score
+      },
+      include: {
+        criterion: true,
+        contestant: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                preferredName: true,
+                email: true
+              }
+            }
+          }
+        }
+      }
+    })
+
+    res.json(scoreRecord)
+  } catch (error) {
+    console.error('Submit score error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Get certification workflow
+const getCertificationWorkflow = async (req, res) => {
+  try {
+    const { categoryId } = req.params
+    const judgeId = req.user.id
+
+    // Check if judge is assigned to this category
+    const assignment = await prisma.assignment.findFirst({
+      where: {
+        judgeId,
+        categoryId,
+        status: { in: ['ACTIVE', 'COMPLETED'] }
+      }
+    })
+
+    if (!assignment) {
+      return res.status(403).json({ error: 'Not assigned to this category' })
+    }
+
+    const category = await prisma.category.findUnique({
+      where: { id: categoryId },
+      include: {
+        contest: {
+          include: {
+            event: true
+          }
+        },
+        scores: {
+          where: { judgeId },
+          include: {
+            criterion: true,
+            contestant: {
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    name: true,
+                    preferredName: true,
+                    email: true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    })
+
+    if (!category) {
+      return res.status(404).json({ error: 'Category not found' })
+    }
+
+    // Calculate certification status
+    const certificationStatus = {
+      totalsCertified: category.totalsCertified,
+      finalCertified: category.finalCertified,
+      tallyMasterCertified: category.tallyMasterCertified,
+      auditorCertified: category.auditorCertified,
+      boardApproved: category.boardApproved,
+      currentStep: 1,
+      totalSteps: 4,
+      canProceed: false,
+      nextStep: null
+    }
+
+    // Determine current step and next action
+    if (!category.totalsCertified) {
+      certificationStatus.currentStep = 1
+      certificationStatus.nextStep = 'TALLY_MASTER_REVIEW'
+      certificationStatus.canProceed = false
+    } else if (!category.finalCertified) {
+      certificationStatus.currentStep = 2
+      certificationStatus.nextStep = 'AUDITOR_REVIEW'
+      certificationStatus.canProceed = false
+    } else if (!category.boardApproved) {
+      certificationStatus.currentStep = 3
+      certificationStatus.nextStep = 'BOARD_APPROVAL'
+      certificationStatus.canProceed = false
+    } else {
+      certificationStatus.currentStep = 4
+      certificationStatus.nextStep = 'COMPLETED'
+      certificationStatus.canProceed = false
+    }
+
+    res.json({
+      category: {
+        id: category.id,
+        name: category.name,
+        description: category.description,
+        maxScore: category.maxScore
+      },
+      contest: {
+        id: category.contest.id,
+        name: category.contest.name,
+        eventName: category.contest.event.name
+      },
+      certificationStatus,
+      scores: category.scores,
+      totalScores: category.scores.length,
+      assignment: {
+        id: assignment.id,
+        status: assignment.status,
+        assignedAt: assignment.assignedAt
+      }
+    })
+  } catch (error) {
+    console.error('Get certification workflow error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Get contestant bios
+const getContestantBios = async (req, res) => {
+  try {
+    const { categoryId } = req.params
+    const judgeId = req.user.id
+
+    // Check if judge is assigned to this category
+    const assignment = await prisma.assignment.findFirst({
+      where: {
+        judgeId,
+        categoryId,
+        status: { in: ['ACTIVE', 'COMPLETED'] }
+      }
+    })
+
+    if (!assignment) {
+      return res.status(403).json({ error: 'Not assigned to this category' })
+    }
+
+    const contestants = await prisma.contestant.findMany({
+      where: {
+        categories: {
+          some: {
+            id: categoryId
+          }
+        }
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            preferredName: true,
+            email: true,
+            pronouns: true
+          }
+        }
+      },
+      orderBy: { name: 'asc' }
+    })
+
+    res.json(contestants)
+  } catch (error) {
+    console.error('Get contestant bios error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Get judge history
+const getJudgeHistory = async (req, res) => {
+  try {
+    const judgeId = req.user.id
+    const { page = 1, limit = 10 } = req.query
+    const offset = (page - 1) * limit
+
+    const assignments = await prisma.assignment.findMany({
+      where: { judgeId },
+      include: {
+        category: {
+          include: {
+            contest: {
+              include: {
+                event: true
+              }
+            }
+          }
+        }
+      },
+      orderBy: { assignedAt: 'desc' },
+      skip: offset,
+      take: parseInt(limit)
+    })
+
+    const total = await prisma.assignment.count({
+      where: { judgeId }
+    })
+
+    res.json({
+      assignments,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / limit)
+      }
+    })
+  } catch (error) {
+    console.error('Get judge history error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+module.exports = {
+  getStats,
+  getAssignments,
+  updateAssignmentStatus,
+  getScoringInterface,
+  submitScore,
+  getCertificationWorkflow,
+  getContestantBios,
+  getJudgeHistory
+}
+EOF
+
+    # Judge Routes
+    cat > "$APP_DIR/src/routes/judgeRoutes.js" << 'EOF'
+const express = require('express')
+const { 
+  getStats,
+  getAssignments,
+  updateAssignmentStatus,
+  getScoringInterface,
+  submitScore,
+  getCertificationWorkflow,
+  getContestantBios,
+  getJudgeHistory
+} = require('../controllers/judgeController')
+const { authenticateToken, requireRole } = require('../middleware/auth')
+const { logActivity } = require('../middleware/errorHandler')
+
+const router = express.Router()
+
+// Apply authentication to all routes
+router.use(authenticateToken)
+router.use(requireRole(['JUDGE', 'ORGANIZER', 'BOARD']))
+
+// Judge dashboard endpoints
+router.get('/stats', getStats)
+router.get('/assignments', getAssignments)
+router.get('/history', getJudgeHistory)
+
+// Assignment management
+router.put('/assignments/:assignmentId/status', logActivity('UPDATE_ASSIGNMENT_STATUS', 'ASSIGNMENT'), updateAssignmentStatus)
+
+// Scoring interface
+router.get('/scoring/:categoryId', getScoringInterface)
+router.post('/scoring/submit', logActivity('SUBMIT_SCORE', 'SCORE'), submitScore)
+
+// Certification workflow
+router.get('/certification-workflow/:categoryId', getCertificationWorkflow)
+
+// Contestant bios
+router.get('/contestant-bios/:categoryId', getContestantBios)
+
+module.exports = router
+EOF
+
+    # Role-Based Navigation Middleware
+    cat > "$APP_DIR/src/middleware/navigation.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+// Define navigation structure based on roles
+const getNavigationItems = (userRole) => {
+  const baseItems = [
+    {
+      id: 'dashboard',
+      label: 'Dashboard',
+      path: '/dashboard',
+      icon: 'HomeIcon',
+      roles: ['ORGANIZER', 'BOARD', 'JUDGE', 'TALLY_MASTER', 'AUDITOR', 'EMCEE', 'CONTESTANT']
+    },
+    {
+      id: 'profile',
+      label: 'Profile',
+      path: '/profile',
+      icon: 'UserIcon',
+      roles: ['ORGANIZER', 'BOARD', 'JUDGE', 'TALLY_MASTER', 'AUDITOR', 'EMCEE', 'CONTESTANT']
+    }
+  ]
+
+  const roleSpecificItems = {
+    ORGANIZER: [
+      {
+        id: 'events',
+        label: 'Events',
+        path: '/events',
+        icon: 'CalendarIcon',
+        roles: ['ORGANIZER', 'BOARD']
+      },
+      {
+        id: 'contests',
+        label: 'Contests',
+        path: '/contests',
+        icon: 'TrophyIcon',
+        roles: ['ORGANIZER', 'BOARD']
+      },
+      {
+        id: 'categories',
+        label: 'Categories',
+        path: '/categories',
+        icon: 'TagIcon',
+        roles: ['ORGANIZER', 'BOARD']
+      },
+      {
+        id: 'users',
+        label: 'Users',
+        path: '/users',
+        icon: 'UsersIcon',
+        roles: ['ORGANIZER', 'BOARD']
+      },
+      {
+        id: 'assignments',
+        label: 'Assignments',
+        path: '/assignments',
+        icon: 'ClipboardDocumentListIcon',
+        roles: ['ORGANIZER', 'BOARD']
+      },
+      {
+        id: 'certifications',
+        label: 'Certifications',
+        path: '/certifications',
+        icon: 'ShieldCheckIcon',
+        roles: ['ORGANIZER', 'BOARD']
+      },
+      {
+        id: 'admin',
+        label: 'Admin',
+        path: '/admin',
+        icon: 'CogIcon',
+        roles: ['ORGANIZER', 'BOARD']
+      },
+      {
+        id: 'settings',
+        label: 'Settings',
+        path: '/settings',
+        icon: 'Cog6ToothIcon',
+        roles: ['ORGANIZER', 'BOARD']
+      }
+    ],
+    BOARD: [
+      {
+        id: 'board',
+        label: 'Board Dashboard',
+        path: '/board',
+        icon: 'BuildingOfficeIcon',
+        roles: ['BOARD', 'ORGANIZER']
+      },
+      {
+        id: 'emcee-scripts',
+        label: 'Emcee Scripts',
+        path: '/emcee-scripts',
+        icon: 'DocumentTextIcon',
+        roles: ['BOARD', 'ORGANIZER']
+      },
+      {
+        id: 'reports',
+        label: 'Reports',
+        path: '/reports',
+        icon: 'ChartBarIcon',
+        roles: ['BOARD', 'ORGANIZER']
+      },
+      {
+        id: 'score-removal',
+        label: 'Score Removal',
+        path: '/score-removal',
+        icon: 'ExclamationTriangleIcon',
+        roles: ['BOARD', 'ORGANIZER']
+      }
+    ],
+    AUDITOR: [
+      {
+        id: 'auditor',
+        label: 'Auditor Dashboard',
+        path: '/auditor',
+        icon: 'MagnifyingGlassIcon',
+        roles: ['AUDITOR', 'ORGANIZER', 'BOARD']
+      },
+      {
+        id: 'score-verification',
+        label: 'Score Verification',
+        path: '/score-verification',
+        icon: 'CheckCircleIcon',
+        roles: ['AUDITOR', 'ORGANIZER', 'BOARD']
+      },
+      {
+        id: 'tally-status',
+        label: 'Tally Status',
+        path: '/tally-status',
+        icon: 'CalculatorIcon',
+        roles: ['AUDITOR', 'ORGANIZER', 'BOARD']
+      },
+      {
+        id: 'final-certification',
+        label: 'Final Certification',
+        path: '/final-certification',
+        icon: 'ShieldCheckIcon',
+        roles: ['AUDITOR', 'ORGANIZER', 'BOARD']
+      }
+    ],
+    TALLY_MASTER: [
+      {
+        id: 'tally-master',
+        label: 'Tally Master Dashboard',
+        path: '/tally-master',
+        icon: 'CalculatorIcon',
+        roles: ['TALLY_MASTER', 'ORGANIZER', 'BOARD']
+      },
+      {
+        id: 'score-review',
+        label: 'Score Review',
+        path: '/score-review',
+        icon: 'EyeIcon',
+        roles: ['TALLY_MASTER', 'ORGANIZER', 'BOARD']
+      },
+      {
+        id: 'bias-checking',
+        label: 'Bias Checking',
+        path: '/bias-checking',
+        icon: 'ExclamationTriangleIcon',
+        roles: ['TALLY_MASTER', 'ORGANIZER', 'BOARD']
+      },
+      {
+        id: 'certification-workflow',
+        label: 'Certification Workflow',
+        path: '/certification-workflow',
+        icon: 'ClipboardDocumentCheckIcon',
+        roles: ['TALLY_MASTER', 'ORGANIZER', 'BOARD']
+      }
+    ],
+    JUDGE: [
+      {
+        id: 'judge',
+        label: 'Judge Dashboard',
+        path: '/judge',
+        icon: 'ScaleIcon',
+        roles: ['JUDGE', 'ORGANIZER', 'BOARD']
+      },
+      {
+        id: 'my-assignments',
+        label: 'My Assignments',
+        path: '/my-assignments',
+        icon: 'ClipboardDocumentListIcon',
+        roles: ['JUDGE', 'ORGANIZER', 'BOARD']
+      },
+      {
+        id: 'scoring',
+        label: 'Scoring',
+        path: '/scoring',
+        icon: 'PencilIcon',
+        roles: ['JUDGE', 'ORGANIZER', 'BOARD']
+      },
+      {
+        id: 'contestant-bios',
+        label: 'Contestant Bios',
+        path: '/contestant-bios',
+        icon: 'UserGroupIcon',
+        roles: ['JUDGE', 'ORGANIZER', 'BOARD']
+      }
+    ],
+    EMCEE: [
+      {
+        id: 'emcee',
+        label: 'Emcee Dashboard',
+        path: '/emcee',
+        icon: 'MicrophoneIcon',
+        roles: ['EMCEE', 'ORGANIZER', 'BOARD']
+      },
+      {
+        id: 'scripts',
+        label: 'Scripts',
+        path: '/scripts',
+        icon: 'DocumentTextIcon',
+        roles: ['EMCEE', 'ORGANIZER', 'BOARD']
+      },
+      {
+        id: 'contestant-bios',
+        label: 'Contestant Bios',
+        path: '/contestant-bios',
+        icon: 'UserGroupIcon',
+        roles: ['EMCEE', 'ORGANIZER', 'BOARD']
+      },
+      {
+        id: 'judge-bios',
+        label: 'Judge Bios',
+        path: '/judge-bios',
+        icon: 'UsersIcon',
+        roles: ['EMCEE', 'ORGANIZER', 'BOARD']
+      },
+      {
+        id: 'event-management',
+        label: 'Event Management',
+        path: '/event-management',
+        icon: 'CalendarIcon',
+        roles: ['EMCEE', 'ORGANIZER', 'BOARD']
+      }
+    ],
+    CONTESTANT: [
+      {
+        id: 'results',
+        label: 'Results',
+        path: '/results',
+        icon: 'TrophyIcon',
+        roles: ['CONTESTANT', 'ORGANIZER', 'BOARD']
+      },
+      {
+        id: 'my-scores',
+        label: 'My Scores',
+        path: '/my-scores',
+        icon: 'ChartBarIcon',
+        roles: ['CONTESTANT', 'ORGANIZER', 'BOARD']
+      }
+    ]
+  }
+
+  // Combine base items with role-specific items
+  const allItems = [...baseItems]
+  
+  if (roleSpecificItems[userRole]) {
+    allItems.push(...roleSpecificItems[userRole])
+  }
+
+  // Filter items based on user role
+  return allItems.filter(item => 
+    item.roles.includes(userRole) || 
+    item.roles.includes('ORGANIZER') || 
+    item.roles.includes('BOARD')
+  )
+}
+
+// Get navigation permissions for a specific route
+const getRoutePermissions = (route, userRole) => {
+  const navigationItems = getNavigationItems(userRole)
+  const item = navigationItems.find(nav => nav.path === route)
+  
+  if (!item) {
+    return {
+      allowed: false,
+      reason: 'Route not found in navigation'
+    }
+  }
+
+  return {
+    allowed: item.roles.includes(userRole),
+    reason: item.roles.includes(userRole) ? 'Access granted' : 'Insufficient permissions'
+  }
+}
+
+// Check if user can access a specific feature
+const canAccessFeature = (feature, userRole) => {
+  const featurePermissions = {
+    'CREATE_EVENT': ['ORGANIZER', 'BOARD'],
+    'EDIT_EVENT': ['ORGANIZER', 'BOARD'],
+    'DELETE_EVENT': ['ORGANIZER', 'BOARD'],
+    'CREATE_CONTEST': ['ORGANIZER', 'BOARD'],
+    'EDIT_CONTEST': ['ORGANIZER', 'BOARD'],
+    'DELETE_CONTEST': ['ORGANIZER', 'BOARD'],
+    'CREATE_CATEGORY': ['ORGANIZER', 'BOARD'],
+    'EDIT_CATEGORY': ['ORGANIZER', 'BOARD'],
+    'DELETE_CATEGORY': ['ORGANIZER', 'BOARD'],
+    'MANAGE_USERS': ['ORGANIZER', 'BOARD'],
+    'ASSIGN_JUDGES': ['ORGANIZER', 'BOARD'],
+    'VIEW_ALL_SCORES': ['ORGANIZER', 'BOARD', 'AUDITOR', 'TALLY_MASTER'],
+    'EDIT_SCORES': ['JUDGE', 'ORGANIZER', 'BOARD'],
+    'CERTIFY_SCORES': ['TALLY_MASTER', 'ORGANIZER', 'BOARD'],
+    'AUDIT_SCORES': ['AUDITOR', 'ORGANIZER', 'BOARD'],
+    'BOARD_APPROVAL': ['BOARD', 'ORGANIZER'],
+    'MANAGE_SCRIPTS': ['EMCEE', 'ORGANIZER', 'BOARD'],
+    'VIEW_CONTESTANT_BIOS': ['JUDGE', 'EMCEE', 'ORGANIZER', 'BOARD'],
+    'VIEW_JUDGE_BIOS': ['EMCEE', 'ORGANIZER', 'BOARD'],
+    'GENERATE_REPORTS': ['ORGANIZER', 'BOARD', 'AUDITOR'],
+    'MANAGE_SETTINGS': ['ORGANIZER', 'BOARD'],
+    'VIEW_ADMIN': ['ORGANIZER', 'BOARD'],
+    'MANAGE_FILES': ['ORGANIZER', 'BOARD'],
+    'VIEW_PERFORMANCE': ['ORGANIZER', 'BOARD']
+  }
+
+  const allowedRoles = featurePermissions[feature] || []
+  return allowedRoles.includes(userRole)
+}
+
+// Get user's accessible features
+const getUserFeatures = (userRole) => {
+  const allFeatures = [
+    'CREATE_EVENT', 'EDIT_EVENT', 'DELETE_EVENT',
+    'CREATE_CONTEST', 'EDIT_CONTEST', 'DELETE_CONTEST',
+    'CREATE_CATEGORY', 'EDIT_CATEGORY', 'DELETE_CATEGORY',
+    'MANAGE_USERS', 'ASSIGN_JUDGES', 'VIEW_ALL_SCORES',
+    'EDIT_SCORES', 'CERTIFY_SCORES', 'AUDIT_SCORES',
+    'BOARD_APPROVAL', 'MANAGE_SCRIPTS', 'VIEW_CONTESTANT_BIOS',
+    'VIEW_JUDGE_BIOS', 'GENERATE_REPORTS', 'MANAGE_SETTINGS',
+    'VIEW_ADMIN', 'MANAGE_FILES', 'VIEW_PERFORMANCE'
+  ]
+
+  return allFeatures.filter(feature => canAccessFeature(feature, userRole))
+}
+
+// Middleware to check navigation permissions
+const checkNavigationPermission = (req, res, next) => {
+  try {
+    const userRole = req.user?.role
+    const requestedPath = req.path
+
+    if (!userRole) {
+      return res.status(401).json({ error: 'User not authenticated' })
+    }
+
+    const permissions = getRoutePermissions(requestedPath, userRole)
+    
+    if (!permissions.allowed) {
+      return res.status(403).json({ 
+        error: 'Access denied', 
+        reason: permissions.reason 
+      })
+    }
+
+    next()
+  } catch (error) {
+    console.error('Navigation permission check error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Get navigation data for frontend
+const getNavigationData = async (req, res) => {
+  try {
+    const userRole = req.user?.role
+
+    if (!userRole) {
+      return res.status(401).json({ error: 'User not authenticated' })
+    }
+
+    const navigationItems = getNavigationItems(userRole)
+    const userFeatures = getUserFeatures(userRole)
+
+    res.json({
+      navigation: navigationItems,
+      features: userFeatures,
+      role: userRole
+    })
+  } catch (error) {
+    console.error('Get navigation data error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+module.exports = {
+  getNavigationItems,
+  getRoutePermissions,
+  canAccessFeature,
+  getUserFeatures,
+  checkNavigationPermission,
+  getNavigationData
+}
+EOF
+
+    # Navigation Routes
+    cat > "$APP_DIR/src/routes/navigationRoutes.js" << 'EOF'
+const express = require('express')
+const { getNavigationData } = require('../middleware/navigation')
+const { authenticateToken } = require('../middleware/auth')
+
+const router = express.Router()
+
+// Apply authentication to all routes
+router.use(authenticateToken)
+
+// Get navigation data for the authenticated user
+router.get('/', getNavigationData)
+
+module.exports = router
+EOF
+
+    # File Access Control Middleware
+    cat > "$APP_DIR/src/middleware/fileAccessControl.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+// File access control middleware
+const checkFileAccess = (requiredPermission = 'READ') => {
+  return async (req, res, next) => {
+    try {
+      const { fileId } = req.params
+      const userId = req.user.id
+      const userRole = req.user.role
+
+      if (!fileId) {
+        return res.status(400).json({ error: 'File ID is required' })
+      }
+
+      // Get file information
+      const file = await prisma.file.findUnique({
+        where: { id: fileId },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              preferredName: true,
+              email: true,
+              role: true
+            }
+          }
+        }
+      })
+
+      if (!file) {
+        return res.status(404).json({ error: 'File not found' })
+      }
+
+      // Check access permissions based on role and file ownership
+      const hasAccess = await checkFilePermission(file, userId, userRole, requiredPermission)
+
+      if (!hasAccess.allowed) {
+        return res.status(403).json({ 
+          error: 'Access denied', 
+          reason: hasAccess.reason 
+        })
+      }
+
+      // Add file information to request for use in controllers
+      req.fileInfo = file
+      next()
+    } catch (error) {
+      console.error('File access control error:', error)
+      res.status(500).json({ error: 'Internal server error' })
+    }
+  }
+}
+
+// Check file permission based on role and ownership
+const checkFilePermission = async (file, userId, userRole, permission) => {
+  // Admin roles have full access
+  if (['ORGANIZER', 'BOARD'].includes(userRole)) {
+    return { allowed: true, reason: 'Admin access granted' }
+  }
+
+  // File owner has full access
+  if (file.uploadedBy === userId) {
+    return { allowed: true, reason: 'File owner access granted' }
+  }
+
+  // Public files can be read by anyone
+  if (file.isPublic && permission === 'READ') {
+    return { allowed: true, reason: 'Public file access granted' }
+  }
+
+  // Check role-based permissions
+  const rolePermissions = await getRoleFilePermissions(userRole, file.category)
+  
+  if (rolePermissions.includes(permission)) {
+    return { allowed: true, reason: 'Role-based access granted' }
+  }
+
+  return { allowed: false, reason: 'Insufficient permissions' }
+}
+
+// Get file permissions for a specific role and file category
+const getRoleFilePermissions = async (userRole, fileCategory) => {
+  const permissions = {
+    ORGANIZER: ['READ', 'WRITE', 'DELETE', 'ADMIN'],
+    BOARD: ['READ', 'WRITE', 'DELETE', 'ADMIN'],
+    AUDITOR: ['READ'],
+    TALLY_MASTER: ['READ'],
+    JUDGE: ['READ'],
+    EMCEE: ['READ'],
+    CONTESTANT: ['READ']
+  }
+
+  // Additional category-specific permissions
+  const categoryPermissions = {
+    CONTESTANT_IMAGE: {
+      JUDGE: ['READ'],
+      EMCEE: ['READ'],
+      AUDITOR: ['READ'],
+      TALLY_MASTER: ['READ']
+    },
+    JUDGE_IMAGE: {
+      EMCEE: ['READ'],
+      AUDITOR: ['READ'],
+      TALLY_MASTER: ['READ']
+    },
+    DOCUMENT: {
+      AUDITOR: ['READ'],
+      TALLY_MASTER: ['READ'],
+      JUDGE: ['READ']
+    },
+    TEMPLATE: {
+      EMCEE: ['READ'],
+      AUDITOR: ['READ'],
+      TALLY_MASTER: ['READ']
+    },
+    REPORT: {
+      AUDITOR: ['READ'],
+      TALLY_MASTER: ['READ'],
+      BOARD: ['READ', 'WRITE', 'DELETE']
+    }
+  }
+
+  const basePermissions = permissions[userRole] || []
+  const categorySpecificPermissions = categoryPermissions[fileCategory]?.[userRole] || []
+
+  return [...new Set([...basePermissions, ...categorySpecificPermissions])]
+}
+
+// Check if user can upload files of a specific category
+const checkUploadPermission = async (req, res, next) => {
+  try {
+    const { category } = req.body
+    const userRole = req.user.role
+
+    const uploadPermissions = {
+      ORGANIZER: ['CONTESTANT_IMAGE', 'JUDGE_IMAGE', 'DOCUMENT', 'TEMPLATE', 'REPORT', 'BACKUP', 'OTHER'],
+      BOARD: ['CONTESTANT_IMAGE', 'JUDGE_IMAGE', 'DOCUMENT', 'TEMPLATE', 'REPORT', 'BACKUP', 'OTHER'],
+      AUDITOR: ['DOCUMENT', 'REPORT', 'OTHER'],
+      TALLY_MASTER: ['DOCUMENT', 'REPORT', 'OTHER'],
+      JUDGE: ['DOCUMENT', 'OTHER'],
+      EMCEE: ['TEMPLATE', 'OTHER'],
+      CONTESTANT: ['OTHER']
+    }
+
+    const allowedCategories = uploadPermissions[userRole] || []
+    
+    if (!allowedCategories.includes(category)) {
+      return res.status(403).json({ 
+        error: 'Upload denied', 
+        reason: `You are not allowed to upload files of category: ${category}` 
+      })
+    }
+
+    next()
+  } catch (error) {
+    console.error('Upload permission check error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Check file sharing permissions
+const checkSharingPermission = async (req, res, next) => {
+  try {
+    const { fileId } = req.params
+    const { isPublic } = req.body
+    const userId = req.user.id
+    const userRole = req.user.role
+
+    const file = await prisma.file.findUnique({
+      where: { id: fileId }
+    })
+
+    if (!file) {
+      return res.status(404).json({ error: 'File not found' })
+    }
+
+    // Only file owner or admin can change sharing settings
+    if (file.uploadedBy !== userId && !['ORGANIZER', 'BOARD'].includes(userRole)) {
+      return res.status(403).json({ error: 'Access denied' })
+    }
+
+    // Check if user has permission to make files public
+    if (isPublic && !['ORGANIZER', 'BOARD'].includes(userRole)) {
+      return res.status(403).json({ 
+        error: 'Permission denied', 
+        reason: 'Only administrators can make files public' 
+      })
+    }
+
+    next()
+  } catch (error) {
+    console.error('Sharing permission check error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Get user's file access summary
+const getUserFileAccess = async (req, res) => {
+  try {
+    const userId = req.user.id
+    const userRole = req.user.role
+
+    const accessSummary = {
+      canUpload: await getUploadableCategories(userRole),
+      canView: await getViewableCategories(userRole),
+      canManage: await getManageableCategories(userRole),
+      totalFiles: await prisma.file.count({
+        where: {
+          OR: [
+            { uploadedBy: userId },
+            { isPublic: true }
+          ]
+        }
+      }),
+      ownedFiles: await prisma.file.count({
+        where: { uploadedBy: userId }
+      })
+    }
+
+    res.json(accessSummary)
+  } catch (error) {
+    console.error('Get user file access error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Helper functions
+const getUploadableCategories = async (userRole) => {
+  const uploadPermissions = {
+    ORGANIZER: ['CONTESTANT_IMAGE', 'JUDGE_IMAGE', 'DOCUMENT', 'TEMPLATE', 'REPORT', 'BACKUP', 'OTHER'],
+    BOARD: ['CONTESTANT_IMAGE', 'JUDGE_IMAGE', 'DOCUMENT', 'TEMPLATE', 'REPORT', 'BACKUP', 'OTHER'],
+    AUDITOR: ['DOCUMENT', 'REPORT', 'OTHER'],
+    TALLY_MASTER: ['DOCUMENT', 'REPORT', 'OTHER'],
+    JUDGE: ['DOCUMENT', 'OTHER'],
+    EMCEE: ['TEMPLATE', 'OTHER'],
+    CONTESTANT: ['OTHER']
+  }
+
+  return uploadPermissions[userRole] || []
+}
+
+const getViewableCategories = async (userRole) => {
+  const viewPermissions = {
+    ORGANIZER: ['CONTESTANT_IMAGE', 'JUDGE_IMAGE', 'DOCUMENT', 'TEMPLATE', 'REPORT', 'BACKUP', 'OTHER'],
+    BOARD: ['CONTESTANT_IMAGE', 'JUDGE_IMAGE', 'DOCUMENT', 'TEMPLATE', 'REPORT', 'BACKUP', 'OTHER'],
+    AUDITOR: ['CONTESTANT_IMAGE', 'JUDGE_IMAGE', 'DOCUMENT', 'TEMPLATE', 'REPORT', 'OTHER'],
+    TALLY_MASTER: ['CONTESTANT_IMAGE', 'JUDGE_IMAGE', 'DOCUMENT', 'TEMPLATE', 'REPORT', 'OTHER'],
+    JUDGE: ['CONTESTANT_IMAGE', 'DOCUMENT', 'OTHER'],
+    EMCEE: ['CONTESTANT_IMAGE', 'JUDGE_IMAGE', 'TEMPLATE', 'OTHER'],
+    CONTESTANT: ['OTHER']
+  }
+
+  return viewPermissions[userRole] || []
+}
+
+const getManageableCategories = async (userRole) => {
+  const managePermissions = {
+    ORGANIZER: ['CONTESTANT_IMAGE', 'JUDGE_IMAGE', 'DOCUMENT', 'TEMPLATE', 'REPORT', 'BACKUP', 'OTHER'],
+    BOARD: ['CONTESTANT_IMAGE', 'JUDGE_IMAGE', 'DOCUMENT', 'TEMPLATE', 'REPORT', 'BACKUP', 'OTHER'],
+    AUDITOR: ['DOCUMENT', 'REPORT'],
+    TALLY_MASTER: ['DOCUMENT', 'REPORT'],
+    JUDGE: ['DOCUMENT'],
+    EMCEE: ['TEMPLATE'],
+    CONTESTANT: []
+  }
+
+  return managePermissions[userRole] || []
+}
+
+module.exports = {
+  checkFileAccess,
+  checkFilePermission,
+  getRoleFilePermissions,
+  checkUploadPermission,
+  checkSharingPermission,
+  getUserFileAccess
+}
+EOF
 const { PrismaClient } = require('@prisma/client')
 
 const prisma = new PrismaClient()
@@ -3460,7 +6104,532 @@ module.exports = {
 }
 EOF
 
-    # Reports Controller
+    # Emcee Controller
+    cat > "$APP_DIR/src/controllers/emceeController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+// Get emcee dashboard stats
+const getStats = async (req, res) => {
+  try {
+    const totalScripts = await prisma.emceeScript.count({
+      where: { isActive: true }
+    })
+
+    const totalEvents = await prisma.event.count({
+      where: { isActive: true }
+    })
+
+    const totalContests = await prisma.contest.count({
+      where: { isActive: true }
+    })
+
+    const totalCategories = await prisma.category.count({
+      where: { isActive: true }
+    })
+
+    res.json({
+      totalScripts,
+      totalEvents,
+      totalContests,
+      totalCategories
+    })
+  } catch (error) {
+    console.error('Get emcee stats error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Get script access
+const getScripts = async (req, res) => {
+  try {
+    const { eventId, contestId, categoryId, type } = req.query
+
+    const whereClause = { isActive: true }
+    
+    if (eventId) whereClause.eventId = eventId
+    if (contestId) whereClause.contestId = contestId
+    if (categoryId) whereClause.categoryId = categoryId
+    if (type) whereClause.type = type
+
+    const scripts = await prisma.emceeScript.findMany({
+      where: whereClause,
+      include: {
+        event: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            startDate: true,
+            endDate: true
+          }
+        },
+        contest: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            startTime: true,
+            endTime: true
+          }
+        },
+        category: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            maxScore: true
+          }
+        },
+        author: {
+          select: {
+            id: true,
+            name: true,
+            preferredName: true,
+            email: true
+          }
+        }
+      },
+      orderBy: [
+        { event: { startDate: 'asc' } },
+        { contest: { startTime: 'asc' } },
+        { category: { name: 'asc' } },
+        { order: 'asc' }
+      ]
+    })
+
+    res.json(scripts)
+  } catch (error) {
+    console.error('Get scripts error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Get specific script
+const getScript = async (req, res) => {
+  try {
+    const { scriptId } = req.params
+
+    const script = await prisma.emceeScript.findUnique({
+      where: { id: scriptId },
+      include: {
+        event: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            startDate: true,
+            endDate: true
+          }
+        },
+        contest: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            startTime: true,
+            endTime: true
+          }
+        },
+        category: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            maxScore: true
+          }
+        },
+        author: {
+          select: {
+            id: true,
+            name: true,
+            preferredName: true,
+            email: true
+          }
+        }
+      }
+    })
+
+    if (!script) {
+      return res.status(404).json({ error: 'Script not found' })
+    }
+
+    // Increment usage count
+    await prisma.emceeScript.update({
+      where: { id: scriptId },
+      data: { usageCount: { increment: 1 } }
+    })
+
+    res.json(script)
+  } catch (error) {
+    console.error('Get script error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Get contestant bios
+const getContestantBios = async (req, res) => {
+  try {
+    const { eventId, contestId, categoryId } = req.query
+
+    const whereClause = {}
+    
+    if (eventId) {
+      whereClause.contests = {
+        some: {
+          eventId
+        }
+      }
+    }
+    
+    if (contestId) {
+      whereClause.contests = {
+        some: {
+          id: contestId
+        }
+      }
+    }
+    
+    if (categoryId) {
+      whereClause.categories = {
+        some: {
+          id: categoryId
+        }
+      }
+    }
+
+    const contestants = await prisma.contestant.findMany({
+      where: whereClause,
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            preferredName: true,
+            email: true,
+            pronouns: true
+          }
+        },
+        contests: {
+          include: {
+            event: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+                startDate: true,
+                endDate: true
+              }
+            }
+          }
+        },
+        categories: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            maxScore: true
+          }
+        }
+      },
+      orderBy: { name: 'asc' }
+    })
+
+    res.json(contestants)
+  } catch (error) {
+    console.error('Get contestant bios error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Get judge bios
+const getJudgeBios = async (req, res) => {
+  try {
+    const { eventId, contestId, categoryId } = req.query
+
+    const whereClause = {
+      role: { in: ['JUDGE', 'TALLY_MASTER', 'AUDITOR', 'BOARD', 'ORGANIZER'] }
+    }
+    
+    if (eventId) {
+      whereClause.contests = {
+        some: {
+          eventId
+        }
+      }
+    }
+    
+    if (contestId) {
+      whereClause.contests = {
+        some: {
+          id: contestId
+        }
+      }
+    }
+    
+    if (categoryId) {
+      whereClause.categories = {
+        some: {
+          id: categoryId
+        }
+      }
+    }
+
+    const judges = await prisma.user.findMany({
+      where: whereClause,
+      select: {
+        id: true,
+        name: true,
+        preferredName: true,
+        email: true,
+        role: true,
+        pronouns: true,
+        judgeBio: true,
+        judgeSpecialties: true,
+        judgeCertifications: true,
+        createdAt: true
+      },
+      orderBy: { name: 'asc' }
+    })
+
+    res.json(judges)
+  } catch (error) {
+    console.error('Get judge bios error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Get event management
+const getEvents = async (req, res) => {
+  try {
+    const events = await prisma.event.findMany({
+      where: { isActive: true },
+      include: {
+        contests: {
+          include: {
+            categories: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+                maxScore: true,
+                isActive: true
+              }
+            }
+          },
+          orderBy: { startTime: 'asc' }
+        }
+      },
+      orderBy: { startDate: 'asc' }
+    })
+
+    res.json(events)
+  } catch (error) {
+    console.error('Get events error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Get specific event
+const getEvent = async (req, res) => {
+  try {
+    const { eventId } = req.params
+
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      include: {
+        contests: {
+          include: {
+            categories: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+                maxScore: true,
+                isActive: true
+              }
+            }
+          },
+          orderBy: { startTime: 'asc' }
+        }
+      }
+    })
+
+    if (!event) {
+      return res.status(404).json({ error: 'Event not found' })
+    }
+
+    res.json(event)
+  } catch (error) {
+    console.error('Get event error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Get contest management
+const getContests = async (req, res) => {
+  try {
+    const { eventId } = req.query
+
+    const whereClause = { isActive: true }
+    if (eventId) whereClause.eventId = eventId
+
+    const contests = await prisma.contest.findMany({
+      where: whereClause,
+      include: {
+        event: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            startDate: true,
+            endDate: true
+          }
+        },
+        categories: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            maxScore: true,
+            isActive: true
+          },
+          orderBy: { name: 'asc' }
+        }
+      },
+      orderBy: { startTime: 'asc' }
+    })
+
+    res.json(contests)
+  } catch (error) {
+    console.error('Get contests error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Get specific contest
+const getContest = async (req, res) => {
+  try {
+    const { contestId } = req.params
+
+    const contest = await prisma.contest.findUnique({
+      where: { id: contestId },
+      include: {
+        event: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            startDate: true,
+            endDate: true
+          }
+        },
+        categories: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            maxScore: true,
+            isActive: true
+          },
+          orderBy: { name: 'asc' }
+        }
+      }
+    })
+
+    if (!contest) {
+      return res.status(404).json({ error: 'Contest not found' })
+    }
+
+    res.json(contest)
+  } catch (error) {
+    console.error('Get contest error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Get emcee history
+const getEmceeHistory = async (req, res) => {
+  try {
+    const { page = 1, limit = 10 } = req.query
+    const offset = (page - 1) * limit
+
+    const scripts = await prisma.emceeScript.findMany({
+      where: { isActive: true },
+      include: {
+        event: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            startDate: true,
+            endDate: true
+          }
+        },
+        contest: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            startTime: true,
+            endTime: true
+          }
+        },
+        category: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            maxScore: true
+          }
+        },
+        author: {
+          select: {
+            id: true,
+            name: true,
+            preferredName: true,
+            email: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' },
+      skip: offset,
+      take: parseInt(limit)
+    })
+
+    const total = await prisma.emceeScript.count({
+      where: { isActive: true }
+    })
+
+    res.json({
+      scripts,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / limit)
+      }
+    })
+  } catch (error) {
+    console.error('Get emcee history error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+module.exports = {
+  getStats,
+  getScripts,
+  getScript,
+  getContestantBios,
+  getJudgeBios,
+  getEvents,
+  getEvent,
+  getContests,
+  getContest,
+  getEmceeHistory
+}
+EOF
     cat > "$APP_DIR/src/controllers/reportsController.js" << 'EOF'
 const { PrismaClient } = require('@prisma/client')
 
@@ -3991,6 +7160,1295 @@ module.exports = {
 }
 EOF
 
+    # File Controller
+    cat > "$APP_DIR/src/controllers/fileController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+const multer = require('multer')
+const path = require('path')
+const crypto = require('crypto')
+const fs = require('fs').promises
+const sharp = require('sharp')
+const { exec } = require('child_process')
+const { promisify } = require('util')
+
+const execAsync = promisify(exec)
+const prisma = new PrismaClient()
+
+// Virus scanning function
+const scanFileForVirus = async (filePath) => {
+  try {
+    // Check if ClamAV is available
+    try {
+      await execAsync('clamscan --version')
+    } catch (error) {
+      console.warn('ClamAV not available, skipping virus scan')
+      return { clean: true, message: 'Virus scanner not available' }
+    }
+
+    // Scan the file
+    const { stdout, stderr } = await execAsync(`clamscan --no-summary "${filePath}"`)
+    
+    if (stderr && stderr.includes('FOUND')) {
+      return { clean: false, message: 'Virus detected in file' }
+    }
+    
+    return { clean: true, message: 'File is clean' }
+  } catch (error) {
+    console.error('Virus scan error:', error)
+    return { clean: false, message: 'Virus scan failed' }
+  }
+}
+
+// Enhanced file validation function
+const validateFile = async (filePath, originalName, mimeType) => {
+  const validations = []
+
+  // Check file size
+  const stats = await fs.stat(filePath)
+  if (stats.size === 0) {
+    validations.push('File is empty')
+  }
+  if (stats.size > 10 * 1024 * 1024) {
+    validations.push('File exceeds maximum size limit')
+  }
+
+  // Check file extension matches MIME type
+  const extension = path.extname(originalName).toLowerCase()
+  const expectedExtensions = {
+    'image/jpeg': ['.jpg', '.jpeg'],
+    'image/png': ['.png'],
+    'image/gif': ['.gif'],
+    'image/webp': ['.webp'],
+    'application/pdf': ['.pdf'],
+    'text/plain': ['.txt'],
+    'application/msword': ['.doc'],
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+    'application/vnd.ms-excel': ['.xls'],
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+    'text/csv': ['.csv']
+  }
+
+  if (expectedExtensions[mimeType] && !expectedExtensions[mimeType].includes(extension)) {
+    validations.push('File extension does not match MIME type')
+  }
+
+  // Check for suspicious file names
+  const suspiciousPatterns = [
+    /\.exe$/i,
+    /\.bat$/i,
+    /\.cmd$/i,
+    /\.scr$/i,
+    /\.pif$/i,
+    /\.com$/i,
+    /\.vbs$/i,
+    /\.js$/i,
+    /\.jar$/i
+  ]
+
+  if (suspiciousPatterns.some(pattern => pattern.test(originalName))) {
+    validations.push('Suspicious file type detected')
+  }
+
+  // Check for malicious content in text files
+  if (mimeType.startsWith('text/')) {
+    try {
+      const content = await fs.readFile(filePath, 'utf8')
+      const maliciousPatterns = [
+        /<script/i,
+        /javascript:/i,
+        /vbscript:/i,
+        /onload=/i,
+        /onerror=/i
+      ]
+
+      if (maliciousPatterns.some(pattern => pattern.test(content))) {
+        validations.push('Potentially malicious content detected')
+      }
+    } catch (error) {
+      validations.push('Unable to read file content for validation')
+    }
+  }
+
+  return validations
+}
+
+// Configure multer for secure file uploads
+const storage = multer.diskStorage({
+  destination: async (req, file, cb) => {
+    const uploadDir = path.join(process.cwd(), 'uploads', file.fieldname)
+    await fs.mkdir(uploadDir, { recursive: true })
+    cb(null, uploadDir)
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = crypto.randomBytes(16).toString('hex')
+    const ext = path.extname(file.originalname)
+    cb(null, `${uniqueSuffix}${ext}`)
+  }
+})
+
+const fileFilter = (req, file, cb) => {
+  // Define allowed file types
+  const allowedTypes = {
+    'image/jpeg': ['.jpg', '.jpeg'],
+    'image/png': ['.png'],
+    'image/gif': ['.gif'],
+    'image/webp': ['.webp'],
+    'application/pdf': ['.pdf'],
+    'application/msword': ['.doc'],
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+    'application/vnd.ms-excel': ['.xls'],
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+    'text/plain': ['.txt'],
+    'text/csv': ['.csv']
+  }
+  
+  const ext = path.extname(file.originalname).toLowerCase()
+  const mimeType = file.mimetype
+  
+  if (allowedTypes[mimeType] && allowedTypes[mimeType].includes(ext)) {
+    cb(null, true)
+  } else {
+    cb(new Error('Invalid file type'), false)
+  }
+}
+
+const upload = multer({
+  storage,
+  fileFilter,
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB limit
+    files: 5 // Maximum 5 files per request
+  }
+})
+
+const getAllFiles = async (req, res) => {
+  try {
+    const { category, uploadedBy, search, page = 1, limit = 20 } = req.query
+    
+    const where = {}
+    if (category) where.category = category
+    if (uploadedBy) where.uploadedBy = uploadedBy
+    if (search) {
+      where.OR = [
+        { filename: { contains: search, mode: 'insensitive' } },
+        { originalName: { contains: search, mode: 'insensitive' } }
+      ]
+    }
+    
+    const files = await prisma.file.findMany({
+      where,
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            preferredName: true,
+            email: true,
+            role: true
+          }
+        }
+      },
+      orderBy: { uploadedAt: 'desc' },
+      skip: (page - 1) * limit,
+      take: parseInt(limit)
+    })
+    
+    const total = await prisma.file.count({ where })
+    
+    res.json({
+      files,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / limit)
+      }
+    })
+  } catch (error) {
+    console.error('Get files error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const uploadFiles = async (req, res) => {
+  try {
+    const files = req.files
+    const { category = 'OTHER' } = req.body
+    
+    if (!files || files.length === 0) {
+      return res.status(400).json({ error: 'No files uploaded' })
+    }
+    
+    const uploadedFiles = []
+    const failedFiles = []
+    
+    for (const file of files) {
+      try {
+        // Enhanced file validation
+        const validationErrors = await validateFile(file.path, file.originalname, file.mimetype)
+        if (validationErrors.length > 0) {
+          // Clean up the uploaded file
+          await fs.unlink(file.path).catch(console.error)
+          failedFiles.push({
+            filename: file.originalname,
+            errors: validationErrors
+          })
+          continue
+        }
+
+        // Virus scanning
+        const virusScanResult = await scanFileForVirus(file.path)
+        if (!virusScanResult.clean) {
+          // Clean up the uploaded file
+          await fs.unlink(file.path).catch(console.error)
+          failedFiles.push({
+            filename: file.originalname,
+            errors: [virusScanResult.message]
+          })
+          continue
+        }
+
+        // Generate checksum for file integrity
+        const fileBuffer = await fs.readFile(file.path)
+        const checksum = crypto.createHash('sha256').update(fileBuffer).digest('hex')
+        
+        // Check if file already exists (by checksum)
+        const existingFile = await prisma.file.findFirst({
+          where: { checksum: checksum }
+        })
+
+        if (existingFile) {
+          // Clean up the duplicate file
+          await fs.unlink(file.path).catch(console.error)
+          failedFiles.push({
+            filename: file.originalname,
+            errors: ['File already exists']
+          })
+          continue
+        }
+        
+        // Process images with sharp for optimization
+        if (file.mimetype.startsWith('image/')) {
+          const optimizedPath = file.path.replace(path.extname(file.path), '_optimized.jpg')
+          await sharp(file.path)
+            .resize(1920, 1080, { fit: 'inside', withoutEnlargement: true })
+            .jpeg({ quality: 85 })
+            .toFile(optimizedPath)
+          
+          // Replace original with optimized version
+          await fs.unlink(file.path)
+          await fs.rename(optimizedPath, file.path)
+        }
+        
+        const fileRecord = await prisma.file.create({
+          data: {
+            filename: file.filename,
+            originalName: file.originalname,
+            mimeType: file.mimetype,
+            size: file.size,
+            path: file.path,
+            category,
+            uploadedBy: req.user.id,
+            checksum,
+            metadata: JSON.stringify({
+              uploadedAt: new Date().toISOString(),
+              virusScanResult: virusScanResult.message,
+              validationPassed: true
+            })
+          },
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                preferredName: true,
+                email: true,
+                role: true
+              }
+            }
+          }
+        })
+        
+        uploadedFiles.push(fileRecord)
+      } catch (fileError) {
+        console.error(`Error processing file ${file.originalname}:`, fileError)
+        // Clean up the uploaded file
+        await fs.unlink(file.path).catch(console.error)
+        failedFiles.push({
+          filename: file.originalname,
+          errors: ['Processing error: ' + fileError.message]
+        })
+      }
+    }
+    
+    // Log upload activity
+    await prisma.activityLog.create({
+      data: {
+        userId: req.user.id,
+        action: 'UPLOAD_FILES',
+        details: `Uploaded ${uploadedFiles.length} files, ${failedFiles.length} failed`,
+        category: 'FILE_MANAGEMENT'
+      }
+    })
+    
+    res.status(201).json({ 
+      files: uploadedFiles,
+      failedFiles: failedFiles,
+      summary: {
+        total: files.length,
+        successful: uploadedFiles.length,
+        failed: failedFiles.length
+      }
+    })
+  } catch (error) {
+    console.error('Upload files error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getFileById = async (req, res) => {
+  try {
+    const { id } = req.params
+    const userId = req.user.id
+    const userRole = req.user.role
+    
+    const file = await prisma.file.findUnique({
+      where: { id },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            preferredName: true,
+            email: true,
+            role: true
+          }
+        }
+      }
+    })
+    
+    if (!file) {
+      return res.status(404).json({ error: 'File not found' })
+    }
+    
+    // Check access permissions
+    if (!['ORGANIZER', 'BOARD'].includes(userRole) && 
+        file.uploadedBy !== userId && 
+        !file.isPublic) {
+      return res.status(403).json({ error: 'Access denied' })
+    }
+    
+    res.json(file)
+  } catch (error) {
+    console.error('Get file by ID error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const downloadFile = async (req, res) => {
+  try {
+    const { id } = req.params
+    const userId = req.user.id
+    const userRole = req.user.role
+    
+    const file = await prisma.file.findUnique({
+      where: { id }
+    })
+    
+    if (!file) {
+      return res.status(404).json({ error: 'File not found' })
+    }
+    
+    // Check access permissions
+    if (!['ORGANIZER', 'BOARD'].includes(userRole) && 
+        file.uploadedBy !== userId && 
+        !file.isPublic) {
+      return res.status(403).json({ error: 'Access denied' })
+    }
+    
+    // Check if file exists on disk
+    try {
+      await fs.access(file.path)
+    } catch (error) {
+      return res.status(404).json({ error: 'File not found on disk' })
+    }
+    
+    // Set appropriate headers
+    res.setHeader('Content-Type', file.mimeType)
+    res.setHeader('Content-Disposition', `attachment; filename="${file.originalName}"`)
+    res.setHeader('Content-Length', file.size)
+    
+    // Stream the file
+    const fileStream = require('fs').createReadStream(file.path)
+    fileStream.pipe(res)
+    
+    // Log download activity
+    await prisma.activityLog.create({
+      data: {
+        userId: userId,
+        action: 'DOWNLOAD_FILE',
+        details: `Downloaded file: ${file.originalName}`,
+        category: 'FILE_MANAGEMENT'
+      }
+    })
+    
+  } catch (error) {
+    console.error('Download file error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const updateFile = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { category, isPublic, metadata } = req.body
+    const userId = req.user.id
+    const userRole = req.user.role
+    
+    const file = await prisma.file.findUnique({
+      where: { id }
+    })
+    
+    if (!file) {
+      return res.status(404).json({ error: 'File not found' })
+    }
+    
+    // Check permissions - only file owner or admin can update
+    if (file.uploadedBy !== userId && !['ORGANIZER', 'BOARD'].includes(userRole)) {
+      return res.status(403).json({ error: 'Access denied' })
+    }
+    
+    const updatedFile = await prisma.file.update({
+      where: { id },
+      data: {
+        ...(category && { category }),
+        ...(isPublic !== undefined && { isPublic }),
+        ...(metadata && { metadata })
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            preferredName: true,
+            email: true,
+            role: true
+          }
+        }
+      }
+    })
+    
+    res.json(updatedFile)
+  } catch (error) {
+    console.error('Update file error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const deleteFile = async (req, res) => {
+  try {
+    const { id } = req.params
+    const userId = req.user.id
+    const userRole = req.user.role
+    
+    const file = await prisma.file.findUnique({
+      where: { id }
+    })
+    
+    if (!file) {
+      return res.status(404).json({ error: 'File not found' })
+    }
+    
+    // Check permissions - only file owner or admin can delete
+    if (file.uploadedBy !== userId && !['ORGANIZER', 'BOARD'].includes(userRole)) {
+      return res.status(403).json({ error: 'Access denied' })
+    }
+    
+    // Delete file from disk
+    try {
+      await fs.unlink(file.path)
+    } catch (error) {
+      console.warn('File not found on disk:', file.path)
+    }
+    
+    // Delete file record from database
+    await prisma.file.delete({
+      where: { id }
+    })
+    
+    // Log deletion activity
+    await prisma.activityLog.create({
+      data: {
+        userId: userId,
+        action: 'DELETE_FILE',
+        details: `Deleted file: ${file.originalName}`,
+        category: 'FILE_MANAGEMENT'
+      }
+    })
+    
+    res.json({ message: 'File deleted successfully' })
+  } catch (error) {
+    console.error('Delete file error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getFileStats = async (req, res) => {
+  try {
+    const userRole = req.user.role
+
+    if (!['ORGANIZER', 'BOARD'].includes(userRole)) {
+      return res.status(403).json({ error: 'Access denied' })
+    }
+
+    const stats = {
+      totalFiles: await prisma.file.count(),
+      totalSize: await prisma.file.aggregate({
+        _sum: { size: true }
+      }),
+      byCategory: await prisma.file.groupBy({
+        by: ['category'],
+        _count: { category: true },
+        _sum: { size: true }
+      }),
+      recentUploads: await prisma.file.count({
+        where: {
+          uploadedAt: {
+            gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) // Last 7 days
+          }
+        }
+      })
+    }
+    
+    res.json(stats)
+  } catch (error) {
+    console.error('Get file stats error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+module.exports = {
+  getAllFiles,
+  uploadFiles,
+  getFileById,
+  downloadFile,
+  updateFile,
+  deleteFile,
+  getFileStats,
+  upload // Export multer middleware
+}
+EOF
+
+    # Performance Monitoring Controller
+    cat > "$APP_DIR/src/controllers/performanceController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+const os = require('os')
+const fs = require('fs').promises
+const path = require('path')
+
+const prisma = new PrismaClient()
+
+// Log performance metrics
+const logPerformance = async (req, res, next) => {
+  const startTime = Date.now()
+  
+  res.on('finish', async () => {
+    try {
+      const responseTime = Date.now() - startTime
+      
+      await prisma.performanceLog.create({
+        data: {
+          endpoint: req.path,
+          method: req.method,
+          responseTime,
+          statusCode: res.statusCode,
+          userId: req.user?.id,
+          ipAddress: req.ip || req.connection.remoteAddress,
+          userAgent: req.get('User-Agent')
+        }
+      })
+    } catch (error) {
+      console.error('Performance logging error:', error)
+    }
+  })
+  
+  next()
+}
+
+const getPerformanceStats = async (req, res) => {
+  try {
+    const { timeRange = '24h', endpoint, method } = req.query
+    
+    // Calculate time range
+    const now = new Date()
+    let startTime
+    switch (timeRange) {
+      case '1h':
+        startTime = new Date(now.getTime() - 60 * 60 * 1000)
+        break
+      case '24h':
+        startTime = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+        break
+      case '7d':
+        startTime = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+        break
+      case '30d':
+        startTime = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+        break
+      default:
+        startTime = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+    }
+    
+    const whereClause = {
+      createdAt: {
+        gte: startTime
+      },
+      ...(endpoint && { endpoint }),
+      ...(method && { method })
+    }
+    
+    // Get performance statistics
+    const stats = await prisma.performanceLog.aggregate({
+      where: whereClause,
+      _avg: {
+        responseTime: true
+      },
+      _min: {
+        responseTime: true
+      },
+      _max: {
+        responseTime: true
+      },
+      _count: {
+        id: true
+      }
+    })
+    
+    // Get response time distribution
+    const responseTimeDistribution = await prisma.performanceLog.groupBy({
+      by: ['statusCode'],
+      where: whereClause,
+      _count: {
+        id: true
+      },
+      _avg: {
+        responseTime: true
+      }
+    })
+    
+    // Get top slow endpoints
+    const slowEndpoints = await prisma.performanceLog.groupBy({
+      by: ['endpoint'],
+      where: whereClause,
+      _avg: {
+        responseTime: true
+      },
+      _count: {
+        id: true
+      },
+      orderBy: {
+        _avg: {
+          responseTime: 'desc'
+        }
+      },
+      take: 10
+    })
+    
+    // Get error rates
+    const errorStats = await prisma.performanceLog.groupBy({
+      by: ['statusCode'],
+      where: {
+        ...whereClause,
+        statusCode: {
+          gte: 400
+        }
+      },
+      _count: {
+        id: true
+      }
+    })
+    
+    res.json({
+      timeRange,
+      totalRequests: stats._count.id,
+      averageResponseTime: Math.round(stats._avg.responseTime || 0),
+      minResponseTime: stats._min.responseTime || 0,
+      maxResponseTime: stats._max.responseTime || 0,
+      responseTimeDistribution,
+      slowEndpoints,
+      errorStats,
+      errorRate: stats._count.id > 0 ? 
+        (errorStats.reduce((sum, stat) => sum + stat._count.id, 0) / stats._count.id * 100).toFixed(2) : 0
+    })
+  } catch (error) {
+    console.error('Get performance stats error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getSystemMetrics = async (req, res) => {
+  try {
+    // CPU and Memory usage
+    const cpuUsage = process.cpuUsage()
+    const memoryUsage = process.memoryUsage()
+    
+    // System information
+    const systemInfo = {
+      platform: os.platform(),
+      arch: os.arch(),
+      hostname: os.hostname(),
+      uptime: os.uptime(),
+      loadAverage: os.loadavg(),
+      totalMemory: os.totalmem(),
+      freeMemory: os.freemem(),
+      cpuCount: os.cpus().length
+    }
+    
+    // Database connection status
+    const dbStatus = await prisma.$queryRaw`SELECT 1 as status`
+    
+    // Disk usage (if possible)
+    let diskUsage = null
+    try {
+      const stats = await fs.stat(path.join(__dirname, '../../'))
+      diskUsage = {
+        available: true,
+        path: path.join(__dirname, '../../')
+      }
+    } catch (error) {
+      diskUsage = { available: false, error: error.message }
+    }
+    
+    res.json({
+      timestamp: new Date().toISOString(),
+      process: {
+        pid: process.pid,
+        uptime: process.uptime(),
+        cpuUsage: {
+          user: cpuUsage.user,
+          system: cpuUsage.system
+        },
+        memoryUsage: {
+          rss: memoryUsage.rss,
+          heapTotal: memoryUsage.heapTotal,
+          heapUsed: memoryUsage.heapUsed,
+          external: memoryUsage.external
+        }
+      },
+      system: systemInfo,
+      database: {
+        status: dbStatus ? 'connected' : 'disconnected',
+        connectionCount: await prisma.$queryRaw`SELECT count(*) as count FROM pg_stat_activity WHERE state = 'active'`
+      },
+      disk: diskUsage
+    })
+  } catch (error) {
+    console.error('Get system metrics error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getPerformanceLogs = async (req, res) => {
+  try {
+    const { 
+      page = 1, 
+      limit = 50, 
+      endpoint, 
+      method, 
+      statusCode, 
+      userId,
+      minResponseTime,
+      maxResponseTime,
+      startDate,
+      endDate
+    } = req.query
+    
+    const whereClause = {
+      ...(endpoint && { endpoint: { contains: endpoint } }),
+      ...(method && { method }),
+      ...(statusCode && { statusCode: parseInt(statusCode) }),
+      ...(userId && { userId }),
+      ...(minResponseTime && { responseTime: { gte: parseInt(minResponseTime) } }),
+      ...(maxResponseTime && { responseTime: { lte: parseInt(maxResponseTime) } }),
+      ...(startDate && endDate && {
+        createdAt: {
+          gte: new Date(startDate),
+          lte: new Date(endDate)
+        }
+      })
+    }
+    
+    const logs = await prisma.performanceLog.findMany({
+      where: whereClause,
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            preferredName: true,
+            email: true,
+            role: true
+          }
+        }
+      },
+      orderBy: {
+        createdAt: 'desc'
+      },
+      skip: (parseInt(page) - 1) * parseInt(limit),
+      take: parseInt(limit)
+    })
+    
+    const total = await prisma.performanceLog.count({
+      where: whereClause
+    })
+    
+    res.json({
+      logs,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / parseInt(limit))
+      }
+    })
+  } catch (error) {
+    console.error('Get performance logs error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const clearPerformanceLogs = async (req, res) => {
+  try {
+    const { olderThan } = req.body
+    
+    let whereClause = {}
+    if (olderThan) {
+      whereClause = {
+        createdAt: {
+          lt: new Date(olderThan)
+        }
+      }
+    }
+    
+    const result = await prisma.performanceLog.deleteMany({
+      where: whereClause
+    })
+    
+    res.json({ 
+      message: `Cleared ${result.count} performance log entries`,
+      count: result.count
+    })
+  } catch (error) {
+    console.error('Clear performance logs error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getHealthCheck = async (req, res) => {
+  try {
+    const checks = {
+      database: false,
+      memory: false,
+      disk: false,
+      uptime: false
+    }
+    
+    // Database check
+    try {
+      await prisma.$queryRaw`SELECT 1`
+      checks.database = true
+    } catch (error) {
+      console.error('Database health check failed:', error)
+    }
+    
+    // Memory check
+    const memoryUsage = process.memoryUsage()
+    const memoryUsagePercent = (memoryUsage.heapUsed / memoryUsage.heapTotal) * 100
+    checks.memory = memoryUsagePercent < 90 // Less than 90% memory usage
+    
+    // Disk check (basic)
+    try {
+      await fs.access(path.join(__dirname, '../../'))
+      checks.disk = true
+    } catch (error) {
+      console.error('Disk health check failed:', error)
+    }
+    
+    // Uptime check
+    checks.uptime = process.uptime() > 0
+    
+    const allHealthy = Object.values(checks).every(check => check === true)
+    
+    res.status(allHealthy ? 200 : 503).json({
+      status: allHealthy ? 'healthy' : 'unhealthy',
+      timestamp: new Date().toISOString(),
+      checks,
+      uptime: process.uptime(),
+      memory: {
+        used: memoryUsage.heapUsed,
+        total: memoryUsage.heapTotal,
+        percent: memoryUsagePercent.toFixed(2)
+      }
+    })
+  } catch (error) {
+    console.error('Health check error:', error)
+    res.status(503).json({ 
+      status: 'unhealthy',
+      error: 'Health check failed',
+      timestamp: new Date().toISOString()
+    })
+  }
+}
+
+module.exports = {
+  logPerformance,
+  getPerformanceStats,
+  getSystemMetrics,
+  getPerformanceLogs,
+  clearPerformanceLogs,
+  getHealthCheck
+}
+EOF
+
+    # Certification Controller
+    cat > "$APP_DIR/src/controllers/certificationController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+const getAllCertifications = async (req, res) => {
+  try {
+    const { status, categoryId, contestId, eventId } = req.query
+    
+    const certifications = await prisma.certification.findMany({
+      where: {
+        ...(status && { status }),
+        ...(categoryId && { categoryId }),
+        ...(contestId && { contestId }),
+        ...(eventId && { eventId }),
+      },
+      include: {
+        category: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            scoreCap: true,
+          }
+        },
+        contest: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+          }
+        },
+        event: {
+          select: {
+            id: true,
+            name: true,
+            startDate: true,
+            endDate: true,
+          }
+        }
+      },
+      orderBy: [
+        { createdAt: 'desc' }
+      ]
+    })
+    
+    res.json(certifications)
+  } catch (error) {
+    console.error('Get certifications error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const createCertification = async (req, res) => {
+  try {
+    const { categoryId, contestId, eventId } = req.body
+    
+    // Check if certification already exists
+    const existingCertification = await prisma.certification.findUnique({
+      where: {
+        categoryId_contestId_eventId: {
+          categoryId,
+          contestId,
+          eventId
+        }
+      }
+    })
+    
+    if (existingCertification) {
+      return res.status(400).json({ error: 'Certification already exists' })
+    }
+    
+    const certification = await prisma.certification.create({
+      data: {
+        categoryId,
+        contestId,
+        eventId,
+        status: 'PENDING',
+        currentStep: 1,
+        totalSteps: 4
+      },
+      include: {
+        category: true,
+        contest: true,
+        event: true
+      }
+    })
+    
+    res.status(201).json(certification)
+  } catch (error) {
+    console.error('Create certification error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const updateCertification = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { status, currentStep, judgeCertified, tallyCertified, auditorCertified, boardApproved, comments } = req.body
+    
+    const certification = await prisma.certification.update({
+      where: { id },
+      data: {
+        ...(status && { status }),
+        ...(currentStep !== undefined && { currentStep }),
+        ...(judgeCertified !== undefined && { judgeCertified }),
+        ...(tallyCertified !== undefined && { tallyCertified }),
+        ...(auditorCertified !== undefined && { auditorCertified }),
+        ...(boardApproved !== undefined && { boardApproved }),
+        ...(comments !== undefined && { comments }),
+      },
+      include: {
+        category: true,
+        contest: true,
+        event: true
+      }
+    })
+    
+    res.json(certification)
+  } catch (error) {
+    console.error('Update certification error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const deleteCertification = async (req, res) => {
+  try {
+    const { id } = req.params
+    
+    await prisma.certification.delete({
+      where: { id }
+    })
+    
+    res.json({ message: 'Certification deleted successfully' })
+  } catch (error) {
+    console.error('Delete certification error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getCertificationById = async (req, res) => {
+  try {
+    const { id } = req.params
+    
+    const certification = await prisma.certification.findUnique({
+      where: { id },
+      include: {
+        category: {
+          include: {
+            criteria: true,
+            contestants: true,
+            scores: true
+          }
+        },
+        contest: true,
+        event: true
+      }
+    })
+    
+    if (!certification) {
+      return res.status(404).json({ error: 'Certification not found' })
+    }
+    
+    res.json(certification)
+  } catch (error) {
+    console.error('Get certification by ID error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const certifyJudge = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { comments } = req.body
+    
+    const certification = await prisma.certification.update({
+      where: { id },
+      data: {
+        judgeCertified: true,
+        currentStep: 2,
+        comments: comments || ''
+      },
+      include: {
+        category: true,
+        contest: true,
+        event: true
+      }
+    })
+    
+    res.json(certification)
+  } catch (error) {
+    console.error('Certify judge error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const certifyTally = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { comments } = req.body
+    
+    const certification = await prisma.certification.update({
+      where: { id },
+      data: {
+        tallyCertified: true,
+        currentStep: 3,
+        comments: comments || ''
+      },
+      include: {
+        category: true,
+        contest: true,
+        event: true
+      }
+    })
+    
+    res.json(certification)
+  } catch (error) {
+    console.error('Certify tally error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const certifyAuditor = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { comments } = req.body
+    
+    const certification = await prisma.certification.update({
+      where: { id },
+      data: {
+        auditorCertified: true,
+        currentStep: 4,
+        comments: comments || ''
+      },
+      include: {
+        category: true,
+        contest: true,
+        event: true
+      }
+    })
+    
+    res.json(certification)
+  } catch (error) {
+    console.error('Certify auditor error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const approveBoard = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { comments } = req.body
+    
+    const certification = await prisma.certification.update({
+      where: { id },
+      data: {
+        boardApproved: true,
+        status: 'CERTIFIED',
+        certifiedAt: new Date(),
+        certifiedBy: req.user.id,
+        comments: comments || ''
+      },
+      include: {
+        category: true,
+        contest: true,
+        event: true
+      }
+    })
+    
+    res.json(certification)
+  } catch (error) {
+    console.error('Approve board error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const rejectCertification = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { rejectionReason } = req.body
+    
+    const certification = await prisma.certification.update({
+      where: { id },
+      data: {
+        status: 'REJECTED',
+        rejectionReason,
+        certifiedBy: req.user.id
+      },
+      include: {
+        category: true,
+        contest: true,
+        event: true
+      }
+    })
+    
+    res.json(certification)
+  } catch (error) {
+    console.error('Reject certification error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getCertificationStats = async (req, res) => {
+  try {
+    const stats = {
+      total: await prisma.certification.count(),
+      pending: await prisma.certification.count({ where: { status: 'PENDING' } }),
+      inProgress: await prisma.certification.count({ where: { status: 'IN_PROGRESS' } }),
+      certified: await prisma.certification.count({ where: { status: 'CERTIFIED' } }),
+      rejected: await prisma.certification.count({ where: { status: 'REJECTED' } }),
+      judgeCertified: await prisma.certification.count({ where: { judgeCertified: true } }),
+      tallyCertified: await prisma.certification.count({ where: { tallyCertified: true } }),
+      auditorCertified: await prisma.certification.count({ where: { auditorCertified: true } }),
+      boardApproved: await prisma.certification.count({ where: { boardApproved: true } })
+    }
+    
+    res.json(stats)
+  } catch (error) {
+    console.error('Get certification stats error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+module.exports = {
+  getAllCertifications,
+  createCertification,
+  updateCertification,
+  deleteCertification,
+  getCertificationById,
+  certifyJudge,
+  certifyTally,
+  certifyAuditor,
+  approveBoard,
+  rejectCertification,
+  getCertificationStats
+}
+EOF
+
     print_success "Controller files created successfully"
 }
 
@@ -4314,7 +8772,17 @@ EOF
     # Assignments Routes
     cat > "$APP_DIR/src/routes/assignmentsRoutes.js" << 'EOF'
 const express = require('express')
-const { getAllAssignments, assignJudge, removeAssignment, deleteAssignment } = require('../controllers/assignmentsController')
+const { 
+  getAllAssignments, 
+  createAssignment, 
+  updateAssignment, 
+  deleteAssignment, 
+  getJudgeAssignments,
+  getJudges,
+  getCategories,
+  assignJudge,
+  removeAssignment 
+} = require('../controllers/assignmentsController')
 const { authenticateToken, requireRole } = require('../middleware/auth')
 const { logActivity } = require('../middleware/errorHandler')
 
@@ -4325,9 +8793,18 @@ router.use(authenticateToken)
 
 // Assignment endpoints
 router.get('/', getAllAssignments)
-router.post('/', requireRole(['ORGANIZER', 'BOARD']), logActivity('CREATE_ASSIGNMENT', 'ASSIGNMENT'), assignJudge)
-router.put('/:id', requireRole(['ORGANIZER', 'BOARD']), logActivity('UPDATE_ASSIGNMENT', 'ASSIGNMENT'), removeAssignment)
+router.post('/', requireRole(['ORGANIZER', 'BOARD']), logActivity('CREATE_ASSIGNMENT', 'ASSIGNMENT'), createAssignment)
+router.put('/:id', requireRole(['ORGANIZER', 'BOARD']), logActivity('UPDATE_ASSIGNMENT', 'ASSIGNMENT'), updateAssignment)
 router.delete('/:id', requireRole(['ORGANIZER', 'BOARD']), logActivity('DELETE_ASSIGNMENT', 'ASSIGNMENT'), deleteAssignment)
+
+// Judge-specific endpoints
+router.get('/judges', getJudges)
+router.get('/judges/:judgeId', getJudgeAssignments)
+router.get('/categories', getCategories)
+
+// Legacy endpoints for backward compatibility
+router.post('/judge', requireRole(['ORGANIZER', 'BOARD']), logActivity('ASSIGN_JUDGE', 'ASSIGNMENT'), assignJudge)
+router.put('/remove/:assignmentId', requireRole(['ORGANIZER', 'BOARD']), logActivity('REMOVE_ASSIGNMENT', 'ASSIGNMENT'), removeAssignment)
 
 module.exports = router
 EOF
@@ -4335,8 +8812,21 @@ EOF
     # Auditor Routes
     cat > "$APP_DIR/src/routes/auditorRoutes.js" << 'EOF'
 const express = require('express')
-const { getStats, finalCertification, rejectAudit } = require('../controllers/auditorController')
+const { 
+  getStats, 
+  getPendingAudits,
+  getCompletedAudits,
+  finalCertification, 
+  rejectAudit,
+  getScoreVerification,
+  verifyScore,
+  getTallyMasterStatus,
+  getCertificationWorkflow,
+  generateSummaryReport,
+  getAuditHistory
+} = require('../controllers/auditorController')
 const { authenticateToken, requireRole } = require('../middleware/auth')
+const { logActivity } = require('../middleware/errorHandler')
 
 const router = express.Router()
 
@@ -4344,10 +8834,31 @@ const router = express.Router()
 router.use(authenticateToken)
 router.use(requireRole(['AUDITOR', 'ORGANIZER', 'BOARD']))
 
-// Auditor endpoints
+// Auditor dashboard endpoints
 router.get('/stats', getStats)
-router.post('/category/:categoryId/final-certification', finalCertification)
-router.post('/category/:categoryId/reject', rejectAudit)
+router.get('/pending-audits', getPendingAudits)
+router.get('/completed-audits', getCompletedAudits)
+
+// Score verification endpoints
+router.get('/score-verification/:categoryId', getScoreVerification)
+router.get('/score-verification/:categoryId/:contestantId', getScoreVerification)
+router.post('/verify-score/:scoreId', logActivity('VERIFY_SCORE', 'SCORE'), verifyScore)
+
+// Tally master status tracking
+router.get('/tally-status/:categoryId', getTallyMasterStatus)
+
+// Certification workflow
+router.get('/certification-workflow/:categoryId', getCertificationWorkflow)
+
+// Final certification
+router.post('/category/:categoryId/final-certification', logActivity('FINAL_CERTIFICATION', 'CATEGORY'), finalCertification)
+router.post('/category/:categoryId/reject', logActivity('REJECT_AUDIT', 'CATEGORY'), rejectAudit)
+
+// Summary reports
+router.post('/summary-report', logActivity('GENERATE_SUMMARY_REPORT', 'REPORT'), generateSummaryReport)
+
+// Audit history
+router.get('/audit-history', getAuditHistory)
 
 module.exports = router
 EOF
@@ -4355,8 +8866,23 @@ EOF
     # Board Routes
     cat > "$APP_DIR/src/routes/boardRoutes.js" << 'EOF'
 const express = require('express')
-const { getStats, getCertificationStatus, getEmceeScripts } = require('../controllers/boardController')
+const { 
+  getStats, 
+  getCertifications,
+  approveCertification,
+  rejectCertification,
+  getCertificationStatus, 
+  getEmceeScripts,
+  createEmceeScript,
+  updateEmceeScript,
+  deleteEmceeScript,
+  generateReport,
+  getScoreRemovalRequests,
+  approveScoreRemoval,
+  rejectScoreRemoval
+} = require('../controllers/boardController')
 const { authenticateToken, requireRole } = require('../middleware/auth')
+const { logActivity } = require('../middleware/errorHandler')
 
 const router = express.Router()
 
@@ -4364,10 +8890,28 @@ const router = express.Router()
 router.use(authenticateToken)
 router.use(requireRole(['BOARD', 'ORGANIZER']))
 
-// Board endpoints
+// Board dashboard endpoints
 router.get('/stats', getStats)
+router.get('/certifications', getCertifications)
 router.get('/certification-status', getCertificationStatus)
+
+// Certification management
+router.post('/certifications/:id/approve', logActivity('APPROVE_CERTIFICATION', 'CERTIFICATION'), approveCertification)
+router.post('/certifications/:id/reject', logActivity('REJECT_CERTIFICATION', 'CERTIFICATION'), rejectCertification)
+
+// Emcee script management
 router.get('/emcee-scripts', getEmceeScripts)
+router.post('/emcee-scripts', logActivity('CREATE_EMCEE_SCRIPT', 'EMCEE_SCRIPT'), createEmceeScript)
+router.put('/emcee-scripts/:id', logActivity('UPDATE_EMCEE_SCRIPT', 'EMCEE_SCRIPT'), updateEmceeScript)
+router.delete('/emcee-scripts/:id', logActivity('DELETE_EMCEE_SCRIPT', 'EMCEE_SCRIPT'), deleteEmceeScript)
+
+// Report generation
+router.post('/reports', logActivity('GENERATE_REPORT', 'REPORT'), generateReport)
+
+// Score removal requests
+router.get('/score-removal-requests', getScoreRemovalRequests)
+router.post('/score-removal-requests/:id/approve', logActivity('APPROVE_SCORE_REMOVAL', 'SCORE_REMOVAL'), approveScoreRemoval)
+router.post('/score-removal-requests/:id/reject', logActivity('REJECT_SCORE_REMOVAL', 'SCORE_REMOVAL'), rejectScoreRemoval)
 
 module.exports = router
 EOF
@@ -4375,8 +8919,19 @@ EOF
     # Tally Master Routes
     cat > "$APP_DIR/src/routes/tallyMasterRoutes.js" << 'EOF'
 const express = require('express')
-const { getStats, getPendingCertifications, certifyTotals } = require('../controllers/tallyMasterController')
+const { 
+  getStats, 
+  getCertifications,
+  getCertificationQueue,
+  getPendingCertifications, 
+  certifyTotals,
+  getScoreReview,
+  getCertificationWorkflow,
+  getBiasCheckingTools,
+  getTallyMasterHistory
+} = require('../controllers/tallyMasterController')
 const { authenticateToken, requireRole } = require('../middleware/auth')
+const { logActivity } = require('../middleware/errorHandler')
 
 const router = express.Router()
 
@@ -4384,10 +8939,26 @@ const router = express.Router()
 router.use(authenticateToken)
 router.use(requireRole(['TALLY_MASTER', 'ORGANIZER', 'BOARD']))
 
-// Tally Master endpoints
+// Tally Master dashboard endpoints
 router.get('/stats', getStats)
+router.get('/certifications', getCertifications)
+router.get('/certification-queue', getCertificationQueue)
 router.get('/pending-certifications', getPendingCertifications)
-router.post('/certify-totals', certifyTotals)
+
+// Score review interface
+router.get('/score-review/:categoryId', getScoreReview)
+
+// Certification workflow
+router.get('/certification-workflow/:categoryId', getCertificationWorkflow)
+
+// Bias checking tools
+router.get('/bias-checking/:categoryId', getBiasCheckingTools)
+
+// Certify totals
+router.post('/certify-totals', logActivity('CERTIFY_TOTALS', 'CATEGORY'), certifyTotals)
+
+// Tally master history
+router.get('/history', getTallyMasterHistory)
 
 module.exports = router
 EOF
@@ -4482,7 +9053,18 @@ EOF
     # Emcee Routes
     cat > "$APP_DIR/src/routes/emceeRoutes.js" << 'EOF'
 const express = require('express')
-const { getScripts, getCurrentEvent, getAnnouncements, createAnnouncement, updateAnnouncement, deleteAnnouncement } = require('../controllers/emceeController')
+const { 
+  getStats,
+  getScripts,
+  getScript,
+  getContestantBios,
+  getJudgeBios,
+  getEvents,
+  getEvent,
+  getContests,
+  getContest,
+  getEmceeHistory
+} = require('../controllers/emceeController')
 const { authenticateToken, requireRole } = require('../middleware/auth')
 const { logActivity } = require('../middleware/errorHandler')
 
@@ -4492,13 +9074,138 @@ const router = express.Router()
 router.use(authenticateToken)
 router.use(requireRole(['EMCEE', 'ORGANIZER', 'BOARD']))
 
-// Emcee endpoints
+// Emcee dashboard endpoints
+router.get('/stats', getStats)
+router.get('/history', getEmceeHistory)
+
+// Script access
 router.get('/scripts', getScripts)
-router.get('/current-event', getCurrentEvent)
-router.get('/announcements', getAnnouncements)
-router.post('/announcements', logActivity('CREATE_ANNOUNCEMENT', 'ANNOUNCEMENT'), createAnnouncement)
-router.put('/announcements/:id', logActivity('UPDATE_ANNOUNCEMENT', 'ANNOUNCEMENT'), updateAnnouncement)
-router.delete('/announcements/:id', logActivity('DELETE_ANNOUNCEMENT', 'ANNOUNCEMENT'), deleteAnnouncement)
+router.get('/scripts/:scriptId', getScript)
+
+// Contestant bios
+router.get('/contestant-bios', getContestantBios)
+
+// Judge bios
+router.get('/judge-bios', getJudgeBios)
+
+// Event management
+router.get('/events', getEvents)
+router.get('/events/:eventId', getEvent)
+
+// Contest management
+router.get('/contests', getContests)
+router.get('/contests/:contestId', getContest)
+
+module.exports = router
+EOF
+
+    # File Routes
+    cat > "$APP_DIR/src/routes/fileRoutes.js" << 'EOF'
+const express = require('express')
+const { 
+  getAllFiles,
+  uploadFiles,
+  getFileById,
+  downloadFile,
+  updateFile,
+  deleteFile,
+  getFileStats,
+  upload
+} = require('../controllers/fileController')
+const { authenticateToken, requireRole } = require('../middleware/auth')
+const { logActivity } = require('../middleware/errorHandler')
+const { 
+  checkFileAccess, 
+  checkUploadPermission, 
+  checkSharingPermission, 
+  getUserFileAccess 
+} = require('../middleware/fileAccessControl')
+
+const router = express.Router()
+
+// Apply authentication to all routes
+router.use(authenticateToken)
+
+// File endpoints
+router.get('/', getAllFiles)
+router.get('/stats', getFileStats)
+router.get('/access', getUserFileAccess)
+router.get('/:id', checkFileAccess('READ'), getFileById)
+router.get('/:id/download', checkFileAccess('READ'), downloadFile)
+router.post('/upload', checkUploadPermission, upload.array('files', 5), logActivity('UPLOAD_FILE', 'FILE'), uploadFiles)
+router.put('/:id', checkFileAccess('WRITE'), logActivity('UPDATE_FILE', 'FILE'), updateFile)
+router.put('/:id/sharing', checkSharingPermission, logActivity('UPDATE_FILE_SHARING', 'FILE'), updateFile)
+router.delete('/:id', checkFileAccess('DELETE'), logActivity('DELETE_FILE', 'FILE'), deleteFile)
+
+module.exports = router
+EOF
+
+    # Performance Routes
+    cat > "$APP_DIR/src/routes/performanceRoutes.js" << 'EOF'
+const express = require('express')
+const { 
+  getPerformanceStats,
+  getSystemMetrics,
+  getPerformanceLogs,
+  clearPerformanceLogs,
+  getHealthCheck
+} = require('../controllers/performanceController')
+const { authenticateToken, requireRole } = require('../middleware/auth')
+const { logActivity } = require('../middleware/errorHandler')
+
+const router = express.Router()
+
+// Apply authentication to all routes
+router.use(authenticateToken)
+
+// Performance endpoints
+router.get('/stats', getPerformanceStats)
+router.get('/system', requireRole(['ORGANIZER', 'BOARD']), getSystemMetrics)
+router.get('/logs', requireRole(['ORGANIZER', 'BOARD']), getPerformanceLogs)
+router.get('/health', getHealthCheck)
+router.delete('/logs', requireRole(['ORGANIZER', 'BOARD']), logActivity('CLEAR_PERFORMANCE_LOGS', 'PERFORMANCE'), clearPerformanceLogs)
+
+module.exports = router
+EOF
+
+    # Certification Routes
+    cat > "$APP_DIR/src/routes/certificationRoutes.js" << 'EOF'
+const express = require('express')
+const { 
+  getAllCertifications,
+  createCertification,
+  updateCertification,
+  deleteCertification,
+  getCertificationById,
+  certifyJudge,
+  certifyTally,
+  certifyAuditor,
+  approveBoard,
+  rejectCertification,
+  getCertificationStats
+} = require('../controllers/certificationController')
+const { authenticateToken, requireRole } = require('../middleware/auth')
+const { logActivity } = require('../middleware/errorHandler')
+
+const router = express.Router()
+
+// Apply authentication to all routes
+router.use(authenticateToken)
+
+// Certification endpoints
+router.get('/', getAllCertifications)
+router.get('/stats', getCertificationStats)
+router.get('/:id', getCertificationById)
+router.post('/', requireRole(['ORGANIZER', 'BOARD']), logActivity('CREATE_CERTIFICATION', 'CERTIFICATION'), createCertification)
+router.put('/:id', requireRole(['ORGANIZER', 'BOARD']), logActivity('UPDATE_CERTIFICATION', 'CERTIFICATION'), updateCertification)
+router.delete('/:id', requireRole(['ORGANIZER', 'BOARD']), logActivity('DELETE_CERTIFICATION', 'CERTIFICATION'), deleteCertification)
+
+// Workflow endpoints
+router.post('/:id/certify-judge', requireRole(['JUDGE']), logActivity('CERTIFY_JUDGE', 'CERTIFICATION'), certifyJudge)
+router.post('/:id/certify-tally', requireRole(['TALLY_MASTER']), logActivity('CERTIFY_TALLY', 'CERTIFICATION'), certifyTally)
+router.post('/:id/certify-auditor', requireRole(['AUDITOR']), logActivity('CERTIFY_AUDITOR', 'CERTIFICATION'), certifyAuditor)
+router.post('/:id/approve-board', requireRole(['BOARD']), logActivity('APPROVE_BOARD', 'CERTIFICATION'), approveBoard)
+router.post('/:id/reject', requireRole(['BOARD', 'AUDITOR']), logActivity('REJECT_CERTIFICATION', 'CERTIFICATION'), rejectCertification)
 
 module.exports = router
 EOF
@@ -4541,14 +9248,19 @@ const settingsRoutes = require('./routes/settingsRoutes')
 const archiveRoutes = require('./routes/archiveRoutes')
 const backupRoutes = require('./routes/backupRoutes')
 const assignmentsRoutes = require('./routes/assignmentsRoutes')
+const fileRoutes = require('./routes/fileRoutes')
+const performanceRoutes = require('./routes/performanceRoutes')
+const certificationRoutes = require('./routes/certificationRoutes')
 const auditorRoutes = require('./routes/auditorRoutes')
 const boardRoutes = require('./routes/boardRoutes')
 const tallyMasterRoutes = require('./routes/tallyMasterRoutes')
+const judgeRoutes = require('./routes/judgeRoutes')
 const emailRoutes = require('./routes/emailRoutes')
 const reportsRoutes = require('./routes/reportsRoutes')
 const templatesRoutes = require('./routes/templatesRoutes')
 const notificationsRoutes = require('./routes/notificationsRoutes')
 const emceeRoutes = require('./routes/emceeRoutes')
+const navigationRoutes = require('./routes/navigationRoutes')
 
 const app = express()
 const server = http.createServer(app)
@@ -4605,6 +9317,10 @@ app.use(express.urlencoded({ extended: true }))
 app.use('/api/auth/', authLimiter)
 app.use('/api/', generalLimiter)
 
+// Performance monitoring middleware
+const { logPerformance } = require('./controllers/performanceController')
+app.use('/api/', logPerformance)
+
 // Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() })
@@ -4624,14 +9340,19 @@ app.use('/api/settings', settingsRoutes)
 app.use('/api/archive', archiveRoutes)
 app.use('/api/backup', backupRoutes)
 app.use('/api/assignments', assignmentsRoutes)
+app.use('/api/files', fileRoutes)
+app.use('/api/performance', performanceRoutes)
+app.use('/api/certifications', certificationRoutes)
 app.use('/api/auditor', auditorRoutes)
 app.use('/api/board', boardRoutes)
 app.use('/api/tally-master', tallyMasterRoutes)
+app.use('/api/judge', judgeRoutes)
 app.use('/api/email', emailRoutes)
 app.use('/api/reports', reportsRoutes)
 app.use('/api/templates', templatesRoutes)
 app.use('/api/notifications', notificationsRoutes)
 app.use('/api/emcee', emceeRoutes)
+app.use('/api/navigation', navigationRoutes)
 
 // Socket.IO connection handling
 io.on('connection', (socket) => {
@@ -4709,6 +9430,10 @@ model Event {
 
   contests         Contest[]
   archivedEvents   ArchivedEvent[]
+  
+  // New relations
+  assignments     Assignment[]
+  certifications  Certification[]
 
   @@map("events")
 }
@@ -4725,6 +9450,10 @@ model Contest {
   categories Category[]
   contestants ContestContestant[]
   judges     ContestJudge[]
+  
+  // New relations
+  assignments     Assignment[]
+  certifications  Certification[]
 
   @@map("contests")
 }
@@ -4747,6 +9476,10 @@ model Category {
   certifications TallyMasterCertification[]
   auditorCertifications AuditorCertification[]
   judgeCertifications JudgeCertification[] @relation("CategoryJudgeCertifications")
+  
+  // New relations
+  assignments     Assignment[]
+  certifications  Certification[]
 
   @@map("categories")
 }
@@ -4839,6 +9572,33 @@ model User {
   judgeId        String?
   contestantId   String?
   sessionVersion Int      @default(1)
+  isActive       Boolean  @default(true)
+  lastLoginAt    DateTime?
+  
+  // Custom fields for Judges
+  judgeBio           String?
+  judgeSpecialties   String? // JSON array
+  judgeCertifications String? // JSON array
+  
+  // Custom fields for Contestants
+  contestantBio      String?
+  contestantNumber   String?
+  contestantAge      Int?
+  contestantSchool   String?
+  
+  // Profile fields
+  bio                String?
+  phone              String?
+  address            String?
+  timezone           String?  @default("UTC")
+  language           String?  @default("en")
+  
+  // Notification preferences
+  notifications      String? // JSON object
+  
+  // Privacy settings
+  privacy            String? // JSON object
+  
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -4846,6 +9606,13 @@ model User {
   contestant Contestant? @relation(fields: [contestantId], references: [id])
   logs       ActivityLog[]
   updatedSettings SystemSetting[] @relation("UserUpdatedSettings")
+  
+  // New relations
+  assignments     Assignment[]
+  certifications  Certification[]
+  files           File[]
+  performanceLogs PerformanceLog[]
+  reports         Report[]
 
   @@map("users")
 }
@@ -5128,6 +9895,111 @@ model CategoryJudge {
   @@map("category_judges")
 }
 
+// Assignment Management
+model Assignment {
+  id          String   @id @default(cuid())
+  judgeId     String
+  categoryId  String
+  contestId   String
+  eventId     String
+  status      AssignmentStatus @default(PENDING)
+  assignedAt  DateTime @default(now())
+  assignedBy  String
+  notes       String?
+  priority    Int      @default(1)
+  
+  judge       User     @relation(fields: [judgeId], references: [id], onDelete: Cascade)
+  category    Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  contest     Contest  @relation(fields: [contestId], references: [id], onDelete: Cascade)
+  event       Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  
+  @@unique([judgeId, categoryId])
+  @@map("assignments")
+}
+
+// Certification Workflow
+model Certification {
+  id              String   @id @default(cuid())
+  categoryId      String
+  contestId       String
+  eventId         String
+  status          CertificationStatus @default(PENDING)
+  currentStep     Int      @default(1)
+  totalSteps      Int      @default(4)
+  judgeCertified  Boolean  @default(false)
+  tallyCertified  Boolean  @default(false)
+  auditorCertified Boolean @default(false)
+  boardApproved   Boolean  @default(false)
+  certifiedAt     DateTime?
+  certifiedBy     String?
+  rejectionReason String?
+  comments        String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  category        Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  contest         Contest  @relation(fields: [contestId], references: [id], onDelete: Cascade)
+  event           Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  
+  @@unique([categoryId, contestId, eventId])
+  @@map("certifications")
+}
+
+// File Management
+model File {
+  id          String   @id @default(cuid())
+  filename    String
+  originalName String
+  mimeType    String
+  size        Int
+  path        String
+  category    FileCategory
+  uploadedBy  String
+  uploadedAt  DateTime @default(now())
+  isPublic    Boolean  @default(false)
+  metadata    String?  // JSON
+  checksum    String?
+  
+  user        User     @relation(fields: [uploadedBy], references: [id], onDelete: Cascade)
+  
+  @@map("files")
+}
+
+// Performance Monitoring
+model PerformanceLog {
+  id          String   @id @default(cuid())
+  endpoint    String
+  method      String
+  responseTime Int
+  statusCode  Int
+  userId      String?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+  
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  
+  @@map("performance_logs")
+}
+
+// Advanced Reporting
+model Report {
+  id          String   @id @default(cuid())
+  name        String
+  type        String
+  parameters  String   // JSON
+  format      String
+  generatedBy String
+  filePath    String?
+  fileSize    Int?
+  status      String   @default("GENERATED")
+  createdAt   DateTime @default(now())
+  
+  user        User     @relation(fields: [generatedBy], references: [id], onDelete: Cascade)
+  
+  @@map("reports")
+}
+
 enum UserRole {
   ORGANIZER
   JUDGE
@@ -5145,11 +10017,35 @@ enum LogLevel {
   DEBUG
 }
 
-    enum RequestStatus {
-      PENDING
-      APPROVED
-      REJECTED
-    }
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum AssignmentStatus {
+  PENDING
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum CertificationStatus {
+  PENDING
+  IN_PROGRESS
+  CERTIFIED
+  REJECTED
+}
+
+enum FileCategory {
+  CONTESTANT_IMAGE
+  JUDGE_IMAGE
+  DOCUMENT
+  TEMPLATE
+  REPORT
+  BACKUP
+  OTHER
+}
 EOF
     
     # Create migration script (overwrite if exists to ensure correct operations)
