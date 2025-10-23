@@ -2225,19 +2225,32 @@ const deleteFile = async (req, res) => {
 
 const getFiles = async (req, res) => {
   try {
-    const files = await prisma.file.findMany({
-      include: {
-        user: {
-          select: {
-            name: true,
-            email: true
-          }
+    // List files from the file system instead of database
+    const uploadDir = path.join(process.cwd(), 'uploads')
+    
+    if (!fs.existsSync(uploadDir)) {
+      return res.json([])
+    }
+    
+    const files = fs.readdirSync(uploadDir)
+    const fileList = files
+      .filter(file => !fs.statSync(path.join(uploadDir, file)).isDirectory())
+      .map(file => {
+        const filePath = path.join(uploadDir, file)
+        const stats = fs.statSync(filePath)
+        return {
+          id: file,
+          filename: file,
+          filepath: filePath,
+          size: stats.size,
+          createdAt: stats.birthtime,
+          updatedAt: stats.mtime,
+          uploadedBy: req.user?.id || 'system'
         }
-      },
-      orderBy: { createdAt: 'desc' }
-    })
+      })
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
 
-    res.json(files)
+    res.json(fileList)
   } catch (error) {
     console.error('Get files error:', error)
     res.status(500).json({ error: 'Internal server error' })
@@ -2340,14 +2353,9 @@ const prisma = new PrismaClient()
 
 const getAllArchives = async (req, res) => {
   try {
-    const archives = await prisma.archive.findMany({
+    const archives = await prisma.archivedEvent.findMany({
       include: {
-        user: {
-          select: {
-            name: true,
-            email: true
-          }
-        }
+        event: true
       },
       orderBy: { createdAt: 'desc' }
     })
@@ -2408,10 +2416,9 @@ const archiveItem = async (req, res) => {
     const { type, id } = req.params
     const { reason } = req.body
 
-    const archive = await prisma.archive.create({
+    const archive = await prisma.archivedEvent.create({
       data: {
-        type,
-        resourceId: id,
+        eventId: id,
         reason,
         archivedBy: req.user.id
       }
@@ -2428,10 +2435,9 @@ const restoreItem = async (req, res) => {
   try {
     const { type, id } = req.params
 
-    await prisma.archive.deleteMany({
+    await prisma.archivedEvent.deleteMany({
       where: {
-        type,
-        resourceId: id
+        eventId: id
       }
     })
 
@@ -2446,10 +2452,9 @@ const deleteArchivedItem = async (req, res) => {
   try {
     const { type, id } = req.params
 
-    await prisma.archive.deleteMany({
+    await prisma.archivedEvent.deleteMany({
       where: {
-        type,
-        resourceId: id
+        eventId: id
       }
     })
 
@@ -2470,10 +2475,9 @@ const archiveEvent = async (req, res) => {
       data: { archived: true }
     })
 
-    const archive = await prisma.archive.create({
+    const archive = await prisma.archivedEvent.create({
       data: {
-        type: 'EVENT',
-        resourceId: eventId,
+        eventId: eventId,
         reason,
         archivedBy: req.user.id
       }
@@ -2495,10 +2499,9 @@ const restoreEvent = async (req, res) => {
       data: { archived: false }
     })
 
-    await prisma.archive.deleteMany({
+    await prisma.archivedEvent.deleteMany({
       where: {
-        type: 'EVENT',
-        resourceId: eventId
+        eventId: eventId
       }
     })
 
@@ -2532,9 +2535,29 @@ const prisma = new PrismaClient()
 
 const getAllBackups = async (req, res) => {
   try {
-    const backups = await prisma.backup.findMany({
-      orderBy: { createdAt: 'desc' }
-    })
+    // List backup files from the file system instead of database
+    const backupDir = path.join(process.cwd(), 'backups')
+    
+    if (!fs.existsSync(backupDir)) {
+      return res.json([])
+    }
+    
+    const files = fs.readdirSync(backupDir)
+    const backups = files
+      .filter(file => file.endsWith('.sql') || file.endsWith('.backup'))
+      .map(file => {
+        const filePath = path.join(backupDir, file)
+        const stats = fs.statSync(filePath)
+        return {
+          id: file,
+          filename: file,
+          filepath: filePath,
+          size: stats.size,
+          createdAt: stats.birthtime,
+          updatedAt: stats.mtime
+        }
+      })
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
 
     res.json(backups)
   } catch (error) {
@@ -2577,17 +2600,15 @@ const createBackup = async (req, res) => {
         return res.status(500).json({ error: 'Backup failed' })
       }
 
-      // Save backup record to database
-      const backup = await prisma.backup.create({
-        data: {
-          filename,
-          type,
-          filepath,
-          createdBy: req.user.id
-        }
+      // Return backup information (no database record needed)
+      res.json({
+        id: filename,
+        filename,
+        type,
+        filepath,
+        createdBy: req.user.id,
+        createdAt: new Date()
       })
-
-      res.json(backup)
     })
   } catch (error) {
     console.error('Create backup error:', error)
@@ -2597,9 +2618,29 @@ const createBackup = async (req, res) => {
 
 const listBackups = async (req, res) => {
   try {
-    const backups = await prisma.backup.findMany({
-      orderBy: { createdAt: 'desc' }
-    })
+    // List backup files from the file system instead of database
+    const backupDir = path.join(process.cwd(), 'backups')
+    
+    if (!fs.existsSync(backupDir)) {
+      return res.json([])
+    }
+    
+    const files = fs.readdirSync(backupDir)
+    const backups = files
+      .filter(file => file.endsWith('.sql') || file.endsWith('.backup'))
+      .map(file => {
+        const filePath = path.join(backupDir, file)
+        const stats = fs.statSync(filePath)
+        return {
+          id: file,
+          filename: file,
+          filepath: filePath,
+          size: stats.size,
+          createdAt: stats.birthtime,
+          updatedAt: stats.mtime
+        }
+      })
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
 
     res.json(backups)
   } catch (error) {
@@ -2611,20 +2652,16 @@ const listBackups = async (req, res) => {
 const downloadBackup = async (req, res) => {
   try {
     const { backupId } = req.params
-
-    const backup = await prisma.backup.findUnique({
-      where: { id: backupId }
-    })
-
-    if (!backup) {
-      return res.status(404).json({ error: 'Backup not found' })
-    }
-
-    if (!fs.existsSync(backup.filepath)) {
+    
+    // Find backup file in the file system
+    const backupDir = path.join(process.cwd(), 'backups')
+    const filePath = path.join(backupDir, backupId)
+    
+    if (!fs.existsSync(filePath)) {
       return res.status(404).json({ error: 'Backup file not found' })
     }
 
-    res.download(backup.filepath, backup.filename)
+    res.download(filePath, backupId)
   } catch (error) {
     console.error('Download backup error:', error)
     res.status(500).json({ error: 'Internal server error' })
@@ -2640,14 +2677,8 @@ const restoreBackup = async (req, res) => {
       // It's a filename
       filepath = path.join('backups', backupIdOrFile)
     } else {
-      // It's a backup ID
-      const backup = await prisma.backup.findUnique({
-        where: { id: backupIdOrFile }
-      })
-      if (!backup) {
-        return res.status(404).json({ error: 'Backup not found' })
-      }
-      filepath = backup.filepath
+      // It's a backup ID (filename)
+      filepath = path.join('backups', backupIdOrFile)
     }
 
     if (!fs.existsSync(filepath)) {
@@ -2673,25 +2704,18 @@ const restoreBackup = async (req, res) => {
 const deleteBackup = async (req, res) => {
   try {
     const { backupId } = req.params
-
-    const backup = await prisma.backup.findUnique({
-      where: { id: backupId }
-    })
-
-    if (!backup) {
-      return res.status(404).json({ error: 'Backup not found' })
+    
+    // Find backup file in the file system
+    const backupDir = path.join(process.cwd(), 'backups')
+    const filePath = path.join(backupDir, backupId)
+    
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'Backup file not found' })
     }
 
     // Delete physical file
-    if (fs.existsSync(backup.filepath)) {
-      fs.unlinkSync(backup.filepath)
-    }
-
-    // Delete database record
-    await prisma.backup.delete({
-      where: { id: backupId }
-    })
-
+    fs.unlinkSync(filePath)
+    
     res.json({ message: 'Backup deleted successfully' })
   } catch (error) {
     console.error('Delete backup error:', error)
