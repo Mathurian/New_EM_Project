@@ -7842,6 +7842,2026 @@ module.exports = {
 }
 EOF
 
+    # Print Controller
+    cat > "$APP_DIR/src/controllers/printController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+const puppeteer = require('puppeteer')
+const handlebars = require('handlebars')
+const fs = require('fs').promises
+const path = require('path')
+const { generateSecurePassword, encryptMetadata, decryptMetadata } = require('../middleware/fileEncryption')
+
+const prisma = new PrismaClient()
+
+// Print templates directory
+const TEMPLATES_DIR = path.join(__dirname, '../templates/print')
+
+// Ensure templates directory exists
+const ensureTemplatesDir = async () => {
+  try {
+    await fs.mkdir(TEMPLATES_DIR, { recursive: true })
+  } catch (error) {
+    console.error('Error creating templates directory:', error)
+  }
+}
+
+// Get available print templates
+const getPrintTemplates = async (req, res) => {
+  try {
+    await ensureTemplatesDir()
+    
+    const templates = await fs.readdir(TEMPLATES_DIR)
+    const templateList = templates
+      .filter(file => file.endsWith('.hbs'))
+      .map(file => ({
+        name: file.replace('.hbs', ''),
+        filename: file,
+        path: path.join(TEMPLATES_DIR, file)
+      }))
+
+    res.json({
+      templates: templateList,
+      message: 'Print templates retrieved successfully'
+    })
+  } catch (error) {
+    console.error('Get print templates error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Create custom print template
+const createPrintTemplate = async (req, res) => {
+  try {
+    const { name, content, description, type } = req.body
+
+    if (!name || !content) {
+      return res.status(400).json({ error: 'Template name and content are required' })
+    }
+
+    await ensureTemplatesDir()
+
+    const templatePath = path.join(TEMPLATES_DIR, `${name}.hbs`)
+    
+    // Validate handlebars template
+    try {
+      handlebars.compile(content)
+    } catch (error) {
+      return res.status(400).json({ error: 'Invalid template syntax: ' + error.message })
+    }
+
+    await fs.writeFile(templatePath, content, 'utf8')
+
+    // Save template metadata to database
+    const template = await prisma.template.create({
+      data: {
+        name,
+        description: description || '',
+        type: type || 'PRINT',
+        content,
+        createdBy: req.user.id,
+        isActive: true
+      }
+    })
+
+    res.json({
+      template,
+      message: 'Print template created successfully'
+    })
+  } catch (error) {
+    console.error('Create print template error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Update print template
+const updatePrintTemplate = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { name, content, description, type } = req.body
+
+    const template = await prisma.template.findUnique({
+      where: { id }
+    })
+
+    if (!template) {
+      return res.status(404).json({ error: 'Template not found' })
+    }
+
+    // Validate handlebars template if content is provided
+    if (content) {
+      try {
+        handlebars.compile(content)
+      } catch (error) {
+        return res.status(400).json({ error: 'Invalid template syntax: ' + error.message })
+      }
+    }
+
+    const updatedTemplate = await prisma.template.update({
+      where: { id },
+      data: {
+        name: name || template.name,
+        content: content || template.content,
+        description: description || template.description,
+        type: type || template.type,
+        updatedAt: new Date()
+      }
+    })
+
+    // Update file if content changed
+    if (content) {
+      const templatePath = path.join(TEMPLATES_DIR, `${updatedTemplate.name}.hbs`)
+      await fs.writeFile(templatePath, content, 'utf8')
+    }
+
+    res.json({
+      template: updatedTemplate,
+      message: 'Print template updated successfully'
+    })
+  } catch (error) {
+    console.error('Update print template error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Delete print template
+const deletePrintTemplate = async (req, res) => {
+  try {
+    const { id } = req.params
+
+    const template = await prisma.template.findUnique({
+      where: { id }
+    })
+
+    if (!template) {
+      return res.status(404).json({ error: 'Template not found' })
+    }
+
+    // Delete file
+    const templatePath = path.join(TEMPLATES_DIR, `${template.name}.hbs`)
+    try {
+      await fs.unlink(templatePath)
+    } catch (error) {
+      console.warn('Template file not found:', templatePath)
+    }
+
+    // Delete from database
+    await prisma.template.delete({
+      where: { id }
+    })
+
+    res.json({ message: 'Print template deleted successfully' })
+  } catch (error) {
+    console.error('Delete print template error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Print event report
+const printEventReport = async (req, res) => {
+  try {
+    const { eventId, templateName, format = 'pdf', options = {} } = req.body
+
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      include: {
+        contests: {
+          include: {
+            categories: {
+              include: {
+                scores: {
+                  include: {
+                    judge: {
+                      select: {
+                        id: true,
+                        name: true,
+                        preferredName: true,
+                        email: true
+                      }
+                    },
+                    contestant: {
+                      select: {
+                        id: true,
+                        name: true,
+                        preferredName: true,
+                        email: true,
+                        contestantNumber: true
+                      }
+                    },
+                    criterion: {
+                      select: {
+                        id: true,
+                        name: true,
+                        description: true,
+                        maxScore: true
+                      }
+                    }
+                  }
+                },
+                contestants: {
+                  include: {
+                    user: {
+                      select: {
+                        id: true,
+                        name: true,
+                        preferredName: true,
+                        email: true,
+                        contestantNumber: true,
+                        contestantAge: true,
+                        contestantSchool: true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    })
+
+    if (!event) {
+      return res.status(404).json({ error: 'Event not found' })
+    }
+
+    // Get template
+    const templatePath = path.join(TEMPLATES_DIR, `${templateName || 'event-report'}.hbs`)
+    let templateContent
+
+    try {
+      templateContent = await fs.readFile(templatePath, 'utf8')
+    } catch (error) {
+      // Use default template if custom template not found
+      templateContent = await getDefaultEventTemplate()
+    }
+
+    // Compile template
+    const template = handlebars.compile(templateContent)
+    
+    // Prepare data for template
+    const templateData = {
+      event,
+      generatedAt: new Date().toISOString(),
+      generatedBy: req.user.name,
+      options
+    }
+
+    // Generate HTML
+    const html = template(templateData)
+
+    // Generate PDF using Puppeteer
+    const browser = await puppeteer.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
+    })
+
+    const page = await browser.newPage()
+    await page.setContent(html, { waitUntil: 'networkidle0' })
+
+    let output
+    if (format === 'pdf') {
+      output = await page.pdf({
+        format: 'A4',
+        printBackground: true,
+        margin: {
+          top: '1cm',
+          right: '1cm',
+          bottom: '1cm',
+          left: '1cm'
+        },
+        ...options
+      })
+    } else {
+      // For other formats, we'll return the HTML
+      output = html
+    }
+
+    await browser.close()
+
+    // Set appropriate headers
+    if (format === 'pdf') {
+      res.setHeader('Content-Type', 'application/pdf')
+      res.setHeader('Content-Disposition', `attachment; filename="event-report-${event.name}-${Date.now()}.pdf"`)
+    } else {
+      res.setHeader('Content-Type', 'text/html')
+    }
+
+    res.send(output)
+  } catch (error) {
+    console.error('Print event report error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Print contest results
+const printContestResults = async (req, res) => {
+  try {
+    const { contestId, templateName, format = 'pdf', options = {} } = req.body
+
+    const contest = await prisma.contest.findUnique({
+      where: { id: contestId },
+      include: {
+        event: {
+          select: {
+            id: true,
+            name: true,
+            startDate: true,
+            endDate: true,
+            location: true
+          }
+        },
+        categories: {
+          include: {
+            scores: {
+              include: {
+                judge: {
+                  select: {
+                    id: true,
+                    name: true,
+                    preferredName: true,
+                    email: true
+                  }
+                },
+                contestant: {
+                  select: {
+                    id: true,
+                    name: true,
+                    preferredName: true,
+                    email: true,
+                    contestantNumber: true
+                  }
+                },
+                criterion: {
+                  select: {
+                    id: true,
+                    name: true,
+                    description: true,
+                    maxScore: true
+                  }
+                }
+              }
+            },
+            contestants: {
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    name: true,
+                    preferredName: true,
+                    email: true,
+                    contestantNumber: true,
+                    contestantAge: true,
+                    contestantSchool: true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    })
+
+    if (!contest) {
+      return res.status(404).json({ error: 'Contest not found' })
+    }
+
+    // Get template
+    const templatePath = path.join(TEMPLATES_DIR, `${templateName || 'contest-results'}.hbs`)
+    let templateContent
+
+    try {
+      templateContent = await fs.readFile(templatePath, 'utf8')
+    } catch (error) {
+      // Use default template if custom template not found
+      templateContent = await getDefaultContestTemplate()
+    }
+
+    // Compile template
+    const template = handlebars.compile(templateContent)
+    
+    // Prepare data for template
+    const templateData = {
+      contest,
+      generatedAt: new Date().toISOString(),
+      generatedBy: req.user.name,
+      options
+    }
+
+    // Generate HTML
+    const html = template(templateData)
+
+    // Generate PDF using Puppeteer
+    const browser = await puppeteer.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
+    })
+
+    const page = await browser.newPage()
+    await page.setContent(html, { waitUntil: 'networkidle0' })
+
+    let output
+    if (format === 'pdf') {
+      output = await page.pdf({
+        format: 'A4',
+        printBackground: true,
+        margin: {
+          top: '1cm',
+          right: '1cm',
+          bottom: '1cm',
+          left: '1cm'
+        },
+        ...options
+      })
+    } else {
+      // For other formats, we'll return the HTML
+      output = html
+    }
+
+    await browser.close()
+
+    // Set appropriate headers
+    if (format === 'pdf') {
+      res.setHeader('Content-Type', 'application/pdf')
+      res.setHeader('Content-Disposition', `attachment; filename="contest-results-${contest.name}-${Date.now()}.pdf"`)
+    } else {
+      res.setHeader('Content-Type', 'text/html')
+    }
+
+    res.send(output)
+  } catch (error) {
+    console.error('Print contest results error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Print judge performance report
+const printJudgePerformance = async (req, res) => {
+  try {
+    const { judgeId, eventId, templateName, format = 'pdf', options = {} } = req.body
+
+    const judge = await prisma.user.findUnique({
+      where: { id: judgeId },
+      include: {
+        scores: {
+          where: eventId ? {
+            category: {
+              contest: {
+                eventId: eventId
+              }
+            }
+          } : {},
+          include: {
+            category: {
+              include: {
+                contest: {
+                  include: {
+                    event: {
+                      select: {
+                        id: true,
+                        name: true,
+                        startDate: true,
+                        endDate: true,
+                        location: true
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            contestant: {
+              select: {
+                id: true,
+                name: true,
+                preferredName: true,
+                email: true,
+                contestantNumber: true
+              }
+            },
+            criterion: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+                maxScore: true
+              }
+            }
+          }
+        }
+      }
+    })
+
+    if (!judge) {
+      return res.status(404).json({ error: 'Judge not found' })
+    }
+
+    // Get template
+    const templatePath = path.join(TEMPLATES_DIR, `${templateName || 'judge-performance'}.hbs`)
+    let templateContent
+
+    try {
+      templateContent = await fs.readFile(templatePath, 'utf8')
+    } catch (error) {
+      // Use default template if custom template not found
+      templateContent = await getDefaultJudgeTemplate()
+    }
+
+    // Compile template
+    const template = handlebars.compile(templateContent)
+    
+    // Calculate performance statistics
+    const performanceStats = {
+      totalScores: judge.scores.length,
+      averageScore: judge.scores.length > 0 ? 
+        judge.scores.reduce((sum, score) => sum + score.score, 0) / judge.scores.length : 0,
+      scoreDistribution: calculateScoreDistribution(judge.scores),
+      categoriesJudged: [...new Set(judge.scores.map(score => score.category.name))].length
+    }
+
+    // Prepare data for template
+    const templateData = {
+      judge,
+      performanceStats,
+      generatedAt: new Date().toISOString(),
+      generatedBy: req.user.name,
+      options
+    }
+
+    // Generate HTML
+    const html = template(templateData)
+
+    // Generate PDF using Puppeteer
+    const browser = await puppeteer.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
+    })
+
+    const page = await browser.newPage()
+    await page.setContent(html, { waitUntil: 'networkidle0' })
+
+    let output
+    if (format === 'pdf') {
+      output = await page.pdf({
+        format: 'A4',
+        printBackground: true,
+        margin: {
+          top: '1cm',
+          right: '1cm',
+          bottom: '1cm',
+          left: '1cm'
+        },
+        ...options
+      })
+    } else {
+      // For other formats, we'll return the HTML
+      output = html
+    }
+
+    await browser.close()
+
+    // Set appropriate headers
+    if (format === 'pdf') {
+      res.setHeader('Content-Type', 'application/pdf')
+      res.setHeader('Content-Disposition', `attachment; filename="judge-performance-${judge.name}-${Date.now()}.pdf"`)
+    } else {
+      res.setHeader('Content-Type', 'text/html')
+    }
+
+    res.send(output)
+  } catch (error) {
+    console.error('Print judge performance error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Helper function to calculate score distribution
+const calculateScoreDistribution = (scores) => {
+  const distribution = {}
+  scores.forEach(score => {
+    const range = Math.floor(score.score / 10) * 10
+    const key = `${range}-${range + 9}`
+    distribution[key] = (distribution[key] || 0) + 1
+  })
+  return distribution
+}
+
+// Default templates
+const getDefaultEventTemplate = async () => {
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Event Report - {{event.name}}</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .header { text-align: center; margin-bottom: 30px; }
+        .event-info { margin-bottom: 20px; }
+        .contest-section { margin-bottom: 30px; page-break-inside: avoid; }
+        .contest-title { font-size: 18px; font-weight: bold; margin-bottom: 10px; }
+        .category-section { margin-left: 20px; margin-bottom: 15px; }
+        .category-title { font-size: 16px; font-weight: bold; margin-bottom: 5px; }
+        .stats { background-color: #f5f5f5; padding: 10px; margin-bottom: 20px; }
+        .footer { margin-top: 50px; text-align: center; font-size: 12px; color: #666; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Event Report</h1>
+        <h2>{{event.name}}</h2>
+    </div>
+    
+    <div class="event-info">
+        <p><strong>Description:</strong> {{event.description}}</p>
+        <p><strong>Date:</strong> {{event.startDate}} - {{event.endDate}}</p>
+        <p><strong>Location:</strong> {{event.location}}</p>
+        <p><strong>Status:</strong> {{event.status}}</p>
+    </div>
+    
+    <div class="stats">
+        <h3>Event Statistics</h3>
+        <p>Total Contests: {{event.contests.length}}</p>
+        <p>Total Categories: {{event.contests.length}}</p>
+        <p>Total Contestants: {{event.contests.length}}</p>
+    </div>
+    
+    {{#each event.contests}}
+    <div class="contest-section">
+        <div class="contest-title">{{name}}</div>
+        <p>{{description}}</p>
+        
+        {{#each categories}}
+        <div class="category-section">
+            <div class="category-title">{{name}}</div>
+            <p>{{description}}</p>
+            <p>Max Score: {{maxScore}}</p>
+            <p>Contestants: {{contestants.length}}</p>
+        </div>
+        {{/each}}
+    </div>
+    {{/each}}
+    
+    <div class="footer">
+        <p>Generated on {{generatedAt}} by {{generatedBy}}</p>
+    </div>
+</body>
+</html>
+  `
+}
+
+const getDefaultContestTemplate = async () => {
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Contest Results - {{contest.name}}</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .header { text-align: center; margin-bottom: 30px; }
+        .contest-info { margin-bottom: 20px; }
+        .category-section { margin-bottom: 30px; page-break-inside: avoid; }
+        .category-title { font-size: 18px; font-weight: bold; margin-bottom: 10px; }
+        .results-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+        .results-table th, .results-table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        .results-table th { background-color: #f2f2f2; }
+        .footer { margin-top: 50px; text-align: center; font-size: 12px; color: #666; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Contest Results</h1>
+        <h2>{{contest.name}}</h2>
+    </div>
+    
+    <div class="contest-info">
+        <p><strong>Event:</strong> {{contest.event.name}}</p>
+        <p><strong>Description:</strong> {{contest.description}}</p>
+        <p><strong>Date:</strong> {{contest.event.startDate}} - {{contest.event.endDate}}</p>
+        <p><strong>Location:</strong> {{contest.event.location}}</p>
+    </div>
+    
+    {{#each contest.categories}}
+    <div class="category-section">
+        <div class="category-title">{{name}}</div>
+        <p>{{description}}</p>
+        <p>Max Score: {{maxScore}}</p>
+        
+        <table class="results-table">
+            <thead>
+                <tr>
+                    <th>Rank</th>
+                    <th>Contestant</th>
+                    <th>Number</th>
+                    <th>Total Score</th>
+                    <th>Average Score</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{#each contestants}}
+                <tr>
+                    <td>{{@index}}</td>
+                    <td>{{user.preferredName}}</td>
+                    <td>{{user.contestantNumber}}</td>
+                    <td>{{totalScore}}</td>
+                    <td>{{averageScore}}</td>
+                </tr>
+                {{/each}}
+            </tbody>
+        </table>
+    </div>
+    {{/each}}
+    
+    <div class="footer">
+        <p>Generated on {{generatedAt}} by {{generatedBy}}</p>
+    </div>
+</body>
+</html>
+  `
+}
+
+const getDefaultJudgeTemplate = async () => {
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Judge Performance Report - {{judge.name}}</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .header { text-align: center; margin-bottom: 30px; }
+        .judge-info { margin-bottom: 20px; }
+        .stats-section { margin-bottom: 30px; }
+        .stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
+        .stat-card { background-color: #f5f5f5; padding: 15px; border-radius: 5px; }
+        .stat-value { font-size: 24px; font-weight: bold; color: #333; }
+        .stat-label { font-size: 14px; color: #666; }
+        .scores-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+        .scores-table th, .scores-table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        .scores-table th { background-color: #f2f2f2; }
+        .footer { margin-top: 50px; text-align: center; font-size: 12px; color: #666; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Judge Performance Report</h1>
+        <h2>{{judge.name}}</h2>
+    </div>
+    
+    <div class="judge-info">
+        <p><strong>Email:</strong> {{judge.email}}</p>
+        <p><strong>Role:</strong> {{judge.role}}</p>
+        <p><strong>Bio:</strong> {{judge.bio}}</p>
+    </div>
+    
+    <div class="stats-section">
+        <h3>Performance Statistics</h3>
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value">{{performanceStats.totalScores}}</div>
+                <div class="stat-label">Total Scores</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{{performanceStats.averageScore}}</div>
+                <div class="stat-label">Average Score</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{{performanceStats.categoriesJudged}}</div>
+                <div class="stat-label">Categories Judged</div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="scores-section">
+        <h3>Recent Scores</h3>
+        <table class="scores-table">
+            <thead>
+                <tr>
+                    <th>Contestant</th>
+                    <th>Category</th>
+                    <th>Criterion</th>
+                    <th>Score</th>
+                    <th>Max Score</th>
+                    <th>Date</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{#each judge.scores}}
+                <tr>
+                    <td>{{contestant.preferredName}}</td>
+                    <td>{{category.name}}</td>
+                    <td>{{criterion.name}}</td>
+                    <td>{{score}}</td>
+                    <td>{{criterion.maxScore}}</td>
+                    <td>{{createdAt}}</td>
+                </tr>
+                {{/each}}
+            </tbody>
+        </table>
+    </div>
+    
+    <div class="footer">
+        <p>Generated on {{generatedAt}} by {{generatedBy}}</p>
+    </div>
+</body>
+</html>
+  `
+}
+
+module.exports = {
+  getPrintTemplates,
+  createPrintTemplate,
+  updatePrintTemplate,
+  deletePrintTemplate,
+  printEventReport,
+  printContestResults,
+  printJudgePerformance
+}
+EOF
+
+    # File Management Interface Controller
+    cat > "$APP_DIR/src/controllers/fileManagementController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+const fs = require('fs').promises
+const path = require('path')
+const { generateSecurePassword, encryptMetadata, decryptMetadata, verifyFileIntegrity, secureDeleteFile } = require('../middleware/fileEncryption')
+
+const prisma = new PrismaClient()
+
+// File Management Interface Functions
+
+// Get files with advanced search and filtering
+const getFilesWithFilters = async (req, res) => {
+  try {
+    const { 
+      search = '', 
+      category = '', 
+      uploadedBy = '', 
+      dateFrom = '', 
+      dateTo = '', 
+      sizeMin = '', 
+      sizeMax = '', 
+      mimeType = '', 
+      isPublic = '', 
+      sortBy = 'uploadedAt', 
+      sortOrder = 'desc', 
+      page = 1, 
+      limit = 20 
+    } = req.query
+
+    // Build where clause
+    const where = {}
+    
+    if (search) {
+      where.OR = [
+        { filename: { contains: search, mode: 'insensitive' } },
+        { originalName: { contains: search, mode: 'insensitive' } },
+        { metadata: { contains: search, mode: 'insensitive' } }
+      ]
+    }
+    
+    if (category) {
+      where.category = category
+    }
+    
+    if (uploadedBy) {
+      where.uploadedBy = uploadedBy
+    }
+    
+    if (dateFrom || dateTo) {
+      where.uploadedAt = {}
+      if (dateFrom) where.uploadedAt.gte = new Date(dateFrom)
+      if (dateTo) where.uploadedAt.lte = new Date(dateTo)
+    }
+    
+    if (sizeMin || sizeMax) {
+      where.size = {}
+      if (sizeMin) where.size.gte = parseInt(sizeMin)
+      if (sizeMax) where.size.lte = parseInt(sizeMax)
+    }
+    
+    if (mimeType) {
+      where.mimeType = { contains: mimeType, mode: 'insensitive' }
+    }
+    
+    if (isPublic !== '') {
+      where.isPublic = isPublic === 'true'
+    }
+
+    // Build orderBy clause
+    const orderBy = {}
+    orderBy[sortBy] = sortOrder
+
+    // Calculate pagination
+    const skip = (parseInt(page) - 1) * parseInt(limit)
+
+    // Get files with pagination
+    const [files, totalCount] = await Promise.all([
+      prisma.file.findMany({
+        where,
+        orderBy,
+        skip,
+        take: parseInt(limit),
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              preferredName: true,
+              email: true,
+              role: true
+            }
+          }
+        }
+      }),
+      prisma.file.count({ where })
+    ])
+
+    // Get file statistics
+    const stats = await prisma.file.aggregate({
+      where,
+      _count: { id: true },
+      _sum: { size: true },
+      _avg: { size: true }
+    })
+
+    // Get category distribution
+    const categoryStats = await prisma.file.groupBy({
+      by: ['category'],
+      where,
+      _count: { id: true },
+      _sum: { size: true }
+    })
+
+    // Get uploader distribution
+    const uploaderStats = await prisma.file.groupBy({
+      by: ['uploadedBy'],
+      where,
+      _count: { id: true },
+      _sum: { size: true }
+    })
+
+    res.json({
+      files,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        totalCount,
+        totalPages: Math.ceil(totalCount / parseInt(limit)),
+        hasNext: skip + parseInt(limit) < totalCount,
+        hasPrev: parseInt(page) > 1
+      },
+      stats: {
+        totalFiles: stats._count.id,
+        totalSize: stats._sum.size,
+        averageSize: stats._avg.size,
+        categoryDistribution: categoryStats,
+        uploaderDistribution: uploaderStats
+      }
+    })
+  } catch (error) {
+    console.error('Get files with filters error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Bulk file operations
+const bulkFileOperations = async (req, res) => {
+  try {
+    const { operation, fileIds, data } = req.body
+
+    if (!operation || !fileIds || !Array.isArray(fileIds)) {
+      return res.status(400).json({ error: 'Invalid operation parameters' })
+    }
+
+    let result = {}
+
+    switch (operation) {
+      case 'delete':
+        result = await bulkDeleteFiles(fileIds)
+        break
+      case 'updateCategory':
+        result = await bulkUpdateCategory(fileIds, data.category)
+        break
+      case 'updatePublicStatus':
+        result = await bulkUpdatePublicStatus(fileIds, data.isPublic)
+        break
+      case 'download':
+        result = await bulkDownloadFiles(fileIds)
+        break
+      case 'move':
+        result = await bulkMoveFiles(fileIds, data.destination)
+        break
+      default:
+        return res.status(400).json({ error: 'Invalid operation' })
+    }
+
+    res.json({
+      operation,
+      result,
+      message: `Bulk ${operation} completed successfully`
+    })
+  } catch (error) {
+    console.error('Bulk file operations error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// File search suggestions
+const getFileSearchSuggestions = async (req, res) => {
+  try {
+    const { query = '', limit = 10 } = req.query
+
+    if (!query || query.length < 2) {
+      return res.json({ suggestions: [] })
+    }
+
+    const suggestions = await prisma.file.findMany({
+      where: {
+        OR: [
+          { filename: { contains: query, mode: 'insensitive' } },
+          { originalName: { contains: query, mode: 'insensitive' } }
+        ]
+      },
+      select: {
+        id: true,
+        filename: true,
+        originalName: true,
+        category: true,
+        mimeType: true
+      },
+      take: parseInt(limit),
+      orderBy: { uploadedAt: 'desc' }
+    })
+
+    res.json({ suggestions })
+  } catch (error) {
+    console.error('Get file search suggestions error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// File analytics and insights
+const getFileAnalytics = async (req, res) => {
+  try {
+    const { period = '30d' } = req.query
+
+    // Calculate date range
+    const now = new Date()
+    const periodDays = period === '7d' ? 7 : period === '30d' ? 30 : period === '90d' ? 90 : 365
+    const startDate = new Date(now.getTime() - (periodDays * 24 * 60 * 60 * 1000))
+
+    // File upload trends
+    const uploadTrends = await prisma.file.groupBy({
+      by: ['uploadedAt'],
+      where: {
+        uploadedAt: { gte: startDate }
+      },
+      _count: { id: true },
+      _sum: { size: true },
+      orderBy: { uploadedAt: 'asc' }
+    })
+
+    // Category distribution
+    const categoryDistribution = await prisma.file.groupBy({
+      by: ['category'],
+      where: {
+        uploadedAt: { gte: startDate }
+      },
+      _count: { id: true },
+      _sum: { size: true }
+    })
+
+    // Top uploaders
+    const topUploaders = await prisma.file.groupBy({
+      by: ['uploadedBy'],
+      where: {
+        uploadedAt: { gte: startDate }
+      },
+      _count: { id: true },
+      _sum: { size: true },
+      orderBy: { _count: { id: 'desc' } },
+      take: 10
+    })
+
+    // File type distribution
+    const fileTypeDistribution = await prisma.file.groupBy({
+      by: ['mimeType'],
+      where: {
+        uploadedAt: { gte: startDate }
+      },
+      _count: { id: true },
+      _sum: { size: true },
+      orderBy: { _count: { id: 'desc' } },
+      take: 10
+    })
+
+    // Storage usage over time
+    const storageUsage = await prisma.file.aggregate({
+      where: {
+        uploadedAt: { gte: startDate }
+      },
+      _sum: { size: true },
+      _count: { id: true }
+    })
+
+    res.json({
+      period,
+      uploadTrends,
+      categoryDistribution,
+      topUploaders,
+      fileTypeDistribution,
+      storageUsage,
+      generatedAt: new Date().toISOString()
+    })
+  } catch (error) {
+    console.error('Get file analytics error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// File integrity check
+const checkFileIntegrity = async (req, res) => {
+  try {
+    const { fileId } = req.params
+
+    const file = await prisma.file.findUnique({
+      where: { id: fileId }
+    })
+
+    if (!file) {
+      return res.status(404).json({ error: 'File not found' })
+    }
+
+    // Check if file exists on disk
+    const fileExists = await fs.access(file.path).then(() => true).catch(() => false)
+    
+    if (!fileExists) {
+      return res.json({
+        fileId,
+        integrity: 'MISSING',
+        message: 'File not found on disk',
+        checksum: file.checksum,
+        fileSize: file.size
+      })
+    }
+
+    // Verify file integrity if checksum exists
+    let integrityCheck = null
+    if (file.checksum) {
+      const isValid = await verifyFileIntegrity(file.path, file.checksum)
+      integrityCheck = {
+        checksum: file.checksum,
+        isValid,
+        status: isValid ? 'VALID' : 'INVALID'
+      }
+    }
+
+    // Get actual file size
+    const stats = await fs.stat(file.path)
+    const actualSize = stats.size
+
+    res.json({
+      fileId,
+      integrity: integrityCheck ? integrityCheck.status : 'UNKNOWN',
+      fileExists: true,
+      expectedSize: file.size,
+      actualSize,
+      sizeMatch: file.size === actualSize,
+      checksum: integrityCheck,
+      lastModified: stats.mtime,
+      message: 'File integrity check completed'
+    })
+  } catch (error) {
+    console.error('Check file integrity error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Bulk file integrity check
+const bulkCheckFileIntegrity = async (req, res) => {
+  try {
+    const { fileIds } = req.body
+
+    if (!fileIds || !Array.isArray(fileIds)) {
+      return res.status(400).json({ error: 'Invalid file IDs' })
+    }
+
+    const results = []
+    
+    for (const fileId of fileIds) {
+      try {
+        const file = await prisma.file.findUnique({
+          where: { id: fileId }
+        })
+
+        if (!file) {
+          results.push({ fileId, status: 'NOT_FOUND', error: 'File not found in database' })
+          continue
+        }
+
+        const fileExists = await fs.access(file.path).then(() => true).catch(() => false)
+        
+        if (!fileExists) {
+          results.push({ fileId, status: 'MISSING', error: 'File not found on disk' })
+          continue
+        }
+
+        let integrityCheck = null
+        if (file.checksum) {
+          const isValid = await verifyFileIntegrity(file.path, file.checksum)
+          integrityCheck = {
+            checksum: file.checksum,
+            isValid,
+            status: isValid ? 'VALID' : 'INVALID'
+          }
+        }
+
+        const stats = await fs.stat(file.path)
+        const actualSize = stats.size
+
+        results.push({
+          fileId,
+          status: 'OK',
+          integrity: integrityCheck ? integrityCheck.status : 'UNKNOWN',
+          expectedSize: file.size,
+          actualSize,
+          sizeMatch: file.size === actualSize,
+          checksum: integrityCheck
+        })
+      } catch (error) {
+        results.push({ fileId, status: 'ERROR', error: error.message })
+      }
+    }
+
+    res.json({
+      results,
+      totalChecked: fileIds.length,
+      completedAt: new Date().toISOString()
+    })
+  } catch (error) {
+    console.error('Bulk check file integrity error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Helper functions for bulk operations
+const bulkDeleteFiles = async (fileIds) => {
+  const results = []
+  
+  for (const fileId of fileIds) {
+    try {
+      const file = await prisma.file.findUnique({
+        where: { id: fileId }
+      })
+
+      if (!file) {
+        results.push({ fileId, status: 'NOT_FOUND' })
+        continue
+      }
+
+      // Securely delete file from disk
+      await secureDeleteFile(file.path)
+
+      // Remove from database
+      await prisma.file.delete({
+        where: { id: fileId }
+      })
+
+      results.push({ fileId, status: 'DELETED' })
+    } catch (error) {
+      results.push({ fileId, status: 'ERROR', error: error.message })
+    }
+  }
+
+  return results
+}
+
+const bulkUpdateCategory = async (fileIds, category) => {
+  const results = []
+  
+  for (const fileId of fileIds) {
+    try {
+      await prisma.file.update({
+        where: { id: fileId },
+        data: { category }
+      })
+      results.push({ fileId, status: 'UPDATED' })
+    } catch (error) {
+      results.push({ fileId, status: 'ERROR', error: error.message })
+    }
+  }
+
+  return results
+}
+
+const bulkUpdatePublicStatus = async (fileIds, isPublic) => {
+  const results = []
+  
+  for (const fileId of fileIds) {
+    try {
+      await prisma.file.update({
+        where: { id: fileId },
+        data: { isPublic }
+      })
+      results.push({ fileId, status: 'UPDATED' })
+    } catch (error) {
+      results.push({ fileId, status: 'ERROR', error: error.message })
+    }
+  }
+
+  return results
+}
+
+const bulkDownloadFiles = async (fileIds) => {
+  const results = []
+  
+  for (const fileId of fileIds) {
+    try {
+      const file = await prisma.file.findUnique({
+        where: { id: fileId }
+      })
+
+      if (!file) {
+        results.push({ fileId, status: 'NOT_FOUND' })
+        continue
+      }
+
+      const fileExists = await fs.access(file.path).then(() => true).catch(() => false)
+      
+      if (!fileExists) {
+        results.push({ fileId, status: 'MISSING' })
+        continue
+      }
+
+      results.push({ 
+        fileId, 
+        status: 'READY', 
+        filename: file.filename,
+        size: file.size,
+        mimeType: file.mimeType
+      })
+    } catch (error) {
+      results.push({ fileId, status: 'ERROR', error: error.message })
+    }
+  }
+
+  return results
+}
+
+const bulkMoveFiles = async (fileIds, destination) => {
+  const results = []
+  
+  for (const fileId of fileIds) {
+    try {
+      const file = await prisma.file.findUnique({
+        where: { id: fileId }
+      })
+
+      if (!file) {
+        results.push({ fileId, status: 'NOT_FOUND' })
+        continue
+      }
+
+      const fileExists = await fs.access(file.path).then(() => true).catch(() => false)
+      
+      if (!fileExists) {
+        results.push({ fileId, status: 'MISSING' })
+        continue
+      }
+
+      // Create destination directory if it doesn't exist
+      await fs.mkdir(destination, { recursive: true })
+
+      // Move file
+      const newPath = path.join(destination, file.filename)
+      await fs.rename(file.path, newPath)
+
+      // Update database
+      await prisma.file.update({
+        where: { id: fileId },
+        data: { path: newPath }
+      })
+
+      results.push({ fileId, status: 'MOVED', newPath })
+    } catch (error) {
+      results.push({ fileId, status: 'ERROR', error: error.message })
+    }
+  }
+
+  return results
+}
+
+module.exports = {
+  getFilesWithFilters,
+  bulkFileOperations,
+  getFileSearchSuggestions,
+  getFileAnalytics,
+  checkFileIntegrity,
+  bulkCheckFileIntegrity
+}
+EOF
+
+    # Export Controller
+    cat > "$APP_DIR/src/controllers/exportController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+const XLSX = require('xlsx')
+const createCsvWriter = require('csv-writer').createObjectCsvWriter
+const { Builder } = require('xml2js')
+const PDFDocument = require('pdfkit')
+const fs = require('fs').promises
+const path = require('path')
+const { generateSecurePassword, encryptMetadata, decryptMetadata } = require('../middleware/fileEncryption')
+
+const prisma = new PrismaClient()
+
+// Export directory
+const EXPORT_DIR = path.join(__dirname, '../exports')
+
+// Ensure export directory exists
+const ensureExportDir = async () => {
+  try {
+    await fs.mkdir(EXPORT_DIR, { recursive: true })
+  } catch (error) {
+    console.error('Error creating export directory:', error)
+  }
+}
+
+// Export event data to Excel
+const exportEventToExcel = async (req, res) => {
+  try {
+    const { eventId, includeDetails = false } = req.body
+
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      include: {
+        contests: {
+          include: {
+            categories: {
+              include: {
+                scores: {
+                  include: {
+                    judge: {
+                      select: {
+                        id: true,
+                        name: true,
+                        preferredName: true,
+                        email: true
+                      }
+                    },
+                    contestant: {
+                      select: {
+                        id: true,
+                        name: true,
+                        preferredName: true,
+                        email: true,
+                        contestantNumber: true
+                      }
+                    },
+                    criterion: {
+                      select: {
+                        id: true,
+                        name: true,
+                        description: true,
+                        maxScore: true
+                      }
+                    }
+                  }
+                },
+                contestants: {
+                  include: {
+                    user: {
+                      select: {
+                        id: true,
+                        name: true,
+                        preferredName: true,
+                        email: true,
+                        contestantNumber: true,
+                        contestantAge: true,
+                        contestantSchool: true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    })
+
+    if (!event) {
+      return res.status(404).json({ error: 'Event not found' })
+    }
+
+    await ensureExportDir()
+
+    // Create workbook
+    const workbook = XLSX.utils.book_new()
+
+    // Event summary sheet
+    const eventSummary = [
+      ['Event Name', event.name],
+      ['Description', event.description],
+      ['Start Date', event.startDate],
+      ['End Date', event.endDate],
+      ['Location', event.location],
+      ['Status', event.status],
+      ['Max Contestants', event.maxContestants],
+      ['Total Contests', event.contests.length],
+      ['Total Categories', event.contests.reduce((sum, contest) => sum + contest.categories.length, 0)],
+      ['Total Contestants', event.contests.reduce((sum, contest) => 
+        sum + contest.categories.reduce((catSum, category) => catSum + category.contestants.length, 0), 0)],
+      ['Total Scores', event.contests.reduce((sum, contest) => 
+        sum + contest.categories.reduce((catSum, category) => catSum + category.scores.length, 0), 0)]
+    ]
+
+    const eventSummarySheet = XLSX.utils.aoa_to_sheet(eventSummary)
+    XLSX.utils.book_append_sheet(workbook, eventSummarySheet, 'Event Summary')
+
+    // Contests sheet
+    const contestsData = event.contests.map(contest => ({
+      'Contest Name': contest.name,
+      'Description': contest.description,
+      'Categories': contest.categories.length,
+      'Total Contestants': contest.categories.reduce((sum, category) => sum + category.contestants.length, 0),
+      'Total Scores': contest.categories.reduce((sum, category) => sum + category.scores.length, 0)
+    }))
+
+    const contestsSheet = XLSX.utils.json_to_sheet(contestsData)
+    XLSX.utils.book_append_sheet(workbook, contestsSheet, 'Contests')
+
+    if (includeDetails) {
+      // Detailed scores sheet
+      const scoresData = []
+      event.contests.forEach(contest => {
+        contest.categories.forEach(category => {
+          category.scores.forEach(score => {
+            scoresData.push({
+              'Event': event.name,
+              'Contest': contest.name,
+              'Category': category.name,
+              'Contestant': score.contestant.preferredName || score.contestant.name,
+              'Contestant Number': score.contestant.contestantNumber,
+              'Judge': score.judge.preferredName || score.judge.name,
+              'Criterion': score.criterion.name,
+              'Score': score.score,
+              'Max Score': score.criterion.maxScore,
+              'Score Date': score.createdAt
+            })
+          })
+        })
+      })
+
+      const scoresSheet = XLSX.utils.json_to_sheet(scoresData)
+      XLSX.utils.book_append_sheet(workbook, scoresSheet, 'Detailed Scores')
+    }
+
+    // Generate filename
+    const filename = `event-export-${event.name.replace(/[^a-zA-Z0-9]/g, '-')}-${Date.now()}.xlsx`
+    const filepath = path.join(EXPORT_DIR, filename)
+
+    // Write file
+    XLSX.writeFile(workbook, filepath)
+
+    // Set headers for download
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+
+    // Send file
+    const fileBuffer = await fs.readFile(filepath)
+    res.send(fileBuffer)
+
+    // Clean up file
+    await fs.unlink(filepath)
+  } catch (error) {
+    console.error('Export event to Excel error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Export contest results to CSV
+const exportContestResultsToCSV = async (req, res) => {
+  try {
+    const { contestId, categoryId } = req.body
+
+    const contest = await prisma.contest.findUnique({
+      where: { id: contestId },
+      include: {
+        event: {
+          select: {
+            id: true,
+            name: true,
+            startDate: true,
+            endDate: true,
+            location: true
+          }
+        },
+        categories: {
+          where: categoryId ? { id: categoryId } : {},
+          include: {
+            scores: {
+              include: {
+                judge: {
+                  select: {
+                    id: true,
+                    name: true,
+                    preferredName: true,
+                    email: true
+                  }
+                },
+                contestant: {
+                  select: {
+                    id: true,
+                    name: true,
+                    preferredName: true,
+                    email: true,
+                    contestantNumber: true
+                  }
+                },
+                criterion: {
+                  select: {
+                    id: true,
+                    name: true,
+                    description: true,
+                    maxScore: true
+                  }
+                }
+              }
+            },
+            contestants: {
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    name: true,
+                    preferredName: true,
+                    email: true,
+                    contestantNumber: true,
+                    contestantAge: true,
+                    contestantSchool: true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    })
+
+    if (!contest) {
+      return res.status(404).json({ error: 'Contest not found' })
+    }
+
+    await ensureExportDir()
+
+    // Prepare CSV data
+    const csvData = []
+    
+    contest.categories.forEach(category => {
+      // Calculate contestant totals
+      const contestantTotals = {}
+      category.scores.forEach(score => {
+        const key = score.contestantId
+        if (!contestantTotals[key]) {
+          contestantTotals[key] = {
+            contestant: score.contestant,
+            totalScore: 0,
+            scoreCount: 0,
+            scores: []
+          }
+        }
+        contestantTotals[key].totalScore += score.score
+        contestantTotals[key].scoreCount += 1
+        contestantTotals[key].scores.push(score)
+      })
+
+      // Add contestant results
+      Object.values(contestantTotals).forEach(group => {
+        csvData.push({
+          'Event': contest.event.name,
+          'Contest': contest.name,
+          'Category': category.name,
+          'Contestant': group.contestant.preferredName || group.contestant.name,
+          'Contestant Number': group.contestant.contestantNumber,
+          'Total Score': group.totalScore,
+          'Average Score': group.totalScore / group.scoreCount,
+          'Score Count': group.scoreCount,
+          'Rank': 0 // Will be calculated after sorting
+        })
+      })
+    })
+
+    // Sort by total score and assign ranks
+    csvData.sort((a, b) => b['Total Score'] - a['Total Score'])
+    csvData.forEach((row, index) => {
+      row['Rank'] = index + 1
+    })
+
+    // Generate filename
+    const filename = `contest-results-${contest.name.replace(/[^a-zA-Z0-9]/g, '-')}-${Date.now()}.csv`
+    const filepath = path.join(EXPORT_DIR, filename)
+
+    // Create CSV writer
+    const csvWriter = createCsvWriter({
+      path: filepath,
+      header: [
+        { id: 'Event', title: 'Event' },
+        { id: 'Contest', title: 'Contest' },
+        { id: 'Category', title: 'Category' },
+        { id: 'Contestant', title: 'Contestant' },
+        { id: 'Contestant Number', title: 'Contestant Number' },
+        { id: 'Total Score', title: 'Total Score' },
+        { id: 'Average Score', title: 'Average Score' },
+        { id: 'Score Count', title: 'Score Count' },
+        { id: 'Rank', title: 'Rank' }
+      ]
+    })
+
+    // Write CSV file
+    await csvWriter.writeRecords(csvData)
+
+    // Set headers for download
+    res.setHeader('Content-Type', 'text/csv')
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+
+    // Send file
+    const fileBuffer = await fs.readFile(filepath)
+    res.send(fileBuffer)
+
+    // Clean up file
+    await fs.unlink(filepath)
+  } catch (error) {
+    console.error('Export contest results to CSV error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Export judge performance to XML
+const exportJudgePerformanceToXML = async (req, res) => {
+  try {
+    const { judgeId, eventId } = req.body
+
+    const judge = await prisma.user.findUnique({
+      where: { id: judgeId },
+      include: {
+        scores: {
+          where: eventId ? {
+            category: {
+              contest: {
+                eventId: eventId
+              }
+            }
+          } : {},
+          include: {
+            category: {
+              include: {
+                contest: {
+                  include: {
+                    event: {
+                      select: {
+                        id: true,
+                        name: true,
+                        startDate: true,
+                        endDate: true,
+                        location: true
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            contestant: {
+              select: {
+                id: true,
+                name: true,
+                preferredName: true,
+                email: true,
+                contestantNumber: true
+              }
+            },
+            criterion: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+                maxScore: true
+              }
+            }
+          }
+        }
+      }
+    })
+
+    if (!judge) {
+      return res.status(404).json({ error: 'Judge not found' })
+    }
+
+    await ensureExportDir()
+
+    // Calculate performance statistics
+    const performanceStats = {
+      totalScores: judge.scores.length,
+      averageScore: judge.scores.length > 0 ? 
+        judge.scores.reduce((sum, score) => sum + score.score, 0) / judge.scores.length : 0,
+      categoriesJudged: [...new Set(judge.scores.map(score => score.category.name))].length
+    }
+
+    // Prepare XML data
+    const xmlData = {
+      judgePerformance: {
+        judge: {
+          id: judge.id,
+          name: judge.name,
+          preferredName: judge.preferredName,
+          email: judge.email,
+          role: judge.role,
+          bio: judge.bio
+        },
+        performance: {
+          totalScores: performanceStats.totalScores,
+          averageScore: performanceStats.averageScore,
+          categoriesJudged: performanceStats.categoriesJudged
+        },
+        scores: judge.scores.map(score => ({
+          score: {
+            id: score.id,
+            score: score.score,
+            createdAt: score.createdAt,
+            contestant: {
+              id: score.contestant.id,
+              name: score.contestant.name,
+              preferredName: score.contestant.preferredName,
+              contestantNumber: score.contestant.contestantNumber
+            },
+            category: {
+              id: score.category.id,
+              name: score.category.name,
+              description: score.category.description
+            },
+            contest: {
+              id: score.category.contest.id,
+              name: score.category.contest.name,
+              description: score.category.contest.description
+            },
+            event: {
+              id: score.category.contest.event.id,
+              name: score.category.contest.event.name,
+              startDate: score.category.contest.event.startDate,
+              endDate: score.category.contest.event.endDate,
+              location: score.category.contest.event.location
+            },
+            criterion: {
+              id: score.criterion.id,
+              name: score.criterion.name,
+              description: score.criterion.description,
+              maxScore: score.criterion.maxScore
+            }
+          }
+        }))
+      }
+    }
+
+    // Generate XML
+    const builder = new Builder({ rootName: 'judgePerformance', xmldec: { version: '1.0', encoding: 'UTF-8' } })
+    const xml = builder.buildObject(xmlData)
+
+    // Generate filename
+    const filename = `judge-performance-${judge.name.replace(/[^a-zA-Z0-9]/g, '-')}-${Date.now()}.xml`
+    const filepath = path.join(EXPORT_DIR, filename)
+
+    // Write file
+    await fs.writeFile(filepath, xml, 'utf8')
+
+    // Set headers for download
+    res.setHeader('Content-Type', 'application/xml')
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+
+    // Send file
+    const fileBuffer = await fs.readFile(filepath)
+    res.send(fileBuffer)
+
+    // Clean up file
+    await fs.unlink(filepath)
+  } catch (error) {
+    console.error('Export judge performance to XML error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Export system analytics to PDF
+const exportSystemAnalyticsToPDF = async (req, res) => {
+  try {
+    const { startDate, endDate } = req.body
+
+    // Get system analytics data
+    const analytics = await prisma.$queryRaw`
+      SELECT 
+        COUNT(DISTINCT e.id) as total_events,
+        COUNT(DISTINCT c.id) as total_contests,
+        COUNT(DISTINCT cat.id) as total_categories,
+        COUNT(DISTINCT u.id) as total_users,
+        COUNT(DISTINCT s.id) as total_scores,
+        AVG(s.score) as average_score,
+        COUNT(DISTINCT CASE WHEN u.role = 'JUDGE' THEN u.id END) as total_judges,
+        COUNT(DISTINCT CASE WHEN u.role = 'CONTESTANT' THEN u.id END) as total_contestants
+      FROM "Event" e
+      LEFT JOIN "Contest" c ON c."eventId" = e.id
+      LEFT JOIN "Category" cat ON cat."contestId" = c.id
+      LEFT JOIN "User" u ON u.id IS NOT NULL
+      LEFT JOIN "Score" s ON s."categoryId" = cat.id
+      WHERE e."createdAt" >= ${startDate || '2020-01-01'}::timestamp
+      AND e."createdAt" <= ${endDate || new Date().toISOString()}::timestamp
+    `
+
+    const stats = analytics[0] || {}
+
+    await ensureExportDir()
+
+    // Create PDF document
+    const doc = new PDFDocument()
+    
+    // Generate filename
+    const filename = `system-analytics-${Date.now()}.pdf`
+    const filepath = path.join(EXPORT_DIR, filename)
+
+    // Pipe PDF to file
+    doc.pipe(require('fs').createWriteStream(filepath))
+
+    // Add content
+    doc.fontSize(20).text('System Analytics Report', 50, 50)
+    doc.fontSize(12).text(`Generated on: ${new Date().toISOString()}`, 50, 80)
+    
+    doc.fontSize(16).text('Overview Statistics', 50, 120)
+    doc.fontSize(12)
+      .text(`Total Events: ${stats.total_events || 0}`, 50, 150)
+      .text(`Total Contests: ${stats.total_contests || 0}`, 50, 170)
+      .text(`Total Categories: ${stats.total_categories || 0}`, 50, 190)
+      .text(`Total Users: ${stats.total_users || 0}`, 50, 210)
+      .text(`Total Judges: ${stats.total_judges || 0}`, 50, 230)
+      .text(`Total Contestants: ${stats.total_contestants || 0}`, 50, 250)
+      .text(`Total Scores: ${stats.total_scores || 0}`, 50, 270)
+      .text(`Average Score: ${(stats.average_score || 0).toFixed(2)}`, 50, 290)
+
+    // Add charts section
+    doc.fontSize(16).text('Performance Metrics', 50, 330)
+    doc.fontSize(12).text('Score distribution and performance metrics would be visualized here.', 50, 360)
+
+    // Finalize PDF
+    doc.end()
+
+    // Wait for PDF to be written
+    await new Promise((resolve) => {
+      doc.on('end', resolve)
+    })
+
+    // Set headers for download
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+
+    // Send file
+    const fileBuffer = await fs.readFile(filepath)
+    res.send(fileBuffer)
+
+    // Clean up file
+    await fs.unlink(filepath)
+  } catch (error) {
+    console.error('Export system analytics to PDF error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Get export history
+const getExportHistory = async (req, res) => {
+  try {
+    const exports = await prisma.report.findMany({
+      where: {
+        generatedBy: req.user.id,
+        type: {
+          in: ['EXCEL_EXPORT', 'CSV_EXPORT', 'XML_EXPORT', 'PDF_EXPORT']
+        }
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 50
+    })
+
+    res.json({
+      exports,
+      message: 'Export history retrieved successfully'
+    })
+  } catch (error) {
+    console.error('Get export history error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+module.exports = {
+  exportEventToExcel,
+  exportContestResultsToCSV,
+  exportJudgePerformanceToXML,
+  exportSystemAnalyticsToPDF,
+  getExportHistory
+}
+EOF
+
     # Templates Controller
     cat > "$APP_DIR/src/controllers/templatesController.js" << 'EOF'
 const { PrismaClient } = require('@prisma/client')
@@ -10107,6 +12127,1441 @@ router.post('/:id/export', requireRole(['ORGANIZER', 'BOARD', 'AUDITOR']), logAc
 module.exports = router
 EOF
 
+    # Print Routes
+    cat > "$APP_DIR/src/routes/printRoutes.js" << 'EOF'
+const express = require('express')
+const { 
+  getPrintTemplates, 
+  createPrintTemplate, 
+  updatePrintTemplate, 
+  deletePrintTemplate,
+  printEventReport,
+  printContestResults,
+  printJudgePerformance
+} = require('../controllers/printController')
+const { authenticateToken, requireRole } = require('../middleware/auth')
+const { logActivity } = require('../middleware/errorHandler')
+
+const router = express.Router()
+
+// Apply authentication to all routes
+router.use(authenticateToken)
+
+// Print template management
+router.get('/templates', getPrintTemplates)
+router.post('/templates', requireRole(['ORGANIZER', 'BOARD']), logActivity('CREATE_PRINT_TEMPLATE', 'TEMPLATE'), createPrintTemplate)
+router.put('/templates/:id', requireRole(['ORGANIZER', 'BOARD']), logActivity('UPDATE_PRINT_TEMPLATE', 'TEMPLATE'), updatePrintTemplate)
+router.delete('/templates/:id', requireRole(['ORGANIZER', 'BOARD']), logActivity('DELETE_PRINT_TEMPLATE', 'TEMPLATE'), deletePrintTemplate)
+
+// Print functionality
+router.post('/event-report', requireRole(['ORGANIZER', 'BOARD', 'AUDITOR']), logActivity('PRINT_EVENT_REPORT', 'PRINT'), printEventReport)
+router.post('/contest-results', requireRole(['ORGANIZER', 'BOARD', 'AUDITOR']), logActivity('PRINT_CONTEST_RESULTS', 'PRINT'), printContestResults)
+router.post('/judge-performance', requireRole(['ORGANIZER', 'BOARD', 'AUDITOR']), logActivity('PRINT_JUDGE_PERFORMANCE', 'PRINT'), printJudgePerformance)
+
+module.exports = router
+EOF
+
+    # File Management Routes
+    cat > "$APP_DIR/src/routes/fileManagementRoutes.js" << 'EOF'
+const express = require('express')
+const { 
+  getFilesWithFilters,
+  bulkFileOperations,
+  getFileSearchSuggestions,
+  getFileAnalytics,
+  checkFileIntegrity,
+  bulkCheckFileIntegrity
+} = require('../controllers/fileManagementController')
+const { authenticateToken, requireRole } = require('../middleware/auth')
+const { logActivity } = require('../middleware/errorHandler')
+
+const router = express.Router()
+
+// Apply authentication to all routes
+router.use(authenticateToken)
+
+// File management interface
+router.get('/files', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), getFilesWithFilters)
+router.post('/files/bulk', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), logActivity('BULK_FILE_OPERATION', 'FILE'), bulkFileOperations)
+
+// File search and suggestions
+router.get('/files/search', getFileSearchSuggestions)
+
+// File analytics
+router.get('/files/analytics', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), getFileAnalytics)
+
+// File integrity checks
+router.get('/files/:fileId/integrity', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), checkFileIntegrity)
+router.post('/files/integrity/bulk', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), logActivity('BULK_INTEGRITY_CHECK', 'FILE'), bulkCheckFileIntegrity)
+
+module.exports = router
+EOF
+
+    # File Backup and Recovery Controller
+    cat > "$APP_DIR/src/controllers/fileBackupController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+const fs = require('fs').promises
+const path = require('path')
+const { exec } = require('child_process')
+const { promisify } = require('util')
+const { generateSecurePassword, encryptMetadata, decryptMetadata } = require('../middleware/fileEncryption')
+
+const prisma = new PrismaClient()
+const execAsync = promisify(exec)
+
+// File Backup and Recovery Functions
+
+// Create file backup
+const createFileBackup = async (req, res) => {
+  try {
+    const { backupType = 'FULL', description = '', includeMetadata = true } = req.body
+
+    const backupId = `file-backup-${Date.now()}`
+    const backupDir = path.join(__dirname, '../backups/files', backupId)
+    
+    // Create backup directory
+    await fs.mkdir(backupDir, { recursive: true })
+
+    let backupData = {
+      id: backupId,
+      type: backupType,
+      description,
+      createdAt: new Date().toISOString(),
+      createdBy: req.user.id,
+      status: 'IN_PROGRESS',
+      files: [],
+      metadata: {}
+    }
+
+    // Get all files to backup
+    const files = await prisma.file.findMany({
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            preferredName: true,
+            email: true,
+            role: true
+          }
+        }
+      }
+    })
+
+    let totalSize = 0
+    let processedFiles = 0
+    const errors = []
+
+    for (const file of files) {
+      try {
+        // Check if file exists on disk
+        const fileExists = await fs.access(file.path).then(() => true).catch(() => false)
+        
+        if (!fileExists) {
+          errors.push({ fileId: file.id, error: 'File not found on disk' })
+          continue
+        }
+
+        // Create file backup entry
+        const fileBackup = {
+          id: file.id,
+          filename: file.filename,
+          originalName: file.originalName,
+          mimeType: file.mimeType,
+          size: file.size,
+          category: file.category,
+          uploadedAt: file.uploadedAt,
+          uploadedBy: file.uploadedBy,
+          isPublic: file.isPublic,
+          checksum: file.checksum,
+          metadata: includeMetadata ? file.metadata : null,
+          user: file.user
+        }
+
+        // Copy file to backup directory
+        const backupFilePath = path.join(backupDir, file.filename)
+        await fs.copyFile(file.path, backupFilePath)
+
+        // Verify backup integrity
+        const stats = await fs.stat(backupFilePath)
+        if (stats.size !== file.size) {
+          errors.push({ fileId: file.id, error: 'Backup size mismatch' })
+          await fs.unlink(backupFilePath)
+          continue
+        }
+
+        backupData.files.push(fileBackup)
+        totalSize += file.size
+        processedFiles++
+
+      } catch (error) {
+        errors.push({ fileId: file.id, error: error.message })
+      }
+    }
+
+    // Create backup manifest
+    backupData.metadata = {
+      totalFiles: files.length,
+      processedFiles,
+      totalSize,
+      errors,
+      backupVersion: '1.0',
+      systemInfo: {
+        nodeVersion: process.version,
+        platform: process.platform,
+        arch: process.arch
+      }
+    }
+
+    // Save backup manifest
+    const manifestPath = path.join(backupDir, 'manifest.json')
+    await fs.writeFile(manifestPath, JSON.stringify(backupData, null, 2))
+
+    // Create compressed backup
+    const compressedPath = `${backupDir}.tar.gz`
+    await execAsync(`tar -czf "${compressedPath}" -C "${path.dirname(backupDir)}" "${path.basename(backupDir)}"`)
+
+    // Remove uncompressed directory
+    await fs.rmdir(backupDir, { recursive: true })
+
+    // Save backup record to database
+    const backupRecord = await prisma.report.create({
+      data: {
+        name: `File Backup - ${backupType}`,
+        description: description || `File backup created on ${new Date().toISOString()}`,
+        type: 'FILE_BACKUP',
+        parameters: {
+          backupId,
+          backupType,
+          totalFiles: files.length,
+          processedFiles,
+          totalSize,
+          errors: errors.length
+        },
+        generatedBy: req.user.id,
+        status: 'COMPLETED'
+      }
+    })
+
+    res.json({
+      backup: backupRecord,
+      backupData: {
+        id: backupId,
+        type: backupType,
+        totalFiles: files.length,
+        processedFiles,
+        totalSize,
+        errors: errors.length,
+        compressedPath,
+        manifestPath
+      },
+      message: 'File backup created successfully'
+    })
+  } catch (error) {
+    console.error('Create file backup error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Restore file backup
+const restoreFileBackup = async (req, res) => {
+  try {
+    const { backupId } = req.params
+    const { restoreOptions = {} } = req.body
+
+    const backupDir = path.join(__dirname, '../backups/files', backupId)
+    const compressedPath = `${backupDir}.tar.gz`
+
+    // Check if backup exists
+    const backupExists = await fs.access(compressedPath).then(() => true).catch(() => false)
+    
+    if (!backupExists) {
+      return res.status(404).json({ error: 'Backup not found' })
+    }
+
+    // Extract backup
+    await execAsync(`tar -xzf "${compressedPath}" -C "${path.dirname(backupDir)}"`)
+
+    // Read backup manifest
+    const manifestPath = path.join(backupDir, 'manifest.json')
+    const manifestData = await fs.readFile(manifestPath, 'utf8')
+    const backupData = JSON.parse(manifestData)
+
+    const restoreResults = {
+      restored: 0,
+      skipped: 0,
+      errors: [],
+      totalSize: 0
+    }
+
+    // Restore files
+    for (const fileBackup of backupData.files) {
+      try {
+        // Check if file already exists
+        const existingFile = await prisma.file.findUnique({
+          where: { id: fileBackup.id }
+        })
+
+        if (existingFile && !restoreOptions.overwrite) {
+          restoreResults.skipped++
+          continue
+        }
+
+        // Restore file to original location
+        const backupFilePath = path.join(backupDir, fileBackup.filename)
+        const fileExists = await fs.access(backupFilePath).then(() => true).catch(() => false)
+        
+        if (!fileExists) {
+          restoreResults.errors.push({ fileId: fileBackup.id, error: 'Backup file not found' })
+          continue
+        }
+
+        // Create directory if it doesn't exist
+        const targetDir = path.dirname(fileBackup.path || `/uploads/${fileBackup.filename}`)
+        await fs.mkdir(targetDir, { recursive: true })
+
+        // Copy file back
+        const targetPath = fileBackup.path || `/uploads/${fileBackup.filename}`
+        await fs.copyFile(backupFilePath, targetPath)
+
+        // Update or create database record
+        if (existingFile) {
+          await prisma.file.update({
+            where: { id: fileBackup.id },
+            data: {
+              filename: fileBackup.filename,
+              originalName: fileBackup.originalName,
+              mimeType: fileBackup.mimeType,
+              size: fileBackup.size,
+              category: fileBackup.category,
+              path: targetPath,
+              checksum: fileBackup.checksum,
+              metadata: fileBackup.metadata,
+              isPublic: fileBackup.isPublic
+            }
+          })
+        } else {
+          await prisma.file.create({
+            data: {
+              id: fileBackup.id,
+              filename: fileBackup.filename,
+              originalName: fileBackup.originalName,
+              mimeType: fileBackup.mimeType,
+              size: fileBackup.size,
+              category: fileBackup.category,
+              path: targetPath,
+              uploadedBy: fileBackup.uploadedBy,
+              uploadedAt: new Date(fileBackup.uploadedAt),
+              checksum: fileBackup.checksum,
+              metadata: fileBackup.metadata,
+              isPublic: fileBackup.isPublic
+            }
+          })
+        }
+
+        restoreResults.restored++
+        restoreResults.totalSize += fileBackup.size
+
+      } catch (error) {
+        restoreResults.errors.push({ fileId: fileBackup.id, error: error.message })
+      }
+    }
+
+    // Clean up extracted files
+    await fs.rmdir(backupDir, { recursive: true })
+
+    // Log restore operation
+    await prisma.report.create({
+      data: {
+        name: `File Restore - ${backupId}`,
+        description: `File backup restored on ${new Date().toISOString()}`,
+        type: 'FILE_RESTORE',
+        parameters: {
+          backupId,
+          restoreResults
+        },
+        generatedBy: req.user.id,
+        status: 'COMPLETED'
+      }
+    })
+
+    res.json({
+      restoreResults,
+      message: 'File backup restored successfully'
+    })
+  } catch (error) {
+    console.error('Restore file backup error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// List file backups
+const listFileBackups = async (req, res) => {
+  try {
+    const backups = await prisma.report.findMany({
+      where: {
+        type: {
+          in: ['FILE_BACKUP', 'FILE_RESTORE']
+        }
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            preferredName: true,
+            email: true
+          }
+        }
+      }
+    })
+
+    res.json({
+      backups,
+      message: 'File backups retrieved successfully'
+    })
+  } catch (error) {
+    console.error('List file backups error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Delete file backup
+const deleteFileBackup = async (req, res) => {
+  try {
+    const { backupId } = req.params
+
+    // Find backup record
+    const backup = await prisma.report.findFirst({
+      where: {
+        type: 'FILE_BACKUP',
+        parameters: {
+          path: ['backupId'],
+          equals: backupId
+        }
+      }
+    })
+
+    if (!backup) {
+      return res.status(404).json({ error: 'Backup not found' })
+    }
+
+    // Delete backup files
+    const compressedPath = path.join(__dirname, '../backups/files', `${backupId}.tar.gz`)
+    const backupExists = await fs.access(compressedPath).then(() => true).catch(() => false)
+    
+    if (backupExists) {
+      await fs.unlink(compressedPath)
+    }
+
+    // Delete backup record
+    await prisma.report.delete({
+      where: { id: backup.id }
+    })
+
+    res.json({ message: 'File backup deleted successfully' })
+  } catch (error) {
+    console.error('Delete file backup error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Get backup details
+const getBackupDetails = async (req, res) => {
+  try {
+    const { backupId } = req.params
+
+    const backup = await prisma.report.findFirst({
+      where: {
+        type: 'FILE_BACKUP',
+        parameters: {
+          path: ['backupId'],
+          equals: backupId
+        }
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            preferredName: true,
+            email: true
+          }
+        }
+      }
+    })
+
+    if (!backup) {
+      return res.status(404).json({ error: 'Backup not found' })
+    }
+
+    // Check if backup file exists
+    const compressedPath = path.join(__dirname, '../backups/files', `${backupId}.tar.gz`)
+    const backupExists = await fs.access(compressedPath).then(() => true).catch(() => false)
+
+    const stats = backupExists ? await fs.stat(compressedPath) : null
+
+    res.json({
+      backup: {
+        ...backup,
+        fileExists: backupExists,
+        fileSize: stats ? stats.size : 0,
+        lastModified: stats ? stats.mtime : null
+      },
+      message: 'Backup details retrieved successfully'
+    })
+  } catch (error) {
+    console.error('Get backup details error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Download backup
+const downloadBackup = async (req, res) => {
+  try {
+    const { backupId } = req.params
+
+    const compressedPath = path.join(__dirname, '../backups/files', `${backupId}.tar.gz`)
+    const backupExists = await fs.access(compressedPath).then(() => true).catch(() => false)
+    
+    if (!backupExists) {
+      return res.status(404).json({ error: 'Backup file not found' })
+    }
+
+    const stats = await fs.stat(compressedPath)
+    
+    res.setHeader('Content-Type', 'application/gzip')
+    res.setHeader('Content-Disposition', `attachment; filename="${backupId}.tar.gz"`)
+    res.setHeader('Content-Length', stats.size)
+
+    const fileStream = require('fs').createReadStream(compressedPath)
+    fileStream.pipe(res)
+  } catch (error) {
+    console.error('Download backup error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+module.exports = {
+  createFileBackup,
+  restoreFileBackup,
+  listFileBackups,
+  deleteFileBackup,
+  getBackupDetails,
+  downloadBackup
+}
+EOF
+
+    # File Backup Routes
+    cat > "$APP_DIR/src/routes/fileBackupRoutes.js" << 'EOF'
+const express = require('express')
+const { 
+  createFileBackup,
+  restoreFileBackup,
+  listFileBackups,
+  deleteFileBackup,
+  getBackupDetails,
+  downloadBackup
+} = require('../controllers/fileBackupController')
+const { authenticateToken, requireRole } = require('../middleware/auth')
+const { logActivity } = require('../middleware/errorHandler')
+
+const router = express.Router()
+
+// Apply authentication to all routes
+router.use(authenticateToken)
+
+// File backup operations
+router.post('/create', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), logActivity('CREATE_FILE_BACKUP', 'BACKUP'), createFileBackup)
+router.post('/:backupId/restore', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), logActivity('RESTORE_FILE_BACKUP', 'BACKUP'), restoreFileBackup)
+router.get('/', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), listFileBackups)
+router.get('/:backupId', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), getBackupDetails)
+router.get('/:backupId/download', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), downloadBackup)
+router.delete('/:backupId', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), logActivity('DELETE_FILE_BACKUP', 'BACKUP'), deleteFileBackup)
+
+module.exports = router
+EOF
+
+    # Performance Monitoring Controller
+    cat > "$APP_DIR/src/controllers/performanceController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+const os = require('os')
+const fs = require('fs').promises
+const path = require('path')
+
+const prisma = new PrismaClient()
+
+// Performance Monitoring Functions
+
+// Get system performance metrics
+const getSystemPerformance = async (req, res) => {
+  try {
+    const now = new Date()
+    
+    // System metrics
+    const systemMetrics = {
+      timestamp: now.toISOString(),
+      cpu: {
+        usage: process.cpuUsage(),
+        loadAverage: os.loadavg(),
+        cores: os.cpus().length,
+        model: os.cpus()[0]?.model || 'Unknown'
+      },
+      memory: {
+        total: os.totalmem(),
+        free: os.freemem(),
+        used: os.totalmem() - os.freemem(),
+        process: process.memoryUsage()
+      },
+      uptime: {
+        system: os.uptime(),
+        process: process.uptime()
+      },
+      platform: {
+        type: os.type(),
+        platform: os.platform(),
+        arch: os.arch(),
+        release: os.release()
+      }
+    }
+
+    // Database metrics
+    const dbMetrics = await getDatabaseMetrics()
+    
+    // Application metrics
+    const appMetrics = await getApplicationMetrics()
+
+    // Log performance data
+    await logPerformanceData({
+      systemMetrics,
+      dbMetrics,
+      appMetrics,
+      userId: req.user?.id
+    })
+
+    res.json({
+      system: systemMetrics,
+      database: dbMetrics,
+      application: appMetrics,
+      timestamp: now.toISOString()
+    })
+  } catch (error) {
+    console.error('Get system performance error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Get database performance metrics
+const getDatabaseMetrics = async () => {
+  try {
+    const startTime = Date.now()
+    
+    // Test database connection
+    await prisma.$queryRaw`SELECT 1`
+    const connectionTime = Date.now() - startTime
+
+    // Get table sizes
+    const tableSizes = await prisma.$queryRaw`
+      SELECT 
+        schemaname,
+        tablename,
+        pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) as size,
+        pg_total_relation_size(schemaname||'.'||tablename) as size_bytes
+      FROM pg_tables 
+      WHERE schemaname = 'public'
+      ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC
+    `
+
+    // Get database size
+    const dbSize = await prisma.$queryRaw`
+      SELECT pg_size_pretty(pg_database_size(current_database())) as size,
+             pg_database_size(current_database()) as size_bytes
+    `
+
+    // Get active connections
+    const activeConnections = await prisma.$queryRaw`
+      SELECT count(*) as count FROM pg_stat_activity WHERE state = 'active'
+    `
+
+    return {
+      connectionTime,
+      tableSizes,
+      databaseSize: dbSize[0],
+      activeConnections: activeConnections[0].count,
+      timestamp: new Date().toISOString()
+    }
+  } catch (error) {
+    console.error('Database metrics error:', error)
+    return {
+      error: error.message,
+      timestamp: new Date().toISOString()
+    }
+  }
+}
+
+// Get application performance metrics
+const getApplicationMetrics = async () => {
+  try {
+    // Get recent activity counts
+    const activityCounts = await prisma.activityLog.groupBy({
+      by: ['action'],
+      where: {
+        createdAt: {
+          gte: new Date(Date.now() - 24 * 60 * 60 * 1000) // Last 24 hours
+        }
+      },
+      _count: { id: true }
+    })
+
+    // Get user activity
+    const userActivity = await prisma.activityLog.groupBy({
+      by: ['userId'],
+      where: {
+        createdAt: {
+          gte: new Date(Date.now() - 24 * 60 * 60 * 1000)
+        }
+      },
+      _count: { id: true },
+      orderBy: { _count: { id: 'desc' } },
+      take: 10
+    })
+
+    // Get error rates
+    const errorCount = await prisma.activityLog.count({
+      where: {
+        createdAt: {
+          gte: new Date(Date.now() - 24 * 60 * 60 * 1000)
+        },
+        action: {
+          contains: 'ERROR'
+        }
+      }
+    })
+
+    const totalActivity = await prisma.activityLog.count({
+      where: {
+        createdAt: {
+          gte: new Date(Date.now() - 24 * 60 * 60 * 1000)
+        }
+      }
+    })
+
+    return {
+      activityCounts,
+      topUsers: userActivity,
+      errorRate: totalActivity > 0 ? (errorCount / totalActivity) * 100 : 0,
+      totalActivity,
+      errorCount,
+      timestamp: new Date().toISOString()
+    }
+  } catch (error) {
+    console.error('Application metrics error:', error)
+    return {
+      error: error.message,
+      timestamp: new Date().toISOString()
+    }
+  }
+}
+
+// Log performance data
+const logPerformanceData = async (data) => {
+  try {
+    await prisma.performanceLog.create({
+      data: {
+        timestamp: new Date(),
+        systemMetrics: data.systemMetrics,
+        databaseMetrics: data.dbMetrics,
+        applicationMetrics: data.appMetrics,
+        userId: data.userId
+      }
+    })
+  } catch (error) {
+    console.error('Log performance data error:', error)
+  }
+}
+
+// Get performance history
+const getPerformanceHistory = async (req, res) => {
+  try {
+    const { period = '24h', limit = 100 } = req.query
+
+    // Calculate time range
+    const now = new Date()
+    const periodHours = period === '1h' ? 1 : period === '6h' ? 6 : period === '24h' ? 24 : period === '7d' ? 168 : 24
+    const startTime = new Date(now.getTime() - (periodHours * 60 * 60 * 1000))
+
+    const performanceData = await prisma.performanceLog.findMany({
+      where: {
+        timestamp: {
+          gte: startTime
+        }
+      },
+      orderBy: { timestamp: 'desc' },
+      take: parseInt(limit),
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            preferredName: true,
+            email: true
+          }
+        }
+      }
+    })
+
+    // Calculate trends
+    const trends = calculatePerformanceTrends(performanceData)
+
+    res.json({
+      data: performanceData,
+      trends,
+      period,
+      generatedAt: new Date().toISOString()
+    })
+  } catch (error) {
+    console.error('Get performance history error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Calculate performance trends
+const calculatePerformanceTrends = (data) => {
+  if (data.length < 2) {
+    return {
+      cpu: { trend: 'stable', change: 0 },
+      memory: { trend: 'stable', change: 0 },
+      database: { trend: 'stable', change: 0 }
+    }
+  }
+
+  const latest = data[0]
+  const oldest = data[data.length - 1]
+
+  // CPU trend
+  const cpuChange = latest.systemMetrics?.cpu?.usage?.user - oldest.systemMetrics?.cpu?.usage?.user || 0
+  const cpuTrend = cpuChange > 0 ? 'increasing' : cpuChange < 0 ? 'decreasing' : 'stable'
+
+  // Memory trend
+  const memoryChange = latest.systemMetrics?.memory?.used - oldest.systemMetrics?.memory?.used || 0
+  const memoryTrend = memoryChange > 0 ? 'increasing' : memoryChange < 0 ? 'decreasing' : 'stable'
+
+  // Database trend
+  const dbChange = latest.databaseMetrics?.connectionTime - oldest.databaseMetrics?.connectionTime || 0
+  const dbTrend = dbChange > 0 ? 'slower' : dbChange < 0 ? 'faster' : 'stable'
+
+  return {
+    cpu: { trend: cpuTrend, change: cpuChange },
+    memory: { trend: memoryTrend, change: memoryChange },
+    database: { trend: dbTrend, change: dbChange }
+  }
+}
+
+// Get performance alerts
+const getPerformanceAlerts = async (req, res) => {
+  try {
+    const alerts = []
+
+    // Get latest performance data
+    const latest = await prisma.performanceLog.findFirst({
+      orderBy: { timestamp: 'desc' }
+    })
+
+    if (!latest) {
+      return res.json({ alerts: [] })
+    }
+
+    const { systemMetrics, databaseMetrics, applicationMetrics } = latest
+
+    // CPU usage alert
+    const cpuUsage = (systemMetrics.memory.used / systemMetrics.memory.total) * 100
+    if (cpuUsage > 90) {
+      alerts.push({
+        type: 'CPU_HIGH',
+        severity: 'HIGH',
+        message: `CPU usage is ${cpuUsage.toFixed(1)}%`,
+        timestamp: latest.timestamp
+      })
+    }
+
+    // Memory usage alert
+    const memoryUsage = (systemMetrics.memory.used / systemMetrics.memory.total) * 100
+    if (memoryUsage > 90) {
+      alerts.push({
+        type: 'MEMORY_HIGH',
+        severity: 'HIGH',
+        message: `Memory usage is ${memoryUsage.toFixed(1)}%`,
+        timestamp: latest.timestamp
+      })
+    }
+
+    // Database connection time alert
+    if (databaseMetrics.connectionTime > 1000) {
+      alerts.push({
+        type: 'DB_SLOW',
+        severity: 'MEDIUM',
+        message: `Database connection time is ${databaseMetrics.connectionTime}ms`,
+        timestamp: latest.timestamp
+      })
+    }
+
+    // Error rate alert
+    if (applicationMetrics.errorRate > 10) {
+      alerts.push({
+        type: 'ERROR_RATE_HIGH',
+        severity: 'HIGH',
+        message: `Error rate is ${applicationMetrics.errorRate.toFixed(1)}%`,
+        timestamp: latest.timestamp
+      })
+    }
+
+    res.json({ alerts })
+  } catch (error) {
+    console.error('Get performance alerts error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Clean up old performance data
+const cleanupPerformanceData = async (req, res) => {
+  try {
+    const { daysToKeep = 30 } = req.body
+
+    const cutoffDate = new Date(Date.now() - (daysToKeep * 24 * 60 * 60 * 1000))
+
+    const deletedCount = await prisma.performanceLog.deleteMany({
+      where: {
+        timestamp: {
+          lt: cutoffDate
+        }
+      }
+    })
+
+    res.json({
+      deletedCount: deletedCount.count,
+      cutoffDate: cutoffDate.toISOString(),
+      message: 'Performance data cleanup completed'
+    })
+  } catch (error) {
+    console.error('Cleanup performance data error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+module.exports = {
+  getSystemPerformance,
+  getPerformanceHistory,
+  getPerformanceAlerts,
+  cleanupPerformanceData
+}
+EOF
+
+    # Performance Monitoring Routes
+    cat > "$APP_DIR/src/routes/performanceRoutes.js" << 'EOF'
+const express = require('express')
+const { 
+  getSystemPerformance,
+  getPerformanceHistory,
+  getPerformanceAlerts,
+  cleanupPerformanceData
+} = require('../controllers/performanceController')
+const { authenticateToken, requireRole } = require('../middleware/auth')
+const { logActivity } = require('../middleware/errorHandler')
+
+const router = express.Router()
+
+// Apply authentication to all routes
+router.use(authenticateToken)
+
+// Performance monitoring
+router.get('/metrics', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), getSystemPerformance)
+router.get('/history', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), getPerformanceHistory)
+router.get('/alerts', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), getPerformanceAlerts)
+router.post('/cleanup', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), logActivity('CLEANUP_PERFORMANCE_DATA', 'SYSTEM'), cleanupPerformanceData)
+
+module.exports = router
+EOF
+
+    # Comprehensive Error Handling Controller
+    cat > "$APP_DIR/src/controllers/errorHandlingController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+const fs = require('fs').promises
+const path = require('path')
+
+const prisma = new PrismaClient()
+
+// Comprehensive Error Handling Functions
+
+// Log error with context
+const logError = async (error, context = {}) => {
+  try {
+    const errorLog = {
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
+      timestamp: new Date().toISOString(),
+      context: {
+        userId: context.userId,
+        userAgent: context.userAgent,
+        ipAddress: context.ipAddress,
+        url: context.url,
+        method: context.method,
+        body: context.body,
+        query: context.query,
+        params: context.params,
+        ...context.additionalContext
+      },
+      severity: determineErrorSeverity(error),
+      category: categorizeError(error),
+      resolved: false
+    }
+
+    // Save to database
+    await prisma.activityLog.create({
+      data: {
+        action: `ERROR_${errorLog.category}`,
+        resourceType: 'ERROR',
+        resourceId: `error-${Date.now()}`,
+        userId: context.userId,
+        details: errorLog,
+        severity: errorLog.severity
+      }
+    })
+
+    // Save to file for detailed analysis
+    await saveErrorToFile(errorLog)
+
+    return errorLog
+  } catch (logError) {
+    console.error('Failed to log error:', logError)
+    // Fallback to console
+    console.error('Original error:', error)
+  }
+}
+
+// Determine error severity
+const determineErrorSeverity = (error) => {
+  if (error.name === 'ValidationError' || error.name === 'CastError') {
+    return 'LOW'
+  }
+  if (error.name === 'UnauthorizedError' || error.name === 'ForbiddenError') {
+    return 'MEDIUM'
+  }
+  if (error.name === 'DatabaseError' || error.name === 'ConnectionError') {
+    return 'HIGH'
+  }
+  if (error.name === 'SyntaxError' || error.name === 'ReferenceError') {
+    return 'CRITICAL'
+  }
+  return 'MEDIUM'
+}
+
+// Categorize error type
+const categorizeError = (error) => {
+  if (error.name === 'ValidationError') return 'VALIDATION'
+  if (error.name === 'DatabaseError') return 'DATABASE'
+  if (error.name === 'AuthenticationError') return 'AUTHENTICATION'
+  if (error.name === 'AuthorizationError') return 'AUTHORIZATION'
+  if (error.name === 'NetworkError') return 'NETWORK'
+  if (error.name === 'FileSystemError') return 'FILESYSTEM'
+  if (error.name === 'SyntaxError') return 'SYNTAX'
+  if (error.name === 'ReferenceError') return 'REFERENCE'
+  return 'UNKNOWN'
+}
+
+// Save error to file for detailed analysis
+const saveErrorToFile = async (errorLog) => {
+  try {
+    const errorDir = path.join(__dirname, '../logs/errors')
+    await fs.mkdir(errorDir, { recursive: true })
+
+    const filename = `error-${Date.now()}-${errorLog.category.toLowerCase()}.json`
+    const filepath = path.join(errorDir, filename)
+
+    await fs.writeFile(filepath, JSON.stringify(errorLog, null, 2))
+  } catch (error) {
+    console.error('Failed to save error to file:', error)
+  }
+}
+
+// Get error statistics
+const getErrorStatistics = async (req, res) => {
+  try {
+    const { period = '24h' } = req.query
+
+    // Calculate time range
+    const now = new Date()
+    const periodHours = period === '1h' ? 1 : period === '6h' ? 6 : period === '24h' ? 24 : period === '7d' ? 168 : 24
+    const startTime = new Date(now.getTime() - (periodHours * 60 * 60 * 1000))
+
+    // Get error counts by category
+    const errorCounts = await prisma.activityLog.groupBy({
+      by: ['action'],
+      where: {
+        createdAt: { gte: startTime },
+        action: { startsWith: 'ERROR_' }
+      },
+      _count: { id: true }
+    })
+
+    // Get error counts by severity
+    const severityCounts = await prisma.activityLog.groupBy({
+      by: ['severity'],
+      where: {
+        createdAt: { gte: startTime },
+        action: { startsWith: 'ERROR_' }
+      },
+      _count: { id: true }
+    })
+
+    // Get recent errors
+    const recentErrors = await prisma.activityLog.findMany({
+      where: {
+        createdAt: { gte: startTime },
+        action: { startsWith: 'ERROR_' }
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            preferredName: true,
+            email: true
+          }
+        }
+      }
+    })
+
+    // Calculate error rate
+    const totalActivity = await prisma.activityLog.count({
+      where: { createdAt: { gte: startTime } }
+    })
+    const totalErrors = await prisma.activityLog.count({
+      where: {
+        createdAt: { gte: startTime },
+        action: { startsWith: 'ERROR_' }
+      }
+    })
+
+    res.json({
+      period,
+      statistics: {
+        totalErrors,
+        totalActivity,
+        errorRate: totalActivity > 0 ? (totalErrors / totalActivity) * 100 : 0,
+        categoryCounts: errorCounts,
+        severityCounts
+      },
+      recentErrors,
+      generatedAt: new Date().toISOString()
+    })
+  } catch (error) {
+    console.error('Get error statistics error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Get error details
+const getErrorDetails = async (req, res) => {
+  try {
+    const { errorId } = req.params
+
+    const error = await prisma.activityLog.findUnique({
+      where: { id: errorId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            preferredName: true,
+            email: true,
+            role: true
+          }
+        }
+      }
+    })
+
+    if (!error) {
+      return res.status(404).json({ error: 'Error not found' })
+    }
+
+    res.json({ error })
+  } catch (error) {
+    console.error('Get error details error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Mark error as resolved
+const markErrorResolved = async (req, res) => {
+  try {
+    const { errorId } = req.params
+    const { resolution, notes } = req.body
+
+    const error = await prisma.activityLog.findUnique({
+      where: { id: errorId }
+    })
+
+    if (!error) {
+      return res.status(404).json({ error: 'Error not found' })
+    }
+
+    // Update error details
+    const updatedDetails = {
+      ...error.details,
+      resolved: true,
+      resolvedAt: new Date().toISOString(),
+      resolvedBy: req.user.id,
+      resolution,
+      notes
+    }
+
+    await prisma.activityLog.update({
+      where: { id: errorId },
+      data: {
+        details: updatedDetails
+      }
+    })
+
+    res.json({ message: 'Error marked as resolved' })
+  } catch (error) {
+    console.error('Mark error resolved error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Get error trends
+const getErrorTrends = async (req, res) => {
+  try {
+    const { period = '7d' } = req.query
+
+    // Calculate time range
+    const now = new Date()
+    const periodDays = period === '1d' ? 1 : period === '7d' ? 7 : period === '30d' ? 30 : 7
+    const startTime = new Date(now.getTime() - (periodDays * 24 * 60 * 60 * 1000))
+
+    // Get daily error counts
+    const dailyErrors = await prisma.activityLog.groupBy({
+      by: ['createdAt'],
+      where: {
+        createdAt: { gte: startTime },
+        action: { startsWith: 'ERROR_' }
+      },
+      _count: { id: true },
+      orderBy: { createdAt: 'asc' }
+    })
+
+    // Get error trends by category
+    const categoryTrends = await prisma.activityLog.groupBy({
+      by: ['action', 'createdAt'],
+      where: {
+        createdAt: { gte: startTime },
+        action: { startsWith: 'ERROR_' }
+      },
+      _count: { id: true },
+      orderBy: { createdAt: 'asc' }
+    })
+
+    res.json({
+      period,
+      dailyErrors,
+      categoryTrends,
+      generatedAt: new Date().toISOString()
+    })
+  } catch (error) {
+    console.error('Get error trends error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Clean up old error logs
+const cleanupErrorLogs = async (req, res) => {
+  try {
+    const { daysToKeep = 30 } = req.body
+
+    const cutoffDate = new Date(Date.now() - (daysToKeep * 24 * 60 * 60 * 1000))
+
+    const deletedCount = await prisma.activityLog.deleteMany({
+      where: {
+        createdAt: { lt: cutoffDate },
+        action: { startsWith: 'ERROR_' }
+      }
+    })
+
+    // Also clean up error files
+    const errorDir = path.join(__dirname, '../logs/errors')
+    try {
+      const files = await fs.readdir(errorDir)
+      let deletedFiles = 0
+
+      for (const file of files) {
+        const filepath = path.join(errorDir, file)
+        const stats = await fs.stat(filepath)
+        
+        if (stats.mtime < cutoffDate) {
+          await fs.unlink(filepath)
+          deletedFiles++
+        }
+      }
+
+      res.json({
+        deletedLogs: deletedCount.count,
+        deletedFiles,
+        cutoffDate: cutoffDate.toISOString(),
+        message: 'Error logs cleanup completed'
+      })
+    } catch (fileError) {
+      res.json({
+        deletedLogs: deletedCount.count,
+        deletedFiles: 0,
+        cutoffDate: cutoffDate.toISOString(),
+        message: 'Error logs cleanup completed (file cleanup failed)'
+      })
+    }
+  } catch (error) {
+    console.error('Cleanup error logs error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Export error logs
+const exportErrorLogs = async (req, res) => {
+  try {
+    const { format = 'json', period = '7d' } = req.query
+
+    // Calculate time range
+    const now = new Date()
+    const periodDays = period === '1d' ? 1 : period === '7d' ? 7 : period === '30d' ? 30 : 7
+    const startTime = new Date(now.getTime() - (periodDays * 24 * 60 * 60 * 1000))
+
+    const errors = await prisma.activityLog.findMany({
+      where: {
+        createdAt: { gte: startTime },
+        action: { startsWith: 'ERROR_' }
+      },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            preferredName: true,
+            email: true,
+            role: true
+          }
+        }
+      }
+    })
+
+    if (format === 'csv') {
+      const csv = convertToCSV(errors)
+      res.setHeader('Content-Type', 'text/csv')
+      res.setHeader('Content-Disposition', `attachment; filename="error-logs-${period}.csv"`)
+      res.send(csv)
+    } else {
+      res.json({
+        errors,
+        period,
+        totalCount: errors.length,
+        generatedAt: new Date().toISOString()
+      })
+    }
+  } catch (error) {
+    console.error('Export error logs error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Convert errors to CSV format
+const convertToCSV = (errors) => {
+  const headers = ['Timestamp', 'Action', 'Severity', 'User', 'Message', 'Details']
+  const rows = errors.map(error => [
+    error.createdAt.toISOString(),
+    error.action,
+    error.severity,
+    error.user?.preferredName || error.user?.name || 'Unknown',
+    error.details?.message || '',
+    JSON.stringify(error.details)
+  ])
+
+  return [headers, ...rows].map(row => row.join(',')).join('\n')
+}
+
+module.exports = {
+  logError,
+  getErrorStatistics,
+  getErrorDetails,
+  markErrorResolved,
+  getErrorTrends,
+  cleanupErrorLogs,
+  exportErrorLogs
+}
+EOF
+
+    # Error Handling Routes
+    cat > "$APP_DIR/src/routes/errorHandlingRoutes.js" << 'EOF'
+const express = require('express')
+const { 
+  getErrorStatistics,
+  getErrorDetails,
+  markErrorResolved,
+  getErrorTrends,
+  cleanupErrorLogs,
+  exportErrorLogs
+} = require('../controllers/errorHandlingController')
+const { authenticateToken, requireRole } = require('../middleware/auth')
+const { logActivity } = require('../middleware/errorHandler')
+
+const router = express.Router()
+
+// Apply authentication to all routes
+router.use(authenticateToken)
+
+// Error handling and monitoring
+router.get('/statistics', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), getErrorStatistics)
+router.get('/trends', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), getErrorTrends)
+router.get('/:errorId', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), getErrorDetails)
+router.put('/:errorId/resolve', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), logActivity('RESOLVE_ERROR', 'ERROR'), markErrorResolved)
+router.get('/export/logs', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), exportErrorLogs)
+router.post('/cleanup', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), logActivity('CLEANUP_ERROR_LOGS', 'ERROR'), cleanupErrorLogs)
+
+module.exports = router
+EOF
+
+    # Export Routes
+    cat > "$APP_DIR/src/routes/exportRoutes.js" << 'EOF'
+const express = require('express')
+const { 
+  exportEventToExcel,
+  exportContestResultsToCSV,
+  exportJudgePerformanceToXML,
+  exportSystemAnalyticsToPDF,
+  getExportHistory
+} = require('../controllers/exportController')
+const { authenticateToken, requireRole } = require('../middleware/auth')
+const { logActivity } = require('../middleware/errorHandler')
+
+const router = express.Router()
+
+// Apply authentication to all routes
+router.use(authenticateToken)
+
+// Export functionality
+router.post('/event/excel', requireRole(['ORGANIZER', 'BOARD', 'AUDITOR']), logActivity('EXPORT_EVENT_EXCEL', 'EXPORT'), exportEventToExcel)
+router.post('/contest-results/csv', requireRole(['ORGANIZER', 'BOARD', 'AUDITOR']), logActivity('EXPORT_CONTEST_RESULTS_CSV', 'EXPORT'), exportContestResultsToCSV)
+router.post('/judge-performance/xml', requireRole(['ORGANIZER', 'BOARD', 'AUDITOR']), logActivity('EXPORT_JUDGE_PERFORMANCE_XML', 'EXPORT'), exportJudgePerformanceToXML)
+router.post('/system-analytics/pdf', requireRole(['ORGANIZER', 'BOARD']), logActivity('EXPORT_SYSTEM_ANALYTICS_PDF', 'EXPORT'), exportSystemAnalyticsToPDF)
+
+// Export history
+router.get('/history', getExportHistory)
+
+module.exports = router
+EOF
+
     # Templates Routes
     cat > "$APP_DIR/src/routes/templatesRoutes.js" << 'EOF'
 const express = require('express')
@@ -10356,6 +13811,12 @@ const tallyMasterRoutes = require('./routes/tallyMasterRoutes')
 const judgeRoutes = require('./routes/judgeRoutes')
 const emailRoutes = require('./routes/emailRoutes')
 const reportsRoutes = require('./routes/reportsRoutes')
+const printRoutes = require('./routes/printRoutes')
+const exportRoutes = require('./routes/exportRoutes')
+const fileManagementRoutes = require('./routes/fileManagementRoutes')
+const fileBackupRoutes = require('./routes/fileBackupRoutes')
+const performanceRoutes = require('./routes/performanceRoutes')
+const errorHandlingRoutes = require('./routes/errorHandlingRoutes')
 const templatesRoutes = require('./routes/templatesRoutes')
 const notificationsRoutes = require('./routes/notificationsRoutes')
 const emceeRoutes = require('./routes/emceeRoutes')
@@ -10448,6 +13909,12 @@ app.use('/api/tally-master', tallyMasterRoutes)
 app.use('/api/judge', judgeRoutes)
 app.use('/api/email', emailRoutes)
 app.use('/api/reports', reportsRoutes)
+app.use('/api/print', printRoutes)
+app.use('/api/export', exportRoutes)
+app.use('/api/file-management', fileManagementRoutes)
+app.use('/api/file-backup', fileBackupRoutes)
+app.use('/api/performance', performanceRoutes)
+app.use('/api/errors', errorHandlingRoutes)
 app.use('/api/templates', templatesRoutes)
 app.use('/api/notifications', notificationsRoutes)
 app.use('/api/emcee', emceeRoutes)
@@ -11727,11 +15194,18 @@ EOF
     "prisma": "^5.22.0",
     "@prisma/client": "^5.22.0",
     "playwright": "^1.40.0",
-    "puppeteer": "^24.15.0",
     "supertest": "^7.1.3",
     "superagent": "^10.2.2",
     "compression": "^1.7.4",
-    "express-rate-limit": "^8.1.0"
+    "express-rate-limit": "^8.1.0",
+    "puppeteer": "^21.5.2",
+    "handlebars": "^4.7.8",
+    "xlsx": "^0.18.5",
+    "csv-writer": "^1.6.0",
+    "xml2js": "^0.6.2",
+    "pdfkit": "^0.14.0",
+    "jspdf": "^2.5.1",
+    "html-pdf-node": "^1.0.8"
   },
   "overrides": {
     "glob": "^10.3.10",
