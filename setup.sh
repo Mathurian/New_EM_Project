@@ -3882,7 +3882,7 @@ model Contest {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  event      Event      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  event      Event      @relation(fields: [eventId], references: [id], onDelete: Cascade)                                                                       
   categories Category[]
   contestants ContestContestant[]
   judges     ContestJudge[]
@@ -3899,7 +3899,7 @@ model Category {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  contest      Contest      @relation(fields: [contestId], references: [id], onDelete: Cascade)
+  contest      Contest      @relation(fields: [contestId], references: [id], onDelete: Cascade)                                                                 
   contestants  CategoryContestant[]
   judges       CategoryJudge[]
   criteria     Criterion[]
@@ -3907,7 +3907,7 @@ model Category {
   comments     JudgeComment[]
   certifications TallyMasterCertification[]
   auditorCertifications AuditorCertification[]
-  judgeCertifications JudgeCertification[] @relation("CategoryJudgeCertifications")
+  judgeCertifications JudgeCertification[] @relation("CategoryJudgeCertifications")                                                                             
 
   @@map("categories")
 }
@@ -3979,10 +3979,10 @@ model Score {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  category   Category   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  contestant Contestant @relation(fields: [contestantId], references: [id], onDelete: Cascade)
-  judge      Judge      @relation(fields: [judgeId], references: [id], onDelete: Cascade)
-  criterion  Criterion  @relation(fields: [criterionId], references: [id], onDelete: Cascade)
+  category   Category   @relation(fields: [categoryId], references: [id], onDelete: Cascade)                                                                    
+  contestant Contestant @relation(fields: [contestantId], references: [id], onDelete: Cascade)                                                                  
+  judge      Judge      @relation(fields: [judgeId], references: [id], onDelete: Cascade)                                                                        
+  criterion  Criterion  @relation(fields: [criterionId], references: [id], onDelete: Cascade)                                                                    
 
   @@unique([categoryId, contestantId, judgeId, criterionId])
   @@map("scores")
@@ -4019,9 +4019,9 @@ model JudgeComment {
   comment      String?
   createdAt    DateTime @default(now())
 
-  category   Category   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  contestant Contestant @relation(fields: [contestantId], references: [id], onDelete: Cascade)
-  judge      Judge      @relation(fields: [judgeId], references: [id], onDelete: Cascade)
+  category   Category   @relation(fields: [categoryId], references: [id], onDelete: Cascade)                                                                    
+  contestant Contestant @relation(fields: [contestantId], references: [id], onDelete: Cascade)                                                                  
+  judge      Judge      @relation(fields: [judgeId], references: [id], onDelete: Cascade)                                                                        
 
   @@unique([categoryId, contestantId, judgeId])
   @@map("judge_comments")
@@ -4034,8 +4034,8 @@ model JudgeCertification {
   signatureName String
   certifiedAt   DateTime @default(now())
 
-  category Category @relation("CategoryJudgeCertifications", fields: [categoryId], references: [id], onDelete: Cascade)
-  judge    Judge    @relation("JudgeCertifications", fields: [judgeId], references: [id], onDelete: Cascade)
+  category Category @relation("CategoryJudgeCertifications", fields: [categoryId], references: [id], onDelete: Cascade)                                         
+  judge    Judge    @relation("JudgeCertifications", fields: [judgeId], references: [id], onDelete: Cascade)                                                    
 
   @@unique([categoryId, judgeId])
   @@map("judge_certifications")
@@ -4047,7 +4047,7 @@ model TallyMasterCertification {
   signatureName String
   certifiedAt   DateTime @default(now())
 
-  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)                                                                        
 
   @@unique([categoryId])
   @@map("tally_master_certifications")
@@ -4059,7 +4059,7 @@ model AuditorCertification {
   signatureName String
   certifiedAt   DateTime @default(now())
 
-  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)                                                                        
 
   @@unique([categoryId])
   @@map("auditor_certifications")
@@ -4159,7 +4159,7 @@ model TemplateCriterion {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  template CategoryTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  template CategoryTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)                                                                
 
   @@map("template_criteria")
 }
@@ -4182,8 +4182,8 @@ model ContestContestant {
   contestId    String
   contestantId String
 
-  contest    Contest    @relation(fields: [contestId], references: [id], onDelete: Cascade)
-  contestant Contestant @relation(fields: [contestantId], references: [id], onDelete: Cascade)
+  contest    Contest    @relation(fields: [contestId], references: [id], onDelete: Cascade)                                                                     
+  contestant Contestant @relation(fields: [contestantId], references: [id], onDelete: Cascade)                                                                  
 
   @@id([contestId, contestantId])
   @@map("contest_contestants")
@@ -4193,8 +4193,8 @@ model ContestJudge {
   contestId String
   judgeId   String
 
-  contest Contest @relation(fields: [contestId], references: [id], onDelete: Cascade)
-  judge   Judge   @relation(fields: [judgeId], references: [id], onDelete: Cascade)
+  contest Contest @relation(fields: [contestId], references: [id], onDelete: Cascade)                                                                           
+  judge   Judge   @relation(fields: [judgeId], references: [id], onDelete: Cascade)                                                                             
 
   @@id([contestId, judgeId])
   @@map("contest_judges")
@@ -4204,8 +4204,8 @@ model CategoryContestant {
   categoryId   String
   contestantId String
 
-  category   Category   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  contestant Contestant @relation(fields: [contestantId], references: [id], onDelete: Cascade)
+  category   Category   @relation(fields: [categoryId], references: [id], onDelete: Cascade)                                                                    
+  contestant Contestant @relation(fields: [contestantId], references: [id], onDelete: Cascade)                                                                  
 
   @@id([categoryId, contestantId])
   @@map("category_contestants")
@@ -4215,8 +4215,8 @@ model CategoryJudge {
   categoryId String
   judgeId    String
 
-  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  judge    Judge    @relation(fields: [judgeId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)                                                                        
+  judge    Judge    @relation(fields: [judgeId], references: [id], onDelete: Cascade)                                                                            
 
   @@id([categoryId, judgeId])
   @@map("category_judges")
