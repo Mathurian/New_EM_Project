@@ -17152,8 +17152,8 @@ model Event {
   // New relations
   assignments     Assignment[]
   certifications  Certification[]
-  files           File[]
-  performanceLogs PerformanceLog[]
+  files           File[] @relation("EventFiles")
+  performanceLogs PerformanceLog[] @relation("EventPerformanceLogs")
   winnerSignatures WinnerSignature[]
 
   @@map("events")
@@ -17175,8 +17175,8 @@ model Contest {
   // New relations
   assignments     Assignment[]
   certifications  Certification[]
-  files           File[]
-  performanceLogs PerformanceLog[]
+  files           File[] @relation("ContestFiles")
+  performanceLogs PerformanceLog[] @relation("ContestPerformanceLogs")
   winnerSignatures WinnerSignature[]
 
   @@map("contests")
@@ -17204,8 +17204,8 @@ model Category {
   // New relations
   assignments     Assignment[]
   certifications  Certification[]
-  files           File[]
-  performanceLogs PerformanceLog[]
+  files           File[] @relation("CategoryFiles")
+  performanceLogs PerformanceLog[] @relation("CategoryPerformanceLogs")
   winnerSignatures WinnerSignature[]
   scoreRemovalRequests ScoreRemovalRequest[]
 
@@ -17653,6 +17653,7 @@ model Certification {
   categoryId      String
   contestId       String
   eventId         String
+  userId          String?
   status          CertificationStatus @default(PENDING)
   currentStep     Int      @default(1)
   totalSteps      Int      @default(4)
@@ -17670,6 +17671,7 @@ model Certification {
   category        Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   contest         Contest  @relation(fields: [contestId], references: [id], onDelete: Cascade)
   event           Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user            User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   
   @@unique([categoryId, contestId, eventId])
   @@map("certifications")
@@ -17690,7 +17692,16 @@ model File {
   metadata    String?  // JSON
   checksum    String?
   
+  // Relations
   user        User     @relation(fields: [uploadedBy], references: [id], onDelete: Cascade)
+  event       Event?   @relation("EventFiles", fields: [eventId], references: [id], onDelete: Cascade)
+  contest     Contest? @relation("ContestFiles", fields: [contestId], references: [id], onDelete: Cascade)
+  categoryRef Category? @relation("CategoryFiles", fields: [categoryId], references: [id], onDelete: Cascade)
+  
+  // Foreign keys
+  eventId     String?
+  contestId   String?
+  categoryId  String?
   
   @@map("files")
 }
@@ -17707,7 +17718,16 @@ model PerformanceLog {
   userAgent   String?
   createdAt   DateTime @default(now())
   
+  // Relations
   user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  event       Event?   @relation("EventPerformanceLogs", fields: [eventId], references: [id], onDelete: Cascade)
+  contest     Contest? @relation("ContestPerformanceLogs", fields: [contestId], references: [id], onDelete: Cascade)
+  category    Category? @relation("CategoryPerformanceLogs", fields: [categoryId], references: [id], onDelete: Cascade)
+  
+  // Foreign keys
+  eventId     String?
+  contestId   String?
+  categoryId  String?
   
   @@map("performance_logs")
 }
