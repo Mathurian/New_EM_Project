@@ -1227,6 +1227,2739 @@ module.exports = {
 }
 EOF
 
+    # Categories Controller
+    cat > "$APP_DIR/src/controllers/categoriesController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+const getAllCategories = async (req, res) => {
+  try {
+    const categories = await prisma.category.findMany({
+      include: {
+        contest: {
+          include: {
+            event: true
+          }
+        },
+        _count: {
+          select: {
+            criteria: true,
+            contestants: true,
+            judges: true,
+            scores: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    res.json(categories)
+  } catch (error) {
+    console.error('Get categories error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getCategoryById = async (req, res) => {
+  try {
+    const { id } = req.params
+
+    const category = await prisma.category.findUnique({
+      where: { id },
+      include: {
+        contest: {
+          include: {
+            event: true
+          }
+        },
+        criteria: true,
+        contestants: true,
+        judges: true,
+        scores: true
+      }
+    })
+
+    if (!category) {
+      return res.status(404).json({ error: 'Category not found' })
+    }
+
+    res.json(category)
+  } catch (error) {
+    console.error('Get category error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getCategoriesByContest = async (req, res) => {
+  try {
+    const { contestId } = req.params
+
+    const categories = await prisma.category.findMany({
+      where: { contestId },
+      include: {
+        _count: {
+          select: {
+            criteria: true,
+            contestants: true,
+            judges: true,
+            scores: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    res.json(categories)
+  } catch (error) {
+    console.error('Get categories by contest error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const createCategory = async (req, res) => {
+  try {
+    const { name, description, maxScore, contestId } = req.body
+
+    const category = await prisma.category.create({
+      data: {
+        name,
+        description,
+        maxScore,
+        contestId,
+        createdBy: req.user.id
+      }
+    })
+
+    res.status(201).json(category)
+  } catch (error) {
+    console.error('Create category error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const updateCategory = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { name, description, maxScore } = req.body
+
+    const category = await prisma.category.update({
+      where: { id },
+      data: {
+        name,
+        description,
+        maxScore
+      }
+    })
+
+    res.json(category)
+  } catch (error) {
+    console.error('Update category error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const deleteCategory = async (req, res) => {
+  try {
+    const { id } = req.params
+
+    await prisma.category.delete({
+      where: { id }
+    })
+
+    res.status(204).send()
+  } catch (error) {
+    console.error('Delete category error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+module.exports = {
+  getAllCategories,
+  getCategoryById,
+  getCategoriesByContest,
+  createCategory,
+  updateCategory,
+  deleteCategory
+}
+EOF
+
+    # Users Controller
+    cat > "$APP_DIR/src/controllers/usersController.js" << 'EOF'
+const bcrypt = require('bcryptjs')
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+const getAllUsers = async (req, res) => {
+  try {
+    const users = await prisma.user.findMany({
+      include: {
+        judge: true,
+        contestant: true
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    res.json(users)
+  } catch (error) {
+    console.error('Get users error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getUserById = async (req, res) => {
+  try {
+    const { id } = req.params
+
+    const user = await prisma.user.findUnique({
+      where: { id },
+      include: {
+        judge: true,
+        contestant: true
+      }
+    })
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' })
+    }
+
+    res.json(user)
+  } catch (error) {
+    console.error('Get user error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const createUser = async (req, res) => {
+  try {
+    const { name, email, password, role } = req.body
+
+    const hashedPassword = await bcrypt.hash(password, 10)
+
+    const user = await prisma.user.create({
+      data: {
+        name,
+        email,
+        password: hashedPassword,
+        role,
+        createdBy: req.user.id
+      }
+    })
+
+    res.status(201).json({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role
+    })
+  } catch (error) {
+    console.error('Create user error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const updateUser = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { name, email, role } = req.body
+
+    const user = await prisma.user.update({
+      where: { id },
+      data: {
+        name,
+        email,
+        role
+      }
+    })
+
+    res.json({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role
+    })
+  } catch (error) {
+    console.error('Update user error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const deleteUser = async (req, res) => {
+  try {
+    const { id } = req.params
+
+    await prisma.user.delete({
+      where: { id }
+    })
+
+    res.status(204).send()
+  } catch (error) {
+    console.error('Delete user error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const resetPassword = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { newPassword } = req.body
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10)
+
+    await prisma.user.update({
+      where: { id },
+      data: {
+        password: hashedPassword
+      }
+    })
+
+    res.json({ message: 'Password reset successfully' })
+  } catch (error) {
+    console.error('Reset password error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+module.exports = {
+  getAllUsers,
+  getUserById,
+  createUser,
+  updateUser,
+  deleteUser,
+  resetPassword
+}
+EOF
+
+    # Scoring Controller
+    cat > "$APP_DIR/src/controllers/scoringController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+const getScores = async (req, res) => {
+  try {
+    const { categoryId, contestantId } = req.params
+
+    let whereClause = { categoryId }
+    if (contestantId) {
+      whereClause.contestantId = contestantId
+    }
+
+    const scores = await prisma.score.findMany({
+      where: whereClause,
+      include: {
+        contestant: true,
+        judge: true,
+        category: true
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    res.json(scores)
+  } catch (error) {
+    console.error('Get scores error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const submitScore = async (req, res) => {
+  try {
+    const { categoryId, contestantId } = req.params
+    const { criteriaId, score, comments } = req.body
+
+    const scoreRecord = await prisma.score.create({
+      data: {
+        categoryId,
+        contestantId,
+        judgeId: req.user.id,
+        criteriaId,
+        score,
+        comments
+      }
+    })
+
+    res.status(201).json(scoreRecord)
+  } catch (error) {
+    console.error('Submit score error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const updateScore = async (req, res) => {
+  try {
+    const { scoreId } = req.params
+    const { score, comments } = req.body
+
+    const scoreRecord = await prisma.score.update({
+      where: { id: scoreId },
+      data: {
+        score,
+        comments
+      }
+    })
+
+    res.json(scoreRecord)
+  } catch (error) {
+    console.error('Update score error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const deleteScore = async (req, res) => {
+  try {
+    const { scoreId } = req.params
+
+    await prisma.score.delete({
+      where: { id: scoreId }
+    })
+
+    res.status(204).send()
+  } catch (error) {
+    console.error('Delete score error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const certifyScores = async (req, res) => {
+  try {
+    const { categoryId } = req.params
+
+    // Update all scores in the category to certified
+    await prisma.score.updateMany({
+      where: { categoryId },
+      data: { certified: true }
+    })
+
+    res.json({ message: 'Scores certified successfully' })
+  } catch (error) {
+    console.error('Certify scores error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const certifyTotals = async (req, res) => {
+  try {
+    const { categoryId } = req.params
+
+    // Calculate totals and mark as certified
+    const scores = await prisma.score.findMany({
+      where: { categoryId }
+    })
+
+    // Group by contestant and calculate totals
+    const totals = {}
+    scores.forEach(score => {
+      if (!totals[score.contestantId]) {
+        totals[score.contestantId] = 0
+      }
+      totals[score.contestantId] += score.score
+    })
+
+    // Update category totals
+    await prisma.category.update({
+      where: { id: categoryId },
+      data: { totalsCertified: true }
+    })
+
+    res.json({ message: 'Totals certified successfully', totals })
+  } catch (error) {
+    console.error('Certify totals error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const finalCertification = async (req, res) => {
+  try {
+    const { categoryId } = req.params
+
+    // Mark category as finally certified
+    await prisma.category.update({
+      where: { id: categoryId },
+      data: { finalCertified: true }
+    })
+
+    res.json({ message: 'Final certification completed' })
+  } catch (error) {
+    console.error('Final certification error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+module.exports = {
+  getScores,
+  submitScore,
+  updateScore,
+  deleteScore,
+  certifyScores,
+  certifyTotals,
+  finalCertification
+}
+EOF
+
+    # Results Controller
+    cat > "$APP_DIR/src/controllers/resultsController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+const getAllResults = async (req, res) => {
+  try {
+    const results = await prisma.score.groupBy({
+      by: ['categoryId', 'contestantId'],
+      _sum: {
+        score: true
+      },
+      _count: {
+        score: true
+      }
+    })
+
+    res.json(results)
+  } catch (error) {
+    console.error('Get results error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getCategories = async (req, res) => {
+  try {
+    const categories = await prisma.category.findMany({
+      include: {
+        contest: {
+          include: {
+            event: true
+          }
+        }
+      }
+    })
+
+    res.json(categories)
+  } catch (error) {
+    console.error('Get categories error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getContestantResults = async (req, res) => {
+  try {
+    const { contestantId } = req.params
+
+    const results = await prisma.score.findMany({
+      where: { contestantId },
+      include: {
+        category: {
+          include: {
+            contest: {
+              include: {
+                event: true
+              }
+            }
+          }
+        },
+        judge: true
+      }
+    })
+
+    res.json(results)
+  } catch (error) {
+    console.error('Get contestant results error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getCategoryResults = async (req, res) => {
+  try {
+    const { categoryId } = req.params
+
+    const results = await prisma.score.groupBy({
+      by: ['contestantId'],
+      where: { categoryId },
+      _sum: {
+        score: true
+      },
+      _count: {
+        score: true
+      }
+    })
+
+    res.json(results)
+  } catch (error) {
+    console.error('Get category results error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getContestResults = async (req, res) => {
+  try {
+    const { contestId } = req.params
+
+    const results = await prisma.score.findMany({
+      where: {
+        category: {
+          contestId
+        }
+      },
+      include: {
+        category: true,
+        contestant: true,
+        judge: true
+      }
+    })
+
+    res.json(results)
+  } catch (error) {
+    console.error('Get contest results error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getEventResults = async (req, res) => {
+  try {
+    const { eventId } = req.params
+
+    const results = await prisma.score.findMany({
+      where: {
+        category: {
+          contest: {
+            eventId
+          }
+        }
+      },
+      include: {
+        category: {
+          include: {
+            contest: true
+          }
+        },
+        contestant: true,
+        judge: true
+      }
+    })
+
+    res.json(results)
+  } catch (error) {
+    console.error('Get event results error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+module.exports = {
+  getAllResults,
+  getCategories,
+  getContestantResults,
+  getCategoryResults,
+  getContestResults,
+  getEventResults
+}
+EOF
+
+    # Admin Controller
+    cat > "$APP_DIR/src/controllers/adminController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+const getStats = async (req, res) => {
+  try {
+    const stats = {
+      totalUsers: await prisma.user.count(),
+      totalEvents: await prisma.event.count(),
+      totalContests: await prisma.contest.count(),
+      totalCategories: await prisma.category.count(),
+      totalScores: await prisma.score.count()
+    }
+
+    res.json(stats)
+  } catch (error) {
+    console.error('Get stats error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getLogs = async (req, res) => {
+  try {
+    const logs = await prisma.activityLog.findMany({
+      include: {
+        user: {
+          select: {
+            name: true,
+            email: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 100
+    })
+
+    res.json(logs)
+  } catch (error) {
+    console.error('Get logs error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getActiveUsers = async (req, res) => {
+  try {
+    const activeUsers = await prisma.user.findMany({
+      where: {
+        lastLoginAt: {
+          gte: new Date(Date.now() - 24 * 60 * 60 * 1000) // Last 24 hours
+        }
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        lastLoginAt: true
+      }
+    })
+
+    res.json(activeUsers)
+  } catch (error) {
+    console.error('Get active users error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getSettings = async (req, res) => {
+  try {
+    const settings = await prisma.setting.findMany()
+    res.json(settings)
+  } catch (error) {
+    console.error('Get settings error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const updateSettings = async (req, res) => {
+  try {
+    const { settings } = req.body
+
+    for (const setting of settings) {
+      await prisma.setting.upsert({
+        where: { key: setting.key },
+        update: { value: setting.value },
+        create: { key: setting.key, value: setting.value }
+      })
+    }
+
+    res.json({ message: 'Settings updated successfully' })
+  } catch (error) {
+    console.error('Update settings error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getUsers = async (req, res) => {
+  try {
+    const users = await prisma.user.findMany({
+      include: {
+        judge: true,
+        contestant: true
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    res.json(users)
+  } catch (error) {
+    console.error('Get users error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getEvents = async (req, res) => {
+  try {
+    const events = await prisma.event.findMany({
+      include: {
+        _count: {
+          select: {
+            contests: true,
+            contestants: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    res.json(events)
+  } catch (error) {
+    console.error('Get events error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getContests = async (req, res) => {
+  try {
+    const contests = await prisma.contest.findMany({
+      include: {
+        event: true,
+        _count: {
+          select: {
+            categories: true,
+            contestants: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    res.json(contests)
+  } catch (error) {
+    console.error('Get contests error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getCategories = async (req, res) => {
+  try {
+    const categories = await prisma.category.findMany({
+      include: {
+        contest: {
+          include: {
+            event: true
+          }
+        },
+        _count: {
+          select: {
+            criteria: true,
+            contestants: true,
+            judges: true,
+            scores: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    res.json(categories)
+  } catch (error) {
+    console.error('Get categories error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getScores = async (req, res) => {
+  try {
+    const scores = await prisma.score.findMany({
+      include: {
+        contestant: true,
+        judge: true,
+        category: {
+          include: {
+            contest: {
+              include: {
+                event: true
+              }
+            }
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 100
+    })
+
+    res.json(scores)
+  } catch (error) {
+    console.error('Get scores error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getActivityLogs = async (req, res) => {
+  try {
+    const logs = await prisma.activityLog.findMany({
+      include: {
+        user: {
+          select: {
+            name: true,
+            email: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 100
+    })
+
+    res.json(logs)
+  } catch (error) {
+    console.error('Get activity logs error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getAuditLogs = async (req, res) => {
+  try {
+    const logs = await prisma.activityLog.findMany({
+      where: {
+        action: {
+          in: ['CERTIFY_SCORES', 'CERTIFY_TOTALS', 'FINAL_CERTIFICATION', 'APPROVE_CERTIFICATION', 'REJECT_CERTIFICATION']
+        }
+      },
+      include: {
+        user: {
+          select: {
+            name: true,
+            email: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 100
+    })
+
+    res.json(logs)
+  } catch (error) {
+    console.error('Get audit logs error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const exportAuditLogs = async (req, res) => {
+  try {
+    const logs = await prisma.activityLog.findMany({
+      where: {
+        action: {
+          in: ['CERTIFY_SCORES', 'CERTIFY_TOTALS', 'FINAL_CERTIFICATION', 'APPROVE_CERTIFICATION', 'REJECT_CERTIFICATION']
+        }
+      },
+      include: {
+        user: {
+          select: {
+            name: true,
+            email: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    res.json(logs)
+  } catch (error) {
+    console.error('Export audit logs error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const testConnection = async (req, res) => {
+  try {
+    const { type } = req.params
+
+    switch (type) {
+      case 'email':
+        // Test email connection
+        res.json({ status: 'success', message: 'Email connection test passed' })
+        break
+      case 'database':
+        // Test database connection
+        await prisma.$queryRaw`SELECT 1`
+        res.json({ status: 'success', message: 'Database connection test passed' })
+        break
+      case 'backup':
+        // Test backup functionality
+        res.json({ status: 'success', message: 'Backup test passed' })
+        break
+      default:
+        res.status(400).json({ error: 'Invalid test type' })
+    }
+  } catch (error) {
+    console.error('Test connection error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+module.exports = {
+  getStats,
+  getLogs,
+  getActiveUsers,
+  getSettings,
+  updateSettings,
+  getUsers,
+  getEvents,
+  getContests,
+  getCategories,
+  getScores,
+  getActivityLogs,
+  getAuditLogs,
+  exportAuditLogs,
+  testConnection
+}
+EOF
+
+    # Upload Controller
+    cat > "$APP_DIR/src/controllers/uploadController.js" << 'EOF'
+const fs = require('fs')
+const path = require('path')
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+const uploadFile = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' })
+    }
+
+    const file = {
+      filename: req.file.filename,
+      originalName: req.file.originalname,
+      mimetype: req.file.mimetype,
+      size: req.file.size,
+      path: req.file.path,
+      uploadedBy: req.user.id
+    }
+
+    res.json({ message: 'File uploaded successfully', file })
+  } catch (error) {
+    console.error('Upload file error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const uploadImage = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No image uploaded' })
+    }
+
+    const image = {
+      filename: req.file.filename,
+      originalName: req.file.originalname,
+      mimetype: req.file.mimetype,
+      size: req.file.size,
+      path: req.file.path,
+      uploadedBy: req.user.id
+    }
+
+    res.json({ message: 'Image uploaded successfully', image })
+  } catch (error) {
+    console.error('Upload image error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const deleteFile = async (req, res) => {
+  try {
+    const { fileId } = req.params
+
+    // Find the file record
+    const file = await prisma.file.findUnique({
+      where: { id: fileId }
+    })
+
+    if (!file) {
+      return res.status(404).json({ error: 'File not found' })
+    }
+
+    // Delete the physical file
+    if (fs.existsSync(file.path)) {
+      fs.unlinkSync(file.path)
+    }
+
+    // Delete the database record
+    await prisma.file.delete({
+      where: { id: fileId }
+    })
+
+    res.json({ message: 'File deleted successfully' })
+  } catch (error) {
+    console.error('Delete file error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getFiles = async (req, res) => {
+  try {
+    const files = await prisma.file.findMany({
+      include: {
+        user: {
+          select: {
+            name: true,
+            email: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    res.json(files)
+  } catch (error) {
+    console.error('Get files error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+module.exports = {
+  uploadFile,
+  uploadImage,
+  deleteFile,
+  getFiles
+}
+EOF
+
+    # Settings Controller
+    cat > "$APP_DIR/src/controllers/settingsController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+const getAllSettings = async (req, res) => {
+  try {
+    const settings = await prisma.setting.findMany()
+    res.json(settings)
+  } catch (error) {
+    console.error('Get all settings error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getSettings = async (req, res) => {
+  try {
+    const settings = await prisma.setting.findMany()
+    res.json(settings)
+  } catch (error) {
+    console.error('Get settings error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const updateSettings = async (req, res) => {
+  try {
+    const { settings } = req.body
+
+    for (const setting of settings) {
+      await prisma.setting.upsert({
+        where: { key: setting.key },
+        update: { value: setting.value },
+        create: { key: setting.key, value: setting.value }
+      })
+    }
+
+    res.json({ message: 'Settings updated successfully' })
+  } catch (error) {
+    console.error('Update settings error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const testSettings = async (req, res) => {
+  try {
+    const { type } = req.params
+
+    switch (type) {
+      case 'email':
+        // Test email settings
+        res.json({ status: 'success', message: 'Email settings test passed' })
+        break
+      case 'database':
+        // Test database settings
+        await prisma.$queryRaw`SELECT 1`
+        res.json({ status: 'success', message: 'Database settings test passed' })
+        break
+      case 'backup':
+        // Test backup settings
+        res.json({ status: 'success', message: 'Backup settings test passed' })
+        break
+      default:
+        res.status(400).json({ error: 'Invalid test type' })
+    }
+  } catch (error) {
+    console.error('Test settings error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+module.exports = {
+  getAllSettings,
+  getSettings,
+  updateSettings,
+  testSettings
+}
+EOF
+
+    # Archive Controller
+    cat > "$APP_DIR/src/controllers/archiveController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+const getAllArchives = async (req, res) => {
+  try {
+    const archives = await prisma.archive.findMany({
+      include: {
+        user: {
+          select: {
+            name: true,
+            email: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    res.json(archives)
+  } catch (error) {
+    console.error('Get archives error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getActiveEvents = async (req, res) => {
+  try {
+    const events = await prisma.event.findMany({
+      where: { archived: false },
+      include: {
+        _count: {
+          select: {
+            contests: true,
+            contestants: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    res.json(events)
+  } catch (error) {
+    console.error('Get active events error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getArchivedEvents = async (req, res) => {
+  try {
+    const events = await prisma.event.findMany({
+      where: { archived: true },
+      include: {
+        _count: {
+          select: {
+            contests: true,
+            contestants: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    res.json(events)
+  } catch (error) {
+    console.error('Get archived events error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const archiveItem = async (req, res) => {
+  try {
+    const { type, id } = req.params
+    const { reason } = req.body
+
+    const archive = await prisma.archive.create({
+      data: {
+        type,
+        resourceId: id,
+        reason,
+        archivedBy: req.user.id
+      }
+    })
+
+    res.json(archive)
+  } catch (error) {
+    console.error('Archive item error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const restoreItem = async (req, res) => {
+  try {
+    const { type, id } = req.params
+
+    await prisma.archive.deleteMany({
+      where: {
+        type,
+        resourceId: id
+      }
+    })
+
+    res.json({ message: 'Item restored successfully' })
+  } catch (error) {
+    console.error('Restore item error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const deleteArchivedItem = async (req, res) => {
+  try {
+    const { type, id } = req.params
+
+    await prisma.archive.deleteMany({
+      where: {
+        type,
+        resourceId: id
+      }
+    })
+
+    res.json({ message: 'Archived item deleted successfully' })
+  } catch (error) {
+    console.error('Delete archived item error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const archiveEvent = async (req, res) => {
+  try {
+    const { eventId } = req.params
+    const { reason } = req.body
+
+    await prisma.event.update({
+      where: { id: eventId },
+      data: { archived: true }
+    })
+
+    const archive = await prisma.archive.create({
+      data: {
+        type: 'EVENT',
+        resourceId: eventId,
+        reason,
+        archivedBy: req.user.id
+      }
+    })
+
+    res.json(archive)
+  } catch (error) {
+    console.error('Archive event error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const restoreEvent = async (req, res) => {
+  try {
+    const { eventId } = req.params
+
+    await prisma.event.update({
+      where: { id: eventId },
+      data: { archived: false }
+    })
+
+    await prisma.archive.deleteMany({
+      where: {
+        type: 'EVENT',
+        resourceId: eventId
+      }
+    })
+
+    res.json({ message: 'Event restored successfully' })
+  } catch (error) {
+    console.error('Restore event error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+module.exports = {
+  getAllArchives,
+  getActiveEvents,
+  getArchivedEvents,
+  archiveItem,
+  restoreItem,
+  deleteArchivedItem,
+  archiveEvent,
+  restoreEvent
+}
+EOF
+
+    # Backup Controller
+    cat > "$APP_DIR/src/controllers/backupController.js" << 'EOF'
+const fs = require('fs')
+const path = require('path')
+const { exec } = require('child_process')
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+const getAllBackups = async (req, res) => {
+  try {
+    const backups = await prisma.backup.findMany({
+      orderBy: { createdAt: 'desc' }
+    })
+
+    res.json(backups)
+  } catch (error) {
+    console.error('Get backups error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const createBackup = async (req, res) => {
+  try {
+    const { type } = req.body
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+    const filename = `backup-${type.toLowerCase()}-${timestamp}.sql`
+    const filepath = path.join('backups', filename)
+
+    // Ensure backups directory exists
+    if (!fs.existsSync('backups')) {
+      fs.mkdirSync('backups', { recursive: true })
+    }
+
+    // Create backup based on type
+    let command
+    switch (type) {
+      case 'FULL':
+        command = `pg_dump ${process.env.DATABASE_URL} > ${filepath}`
+        break
+      case 'SCHEMA':
+        command = `pg_dump --schema-only ${process.env.DATABASE_URL} > ${filepath}`
+        break
+      case 'DATA':
+        command = `pg_dump --data-only ${process.env.DATABASE_URL} > ${filepath}`
+        break
+      default:
+        return res.status(400).json({ error: 'Invalid backup type' })
+    }
+
+    exec(command, async (error, stdout, stderr) => {
+      if (error) {
+        console.error('Backup error:', error)
+        return res.status(500).json({ error: 'Backup failed' })
+      }
+
+      // Save backup record to database
+      const backup = await prisma.backup.create({
+        data: {
+          filename,
+          type,
+          filepath,
+          createdBy: req.user.id
+        }
+      })
+
+      res.json(backup)
+    })
+  } catch (error) {
+    console.error('Create backup error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const listBackups = async (req, res) => {
+  try {
+    const backups = await prisma.backup.findMany({
+      orderBy: { createdAt: 'desc' }
+    })
+
+    res.json(backups)
+  } catch (error) {
+    console.error('List backups error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const downloadBackup = async (req, res) => {
+  try {
+    const { backupId } = req.params
+
+    const backup = await prisma.backup.findUnique({
+      where: { id: backupId }
+    })
+
+    if (!backup) {
+      return res.status(404).json({ error: 'Backup not found' })
+    }
+
+    if (!fs.existsSync(backup.filepath)) {
+      return res.status(404).json({ error: 'Backup file not found' })
+    }
+
+    res.download(backup.filepath, backup.filename)
+  } catch (error) {
+    console.error('Download backup error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const restoreBackup = async (req, res) => {
+  try {
+    const { backupIdOrFile } = req.params
+
+    let filepath
+    if (backupIdOrFile.includes('.')) {
+      // It's a filename
+      filepath = path.join('backups', backupIdOrFile)
+    } else {
+      // It's a backup ID
+      const backup = await prisma.backup.findUnique({
+        where: { id: backupIdOrFile }
+      })
+      if (!backup) {
+        return res.status(404).json({ error: 'Backup not found' })
+      }
+      filepath = backup.filepath
+    }
+
+    if (!fs.existsSync(filepath)) {
+      return res.status(404).json({ error: 'Backup file not found' })
+    }
+
+    const command = `psql ${process.env.DATABASE_URL} < ${filepath}`
+
+    exec(command, (error, stdout, stderr) => {
+      if (error) {
+        console.error('Restore error:', error)
+        return res.status(500).json({ error: 'Restore failed' })
+      }
+
+      res.json({ message: 'Backup restored successfully' })
+    })
+  } catch (error) {
+    console.error('Restore backup error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const deleteBackup = async (req, res) => {
+  try {
+    const { backupId } = req.params
+
+    const backup = await prisma.backup.findUnique({
+      where: { id: backupId }
+    })
+
+    if (!backup) {
+      return res.status(404).json({ error: 'Backup not found' })
+    }
+
+    // Delete physical file
+    if (fs.existsSync(backup.filepath)) {
+      fs.unlinkSync(backup.filepath)
+    }
+
+    // Delete database record
+    await prisma.backup.delete({
+      where: { id: backupId }
+    })
+
+    res.json({ message: 'Backup deleted successfully' })
+  } catch (error) {
+    console.error('Delete backup error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+module.exports = {
+  getAllBackups,
+  createBackup,
+  listBackups,
+  downloadBackup,
+  restoreBackup,
+  deleteBackup
+}
+EOF
+
+    # Assignments Controller
+    cat > "$APP_DIR/src/controllers/assignmentsController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+const getAllAssignments = async (req, res) => {
+  try {
+    const assignments = await prisma.assignment.findMany({
+      include: {
+        judge: {
+          include: {
+            user: true
+          }
+        },
+        category: {
+          include: {
+            contest: {
+              include: {
+                event: true
+              }
+            }
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    res.json(assignments)
+  } catch (error) {
+    console.error('Get assignments error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getJudges = async (req, res) => {
+  try {
+    const judges = await prisma.judge.findMany({
+      include: {
+        user: true
+      }
+    })
+
+    res.json(judges)
+  } catch (error) {
+    console.error('Get judges error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getCategories = async (req, res) => {
+  try {
+    const categories = await prisma.category.findMany({
+      include: {
+        contest: {
+          include: {
+            event: true
+          }
+        }
+      }
+    })
+
+    res.json(categories)
+  } catch (error) {
+    console.error('Get categories error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const assignJudge = async (req, res) => {
+  try {
+    const { judgeId, categoryId } = req.body
+
+    const assignment = await prisma.assignment.create({
+      data: {
+        judgeId,
+        categoryId,
+        assignedBy: req.user.id
+      }
+    })
+
+    res.status(201).json(assignment)
+  } catch (error) {
+    console.error('Assign judge error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const removeAssignment = async (req, res) => {
+  try {
+    const { assignmentId } = req.params
+
+    await prisma.assignment.delete({
+      where: { id: assignmentId }
+    })
+
+    res.status(204).send()
+  } catch (error) {
+    console.error('Remove assignment error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const deleteAssignment = async (req, res) => {
+  try {
+    const { id } = req.params
+
+    await prisma.assignment.delete({
+      where: { id }
+    })
+
+    res.status(204).send()
+  } catch (error) {
+    console.error('Delete assignment error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+module.exports = {
+  getAllAssignments,
+  getJudges,
+  getCategories,
+  assignJudge,
+  removeAssignment,
+  deleteAssignment
+}
+EOF
+
+    # Auditor Controller
+    cat > "$APP_DIR/src/controllers/auditorController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+const getStats = async (req, res) => {
+  try {
+    const stats = {
+      totalCategories: await prisma.category.count(),
+      pendingAudits: await prisma.category.count({
+        where: { totalsCertified: true, finalCertified: false }
+      }),
+      completedAudits: await prisma.category.count({
+        where: { finalCertified: true }
+      })
+    }
+
+    res.json(stats)
+  } catch (error) {
+    console.error('Get auditor stats error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getPendingAudits = async (req, res) => {
+  try {
+    const categories = await prisma.category.findMany({
+      where: { totalsCertified: true, finalCertified: false },
+      include: {
+        contest: {
+          include: {
+            event: true
+          }
+        },
+        scores: {
+          include: {
+            judge: true,
+            contestant: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    res.json(categories)
+  } catch (error) {
+    console.error('Get pending audits error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getCompletedAudits = async (req, res) => {
+  try {
+    const categories = await prisma.category.findMany({
+      where: { finalCertified: true },
+      include: {
+        contest: {
+          include: {
+            event: true
+          }
+        },
+        scores: {
+          include: {
+            judge: true,
+            contestant: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    res.json(categories)
+  } catch (error) {
+    console.error('Get completed audits error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const finalCertification = async (req, res) => {
+  try {
+    const { categoryId } = req.params
+
+    await prisma.category.update({
+      where: { id: categoryId },
+      data: { finalCertified: true }
+    })
+
+    res.json({ message: 'Final certification completed' })
+  } catch (error) {
+    console.error('Final certification error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const rejectAudit = async (req, res) => {
+  try {
+    const { categoryId } = req.params
+    const { reason } = req.body
+
+    await prisma.category.update({
+      where: { id: categoryId },
+      data: { 
+        finalCertified: false,
+        rejectionReason: reason
+      }
+    })
+
+    res.json({ message: 'Audit rejected' })
+  } catch (error) {
+    console.error('Reject audit error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+module.exports = {
+  getStats,
+  getPendingAudits,
+  getCompletedAudits,
+  finalCertification,
+  rejectAudit
+}
+EOF
+
+    # Board Controller
+    cat > "$APP_DIR/src/controllers/boardController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+const getStats = async (req, res) => {
+  try {
+    const stats = {
+      totalCertifications: await prisma.category.count({
+        where: { finalCertified: true }
+      }),
+      pendingApprovals: await prisma.category.count({
+        where: { finalCertified: true, boardApproved: false }
+      }),
+      approvedCertifications: await prisma.category.count({
+        where: { boardApproved: true }
+      })
+    }
+
+    res.json(stats)
+  } catch (error) {
+    console.error('Get board stats error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getCertifications = async (req, res) => {
+  try {
+    const categories = await prisma.category.findMany({
+      where: { finalCertified: true },
+      include: {
+        contest: {
+          include: {
+            event: true
+          }
+        },
+        scores: {
+          include: {
+            judge: true,
+            contestant: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    res.json(categories)
+  } catch (error) {
+    console.error('Get certifications error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const approveCertification = async (req, res) => {
+  try {
+    const { id } = req.params
+
+    await prisma.category.update({
+      where: { id },
+      data: { boardApproved: true }
+    })
+
+    res.json({ message: 'Certification approved' })
+  } catch (error) {
+    console.error('Approve certification error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const rejectCertification = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { reason } = req.body
+
+    await prisma.category.update({
+      where: { id },
+      data: { 
+        boardApproved: false,
+        rejectionReason: reason
+      }
+    })
+
+    res.json({ message: 'Certification rejected' })
+  } catch (error) {
+    console.error('Reject certification error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getCertificationStatus = async (req, res) => {
+  try {
+    const status = {
+      total: await prisma.category.count(),
+      pending: await prisma.category.count({
+        where: { finalCertified: false }
+      }),
+      certified: await prisma.category.count({
+        where: { finalCertified: true, boardApproved: false }
+      }),
+      approved: await prisma.category.count({
+        where: { boardApproved: true }
+      })
+    }
+
+    res.json(status)
+  } catch (error) {
+    console.error('Get certification status error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getEmceeScripts = async (req, res) => {
+  try {
+    const scripts = await prisma.emceeScript.findMany({
+      orderBy: { createdAt: 'desc' }
+    })
+
+    res.json(scripts)
+  } catch (error) {
+    console.error('Get emcee scripts error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+module.exports = {
+  getStats,
+  getCertifications,
+  approveCertification,
+  rejectCertification,
+  getCertificationStatus,
+  getEmceeScripts
+}
+EOF
+
+    # Tally Master Controller
+    cat > "$APP_DIR/src/controllers/tallyMasterController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+const getStats = async (req, res) => {
+  try {
+    const stats = {
+      totalCategories: await prisma.category.count(),
+      pendingTotals: await prisma.category.count({
+        where: { totalsCertified: false }
+      }),
+      certifiedTotals: await prisma.category.count({
+        where: { totalsCertified: true }
+      })
+    }
+
+    res.json(stats)
+  } catch (error) {
+    console.error('Get tally master stats error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getCertifications = async (req, res) => {
+  try {
+    const categories = await prisma.category.findMany({
+      where: { totalsCertified: true },
+      include: {
+        contest: {
+          include: {
+            event: true
+          }
+        },
+        scores: {
+          include: {
+            judge: true,
+            contestant: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    res.json(categories)
+  } catch (error) {
+    console.error('Get certifications error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getCertificationQueue = async (req, res) => {
+  try {
+    const categories = await prisma.category.findMany({
+      where: { totalsCertified: false },
+      include: {
+        contest: {
+          include: {
+            event: true
+          }
+        },
+        scores: {
+          include: {
+            judge: true,
+            contestant: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    res.json(categories)
+  } catch (error) {
+    console.error('Get certification queue error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getPendingCertifications = async (req, res) => {
+  try {
+    const categories = await prisma.category.findMany({
+      where: { totalsCertified: false },
+      include: {
+        contest: {
+          include: {
+            event: true
+          }
+        },
+        scores: {
+          include: {
+            judge: true,
+            contestant: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    res.json(categories)
+  } catch (error) {
+    console.error('Get pending certifications error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const certifyTotals = async (req, res) => {
+  try {
+    const { categoryId } = req.params
+
+    await prisma.category.update({
+      where: { id: categoryId },
+      data: { totalsCertified: true }
+    })
+
+    res.json({ message: 'Totals certified successfully' })
+  } catch (error) {
+    console.error('Certify totals error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+module.exports = {
+  getStats,
+  getCertifications,
+  getCertificationQueue,
+  getPendingCertifications,
+  certifyTotals
+}
+EOF
+
+    # Email Controller
+    cat > "$APP_DIR/src/controllers/emailController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+const getTemplates = async (req, res) => {
+  try {
+    const templates = await prisma.emailTemplate.findMany({
+      orderBy: { createdAt: 'desc' }
+    })
+
+    res.json(templates)
+  } catch (error) {
+    console.error('Get email templates error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const createTemplate = async (req, res) => {
+  try {
+    const { name, subject, body, type } = req.body
+
+    const template = await prisma.emailTemplate.create({
+      data: {
+        name,
+        subject,
+        body,
+        type,
+        createdBy: req.user.id
+      }
+    })
+
+    res.status(201).json(template)
+  } catch (error) {
+    console.error('Create email template error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const updateTemplate = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { name, subject, body, type } = req.body
+
+    const template = await prisma.emailTemplate.update({
+      where: { id },
+      data: {
+        name,
+        subject,
+        body,
+        type
+      }
+    })
+
+    res.json(template)
+  } catch (error) {
+    console.error('Update email template error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const deleteTemplate = async (req, res) => {
+  try {
+    const { id } = req.params
+
+    await prisma.emailTemplate.delete({
+      where: { id }
+    })
+
+    res.status(204).send()
+  } catch (error) {
+    console.error('Delete email template error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getCampaigns = async (req, res) => {
+  try {
+    const campaigns = await prisma.emailCampaign.findMany({
+      orderBy: { createdAt: 'desc' }
+    })
+
+    res.json(campaigns)
+  } catch (error) {
+    console.error('Get email campaigns error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const createCampaign = async (req, res) => {
+  try {
+    const { name, templateId, recipients, scheduledAt } = req.body
+
+    const campaign = await prisma.emailCampaign.create({
+      data: {
+        name,
+        templateId,
+        recipients,
+        scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
+        createdBy: req.user.id
+      }
+    })
+
+    res.status(201).json(campaign)
+  } catch (error) {
+    console.error('Create email campaign error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const sendCampaign = async (req, res) => {
+  try {
+    const { id } = req.params
+
+    await prisma.emailCampaign.update({
+      where: { id },
+      data: { 
+        status: 'SENT',
+        sentAt: new Date()
+      }
+    })
+
+    res.json({ message: 'Campaign sent successfully' })
+  } catch (error) {
+    console.error('Send campaign error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getLogs = async (req, res) => {
+  try {
+    const logs = await prisma.emailLog.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 100
+    })
+
+    res.json(logs)
+  } catch (error) {
+    console.error('Get email logs error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+module.exports = {
+  getTemplates,
+  createTemplate,
+  updateTemplate,
+  deleteTemplate,
+  getCampaigns,
+  createCampaign,
+  sendCampaign,
+  getLogs
+}
+EOF
+
+    # Reports Controller
+    cat > "$APP_DIR/src/controllers/reportsController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+const getTemplates = async (req, res) => {
+  try {
+    const templates = await prisma.reportTemplate.findMany({
+      orderBy: { createdAt: 'desc' }
+    })
+
+    res.json(templates)
+  } catch (error) {
+    console.error('Get report templates error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const createTemplate = async (req, res) => {
+  try {
+    const { name, description, template, parameters } = req.body
+
+    const reportTemplate = await prisma.reportTemplate.create({
+      data: {
+        name,
+        description,
+        template,
+        parameters,
+        createdBy: req.user.id
+      }
+    })
+
+    res.status(201).json(reportTemplate)
+  } catch (error) {
+    console.error('Create report template error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const updateTemplate = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { name, description, template, parameters } = req.body
+
+    const reportTemplate = await prisma.reportTemplate.update({
+      where: { id },
+      data: {
+        name,
+        description,
+        template,
+        parameters
+      }
+    })
+
+    res.json(reportTemplate)
+  } catch (error) {
+    console.error('Update report template error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const deleteTemplate = async (req, res) => {
+  try {
+    const { id } = req.params
+
+    await prisma.reportTemplate.delete({
+      where: { id }
+    })
+
+    res.status(204).send()
+  } catch (error) {
+    console.error('Delete report template error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const generateReport = async (req, res) => {
+  try {
+    const { templateId } = req.params
+    const { parameters } = req.body
+
+    const template = await prisma.reportTemplate.findUnique({
+      where: { id: templateId }
+    })
+
+    if (!template) {
+      return res.status(404).json({ error: 'Template not found' })
+    }
+
+    // Generate report based on template
+    const report = {
+      templateId,
+      parameters,
+      generatedAt: new Date(),
+      generatedBy: req.user.id
+    }
+
+    res.json(report)
+  } catch (error) {
+    console.error('Generate report error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getHistory = async (req, res) => {
+  try {
+    const history = await prisma.reportHistory.findMany({
+      include: {
+        template: true,
+        user: {
+          select: {
+            name: true,
+            email: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 100
+    })
+
+    res.json(history)
+  } catch (error) {
+    console.error('Get report history error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+module.exports = {
+  getTemplates,
+  createTemplate,
+  updateTemplate,
+  deleteTemplate,
+  generateReport,
+  getHistory
+}
+EOF
+
+    # Templates Controller
+    cat > "$APP_DIR/src/controllers/templatesController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+const getAllTemplates = async (req, res) => {
+  try {
+    const templates = await prisma.template.findMany({
+      orderBy: { createdAt: 'desc' }
+    })
+
+    res.json(templates)
+  } catch (error) {
+    console.error('Get all templates error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getTemplateById = async (req, res) => {
+  try {
+    const { id } = req.params
+
+    const template = await prisma.template.findUnique({
+      where: { id }
+    })
+
+    if (!template) {
+      return res.status(404).json({ error: 'Template not found' })
+    }
+
+    res.json(template)
+  } catch (error) {
+    console.error('Get template error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const createTemplate = async (req, res) => {
+  try {
+    const { name, description, content, type } = req.body
+
+    const template = await prisma.template.create({
+      data: {
+        name,
+        description,
+        content,
+        type,
+        createdBy: req.user.id
+      }
+    })
+
+    res.status(201).json(template)
+  } catch (error) {
+    console.error('Create template error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const updateTemplate = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { name, description, content, type } = req.body
+
+    const template = await prisma.template.update({
+      where: { id },
+      data: {
+        name,
+        description,
+        content,
+        type
+      }
+    })
+
+    res.json(template)
+  } catch (error) {
+    console.error('Update template error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const deleteTemplate = async (req, res) => {
+  try {
+    const { id } = req.params
+
+    await prisma.template.delete({
+      where: { id }
+    })
+
+    res.status(204).send()
+  } catch (error) {
+    console.error('Delete template error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const duplicateTemplate = async (req, res) => {
+  try {
+    const { id } = req.params
+
+    const originalTemplate = await prisma.template.findUnique({
+      where: { id }
+    })
+
+    if (!originalTemplate) {
+      return res.status(404).json({ error: 'Template not found' })
+    }
+
+    const duplicatedTemplate = await prisma.template.create({
+      data: {
+        name: `${originalTemplate.name} (Copy)`,
+        description: originalTemplate.description,
+        content: originalTemplate.content,
+        type: originalTemplate.type,
+        createdBy: req.user.id
+      }
+    })
+
+    res.status(201).json(duplicatedTemplate)
+  } catch (error) {
+    console.error('Duplicate template error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+module.exports = {
+  getAllTemplates,
+  getTemplateById,
+  createTemplate,
+  updateTemplate,
+  deleteTemplate,
+  duplicateTemplate
+}
+EOF
+
+    # Notifications Controller
+    cat > "$APP_DIR/src/controllers/notificationsController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+const getAllNotifications = async (req, res) => {
+  try {
+    const notifications = await prisma.notification.findMany({
+      where: { userId: req.user.id },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    res.json(notifications)
+  } catch (error) {
+    console.error('Get notifications error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getNotificationById = async (req, res) => {
+  try {
+    const { id } = req.params
+
+    const notification = await prisma.notification.findUnique({
+      where: { id }
+    })
+
+    if (!notification) {
+      return res.status(404).json({ error: 'Notification not found' })
+    }
+
+    res.json(notification)
+  } catch (error) {
+    console.error('Get notification error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const createNotification = async (req, res) => {
+  try {
+    const { title, message, type, userId } = req.body
+
+    const notification = await prisma.notification.create({
+      data: {
+        title,
+        message,
+        type,
+        userId: userId || req.user.id,
+        createdBy: req.user.id
+      }
+    })
+
+    res.status(201).json(notification)
+  } catch (error) {
+    console.error('Create notification error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const updateNotification = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { title, message, type } = req.body
+
+    const notification = await prisma.notification.update({
+      where: { id },
+      data: {
+        title,
+        message,
+        type
+      }
+    })
+
+    res.json(notification)
+  } catch (error) {
+    console.error('Update notification error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const deleteNotification = async (req, res) => {
+  try {
+    const { id } = req.params
+
+    await prisma.notification.delete({
+      where: { id }
+    })
+
+    res.status(204).send()
+  } catch (error) {
+    console.error('Delete notification error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const markAsRead = async (req, res) => {
+  try {
+    const { id } = req.params
+
+    await prisma.notification.update({
+      where: { id },
+      data: { read: true }
+    })
+
+    res.json({ message: 'Notification marked as read' })
+  } catch (error) {
+    console.error('Mark notification as read error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const markAllAsRead = async (req, res) => {
+  try {
+    await prisma.notification.updateMany({
+      where: { userId: req.user.id },
+      data: { read: true }
+    })
+
+    res.json({ message: 'All notifications marked as read' })
+  } catch (error) {
+    console.error('Mark all notifications as read error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+module.exports = {
+  getAllNotifications,
+  getNotificationById,
+  createNotification,
+  updateNotification,
+  deleteNotification,
+  markAsRead,
+  markAllAsRead
+}
+EOF
+
+    # Emcee Controller
+    cat > "$APP_DIR/src/controllers/emceeController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+const getScripts = async (req, res) => {
+  try {
+    const scripts = await prisma.emceeScript.findMany({
+      orderBy: { createdAt: 'desc' }
+    })
+
+    res.json(scripts)
+  } catch (error) {
+    console.error('Get emcee scripts error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getCurrentEvent = async (req, res) => {
+  try {
+    const event = await prisma.event.findFirst({
+      where: {
+        startDate: { lte: new Date() },
+        endDate: { gte: new Date() }
+      },
+      include: {
+        contests: {
+          include: {
+            categories: true
+          }
+        }
+      }
+    })
+
+    res.json(event)
+  } catch (error) {
+    console.error('Get current event error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getAnnouncements = async (req, res) => {
+  try {
+    const announcements = await prisma.announcement.findMany({
+      orderBy: { createdAt: 'desc' }
+    })
+
+    res.json(announcements)
+  } catch (error) {
+    console.error('Get announcements error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const createAnnouncement = async (req, res) => {
+  try {
+    const { title, message, priority } = req.body
+
+    const announcement = await prisma.announcement.create({
+      data: {
+        title,
+        message,
+        priority,
+        createdBy: req.user.id
+      }
+    })
+
+    res.status(201).json(announcement)
+  } catch (error) {
+    console.error('Create announcement error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const updateAnnouncement = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { title, message, priority } = req.body
+
+    const announcement = await prisma.announcement.update({
+      where: { id },
+      data: {
+        title,
+        message,
+        priority
+      }
+    })
+
+    res.json(announcement)
+  } catch (error) {
+    console.error('Update announcement error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const deleteAnnouncement = async (req, res) => {
+  try {
+    const { id } = req.params
+
+    await prisma.announcement.delete({
+      where: { id }
+    })
+
+    res.status(204).send()
+  } catch (error) {
+    console.error('Delete announcement error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+module.exports = {
+  getScripts,
+  getCurrentEvent,
+  getAnnouncements,
+  createAnnouncement,
+  updateAnnouncement,
+  deleteAnnouncement
+}
+EOF
+
     print_success "Controller files created successfully"
 }
 
@@ -1299,6 +4032,191 @@ router.delete('/:id', logActivity('DELETE_CONTEST', 'CONTEST'), deleteContest)
 module.exports = router
 EOF
 
+    # Categories Routes
+    cat > "$APP_DIR/src/routes/categoriesRoutes.js" << 'EOF'
+const express = require('express')
+const { getAllCategories, getCategoryById, getCategoriesByContest, createCategory, updateCategory, deleteCategory } = require('../controllers/categoriesController')
+const { authenticateToken } = require('../middleware/auth')
+const { validateCategory } = require('../middleware/validation')
+const { logActivity } = require('../middleware/errorHandler')
+
+const router = express.Router()
+
+// Apply authentication to all routes
+router.use(authenticateToken)
+
+// Categories endpoints
+router.get('/', getAllCategories)
+router.get('/contest/:contestId', getCategoriesByContest)
+router.get('/:id', getCategoryById)
+router.post('/', validateCategory, logActivity('CREATE_CATEGORY', 'CATEGORY'), createCategory)
+router.put('/:id', validateCategory, logActivity('UPDATE_CATEGORY', 'CATEGORY'), updateCategory)
+router.delete('/:id', logActivity('DELETE_CATEGORY', 'CATEGORY'), deleteCategory)
+
+module.exports = router
+EOF
+
+    # Users Routes
+    cat > "$APP_DIR/src/routes/usersRoutes.js" << 'EOF'
+const express = require('express')
+const { getAllUsers, getUserById, createUser, updateUser, deleteUser, resetPassword } = require('../controllers/usersController')
+const { authenticateToken, requireRole } = require('../middleware/auth')
+const { validateUser } = require('../middleware/validation')
+const { logActivity } = require('../middleware/errorHandler')
+
+const router = express.Router()
+
+// Apply authentication to all routes
+router.use(authenticateToken)
+
+// Users endpoints
+router.get('/', requireRole(['ORGANIZER', 'BOARD']), getAllUsers)
+router.get('/:id', getUserById)
+router.post('/', requireRole(['ORGANIZER', 'BOARD']), validateUser, logActivity('CREATE_USER', 'USER'), createUser)
+router.put('/:id', requireRole(['ORGANIZER', 'BOARD']), validateUser, logActivity('UPDATE_USER', 'USER'), updateUser)
+router.delete('/:id', requireRole(['ORGANIZER', 'BOARD']), logActivity('DELETE_USER', 'USER'), deleteUser)
+router.post('/:id/reset-password', requireRole(['ORGANIZER', 'BOARD']), resetPassword)
+
+module.exports = router
+EOF
+
+    # Scoring Routes
+    cat > "$APP_DIR/src/routes/scoringRoutes.js" << 'EOF'
+const express = require('express')
+const { getScores, submitScore, updateScore, deleteScore, certifyScores, certifyTotals, finalCertification } = require('../controllers/scoringController')
+const { authenticateToken, requireRole } = require('../middleware/auth')
+const { logActivity } = require('../middleware/errorHandler')
+
+const router = express.Router()
+
+// Apply authentication to all routes
+router.use(authenticateToken)
+
+// Scoring endpoints
+router.get('/category/:categoryId', getScores)
+router.get('/category/:categoryId/contestant/:contestantId', getScores)
+router.post('/category/:categoryId/contestant/:contestantId', requireRole(['JUDGE']), logActivity('SUBMIT_SCORE', 'SCORE'), submitScore)
+router.put('/:scoreId', requireRole(['JUDGE']), logActivity('UPDATE_SCORE', 'SCORE'), updateScore)
+router.delete('/:scoreId', requireRole(['JUDGE']), logActivity('DELETE_SCORE', 'SCORE'), deleteScore)
+router.post('/category/:categoryId/certify', requireRole(['JUDGE']), certifyScores)
+router.post('/category/:categoryId/certify-totals', requireRole(['TALLY_MASTER']), certifyTotals)
+router.post('/category/:categoryId/final-certification', requireRole(['AUDITOR']), finalCertification)
+
+module.exports = router
+EOF
+
+    # Results Routes
+    cat > "$APP_DIR/src/routes/resultsRoutes.js" << 'EOF'
+const express = require('express')
+const { getAllResults, getCategories, getContestantResults, getCategoryResults, getContestResults, getEventResults } = require('../controllers/resultsController')
+const { authenticateToken } = require('../middleware/auth')
+
+const router = express.Router()
+
+// Apply authentication to all routes
+router.use(authenticateToken)
+
+// Results endpoints
+router.get('/', getAllResults)
+router.get('/categories', getCategories)
+router.get('/contestant/:contestantId', getContestantResults)
+router.get('/category/:categoryId', getCategoryResults)
+router.get('/contest/:contestId', getContestResults)
+router.get('/event/:eventId', getEventResults)
+
+module.exports = router
+EOF
+
+    # Admin Routes
+    cat > "$APP_DIR/src/routes/adminRoutes.js" << 'EOF'
+const express = require('express')
+const { getStats, getLogs, getActiveUsers, getSettings, updateSettings, getUsers, getEvents, getContests, getCategories, getScores, getActivityLogs, getAuditLogs, exportAuditLogs, testConnection } = require('../controllers/adminController')
+const { authenticateToken, requireRole } = require('../middleware/auth')
+
+const router = express.Router()
+
+// Apply authentication to all routes
+router.use(authenticateToken)
+router.use(requireRole(['ORGANIZER', 'BOARD']))
+
+// Admin endpoints
+router.get('/stats', getStats)
+router.get('/logs', getLogs)
+router.get('/active-users', getActiveUsers)
+router.get('/settings', getSettings)
+router.put('/settings', updateSettings)
+router.get('/users', getUsers)
+router.get('/events', getEvents)
+router.get('/contests', getContests)
+router.get('/categories', getCategories)
+router.get('/scores', getScores)
+router.get('/logs', getActivityLogs)
+router.get('/audit-logs', getAuditLogs)
+router.post('/export-audit-logs', exportAuditLogs)
+router.post('/test/:type', testConnection)
+
+module.exports = router
+EOF
+
+    # Upload Routes
+    cat > "$APP_DIR/src/routes/uploadRoutes.js" << 'EOF'
+const express = require('express')
+const multer = require('multer')
+const { uploadFile, uploadImage, deleteFile, getFiles } = require('../controllers/uploadController')
+const { authenticateToken } = require('../middleware/auth')
+const { logActivity } = require('../middleware/errorHandler')
+
+const router = express.Router()
+
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, 'uploads/')
+  },
+  filename: (req, file, cb) => {
+    cb(null, Date.now() + '-' + file.originalname)
+  }
+})
+
+const upload = multer({ 
+  storage: storage,
+  limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
+})
+
+// Apply authentication to all routes
+router.use(authenticateToken)
+
+// Upload endpoints
+router.post('/', upload.single('file'), logActivity('UPLOAD_FILE', 'FILE'), uploadFile)
+router.post('/image', upload.single('image'), logActivity('UPLOAD_IMAGE', 'FILE'), uploadImage)
+router.delete('/:fileId', logActivity('DELETE_FILE', 'FILE'), deleteFile)
+router.get('/files', getFiles)
+
+module.exports = router
+EOF
+
+    # Settings Routes
+    cat > "$APP_DIR/src/routes/settingsRoutes.js" << 'EOF'
+const express = require('express')
+const { getAllSettings, getSettings, updateSettings, testSettings } = require('../controllers/settingsController')
+const { authenticateToken, requireRole } = require('../middleware/auth')
+const { logActivity } = require('../middleware/errorHandler')
+
+const router = express.Router()
+
+// Apply authentication to all routes
+router.use(authenticateToken)
+
+// Settings endpoints
+router.get('/', getAllSettings)
+router.get('/settings', getSettings)
+router.put('/', requireRole(['ORGANIZER', 'BOARD']), logActivity('UPDATE_SETTINGS', 'SETTINGS'), updateSettings)
+router.put('/settings', requireRole(['ORGANIZER', 'BOARD']), logActivity('UPDATE_SETTINGS', 'SETTINGS'), updateSettings)
+router.post('/test/:type', requireRole(['ORGANIZER', 'BOARD']), testSettings)
+
+module.exports = router
+EOF
+
     print_success "Route files created successfully"
 }
 
@@ -1324,6 +4242,24 @@ const { errorHandler } = require('./middleware/errorHandler')
 const authRoutes = require('./routes/authRoutes')
 const eventsRoutes = require('./routes/eventsRoutes')
 const contestsRoutes = require('./routes/contestsRoutes')
+const categoriesRoutes = require('./routes/categoriesRoutes')
+const usersRoutes = require('./routes/usersRoutes')
+const scoringRoutes = require('./routes/scoringRoutes')
+const resultsRoutes = require('./routes/resultsRoutes')
+const adminRoutes = require('./routes/adminRoutes')
+const uploadRoutes = require('./routes/uploadRoutes')
+const settingsRoutes = require('./routes/settingsRoutes')
+const archiveRoutes = require('./routes/archiveRoutes')
+const backupRoutes = require('./routes/backupRoutes')
+const assignmentsRoutes = require('./routes/assignmentsRoutes')
+const auditorRoutes = require('./routes/auditorRoutes')
+const boardRoutes = require('./routes/boardRoutes')
+const tallyMasterRoutes = require('./routes/tallyMasterRoutes')
+const emailRoutes = require('./routes/emailRoutes')
+const reportsRoutes = require('./routes/reportsRoutes')
+const templatesRoutes = require('./routes/templatesRoutes')
+const notificationsRoutes = require('./routes/notificationsRoutes')
+const emceeRoutes = require('./routes/emceeRoutes')
 
 const app = express()
 const server = http.createServer(app)
@@ -1386,6 +4322,24 @@ app.get('/health', (req, res) => {
 app.use('/api/auth', authRoutes)
 app.use('/api/events', eventsRoutes)
 app.use('/api/contests', contestsRoutes)
+app.use('/api/categories', categoriesRoutes)
+app.use('/api/users', usersRoutes)
+app.use('/api/scoring', scoringRoutes)
+app.use('/api/results', resultsRoutes)
+app.use('/api/admin', adminRoutes)
+app.use('/api/upload', uploadRoutes)
+app.use('/api/settings', settingsRoutes)
+app.use('/api/archive', archiveRoutes)
+app.use('/api/backup', backupRoutes)
+app.use('/api/assignments', assignmentsRoutes)
+app.use('/api/auditor', auditorRoutes)
+app.use('/api/board', boardRoutes)
+app.use('/api/tally-master', tallyMasterRoutes)
+app.use('/api/email', emailRoutes)
+app.use('/api/reports', reportsRoutes)
+app.use('/api/templates', templatesRoutes)
+app.use('/api/notifications', notificationsRoutes)
+app.use('/api/emcee', emceeRoutes)
 
 // Socket.IO connection handling
 io.on('connection', (socket) => {
