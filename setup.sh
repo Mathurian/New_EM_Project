@@ -11880,21 +11880,28 @@ const {
 } = require('../controllers/assignmentsController')
 const { authenticateToken, requireRole } = require('../middleware/auth')
 const { logActivity } = require('../middleware/errorHandler')
+const {
+  validateAssignmentCreation,
+  validateAssignmentUpdate,
+  validateAssignmentDeletion,
+  validateBulkAssignmentOperation,
+  validateAssignmentQuery
+} = require('../middleware/assignmentValidation')
 
 const router = express.Router()
 
 // Apply authentication to all routes
 router.use(authenticateToken)
 
-// Assignment endpoints
-router.get('/', getAllAssignments)
-router.post('/', requireRole(['ORGANIZER', 'BOARD']), logActivity('CREATE_ASSIGNMENT', 'ASSIGNMENT'), createAssignment)
-router.put('/:id', requireRole(['ORGANIZER', 'BOARD']), logActivity('UPDATE_ASSIGNMENT', 'ASSIGNMENT'), updateAssignment)
-router.delete('/:id', requireRole(['ORGANIZER', 'BOARD']), logActivity('DELETE_ASSIGNMENT', 'ASSIGNMENT'), deleteAssignment)
+// Assignment endpoints with validation
+router.get('/', validateAssignmentQuery, getAllAssignments)
+router.post('/', validateAssignmentCreation, requireRole(['ORGANIZER', 'BOARD']), logActivity('CREATE_ASSIGNMENT', 'ASSIGNMENT'), createAssignment)
+router.put('/:id', validateAssignmentUpdate, requireRole(['ORGANIZER', 'BOARD']), logActivity('UPDATE_ASSIGNMENT', 'ASSIGNMENT'), updateAssignment)
+router.delete('/:id', validateAssignmentDeletion, requireRole(['ORGANIZER', 'BOARD']), logActivity('DELETE_ASSIGNMENT', 'ASSIGNMENT'), deleteAssignment)
 
 // Judge-specific endpoints
 router.get('/judges', getJudges)
-router.get('/judges/:judgeId', getJudgeAssignments)
+router.get('/judges/:judgeId', validateAssignmentQuery, getJudgeAssignments)
 router.get('/categories', getCategories)
 
 // Legacy endpoints for backward compatibility
@@ -13502,6 +13509,1594 @@ module.exports = {
 }
 EOF
 
+    # Assignment Validation Middleware
+    cat > "$APP_DIR/src/middleware/assignmentValidation.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+// Assignment Validation Middleware Functions
+
+// Validate assignment creation
+const validateAssignmentCreation = async (req, res, next) => {
+  try {
+    const { judgeId, categoryId, eventId, contestId } = req.body
+
+    // Check if judge exists and has JUDGE role
+    const judge = await prisma.user.findUnique({
+      where: { id: judgeId },
+      include: { judge: true }
+    })
+
+    if (!judge) {
+      return res.status(404).json({ error: 'Judge not found' })
+    }
+
+    if (judge.role !== 'JUDGE') {
+      return res.status(400).json({ error: 'User must have JUDGE role to be assigned' })
+    }
+
+    // Check if category exists
+    const category = await prisma.category.findUnique({
+      where: { id: categoryId },
+      include: {
+        contest: {
+          include: {
+            event: true
+          }
+        }
+      }
+    })
+
+    if (!category) {
+      return res.status(404).json({ error: 'Category not found' })
+    }
+
+    // Validate event and contest relationships
+    if (eventId && category.contest.eventId !== eventId) {
+      return res.status(400).json({ error: 'Category does not belong to the specified event' })
+    }
+
+    if (contestId && category.contestId !== contestId) {
+      return res.status(400).json({ error: 'Category does not belong to the specified contest' })
+    }
+
+    // Check for existing assignment
+    const existingAssignment = await prisma.assignment.findFirst({
+      where: {
+        judgeId,
+        categoryId,
+        status: {
+          in: ['PENDING', 'ACCEPTED', 'IN_PROGRESS']
+        }
+      }
+    })
+
+    if (existingAssignment) {
+      return res.status(400).json({ error: 'Judge is already assigned to this category' })
+    }
+
+    // Check judge availability (no overlapping assignments)
+    const overlappingAssignments = await prisma.assignment.findMany({
+      where: {
+        judgeId,
+        status: {
+          in: ['ACCEPTED', 'IN_PROGRESS']
+        },
+        category: {
+          contest: {
+            event: {
+              startDate: {
+                lte: category.contest.event.endDate
+              },
+              endDate: {
+                gte: category.contest.event.startDate
+              }
+            }
+          }
+        }
+      }
+    })
+
+    if (overlappingAssignments.length > 0) {
+      return res.status(400).json({ 
+        error: 'Judge has overlapping assignments during this event period',
+        conflictingAssignments: overlappingAssignments.map(a => ({
+          id: a.id,
+          categoryId: a.categoryId,
+          eventName: a.category?.contest?.event?.name
+        }))
+      })
+    }
+
+    // Check category capacity (max judges per category)
+    const currentAssignments = await prisma.assignment.count({
+      where: {
+        categoryId,
+        status: {
+          in: ['ACCEPTED', 'IN_PROGRESS']
+        }
+      }
+    })
+
+    const maxJudgesPerCategory = 5 // This could be configurable
+    if (currentAssignments >= maxJudgesPerCategory) {
+      return res.status(400).json({ 
+        error: `Category has reached maximum judge capacity (${maxJudgesPerCategory})`,
+        currentAssignments,
+        maxCapacity: maxJudgesPerCategory
+      })
+    }
+
+    // Check judge workload (max categories per judge per event)
+    const judgeEventAssignments = await prisma.assignment.count({
+      where: {
+        judgeId,
+        status: {
+          in: ['ACCEPTED', 'IN_PROGRESS']
+        },
+        category: {
+          contest: {
+            eventId: category.contest.eventId
+          }
+        }
+      }
+    })
+
+    const maxCategoriesPerJudge = 3 // This could be configurable
+    if (judgeEventAssignments >= maxCategoriesPerJudge) {
+      return res.status(400).json({ 
+        error: `Judge has reached maximum category assignments for this event (${maxCategoriesPerJudge})`,
+        currentAssignments: judgeEventAssignments,
+        maxCapacity: maxCategoriesPerJudge
+      })
+    }
+
+    // Add validation data to request for use in controller
+    req.validationData = {
+      judge,
+      category,
+      currentAssignments,
+      judgeEventAssignments
+    }
+
+    next()
+  } catch (error) {
+    console.error('Assignment validation error:', error)
+    res.status(500).json({ error: 'Internal server error during validation' })
+  }
+}
+
+// Validate assignment update
+const validateAssignmentUpdate = async (req, res, next) => {
+  try {
+    const { assignmentId } = req.params
+    const { status, notes } = req.body
+
+    // Check if assignment exists
+    const assignment = await prisma.assignment.findUnique({
+      where: { id: assignmentId },
+      include: {
+        judge: {
+          include: {
+            user: true
+          }
+        },
+        category: {
+          include: {
+            contest: {
+              include: {
+                event: true
+              }
+            }
+          }
+        }
+      }
+    })
+
+    if (!assignment) {
+      return res.status(404).json({ error: 'Assignment not found' })
+    }
+
+    // Validate status transition
+    const validTransitions = {
+      'PENDING': ['ACCEPTED', 'REJECTED'],
+      'ACCEPTED': ['IN_PROGRESS', 'COMPLETED', 'CANCELLED'],
+      'IN_PROGRESS': ['COMPLETED', 'CANCELLED'],
+      'COMPLETED': [], // No transitions from completed
+      'REJECTED': [], // No transitions from rejected
+      'CANCELLED': [] // No transitions from cancelled
+    }
+
+    if (status && !validTransitions[assignment.status]?.includes(status)) {
+      return res.status(400).json({ 
+        error: `Invalid status transition from ${assignment.status} to ${status}`,
+        validTransitions: validTransitions[assignment.status]
+      })
+    }
+
+    // Validate user permissions for status changes
+    const userRole = req.user.role
+    const allowedStatusChanges = {
+      'JUDGE': ['ACCEPTED', 'REJECTED', 'IN_PROGRESS', 'COMPLETED'],
+      'ORGANIZER': ['ACCEPTED', 'REJECTED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'],
+      'BOARD': ['ACCEPTED', 'REJECTED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'],
+      'ADMIN': ['ACCEPTED', 'REJECTED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED']
+    }
+
+    if (status && !allowedStatusChanges[userRole]?.includes(status)) {
+      return res.status(403).json({ 
+        error: `User role ${userRole} is not authorized to change status to ${status}`,
+        allowedChanges: allowedStatusChanges[userRole]
+      })
+    }
+
+    // Special validation for judge accepting/rejecting their own assignment
+    if (userRole === 'JUDGE' && assignment.judgeId !== req.user.id) {
+      return res.status(403).json({ 
+        error: 'Judges can only modify their own assignments' 
+      })
+    }
+
+    // Validate completion requirements
+    if (status === 'COMPLETED') {
+      // Check if all required scores are submitted
+      const requiredScores = await prisma.score.count({
+        where: {
+          categoryId: assignment.categoryId,
+          judgeId: assignment.judgeId
+        }
+      })
+
+      const totalContestants = await prisma.categoryContestant.count({
+        where: {
+          categoryId: assignment.categoryId
+        }
+      })
+
+      if (requiredScores < totalContestants) {
+        return res.status(400).json({ 
+          error: 'Cannot complete assignment: not all scores have been submitted',
+          submittedScores: requiredScores,
+          requiredScores: totalContestants
+        })
+      }
+    }
+
+    // Add validation data to request
+    req.validationData = {
+      assignment,
+      validTransitions: validTransitions[assignment.status],
+      allowedChanges: allowedStatusChanges[userRole]
+    }
+
+    next()
+  } catch (error) {
+    console.error('Assignment update validation error:', error)
+    res.status(500).json({ error: 'Internal server error during validation' })
+  }
+}
+
+// Validate assignment deletion
+const validateAssignmentDeletion = async (req, res, next) => {
+  try {
+    const { assignmentId } = req.params
+
+    const assignment = await prisma.assignment.findUnique({
+      where: { id: assignmentId },
+      include: {
+        judge: {
+          include: {
+            user: true
+          }
+        },
+        category: {
+          include: {
+            contest: {
+              include: {
+                event: true
+              }
+            }
+          }
+        }
+      }
+    })
+
+    if (!assignment) {
+      return res.status(404).json({ error: 'Assignment not found' })
+    }
+
+    // Check if assignment can be deleted
+    const deletableStatuses = ['PENDING', 'REJECTED', 'CANCELLED']
+    if (!deletableStatuses.includes(assignment.status)) {
+      return res.status(400).json({ 
+        error: `Cannot delete assignment with status ${assignment.status}`,
+        deletableStatuses
+      })
+    }
+
+    // Check user permissions
+    const userRole = req.user.role
+    const canDelete = ['ORGANIZER', 'BOARD', 'ADMIN'].includes(userRole) || 
+                     (userRole === 'JUDGE' && assignment.judgeId === req.user.id)
+
+    if (!canDelete) {
+      return res.status(403).json({ 
+        error: 'Insufficient permissions to delete this assignment' 
+      })
+    }
+
+    // Check for dependent data
+    const dependentScores = await prisma.score.count({
+      where: {
+        categoryId: assignment.categoryId,
+        judgeId: assignment.judgeId
+      }
+    })
+
+    if (dependentScores > 0) {
+      return res.status(400).json({ 
+        error: 'Cannot delete assignment: scores have been submitted',
+        dependentScores
+      })
+    }
+
+    req.validationData = { assignment }
+    next()
+  } catch (error) {
+    console.error('Assignment deletion validation error:', error)
+    res.status(500).json({ error: 'Internal server error during validation' })
+  }
+}
+
+// Validate bulk assignment operations
+const validateBulkAssignmentOperation = async (req, res, next) => {
+  try {
+    const { operation, assignmentIds, data } = req.body
+
+    if (!operation || !assignmentIds || !Array.isArray(assignmentIds)) {
+      return res.status(400).json({ error: 'Invalid bulk operation parameters' })
+    }
+
+    // Check if all assignments exist
+    const assignments = await prisma.assignment.findMany({
+      where: {
+        id: { in: assignmentIds }
+      },
+      include: {
+        judge: {
+          include: {
+            user: true
+          }
+        },
+        category: {
+          include: {
+            contest: {
+              include: {
+                event: true
+              }
+            }
+          }
+        }
+      }
+    })
+
+    if (assignments.length !== assignmentIds.length) {
+      return res.status(400).json({ 
+        error: 'Some assignments not found',
+        requested: assignmentIds.length,
+        found: assignments.length
+      })
+    }
+
+    // Validate operation-specific requirements
+    switch (operation) {
+      case 'updateStatus':
+        if (!data.status) {
+          return res.status(400).json({ error: 'Status is required for update operation' })
+        }
+        break
+      case 'delete':
+        // Check if all assignments can be deleted
+        const nonDeletable = assignments.filter(a => 
+          !['PENDING', 'REJECTED', 'CANCELLED'].includes(a.status)
+        )
+        if (nonDeletable.length > 0) {
+          return res.status(400).json({ 
+            error: 'Some assignments cannot be deleted due to their status',
+            nonDeletable: nonDeletable.map(a => ({ id: a.id, status: a.status }))
+          })
+        }
+        break
+      default:
+        return res.status(400).json({ error: 'Invalid bulk operation' })
+    }
+
+    req.validationData = { assignments }
+    next()
+  } catch (error) {
+    console.error('Bulk assignment validation error:', error)
+    res.status(500).json({ error: 'Internal server error during validation' })
+  }
+}
+
+// Validate assignment query parameters
+const validateAssignmentQuery = async (req, res, next) => {
+  try {
+    const { status, judgeId, categoryId, eventId, contestId, sortBy, sortOrder } = req.query
+
+    // Validate status filter
+    if (status && !['PENDING', 'ACCEPTED', 'IN_PROGRESS', 'COMPLETED', 'REJECTED', 'CANCELLED'].includes(status)) {
+      return res.status(400).json({ 
+        error: 'Invalid status filter',
+        validStatuses: ['PENDING', 'ACCEPTED', 'IN_PROGRESS', 'COMPLETED', 'REJECTED', 'CANCELLED']
+      })
+    }
+
+    // Validate sort parameters
+    const validSortFields = ['createdAt', 'updatedAt', 'status', 'judgeId', 'categoryId']
+    if (sortBy && !validSortFields.includes(sortBy)) {
+      return res.status(400).json({ 
+        error: 'Invalid sort field',
+        validFields: validSortFields
+      })
+    }
+
+    if (sortOrder && !['asc', 'desc'].includes(sortOrder.toLowerCase())) {
+      return res.status(400).json({ 
+        error: 'Invalid sort order',
+        validOrders: ['asc', 'desc']
+      })
+    }
+
+    // Validate ID parameters exist
+    if (judgeId) {
+      const judge = await prisma.user.findUnique({ where: { id: judgeId } })
+      if (!judge) {
+        return res.status(404).json({ error: 'Judge not found' })
+      }
+    }
+
+    if (categoryId) {
+      const category = await prisma.category.findUnique({ where: { id: categoryId } })
+      if (!category) {
+        return res.status(404).json({ error: 'Category not found' })
+      }
+    }
+
+    if (eventId) {
+      const event = await prisma.event.findUnique({ where: { id: eventId } })
+      if (!event) {
+        return res.status(404).json({ error: 'Event not found' })
+      }
+    }
+
+    if (contestId) {
+      const contest = await prisma.contest.findUnique({ where: { id: contestId } })
+      if (!contest) {
+        return res.status(404).json({ error: 'Contest not found' })
+      }
+    }
+
+    next()
+  } catch (error) {
+    console.error('Assignment query validation error:', error)
+    res.status(500).json({ error: 'Internal server error during validation' })
+  }
+}
+
+module.exports = {
+  validateAssignmentCreation,
+  validateAssignmentUpdate,
+  validateAssignmentDeletion,
+  validateBulkAssignmentOperation,
+  validateAssignmentQuery
+}
+EOF
+
+    # Advanced Reporting Controller
+    cat > "$APP_DIR/src/controllers/advancedReportingController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+const fs = require('fs').promises
+const path = require('path')
+const XLSX = require('xlsx')
+const csvWriter = require('csv-writer')
+const xml2js = require('xml2js')
+const PDFDocument = require('pdfkit')
+const puppeteer = require('puppeteer')
+const handlebars = require('handlebars')
+
+const prisma = new PrismaClient()
+
+// Advanced Reporting Controller Functions
+
+// Generate comprehensive event report
+const generateEventReport = async (req, res) => {
+  try {
+    const { eventId, format = 'pdf', includeDetails = true } = req.query
+
+    if (!eventId) {
+      return res.status(400).json({ error: 'Event ID is required' })
+    }
+
+    // Get event data with all related information
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      include: {
+        contests: {
+          include: {
+            categories: {
+              include: {
+                contestants: {
+                  include: {
+                    contestant: {
+                      include: {
+                        user: true
+                      }
+                    }
+                  }
+                },
+                assignments: {
+                  include: {
+                    judge: {
+                      include: {
+                        user: true
+                      }
+                    }
+                  }
+                },
+                scores: {
+                  include: {
+                    judge: {
+                      include: {
+                        user: true
+                      }
+                    },
+                    contestant: {
+                      include: {
+                        user: true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        organizer: {
+          include: {
+            user: true
+          }
+        }
+      }
+    })
+
+    if (!event) {
+      return res.status(404).json({ error: 'Event not found' })
+    }
+
+    // Calculate comprehensive statistics
+    const stats = {
+      totalContests: event.contests.length,
+      totalCategories: event.contests.reduce((sum, contest) => sum + contest.categories.length, 0),
+      totalContestants: event.contests.reduce((sum, contest) => 
+        sum + contest.categories.reduce((catSum, category) => catSum + category.contestants.length, 0), 0),
+      totalJudges: new Set(event.contests.flatMap(contest => 
+        contest.categories.flatMap(category => 
+          category.assignments.map(assignment => assignment.judgeId)
+        )
+      )).size,
+      totalScores: event.contests.reduce((sum, contest) => 
+        sum + contest.categories.reduce((catSum, category) => catSum + category.scores.length, 0), 0),
+      averageScore: 0,
+      completionRate: 0
+    }
+
+    // Calculate average score and completion rate
+    if (stats.totalScores > 0) {
+      const totalScoreValue = event.contests.reduce((sum, contest) => 
+        sum + contest.categories.reduce((catSum, category) => 
+          catSum + category.scores.reduce((scoreSum, score) => scoreSum + score.score, 0), 0), 0)
+      stats.averageScore = totalScoreValue / stats.totalScores
+    }
+
+    const totalPossibleScores = stats.totalCategories * stats.totalJudges * stats.totalContestants
+    if (totalPossibleScores > 0) {
+      stats.completionRate = (stats.totalScores / totalPossibleScores) * 100
+    }
+
+    // Generate report based on format
+    switch (format.toLowerCase()) {
+      case 'pdf':
+        return await generatePDFReport(res, event, stats, includeDetails)
+      case 'excel':
+        return await generateExcelReport(res, event, stats, includeDetails)
+      case 'csv':
+        return await generateCSVReport(res, event, stats, includeDetails)
+      case 'xml':
+        return await generateXMLReport(res, event, stats, includeDetails)
+      case 'json':
+        return await generateJSONReport(res, event, stats, includeDetails)
+      default:
+        return res.status(400).json({ error: 'Invalid format. Supported: pdf, excel, csv, xml, json' })
+    }
+  } catch (error) {
+    console.error('Event report generation error:', error)
+    res.status(500).json({ error: 'Failed to generate event report' })
+  }
+}
+
+// Generate PDF report using Puppeteer
+const generatePDFReport = async (res, event, stats, includeDetails) => {
+  try {
+    const browser = await puppeteer.launch({ headless: true })
+    const page = await browser.newPage()
+
+    // Create HTML template
+    const htmlTemplate = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Event Report - ${event.name}</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 20px; }
+          .header { text-align: center; margin-bottom: 30px; }
+          .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 30px; }
+          .stat-card { border: 1px solid #ddd; padding: 15px; text-align: center; }
+          .stat-value { font-size: 24px; font-weight: bold; color: #2563eb; }
+          .stat-label { color: #666; margin-top: 5px; }
+          .section { margin-bottom: 30px; }
+          .section h2 { color: #2563eb; border-bottom: 2px solid #2563eb; padding-bottom: 5px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+          th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+          th { background-color: #f5f5f5; }
+          .footer { margin-top: 50px; text-align: center; color: #666; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>Event Report</h1>
+          <h2>${event.name}</h2>
+          <p>Generated on: ${new Date().toLocaleDateString()}</p>
+        </div>
+
+        <div class="stats">
+          <div class="stat-card">
+            <div class="stat-value">${stats.totalContests}</div>
+            <div class="stat-label">Total Contests</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value">${stats.totalCategories}</div>
+            <div class="stat-label">Total Categories</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value">${stats.totalContestants}</div>
+            <div class="stat-label">Total Contestants</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value">${stats.totalJudges}</div>
+            <div class="stat-label">Total Judges</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value">${stats.totalScores}</div>
+            <div class="stat-label">Scores Submitted</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value">${stats.averageScore.toFixed(2)}</div>
+            <div class="stat-label">Average Score</div>
+          </div>
+        </div>
+
+        ${includeDetails ? `
+        <div class="section">
+          <h2>Event Details</h2>
+          <p><strong>Description:</strong> ${event.description || 'N/A'}</p>
+          <p><strong>Start Date:</strong> ${new Date(event.startDate).toLocaleDateString()}</p>
+          <p><strong>End Date:</strong> ${new Date(event.endDate).toLocaleDateString()}</p>
+          <p><strong>Location:</strong> ${event.location || 'N/A'}</p>
+          <p><strong>Organizer:</strong> ${event.organizer?.user?.firstName} ${event.organizer?.user?.lastName}</p>
+        </div>
+
+        <div class="section">
+          <h2>Contest Summary</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Contest Name</th>
+                <th>Categories</th>
+                <th>Contestants</th>
+                <th>Scores</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${event.contests.map(contest => `
+                <tr>
+                  <td>${contest.name}</td>
+                  <td>${contest.categories.length}</td>
+                  <td>${contest.categories.reduce((sum, cat) => sum + cat.contestants.length, 0)}</td>
+                  <td>${contest.categories.reduce((sum, cat) => sum + cat.scores.length, 0)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+        ` : ''}
+
+        <div class="footer">
+          <p>Report generated by Event Manager System</p>
+        </div>
+      </body>
+      </html>
+    `
+
+    await page.setContent(htmlTemplate)
+    const pdf = await page.pdf({ 
+      format: 'A4', 
+      printBackground: true,
+      margin: { top: '20px', right: '20px', bottom: '20px', left: '20px' }
+    })
+
+    await browser.close()
+
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', `attachment; filename="event-report-${event.id}.pdf"`)
+    res.send(pdf)
+  } catch (error) {
+    console.error('PDF generation error:', error)
+    res.status(500).json({ error: 'Failed to generate PDF report' })
+  }
+}
+
+// Generate Excel report
+const generateExcelReport = async (res, event, stats, includeDetails) => {
+  try {
+    const workbook = XLSX.utils.book_new()
+
+    // Summary sheet
+    const summaryData = [
+      ['Event Report Summary'],
+      [''],
+      ['Event Name', event.name],
+      ['Start Date', new Date(event.startDate).toLocaleDateString()],
+      ['End Date', new Date(event.endDate).toLocaleDateString()],
+      ['Location', event.location || 'N/A'],
+      ['Organizer', `${event.organizer?.user?.firstName} ${event.organizer?.user?.lastName}`],
+      [''],
+      ['Statistics'],
+      ['Total Contests', stats.totalContests],
+      ['Total Categories', stats.totalCategories],
+      ['Total Contestants', stats.totalContestants],
+      ['Total Judges', stats.totalJudges],
+      ['Scores Submitted', stats.totalScores],
+      ['Average Score', stats.averageScore.toFixed(2)],
+      ['Completion Rate', `${stats.completionRate.toFixed(1)}%']
+    ]
+
+    const summarySheet = XLSX.utils.aoa_to_sheet(summaryData)
+    XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary')
+
+    if (includeDetails) {
+      // Contests sheet
+      const contestsData = [
+        ['Contest Name', 'Categories', 'Contestants', 'Scores Submitted', 'Average Score']
+      ]
+
+      event.contests.forEach(contest => {
+        const totalContestants = contest.categories.reduce((sum, cat) => sum + cat.contestants.length, 0)
+        const totalScores = contest.categories.reduce((sum, cat) => sum + cat.scores.length, 0)
+        const avgScore = totalScores > 0 ? 
+          contest.categories.reduce((sum, cat) => 
+            sum + cat.scores.reduce((scoreSum, score) => scoreSum + score.score, 0), 0) / totalScores : 0
+
+        contestsData.push([
+          contest.name,
+          contest.categories.length,
+          totalContestants,
+          totalScores,
+          avgScore.toFixed(2)
+        ])
+      })
+
+      const contestsSheet = XLSX.utils.aoa_to_sheet(contestsData)
+      XLSX.utils.book_append_sheet(workbook, contestsSheet, 'Contests')
+
+      // Categories sheet
+      const categoriesData = [
+        ['Contest', 'Category', 'Contestants', 'Judges', 'Scores', 'Average Score']
+      ]
+
+      event.contests.forEach(contest => {
+        contest.categories.forEach(category => {
+          const avgScore = category.scores.length > 0 ? 
+            category.scores.reduce((sum, score) => sum + score.score, 0) / category.scores.length : 0
+
+          categoriesData.push([
+            contest.name,
+            category.name,
+            category.contestants.length,
+            category.assignments.length,
+            category.scores.length,
+            avgScore.toFixed(2)
+          ])
+        })
+      })
+
+      const categoriesSheet = XLSX.utils.aoa_to_sheet(categoriesData)
+      XLSX.utils.book_append_sheet(workbook, categoriesSheet, 'Categories')
+    }
+
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' })
+    
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', `attachment; filename="event-report-${event.id}.xlsx"`)
+    res.send(buffer)
+  } catch (error) {
+    console.error('Excel generation error:', error)
+    res.status(500).json({ error: 'Failed to generate Excel report' })
+  }
+}
+
+// Generate CSV report
+const generateCSVReport = async (res, event, stats, includeDetails) => {
+  try {
+    const csvData = []
+    
+    // Header
+    csvData.push(['Event Report', event.name])
+    csvData.push(['Generated', new Date().toISOString()])
+    csvData.push([''])
+    
+    // Statistics
+    csvData.push(['Statistics'])
+    csvData.push(['Total Contests', stats.totalContests])
+    csvData.push(['Total Categories', stats.totalCategories])
+    csvData.push(['Total Contestants', stats.totalContestants])
+    csvData.push(['Total Judges', stats.totalJudges])
+    csvData.push(['Scores Submitted', stats.totalScores])
+    csvData.push(['Average Score', stats.averageScore.toFixed(2)])
+    csvData.push(['Completion Rate', `${stats.completionRate.toFixed(1)}%`])
+    csvData.push([''])
+
+    if (includeDetails) {
+      // Contest details
+      csvData.push(['Contest Details'])
+      csvData.push(['Contest Name', 'Categories', 'Contestants', 'Scores', 'Average Score'])
+      
+      event.contests.forEach(contest => {
+        const totalContestants = contest.categories.reduce((sum, cat) => sum + cat.contestants.length, 0)
+        const totalScores = contest.categories.reduce((sum, cat) => sum + cat.scores.length, 0)
+        const avgScore = totalScores > 0 ? 
+          contest.categories.reduce((sum, cat) => 
+            sum + cat.scores.reduce((scoreSum, score) => scoreSum + score.score, 0), 0) / totalScores : 0
+
+        csvData.push([
+          contest.name,
+          contest.categories.length,
+          totalContestants,
+          totalScores,
+          avgScore.toFixed(2)
+        ])
+      })
+    }
+
+    const csvContent = csvData.map(row => row.map(cell => `"${cell}"`).join(',')).join('\n')
+    
+    res.setHeader('Content-Type', 'text/csv')
+    res.setHeader('Content-Disposition', `attachment; filename="event-report-${event.id}.csv"`)
+    res.send(csvContent)
+  } catch (error) {
+    console.error('CSV generation error:', error)
+    res.status(500).json({ error: 'Failed to generate CSV report' })
+  }
+}
+
+// Generate XML report
+const generateXMLReport = async (res, event, stats, includeDetails) => {
+  try {
+    const builder = new xml2js.Builder({
+      rootName: 'EventReport',
+      xmldec: { version: '1.0', encoding: 'UTF-8' }
+    })
+
+    const reportData = {
+      $: {
+        eventId: event.id,
+        generatedAt: new Date().toISOString()
+      },
+      Event: {
+        Name: event.name,
+        Description: event.description || '',
+        StartDate: event.startDate,
+        EndDate: event.endDate,
+        Location: event.location || '',
+        Organizer: {
+          FirstName: event.organizer?.user?.firstName || '',
+          LastName: event.organizer?.user?.lastName || ''
+        }
+      },
+      Statistics: {
+        TotalContests: stats.totalContests,
+        TotalCategories: stats.totalCategories,
+        TotalContestants: stats.totalContestants,
+        TotalJudges: stats.totalJudges,
+        ScoresSubmitted: stats.totalScores,
+        AverageScore: stats.averageScore.toFixed(2),
+        CompletionRate: `${stats.completionRate.toFixed(1)}%`
+      }
+    }
+
+    if (includeDetails) {
+      reportData.Contests = {
+        Contest: event.contests.map(contest => ({
+          $: { id: contest.id },
+          Name: contest.name,
+          Categories: contest.categories.length,
+          Contestants: contest.categories.reduce((sum, cat) => sum + cat.contestants.length, 0),
+          Scores: contest.categories.reduce((sum, cat) => sum + cat.scores.length, 0),
+          Category: contest.categories.map(category => ({
+            $: { id: category.id },
+            Name: category.name,
+            Contestants: category.contestants.length,
+            Judges: category.assignments.length,
+            Scores: category.scores.length,
+            AverageScore: category.scores.length > 0 ? 
+              (category.scores.reduce((sum, score) => sum + score.score, 0) / category.scores.length).toFixed(2) : '0.00'
+          }))
+        }))
+      }
+    }
+
+    const xml = builder.buildObject(reportData)
+    
+    res.setHeader('Content-Type', 'application/xml')
+    res.setHeader('Content-Disposition', `attachment; filename="event-report-${event.id}.xml"`)
+    res.send(xml)
+  } catch (error) {
+    console.error('XML generation error:', error)
+    res.status(500).json({ error: 'Failed to generate XML report' })
+  }
+}
+
+// Generate JSON report
+const generateJSONReport = async (res, event, stats, includeDetails) => {
+  try {
+    const reportData = {
+      eventId: event.id,
+      generatedAt: new Date().toISOString(),
+      event: {
+        name: event.name,
+        description: event.description,
+        startDate: event.startDate,
+        endDate: event.endDate,
+        location: event.location,
+        organizer: {
+          firstName: event.organizer?.user?.firstName,
+          lastName: event.organizer?.user?.lastName
+        }
+      },
+      statistics: stats
+    }
+
+    if (includeDetails) {
+      reportData.contests = event.contests.map(contest => ({
+        id: contest.id,
+        name: contest.name,
+        categories: contest.categories.length,
+        contestants: contest.categories.reduce((sum, cat) => sum + cat.contestants.length, 0),
+        scores: contest.categories.reduce((sum, cat) => sum + cat.scores.length, 0),
+        categories: contest.categories.map(category => ({
+          id: category.id,
+          name: category.name,
+          contestants: category.contestants.length,
+          judges: category.assignments.length,
+          scores: category.scores.length,
+          averageScore: category.scores.length > 0 ? 
+            category.scores.reduce((sum, score) => sum + score.score, 0) / category.scores.length : 0
+        }))
+      }))
+    }
+
+    res.setHeader('Content-Type', 'application/json')
+    res.setHeader('Content-Disposition', `attachment; filename="event-report-${event.id}.json"`)
+    res.json(reportData)
+  } catch (error) {
+    console.error('JSON generation error:', error)
+    res.status(500).json({ error: 'Failed to generate JSON report' })
+  }
+}
+
+// Generate judge performance report
+const generateJudgePerformanceReport = async (req, res) => {
+  try {
+    const { judgeId, eventId, format = 'pdf' } = req.query
+
+    if (!judgeId && !eventId) {
+      return res.status(400).json({ error: 'Either judgeId or eventId is required' })
+    }
+
+    let whereClause = {}
+    if (judgeId) whereClause.judgeId = judgeId
+    if (eventId) {
+      whereClause.category = {
+        contest: {
+          eventId: eventId
+        }
+      }
+    }
+
+    const scores = await prisma.score.findMany({
+      where: whereClause,
+      include: {
+        judge: {
+          include: {
+            user: true
+          }
+        },
+        contestant: {
+          include: {
+            user: true
+          }
+        },
+        category: {
+          include: {
+            contest: {
+              include: {
+                event: true
+              }
+            }
+          }
+        }
+      }
+    })
+
+    if (scores.length === 0) {
+      return res.status(404).json({ error: 'No scores found for the specified criteria' })
+    }
+
+    // Calculate performance metrics
+    const judgeStats = {}
+    scores.forEach(score => {
+      const judgeId = score.judgeId
+      if (!judgeStats[judgeId]) {
+        judgeStats[judgeId] = {
+          judge: score.judge,
+          totalScores: 0,
+          totalScoreValue: 0,
+          averageScore: 0,
+          categories: new Set(),
+          events: new Set(),
+          scores: []
+        }
+      }
+      
+      judgeStats[judgeId].totalScores++
+      judgeStats[judgeId].totalScoreValue += score.score
+      judgeStats[judgeId].categories.add(score.categoryId)
+      judgeStats[judgeId].events.add(score.category.contest.eventId)
+      judgeStats[judgeId].scores.push(score)
+    })
+
+    // Calculate averages
+    Object.values(judgeStats).forEach(stat => {
+      stat.averageScore = stat.totalScoreValue / stat.totalScores
+      stat.categoriesCount = stat.categories.size
+      stat.eventsCount = stat.events.size
+    })
+
+    // Generate report based on format
+    switch (format.toLowerCase()) {
+      case 'pdf':
+        return await generateJudgePDFReport(res, judgeStats)
+      case 'excel':
+        return await generateJudgeExcelReport(res, judgeStats)
+      case 'csv':
+        return await generateJudgeCSVReport(res, judgeStats)
+      case 'json':
+        return await generateJudgeJSONReport(res, judgeStats)
+      default:
+        return res.status(400).json({ error: 'Invalid format. Supported: pdf, excel, csv, json' })
+    }
+  } catch (error) {
+    console.error('Judge performance report error:', error)
+    res.status(500).json({ error: 'Failed to generate judge performance report' })
+  }
+}
+
+// Generate judge PDF report
+const generateJudgePDFReport = async (res, judgeStats) => {
+  try {
+    const browser = await puppeteer.launch({ headless: true })
+    const page = await browser.newPage()
+
+    const htmlTemplate = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Judge Performance Report</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 20px; }
+          .header { text-align: center; margin-bottom: 30px; }
+          .judge-card { border: 1px solid #ddd; margin-bottom: 20px; padding: 15px; }
+          .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 20px; }
+          .stat-item { text-align: center; }
+          .stat-value { font-size: 20px; font-weight: bold; color: #2563eb; }
+          .stat-label { color: #666; }
+          table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+          th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+          th { background-color: #f5f5f5; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>Judge Performance Report</h1>
+          <p>Generated on: ${new Date().toLocaleDateString()}</p>
+        </div>
+
+        ${Object.values(judgeStats).map(stat => `
+          <div class="judge-card">
+            <h2>${stat.judge.user.firstName} ${stat.judge.user.lastName}</h2>
+            <div class="stats">
+              <div class="stat-item">
+                <div class="stat-value">${stat.totalScores}</div>
+                <div class="stat-label">Total Scores</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-value">${stat.averageScore.toFixed(2)}</div>
+                <div class="stat-label">Average Score</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-value">${stat.categoriesCount}</div>
+                <div class="stat-label">Categories</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-value">${stat.eventsCount}</div>
+                <div class="stat-label">Events</div>
+              </div>
+            </div>
+          </div>
+        `).join('')}
+      </body>
+      </html>
+    `
+
+    await page.setContent(htmlTemplate)
+    const pdf = await page.pdf({ format: 'A4', printBackground: true })
+    await browser.close()
+
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', 'attachment; filename="judge-performance-report.pdf"')
+    res.send(pdf)
+  } catch (error) {
+    console.error('Judge PDF generation error:', error)
+    res.status(500).json({ error: 'Failed to generate judge PDF report' })
+  }
+}
+
+// Generate judge Excel report
+const generateJudgeExcelReport = async (res, judgeStats) => {
+  try {
+    const workbook = XLSX.utils.book_new()
+
+    const judgeData = [
+      ['Judge Name', 'Total Scores', 'Average Score', 'Categories', 'Events']
+    ]
+
+    Object.values(judgeStats).forEach(stat => {
+      judgeData.push([
+        `${stat.judge.user.firstName} ${stat.judge.user.lastName}`,
+        stat.totalScores,
+        stat.averageScore.toFixed(2),
+        stat.categoriesCount,
+        stat.eventsCount
+      ])
+    })
+
+    const judgeSheet = XLSX.utils.aoa_to_sheet(judgeData)
+    XLSX.utils.book_append_sheet(workbook, judgeSheet, 'Judge Performance')
+
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' })
+    
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', 'attachment; filename="judge-performance-report.xlsx"')
+    res.send(buffer)
+  } catch (error) {
+    console.error('Judge Excel generation error:', error)
+    res.status(500).json({ error: 'Failed to generate judge Excel report' })
+  }
+}
+
+// Generate judge CSV report
+const generateJudgeCSVReport = async (res, judgeStats) => {
+  try {
+    const csvData = [
+      ['Judge Performance Report'],
+      ['Generated', new Date().toISOString()],
+      [''],
+      ['Judge Name', 'Total Scores', 'Average Score', 'Categories', 'Events']
+    ]
+
+    Object.values(judgeStats).forEach(stat => {
+      csvData.push([
+        `"${stat.judge.user.firstName} ${stat.judge.user.lastName}"`,
+        stat.totalScores,
+        stat.averageScore.toFixed(2),
+        stat.categoriesCount,
+        stat.eventsCount
+      ])
+    })
+
+    const csvContent = csvData.map(row => row.join(',')).join('\n')
+    
+    res.setHeader('Content-Type', 'text/csv')
+    res.setHeader('Content-Disposition', 'attachment; filename="judge-performance-report.csv"')
+    res.send(csvContent)
+  } catch (error) {
+    console.error('Judge CSV generation error:', error)
+    res.status(500).json({ error: 'Failed to generate judge CSV report' })
+  }
+}
+
+// Generate judge JSON report
+const generateJudgeJSONReport = async (res, judgeStats) => {
+  try {
+    const reportData = {
+      generatedAt: new Date().toISOString(),
+      judges: Object.values(judgeStats).map(stat => ({
+        judgeId: stat.judge.id,
+        name: `${stat.judge.user.firstName} ${stat.judge.user.lastName}`,
+        totalScores: stat.totalScores,
+        averageScore: stat.averageScore,
+        categoriesCount: stat.categoriesCount,
+        eventsCount: stat.eventsCount,
+        scores: stat.scores.map(score => ({
+          score: score.score,
+          category: score.category.name,
+          contest: score.category.contest.name,
+          event: score.category.contest.event.name,
+          contestant: `${score.contestant.user.firstName} ${score.contestant.user.lastName}`
+        }))
+      }))
+    }
+
+    res.setHeader('Content-Type', 'application/json')
+    res.setHeader('Content-Disposition', 'attachment; filename="judge-performance-report.json"')
+    res.json(reportData)
+  } catch (error) {
+    console.error('Judge JSON generation error:', error)
+    res.status(500).json({ error: 'Failed to generate judge JSON report' })
+  }
+}
+
+// Generate system analytics report
+const generateSystemAnalyticsReport = async (req, res) => {
+  try {
+    const { format = 'pdf', period = '30' } = req.query
+
+    // Get system statistics
+    const stats = {
+      totalUsers: await prisma.user.count(),
+      totalEvents: await prisma.event.count(),
+      totalContests: await prisma.contest.count(),
+      totalCategories: await prisma.category.count(),
+      totalScores: await prisma.score.count(),
+      totalAssignments: await prisma.assignment.count(),
+      totalFiles: await prisma.file.count()
+    }
+
+    // Get recent activity (last 30 days by default)
+    const startDate = new Date()
+    startDate.setDate(startDate.getDate() - parseInt(period))
+
+    const recentActivity = await prisma.activityLog.findMany({
+      where: {
+        createdAt: {
+          gte: startDate
+        }
+      },
+      include: {
+        user: {
+          include: {
+            user: true
+          }
+        }
+      },
+      orderBy: {
+        createdAt: 'desc'
+      },
+      take: 100
+    })
+
+    // Get user role distribution
+    const userRoles = await prisma.user.groupBy({
+      by: ['role'],
+      _count: {
+        role: true
+      }
+    })
+
+    // Get event status distribution
+    const eventStatuses = await prisma.event.groupBy({
+      by: ['status'],
+      _count: {
+        status: true
+      }
+    })
+
+    const analyticsData = {
+      stats,
+      recentActivity,
+      userRoles,
+      eventStatuses,
+      period: parseInt(period)
+    }
+
+    // Generate report based on format
+    switch (format.toLowerCase()) {
+      case 'pdf':
+        return await generateAnalyticsPDFReport(res, analyticsData)
+      case 'excel':
+        return await generateAnalyticsExcelReport(res, analyticsData)
+      case 'json':
+        return await generateAnalyticsJSONReport(res, analyticsData)
+      default:
+        return res.status(400).json({ error: 'Invalid format. Supported: pdf, excel, json' })
+    }
+  } catch (error) {
+    console.error('System analytics report error:', error)
+    res.status(500).json({ error: 'Failed to generate system analytics report' })
+  }
+}
+
+// Generate analytics PDF report
+const generateAnalyticsPDFReport = async (res, analyticsData) => {
+  try {
+    const browser = await puppeteer.launch({ headless: true })
+    const page = await browser.newPage()
+
+    const htmlTemplate = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>System Analytics Report</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 20px; }
+          .header { text-align: center; margin-bottom: 30px; }
+          .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 30px; }
+          .stat-card { border: 1px solid #ddd; padding: 15px; text-align: center; }
+          .stat-value { font-size: 24px; font-weight: bold; color: #2563eb; }
+          .stat-label { color: #666; margin-top: 5px; }
+          .section { margin-bottom: 30px; }
+          .section h2 { color: #2563eb; border-bottom: 2px solid #2563eb; padding-bottom: 5px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+          th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+          th { background-color: #f5f5f5; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>System Analytics Report</h1>
+          <p>Period: Last ${analyticsData.period} days</p>
+          <p>Generated on: ${new Date().toLocaleDateString()}</p>
+        </div>
+
+        <div class="stats">
+          <div class="stat-card">
+            <div class="stat-value">${analyticsData.stats.totalUsers}</div>
+            <div class="stat-label">Total Users</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value">${analyticsData.stats.totalEvents}</div>
+            <div class="stat-label">Total Events</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value">${analyticsData.stats.totalContests}</div>
+            <div class="stat-label">Total Contests</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value">${analyticsData.stats.totalScores}</div>
+            <div class="stat-label">Total Scores</div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>User Role Distribution</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Role</th>
+                <th>Count</th>
+                <th>Percentage</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${analyticsData.userRoles.map(role => `
+                <tr>
+                  <td>${role.role}</td>
+                  <td>${role._count.role}</td>
+                  <td>${((role._count.role / analyticsData.stats.totalUsers) * 100).toFixed(1)}%</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="section">
+          <h2>Recent Activity (Last ${analyticsData.period} days)</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>User</th>
+                <th>Action</th>
+                <th>Entity</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${analyticsData.recentActivity.slice(0, 20).map(activity => `
+                <tr>
+                  <td>${new Date(activity.createdAt).toLocaleDateString()}</td>
+                  <td>${activity.user?.user?.firstName} ${activity.user?.user?.lastName}</td>
+                  <td>${activity.action}</td>
+                  <td>${activity.entityType}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </body>
+      </html>
+    `
+
+    await page.setContent(htmlTemplate)
+    const pdf = await page.pdf({ format: 'A4', printBackground: true })
+    await browser.close()
+
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', 'attachment; filename="system-analytics-report.pdf"')
+    res.send(pdf)
+  } catch (error) {
+    console.error('Analytics PDF generation error:', error)
+    res.status(500).json({ error: 'Failed to generate analytics PDF report' })
+  }
+}
+
+// Generate analytics Excel report
+const generateAnalyticsExcelReport = async (res, analyticsData) => {
+  try {
+    const workbook = XLSX.utils.book_new()
+
+    // Summary sheet
+    const summaryData = [
+      ['System Analytics Report'],
+      ['Generated', new Date().toISOString()],
+      ['Period', `Last ${analyticsData.period} days`],
+      [''],
+      ['Statistics'],
+      ['Total Users', analyticsData.stats.totalUsers],
+      ['Total Events', analyticsData.stats.totalEvents],
+      ['Total Contests', analyticsData.stats.totalContests],
+      ['Total Categories', analyticsData.stats.totalCategories],
+      ['Total Scores', analyticsData.stats.totalScores],
+      ['Total Assignments', analyticsData.stats.totalAssignments],
+      ['Total Files', analyticsData.stats.totalFiles]
+    ]
+
+    const summarySheet = XLSX.utils.aoa_to_sheet(summaryData)
+    XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary')
+
+    // User roles sheet
+    const rolesData = [
+      ['Role', 'Count', 'Percentage']
+    ]
+
+    analyticsData.userRoles.forEach(role => {
+      rolesData.push([
+        role.role,
+        role._count.role,
+        ((role._count.role / analyticsData.stats.totalUsers) * 100).toFixed(1) + '%'
+      ])
+    })
+
+    const rolesSheet = XLSX.utils.aoa_to_sheet(rolesData)
+    XLSX.utils.book_append_sheet(workbook, rolesSheet, 'User Roles')
+
+    // Recent activity sheet
+    const activityData = [
+      ['Date', 'User', 'Action', 'Entity Type', 'Entity ID']
+    ]
+
+    analyticsData.recentActivity.forEach(activity => {
+      activityData.push([
+        new Date(activity.createdAt).toLocaleDateString(),
+        `${activity.user?.user?.firstName} ${activity.user?.user?.lastName}`,
+        activity.action,
+        activity.entityType,
+        activity.entityId
+      ])
+    })
+
+    const activitySheet = XLSX.utils.aoa_to_sheet(activityData)
+    XLSX.utils.book_append_sheet(workbook, activitySheet, 'Recent Activity')
+
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' })
+    
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', 'attachment; filename="system-analytics-report.xlsx"')
+    res.send(buffer)
+  } catch (error) {
+    console.error('Analytics Excel generation error:', error)
+    res.status(500).json({ error: 'Failed to generate analytics Excel report' })
+  }
+}
+
+// Generate analytics JSON report
+const generateAnalyticsJSONReport = async (res, analyticsData) => {
+  try {
+    const reportData = {
+      generatedAt: new Date().toISOString(),
+      period: analyticsData.period,
+      statistics: analyticsData.stats,
+      userRoles: analyticsData.userRoles.map(role => ({
+        role: role.role,
+        count: role._count.role,
+        percentage: ((role._count.role / analyticsData.stats.totalUsers) * 100).toFixed(1)
+      })),
+      eventStatuses: analyticsData.eventStatuses.map(status => ({
+        status: status.status,
+        count: status._count.status
+      })),
+      recentActivity: analyticsData.recentActivity.map(activity => ({
+        date: activity.createdAt,
+        user: `${activity.user?.user?.firstName} ${activity.user?.user?.lastName}`,
+        action: activity.action,
+        entityType: activity.entityType,
+        entityId: activity.entityId
+      }))
+    }
+
+    res.setHeader('Content-Type', 'application/json')
+    res.setHeader('Content-Disposition', 'attachment; filename="system-analytics-report.json"')
+    res.json(reportData)
+  } catch (error) {
+    console.error('Analytics JSON generation error:', error)
+    res.status(500).json({ error: 'Failed to generate analytics JSON report' })
+  }
+}
+
+module.exports = {
+  generateEventReport,
+  generateJudgePerformanceReport,
+  generateSystemAnalyticsReport
+}
+EOF
+
+    # Advanced Reporting Routes
+    cat > "$APP_DIR/src/routes/advancedReportingRoutes.js" << 'EOF'
+const express = require('express')
+const { 
+  generateEventReport,
+  generateJudgePerformanceReport,
+  generateSystemAnalyticsReport
+} = require('../controllers/advancedReportingController')
+const { authenticateToken, requireRole } = require('../middleware/auth')
+const { logActivity } = require('../middleware/errorHandler')
+
+const router = express.Router()
+
+// Apply authentication to all routes
+router.use(authenticateToken)
+
+// Advanced reporting endpoints
+router.get('/event/:eventId', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), logActivity('GENERATE_EVENT_REPORT', 'REPORT'), generateEventReport)
+router.get('/judge-performance', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), logActivity('GENERATE_JUDGE_REPORT', 'REPORT'), generateJudgePerformanceReport)
+router.get('/system-analytics', requireRole(['ADMIN']), logActivity('GENERATE_SYSTEM_REPORT', 'REPORT'), generateSystemAnalyticsReport)
+
+module.exports = router
+EOF
+
     # Error Handling Routes
     cat > "$APP_DIR/src/routes/errorHandlingRoutes.js" << 'EOF'
 const express = require('express')
@@ -13821,6 +15416,7 @@ const templatesRoutes = require('./routes/templatesRoutes')
 const notificationsRoutes = require('./routes/notificationsRoutes')
 const emceeRoutes = require('./routes/emceeRoutes')
 const navigationRoutes = require('./routes/navigationRoutes')
+const advancedReportingRoutes = require('./routes/advancedReportingRoutes')
 
 const app = express()
 const server = http.createServer(app)
@@ -13919,6 +15515,7 @@ app.use('/api/templates', templatesRoutes)
 app.use('/api/notifications', notificationsRoutes)
 app.use('/api/emcee', emceeRoutes)
 app.use('/api/navigation', navigationRoutes)
+app.use('/api/advanced-reports', advancedReportingRoutes)
 
 // Socket.IO connection handling
 io.on('connection', (socket) => {
