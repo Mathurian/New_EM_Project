@@ -5426,6 +5426,9 @@ EOF
 
 # Setup database
 setup_database() {
+    # Create essential backend files first (always create these)
+    create_backend_files
+    
     if [[ "$AUTO_SETUP_DB" == "false" && "$NON_INTERACTIVE" == "false" ]]; then
         echo ""
         read -p "Setup database (create user, database, migrate, seed)? [y/N]: " -n 1 -r
@@ -5437,9 +5440,6 @@ setup_database() {
     fi
     
     print_status "Setting up database..."
-    
-    # Create essential backend files first
-    create_backend_files
     
     # Create database user and database
     sudo -u postgres psql << EOF
@@ -20867,8 +20867,7 @@ EOF
     # Fix modal visibility and centering issues
     fix_modal_visibility
     
-    # Fix API endpoints and admin functionality
-    fix_api_endpoints
+    # API endpoints are handled by modular routes - no need to fix
 }
 
 # Force rebuild frontend with clean environment
@@ -20960,8 +20959,7 @@ EOF
     # Fix modal visibility and centering issues
     fix_modal_visibility
     
-    # Fix API endpoints and admin functionality
-    fix_api_endpoints
+    # API endpoints are handled by modular routes - no need to fix
 }
 
 # Verify installation
@@ -21358,8 +21356,10 @@ EOF
 }
 
 # Fix API endpoints and admin functionality
+# DISABLED: This function appends inline routes to modular server.js, causing authenticateToken errors
 fix_api_endpoints() {
-    print_status "🔧 Fixing API endpoints and admin functionality..."
+    print_status "🔧 DISABLED: API endpoints are handled by modular routes"
+    return 0  # Exit early to prevent execution
     
     local server_file="$APP_DIR/src/server.js"
     
