@@ -671,6 +671,10 @@ EOF
 
     # Error handling middleware
     cat > "$APP_DIR/src/middleware/errorHandler.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
 const logActivity = (action, resourceType = null, resourceId = null) => {
   return async (req, res, next) => {
     const originalSend = res.send
