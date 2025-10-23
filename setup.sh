@@ -6180,6 +6180,12 @@ fix_typescript_errors() {
     
     cd "$APP_DIR/frontend"
     
+    # Clear TypeScript cache and node_modules cache
+    print_status "Clearing TypeScript cache..."
+    rm -rf node_modules/.cache
+    rm -rf .tsbuildinfo
+    rm -rf dist
+    
     # 1. Fix API service - add missing methods and export api
     print_status "Updating API service with missing methods..."
     cat > src/services/api.ts << 'APIEOF'
@@ -6410,6 +6416,7 @@ export const tallyMasterAPI = {
 
 // Export the api instance for direct use
 export { api }
+export default api
 
 APIEOF
 
@@ -6557,12 +6564,16 @@ ARCHIVEEOF
         sed -i 's/import { DocumentIcon, PrinterIcon, DownloadIcon }/import { DocumentIcon, PrinterIcon, ArrowDownTrayIcon }/g' src/components/PrintReports.tsx
     fi
 
-    # 6. Fix all import statements to use default import for api
+    # 6. Fix all import statements to use correct import syntax
     print_status "Fixing API import statements..."
-    find src -name "*.tsx" -o -name "*.ts" | xargs sed -i 's/import { \([^,]*\), api }/import { \1 } from "..\/services\/api"\nimport api from "..\/services\/api"/g' 2>/dev/null || true
-    find src -name "*.tsx" -o -name "*.ts" | xargs sed -i 's/import { api }/import api/g' 2>/dev/null || true
+    # Remove any incorrect default imports and ensure named imports are used
+    find src -name "*.tsx" -o -name "*.ts" | xargs sed -i 's/import api from/import { api } from/g' 2>/dev/null || true
 
     print_success "TypeScript errors resolved automatically"
+    
+    # Regenerate TypeScript types
+    print_status "Regenerating TypeScript types..."
+    npx tsc --noEmit --skipLibCheck
 }
 
 # Build frontend
