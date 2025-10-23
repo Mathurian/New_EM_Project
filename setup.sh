@@ -521,27 +521,64 @@ install_prerequisites() {
         sudo systemctl start postgresql
         sudo systemctl enable postgresql
         
-        # Configure PostgreSQL for remote connections
-        print_status "Configuring PostgreSQL for remote connections..."
-        
-        # Backup original postgresql.conf
-        sudo cp /etc/postgresql/*/main/postgresql.conf /etc/postgresql/*/main/postgresql.conf.backup
-        
-        # Configure postgresql.conf for remote connections
-        sudo sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/" /etc/postgresql/*/main/postgresql.conf
-        sudo sed -i "s/#port = 5432/port = 5432/" /etc/postgresql/*/main/postgresql.conf
-        sudo sed -i "s/#max_connections = 100/max_connections = 200/" /etc/postgresql/*/main/postgresql.conf
-        
-        # Configure pg_hba.conf for remote connections
-        sudo cp /etc/postgresql/*/main/pg_hba.conf /etc/postgresql/*/main/pg_hba.conf.backup
-        
-        # Add remote connection rules
-        echo "# Remote connections" | sudo tee -a /etc/postgresql/*/main/pg_hba.conf
-        echo "host    all             all             0.0.0.0/0               md5" | sudo tee -a /etc/postgresql/*/main/pg_hba.conf
-        echo "host    all             all             ::/0                    md5" | sudo tee -a /etc/postgresql/*/main/pg_hba.conf
-        
-        # Restart PostgreSQL to apply changes
-        sudo systemctl restart postgresql
+    # Configure PostgreSQL for remote connections
+    print_status "Configuring PostgreSQL for remote connections..."
+
+    # Find PostgreSQL version directory
+    POSTGRES_VERSION_DIR=$(ls /etc/postgresql/ | head -1)
+    if [ -z "$POSTGRES_VERSION_DIR" ]; then
+        print_error "PostgreSQL configuration directory not found. Please ensure PostgreSQL is installed."
+        return 1
+    fi
+    
+    POSTGRES_CONFIG_DIR="/etc/postgresql/$POSTGRES_VERSION_DIR/main"
+    print_status "Using PostgreSQL configuration directory: $POSTGRES_CONFIG_DIR"
+
+    # Check if configuration files exist
+    if [ ! -f "$POSTGRES_CONFIG_DIR/postgresql.conf" ]; then
+        print_error "postgresql.conf not found at $POSTGRES_CONFIG_DIR"
+        return 1
+    fi
+
+    if [ ! -f "$POSTGRES_CONFIG_DIR/pg_hba.conf" ]; then
+        print_error "pg_hba.conf not found at $POSTGRES_CONFIG_DIR"
+        return 1
+    fi
+
+    # Backup original configuration files
+    print_status "Creating backups of PostgreSQL configuration files..."
+    sudo cp "$POSTGRES_CONFIG_DIR/postgresql.conf" "$POSTGRES_CONFIG_DIR/postgresql.conf.backup"
+    sudo cp "$POSTGRES_CONFIG_DIR/pg_hba.conf" "$POSTGRES_CONFIG_DIR/pg_hba.conf.backup"
+
+    # Configure postgresql.conf for remote connections
+    print_status "Configuring postgresql.conf for remote connections..."
+    sudo sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/" "$POSTGRES_CONFIG_DIR/postgresql.conf"
+    sudo sed -i "s/#port = 5432/port = 5432/" "$POSTGRES_CONFIG_DIR/postgresql.conf"
+    sudo sed -i "s/#max_connections = 100/max_connections = 200/" "$POSTGRES_CONFIG_DIR/postgresql.conf"
+
+    # Configure pg_hba.conf for remote connections
+    print_status "Configuring pg_hba.conf for remote connections..."
+    
+    # Check if remote connection rules already exist
+    if ! grep -q "host    all             all             0.0.0.0/0               md5" "$POSTGRES_CONFIG_DIR/pg_hba.conf"; then
+        echo "# Remote connections" | sudo tee -a "$POSTGRES_CONFIG_DIR/pg_hba.conf"
+        echo "host    all             all             0.0.0.0/0               md5" | sudo tee -a "$POSTGRES_CONFIG_DIR/pg_hba.conf"
+        echo "host    all             all             ::/0                    md5" | sudo tee -a "$POSTGRES_CONFIG_DIR/pg_hba.conf"
+    else
+        print_status "Remote connection rules already exist in pg_hba.conf"
+    fi
+
+    # Restart PostgreSQL to apply changes
+    print_status "Restarting PostgreSQL to apply configuration changes..."
+    sudo systemctl restart postgresql
+    
+    # Verify PostgreSQL is running
+    if sudo systemctl is-active --quiet postgresql; then
+        print_success "PostgreSQL restarted successfully and is running"
+    else
+        print_error "PostgreSQL failed to restart. Please check the configuration."
+        return 1
+    fi
         
         if [[ "$INSTALL_NGINX" == "true" ]]; then
             sudo systemctl start nginx
