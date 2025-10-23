@@ -5259,7 +5259,7 @@ EOF
     "supertest": "^7.1.3",
     "superagent": "^10.2.2",
     "compression": "^1.7.4",
-    "express-rate-limit": "^8.1.0",
+    "express-rate-limit": "^8.1.0"
   },
   "overrides": {
     "glob": "^10.3.10",
