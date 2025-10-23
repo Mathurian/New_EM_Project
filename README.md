@@ -62,6 +62,7 @@ chmod +x setup.sh
 - **Zero Prerequisites**: Installs Node.js, PostgreSQL, build tools automatically
 - **Environment Configuration**: Prompts for or accepts all configuration variables
 - **Database Setup**: Creates database, user, and runs migrations
+- **Default Users**: Creates 7 default users (one for each role) with password `password123`
 - **Security**: Auto-generates secure JWT and session secrets
 - **Multiple Modes**: Interactive, non-interactive, or selective automation
 
@@ -273,6 +274,8 @@ RATE_LIMIT_MAX_REQUESTS=100
 ./setup.sh --non-interactive
 ```
 
+**Note**: The setup script automatically creates 7 default users (one for each role) with password `password123`. See the [User Roles & Default Users](#-user-roles--default-users) section for complete details.
+
 ### Production Deployment:
 ```bash
 # Docker deployment
@@ -329,7 +332,11 @@ event-manager/
 └── package.json           # Backend dependencies
 ```
 
-## 👥 User Roles
+## 👥 User Roles & Default Users
+
+The system supports 7 different user roles, each with specific permissions and access levels. During setup, default users are automatically created for each role to facilitate testing and development.
+
+### User Roles:
 
 1. **Organizer**: Full system access, can manage all events and users
 2. **Judge**: Can score contestants in assigned categories
@@ -338,6 +345,30 @@ event-manager/
 5. **Tally Master**: Can certify totals after judges complete scoring
 6. **Auditor**: Can perform final certification of results
 7. **Board**: Administrative access with oversight capabilities
+
+### Default Users Created During Setup:
+
+All default users have the password: `password123`
+
+| Role | Name | Email | Gender | Pronouns |
+|------|------|-------|--------|----------|
+| **ORGANIZER** | System Administrator | admin@eventmanager.com | Other | they/them |
+| **JUDGE** | John Judge | judge@eventmanager.com | Male | he/him |
+| **CONTESTANT** | Jane Contestant | contestant@eventmanager.com | Female | she/her |
+| **EMCEE** | Mike Emcee | emcee@eventmanager.com | Male | he/him |
+| **TALLY_MASTER** | Sarah Tally Master | tallymaster@eventmanager.com | Female | she/her |
+| **AUDITOR** | David Auditor | auditor@eventmanager.com | Male | he/him |
+| **BOARD** | Lisa Board Member | board@eventmanager.com | Female | she/her |
+
+### Role-Based Access:
+
+- **ORGANIZER**: Full administrative access to all features
+- **JUDGE**: Access to scoring interface and assigned categories
+- **CONTESTANT**: View-only access to personal scores and contest info
+- **EMCEE**: Access to emcee scripts and announcement tools
+- **TALLY_MASTER**: Access to totals certification workflow
+- **AUDITOR**: Access to final certification and audit tools
+- **BOARD**: Administrative oversight and reporting capabilities
 
 ## 🔌 API Endpoints
 
@@ -404,6 +435,12 @@ npm run seed
 # Run tests
 npm test
 ```
+
+**Testing Different Roles**: Use the default users created during setup to test role-based functionality:
+- Login as different users to see role-specific dashboards
+- Test permissions and access controls
+- Verify scoring workflows with judge/contestant accounts
+- Test administrative functions with organizer/board accounts
 
 ### Frontend Development
 ```bash
@@ -666,8 +703,18 @@ MIT License - see LICENSE file for details.
 ---
 
 **Default Login Credentials:**
-- Email: `admin@eventmanager.com`
-- Password: `admin123`
+
+All users have the password: `password123`
+
+| Role | Email |
+|------|-------|
+| **ORGANIZER** | admin@eventmanager.com |
+| **JUDGE** | judge@eventmanager.com |
+| **CONTESTANT** | contestant@eventmanager.com |
+| **EMCEE** | emcee@eventmanager.com |
+| **TALLY_MASTER** | tallymaster@eventmanager.com |
+| **AUDITOR** | auditor@eventmanager.com |
+| **BOARD** | board@eventmanager.com |
 
 **Application URLs:**
 - Frontend: http://localhost:3001

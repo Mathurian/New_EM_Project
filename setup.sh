@@ -809,11 +809,33 @@ const validateUser = (req, res, next) => {
   next()
 }
 
+const validateUserUpdate = (req, res, next) => {
+  const { name, email, role } = req.body
+  
+  // Only validate fields that are present
+  if (email) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ error: 'Invalid email format' })
+    }
+  }
+  
+  if (role) {
+    const validRoles = ['ORGANIZER', 'JUDGE', 'CONTESTANT', 'EMCEE', 'TALLY_MASTER', 'AUDITOR', 'BOARD']
+    if (!validRoles.includes(role)) {
+      return res.status(400).json({ error: 'Invalid role' })
+    }
+  }
+  
+  next()
+}
+
 module.exports = {
   validateEvent,
   validateContest,
   validateCategory,
-  validateUser
+  validateUser,
+  validateUserUpdate
 }
 EOF
 
@@ -4039,7 +4061,7 @@ EOF
 const express = require('express')
 const { getAllUsers, getUserById, createUser, updateUser, deleteUser, resetPassword } = require('../controllers/usersController')
 const { authenticateToken, requireRole } = require('../middleware/auth')
-const { validateUser } = require('../middleware/validation')
+const { validateUser, validateUserUpdate } = require('../middleware/validation')
 const { logActivity } = require('../middleware/errorHandler')
 
 const router = express.Router()
@@ -4051,7 +4073,8 @@ router.use(authenticateToken)
 router.get('/', requireRole(['ORGANIZER', 'BOARD']), getAllUsers)
 router.get('/:id', getUserById)
 router.post('/', requireRole(['ORGANIZER', 'BOARD']), validateUser, logActivity('CREATE_USER', 'USER'), createUser)
-router.put('/:id', requireRole(['ORGANIZER', 'BOARD']), validateUser, logActivity('UPDATE_USER', 'USER'), updateUser)
+router.put('/:id', requireRole(['ORGANIZER', 'BOARD']), validateUserUpdate, logActivity('UPDATE_USER', 'USER'), updateUser)
+router.put('/profile/:id', validateUserUpdate, logActivity('UPDATE_PROFILE', 'USER'), updateUser)
 router.delete('/:id', requireRole(['ORGANIZER', 'BOARD']), logActivity('DELETE_USER', 'USER'), deleteUser)
 router.post('/:id/reset-password', requireRole(['ORGANIZER', 'BOARD']), resetPassword)
 
@@ -5068,25 +5091,84 @@ const seed = async () => {
     const prisma = new PrismaClient()
     
     console.log('🌱 Seeding database with initial data...')
+    console.log('📝 Creating default users for all roles...')
     
-    // Create default admin user
-    const hashedPassword = await bcrypt.hash('admin123', 12)
+    // Create default users for each role
+    const hashedPassword = await bcrypt.hash('password123', 12)
     
-    const adminUser = await prisma.user.upsert({
-      where: { email: 'admin@eventmanager.com' },
-      update: {},
-      create: {
+    const defaultUsers = [
+      {
         name: 'System Administrator',
         preferredName: 'Admin',
         email: 'admin@eventmanager.com',
-        password: hashedPassword,
         role: 'ORGANIZER',
         gender: 'Other',
         pronouns: 'they/them'
+      },
+      {
+        name: 'John Judge',
+        preferredName: 'John',
+        email: 'judge@eventmanager.com',
+        role: 'JUDGE',
+        gender: 'Male',
+        pronouns: 'he/him'
+      },
+      {
+        name: 'Jane Contestant',
+        preferredName: 'Jane',
+        email: 'contestant@eventmanager.com',
+        role: 'CONTESTANT',
+        gender: 'Female',
+        pronouns: 'she/her'
+      },
+      {
+        name: 'Mike Emcee',
+        preferredName: 'Mike',
+        email: 'emcee@eventmanager.com',
+        role: 'EMCEE',
+        gender: 'Male',
+        pronouns: 'he/him'
+      },
+      {
+        name: 'Sarah Tally Master',
+        preferredName: 'Sarah',
+        email: 'tallymaster@eventmanager.com',
+        role: 'TALLY_MASTER',
+        gender: 'Female',
+        pronouns: 'she/her'
+      },
+      {
+        name: 'David Auditor',
+        preferredName: 'David',
+        email: 'auditor@eventmanager.com',
+        role: 'AUDITOR',
+        gender: 'Male',
+        pronouns: 'he/him'
+      },
+      {
+        name: 'Lisa Board Member',
+        preferredName: 'Lisa',
+        email: 'board@eventmanager.com',
+        role: 'BOARD',
+        gender: 'Female',
+        pronouns: 'she/her'
       }
-    })
+    ]
     
-    console.log('✅ Admin user created:', adminUser.email)
+    // Create all default users
+    for (const userData of defaultUsers) {
+      const user = await prisma.user.upsert({
+        where: { email: userData.email },
+        update: {},
+        create: {
+          ...userData,
+          password: hashedPassword
+        }
+      })
+      console.log(\`✅ \${userData.role} user created:\`, user.email)
+    }
+    
+    console.log(\`🎉 Successfully created \${defaultUsers.length} default users!\`)
     
     // Create sample event
     const sampleEvent = await prisma.event.create({
@@ -5277,9 +5359,14 @@ const seed = async () => {
     
     console.log('🎉 Database seeding completed successfully!')
     console.log('')
-    console.log('📋 Default login credentials:')
-    console.log('   Email: admin@eventmanager.com')
-    console.log('   Password: admin123')
+    console.log('📋 Default login credentials (all users have password: password123):')
+    console.log('   ORGANIZER: admin@eventmanager.com')
+    console.log('   JUDGE: judge@eventmanager.com')
+    console.log('   CONTESTANT: contestant@eventmanager.com')
+    console.log('   EMCEE: emcee@eventmanager.com')
+    console.log('   TALLY_MASTER: tallymaster@eventmanager.com')
+    console.log('   AUDITOR: auditor@eventmanager.com')
+    console.log('   BOARD: board@eventmanager.com')
     
     await prisma.$disconnect()
     
@@ -6190,6 +6277,7 @@ export const usersAPI = {
   getById: (id: string) => api.get(`/users/${id}`),
   create: (data: any) => api.post('/users', data),
   update: (id: string, data: any) => api.put(`/users/${id}`, data),
+  updateProfile: (id: string, data: any) => api.put(`/users/profile/${id}`, data),
   delete: (id: string) => api.delete(`/users/${id}`),
   resetPassword: (id: string, data: any) => api.post(`/users/${id}/reset-password`, data),
 }
@@ -7244,7 +7332,7 @@ export const getStatusText = (status: string) => {
 EOF
     
     cat > "$APP_DIR/frontend/src/components/Layout.tsx" << 'EOF'
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useSocket } from '../contexts/SocketContext'
@@ -7277,6 +7365,24 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const { theme, setTheme, actualTheme } = useTheme()
   const { isConnected } = useSocket()
   const location = useLocation()
+  const userMenuRef = useRef<HTMLDivElement>(null)
+
+  // Close user menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setUserMenuOpen(false)
+      }
+    }
+
+    if (userMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [userMenuOpen])
 
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: HomeIcon, roles: ['ORGANIZER', 'JUDGE', 'CONTESTANT', 'EMCEE', 'TALLY_MASTER', 'AUDITOR', 'BOARD'] },
@@ -7445,7 +7551,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               </div>
 
               {/* Profile dropdown */}
-              <div className="ml-3 relative">
+              <div className="ml-3 relative" ref={userMenuRef}>
                 <div>
                   <button
                     type="button"
@@ -7466,12 +7572,16 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                     </div>
                     <Link
                       to="/profile"
+                      onClick={() => setUserMenuOpen(false)}
                       className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
                     >
                       Your Profile
                     </Link>
                     <button
-                      onClick={logout}
+                      onClick={() => {
+                        setUserMenuOpen(false)
+                        logout()
+                      }}
                       className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
                     >
                       Sign out
@@ -11185,7 +11295,7 @@ code {
   }
 
   .mobile-menu-content {
-    @apply fixed top-0 right-0 h-full w-80 bg-white dark:bg-gray-800 border-l shadow-lg;
+    @apply fixed top-0 left-0 h-full w-80 bg-white dark:bg-gray-800 border-r shadow-lg;
   }
 
   .dropdown {
@@ -15043,7 +15153,7 @@ const ProfilePage: React.FC = () => {
   }
 
   const updateProfileMutation = useMutation(
-    (data: Partial<UserProfile>) => usersAPI.update(userProfile.id, data),
+    (data: Partial<UserProfile>) => usersAPI.updateProfile(userProfile.id, data),
     {
       onSuccess: () => {
         queryClient.invalidateQueries('userProfile')
@@ -21100,9 +21210,14 @@ main() {
     fi
     echo "   Backend API: http://localhost:3000"
     echo ""
-    echo "🔐 Default Login Credentials:"
-    echo "   Email: admin@eventmanager.com"
-    echo "   Password: admin123"
+    echo "🔐 Default Login Credentials (all users have password: password123):"
+    echo "   ORGANIZER: admin@eventmanager.com"
+    echo "   JUDGE: judge@eventmanager.com"
+    echo "   CONTESTANT: contestant@eventmanager.com"
+    echo "   EMCEE: emcee@eventmanager.com"
+    echo "   TALLY_MASTER: tallymaster@eventmanager.com"
+    echo "   AUDITOR: auditor@eventmanager.com"
+    echo "   BOARD: board@eventmanager.com"
     echo ""
     echo "✨ Complete Event Manager Application Features:"
     echo "   ✅ Professional Login Page with Authentication"
