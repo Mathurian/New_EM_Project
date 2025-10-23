@@ -1822,11 +1822,11 @@ const prisma = new PrismaClient()
 const getStats = async (req, res) => {
   try {
     const stats = {
-      totalUsers: await prisma.user.count(),
-      totalEvents: await prisma.event.count(),
-      totalContests: await prisma.contest.count(),
-      totalCategories: await prisma.category.count(),
-      totalScores: await prisma.score.count()
+      users: await prisma.user.count(),
+      events: await prisma.event.count(),
+      contests: await prisma.contest.count(),
+      categories: await prisma.category.count(),
+      scores: await prisma.score.count()
     }
 
     res.json(stats)
@@ -10456,6 +10456,7 @@ EOF
     cat > "$APP_DIR/frontend/src/pages/Dashboard.tsx" << 'EOF'
 import React, { useState } from 'react'
 import { useQuery } from 'react-query'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useSocket } from '../contexts/SocketContext'
 import { adminAPI, eventsAPI, contestsAPI, usersAPI } from '../services/api'
@@ -10482,6 +10483,7 @@ import { format, subDays, subWeeks, subMonths } from 'date-fns'
 const Dashboard: React.FC = () => {
   const { user, isLoading: authLoading } = useAuth()
   const { isConnected } = useSocket()
+  const navigate = useNavigate()
   const [timeRange, setTimeRange] = useState<'7d' | '30d' | '90d' | '1y'>('30d')
 
   // Admin/Board queries
@@ -10536,6 +10538,31 @@ const Dashboard: React.FC = () => {
       case 'BOARD':
         return (
           <div className="space-y-6">
+            {/* System Status */}
+            <div className="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg">
+              <div className="px-4 py-5 sm:p-6">
+                <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white mb-4">
+                  System Status
+                </h3>
+                <div className="flex items-center space-x-4">
+                  <div className="flex items-center">
+                    <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-green-400' : 'bg-red-400'}`}></div>
+                    <span className="ml-2 text-sm text-gray-600 dark:text-gray-400">
+                      WebSocket: {isConnected ? 'Connected' : 'Disconnected'}
+                    </span>
+                  </div>
+                  <div className="flex items-center">
+                    <div className="w-3 h-3 rounded-full bg-green-400"></div>
+                    <span className="ml-2 text-sm text-gray-600 dark:text-gray-400">Database: Online</span>
+                  </div>
+                  <div className="flex items-center">
+                    <div className="w-3 h-3 rounded-full bg-green-400"></div>
+                    <span className="ml-2 text-sm text-gray-600 dark:text-gray-400">API: Online</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* System Overview */}
             <div className="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg">
               <div className="px-4 py-5 sm:p-6">
@@ -10609,6 +10636,38 @@ const Dashboard: React.FC = () => {
               </div>
             </div>
 
+            {/* Quick Actions */}
+            <div className="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg">
+              <div className="px-4 py-5 sm:p-6">
+                <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white mb-4">
+                  Quick Actions
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <button 
+                    onClick={() => navigate('/events')}
+                    className="p-4 bg-blue-50 dark:bg-blue-900 hover:bg-blue-100 dark:hover:bg-blue-800 rounded-lg text-left transition-colors"
+                  >
+                    <div className="text-blue-600 dark:text-blue-400 font-medium">Create New Event</div>
+                    <div className="text-sm text-blue-500 dark:text-blue-300">Start a new contest event</div>
+                  </button>
+                  <button 
+                    onClick={() => navigate('/users')}
+                    className="p-4 bg-green-50 dark:bg-green-900 hover:bg-green-100 dark:hover:bg-green-800 rounded-lg text-left transition-colors"
+                  >
+                    <div className="text-green-600 dark:text-green-400 font-medium">Manage Users</div>
+                    <div className="text-sm text-green-500 dark:text-green-300">Add judges and contestants</div>
+                  </button>
+                  <button 
+                    onClick={() => navigate('/reports')}
+                    className="p-4 bg-yellow-50 dark:bg-yellow-900 hover:bg-yellow-100 dark:hover:bg-yellow-800 rounded-lg text-left transition-colors"
+                  >
+                    <div className="text-yellow-600 dark:text-yellow-400 font-medium">View Reports</div>
+                    <div className="text-sm text-yellow-500 dark:text-yellow-300">Generate contest reports</div>
+                  </button>
+                </div>
+              </div>
+            </div>
+
             {/* Recent Events */}
             <div className="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg">
               <div className="px-4 py-5 sm:p-6">
@@ -10636,54 +10695,6 @@ const Dashboard: React.FC = () => {
                     ))}
                   </div>
                 )}
-              </div>
-            </div>
-
-            {/* Quick Actions */}
-            <div className="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg">
-              <div className="px-4 py-5 sm:p-6">
-                <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white mb-4">
-                  Quick Actions
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <button className="p-4 bg-blue-50 dark:bg-blue-900 hover:bg-blue-100 dark:hover:bg-blue-800 rounded-lg text-left transition-colors">
-                    <div className="text-blue-600 dark:text-blue-400 font-medium">Create New Event</div>
-                    <div className="text-sm text-blue-500 dark:text-blue-300">Start a new contest event</div>
-                  </button>
-                  <button className="p-4 bg-green-50 dark:bg-green-900 hover:bg-green-100 dark:hover:bg-green-800 rounded-lg text-left transition-colors">
-                    <div className="text-green-600 dark:text-green-400 font-medium">Manage Users</div>
-                    <div className="text-sm text-green-500 dark:text-green-300">Add judges and contestants</div>
-                  </button>
-                  <button className="p-4 bg-yellow-50 dark:bg-yellow-900 hover:bg-yellow-100 dark:hover:bg-yellow-800 rounded-lg text-left transition-colors">
-                    <div className="text-yellow-600 dark:text-yellow-400 font-medium">View Reports</div>
-                    <div className="text-sm text-yellow-500 dark:text-yellow-300">Generate contest reports</div>
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* System Status */}
-            <div className="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg">
-              <div className="px-4 py-5 sm:p-6">
-                <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white mb-4">
-                  System Status
-                </h3>
-                <div className="flex items-center space-x-4">
-                  <div className="flex items-center">
-                    <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-green-400' : 'bg-red-400'}`}></div>
-                    <span className="ml-2 text-sm text-gray-600 dark:text-gray-400">
-                      WebSocket: {isConnected ? 'Connected' : 'Disconnected'}
-                    </span>
-                  </div>
-                  <div className="flex items-center">
-                    <div className="w-3 h-3 rounded-full bg-green-400"></div>
-                    <span className="ml-2 text-sm text-gray-600 dark:text-gray-400">Database: Online</span>
-                  </div>
-                  <div className="flex items-center">
-                    <div className="w-3 h-3 rounded-full bg-green-400"></div>
-                    <span className="ml-2 text-sm text-gray-600 dark:text-gray-400">API: Online</span>
-                  </div>
-                </div>
               </div>
             </div>
           </div>
