@@ -521,6 +521,28 @@ install_prerequisites() {
         sudo systemctl start postgresql
         sudo systemctl enable postgresql
         
+        # Configure PostgreSQL for remote connections
+        print_status "Configuring PostgreSQL for remote connections..."
+        
+        # Backup original postgresql.conf
+        sudo cp /etc/postgresql/*/main/postgresql.conf /etc/postgresql/*/main/postgresql.conf.backup
+        
+        # Configure postgresql.conf for remote connections
+        sudo sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/" /etc/postgresql/*/main/postgresql.conf
+        sudo sed -i "s/#port = 5432/port = 5432/" /etc/postgresql/*/main/postgresql.conf
+        sudo sed -i "s/#max_connections = 100/max_connections = 200/" /etc/postgresql/*/main/postgresql.conf
+        
+        # Configure pg_hba.conf for remote connections
+        sudo cp /etc/postgresql/*/main/pg_hba.conf /etc/postgresql/*/main/pg_hba.conf.backup
+        
+        # Add remote connection rules
+        echo "# Remote connections" | sudo tee -a /etc/postgresql/*/main/pg_hba.conf
+        echo "host    all             all             0.0.0.0/0               md5" | sudo tee -a /etc/postgresql/*/main/pg_hba.conf
+        echo "host    all             all             ::/0                    md5" | sudo tee -a /etc/postgresql/*/main/pg_hba.conf
+        
+        # Restart PostgreSQL to apply changes
+        sudo systemctl restart postgresql
+        
         if [[ "$INSTALL_NGINX" == "true" ]]; then
             sudo systemctl start nginx
             sudo systemctl enable nginx
@@ -1528,13 +1550,201 @@ const resetPassword = async (req, res) => {
   }
 }
 
+// CSV Import functionality
+const importUsersFromCSV = async (req, res) => {
+  try {
+    const { csvData, userType } = req.body
+
+    if (!csvData || !Array.isArray(csvData) || csvData.length === 0) {
+      return res.status(400).json({ error: 'CSV data is required' })
+    }
+
+    if (!userType) {
+      return res.status(400).json({ error: 'User type is required' })
+    }
+
+    const results = []
+    const errors = []
+
+    for (let i = 0; i < csvData.length; i++) {
+      const row = csvData[i]
+      try {
+        // Validate required fields based on user type
+        const requiredFields = ['name', 'email']
+        const missingFields = requiredFields.filter(field => !row[field])
+        
+        if (missingFields.length > 0) {
+          errors.push({
+            row: i + 1,
+            error: `Missing required fields: ${missingFields.join(', ')}`
+          })
+          continue
+        }
+
+        // Check if user already exists
+        const existingUser = await prisma.user.findUnique({
+          where: { email: row.email }
+        })
+
+        if (existingUser) {
+          errors.push({
+            row: i + 1,
+            email: row.email,
+            error: 'User already exists'
+          })
+          continue
+        }
+
+        // Hash password (use default or provided)
+        const password = row.password || 'defaultPassword123!'
+        const hashedPassword = await bcrypt.hash(password, 10)
+
+        // Create user data
+        const userData = {
+          name: row.name,
+          email: row.email,
+          password: hashedPassword,
+          role: userType,
+          isActive: true,
+          preferredName: row.preferredName || null,
+          pronouns: row.pronouns || null,
+          phone: row.phone || null,
+          address: row.address || null,
+          emergencyContact: row.emergencyContact || null,
+          emergencyPhone: row.emergencyPhone || null,
+          medicalInfo: row.medicalInfo || null,
+          notes: row.notes || null
+        }
+
+        // Create user
+        const user = await prisma.user.create({
+          data: userData
+        })
+
+        // Create role-specific data
+        if (userType === 'JUDGE' && row.judgeData) {
+          await prisma.judge.create({
+            data: {
+              userId: user.id,
+              experience: row.judgeData.experience || null,
+              specialties: row.judgeData.specialties || null,
+              certifications: row.judgeData.certifications || null,
+              bio: row.judgeData.bio || null,
+              availability: row.judgeData.availability || null
+            }
+          })
+        } else if (userType === 'CONTESTANT' && row.contestantData) {
+          await prisma.contestant.create({
+            data: {
+              userId: user.id,
+              contestantNumber: row.contestantData.contestantNumber || null,
+              age: row.contestantData.age || null,
+              school: row.contestantData.school || null,
+              grade: row.contestantData.grade || null,
+              parentGuardian: row.contestantData.parentGuardian || null,
+              parentPhone: row.contestantData.parentPhone || null,
+              parentEmail: row.contestantData.parentEmail || null,
+              bio: row.contestantData.bio || null,
+              achievements: row.contestantData.achievements || null
+            }
+          })
+        }
+
+        results.push({
+          row: i + 1,
+          user: {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            role: user.role
+          },
+          status: 'SUCCESS'
+        })
+      } catch (error) {
+        console.error(`Error processing row ${i + 1}:`, error)
+        errors.push({
+          row: i + 1,
+          error: error.message
+        })
+      }
+    }
+
+    res.json({
+      message: 'CSV import completed',
+      totalProcessed: csvData.length,
+      successful: results.length,
+      failed: errors.length,
+      results: results,
+      errors: errors
+    })
+  } catch (error) {
+    console.error('CSV import error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Get CSV template
+const getCSVTemplate = async (req, res) => {
+  try {
+    const { userType } = req.query
+
+    if (!userType) {
+      return res.status(400).json({ error: 'User type is required' })
+    }
+
+    let template = {
+      headers: ['name', 'email', 'preferredName', 'pronouns', 'phone', 'address', 'emergencyContact', 'emergencyPhone', 'medicalInfo', 'notes'],
+      sample: {
+        name: 'John Doe',
+        email: 'john.doe@example.com',
+        preferredName: 'Johnny',
+        pronouns: 'he/him',
+        phone: '555-1234',
+        address: '123 Main St, City, State 12345',
+        emergencyContact: 'Jane Doe',
+        emergencyPhone: '555-5678',
+        medicalInfo: 'None',
+        notes: 'Sample user'
+      }
+    }
+
+    // Add role-specific fields
+    if (userType === 'JUDGE') {
+      template.headers.push('judgeData.experience', 'judgeData.specialties', 'judgeData.certifications', 'judgeData.bio', 'judgeData.availability')
+      template.sample['judgeData.experience'] = '5 years'
+      template.sample['judgeData.specialties'] = 'Speech, Debate'
+      template.sample['judgeData.certifications'] = 'Certified Judge'
+      template.sample['judgeData.bio'] = 'Experienced judge'
+      template.sample['judgeData.availability'] = 'Weekends'
+    } else if (userType === 'CONTESTANT') {
+      template.headers.push('contestantData.contestantNumber', 'contestantData.age', 'contestantData.school', 'contestantData.grade', 'contestantData.parentGuardian', 'contestantData.parentPhone', 'contestantData.parentEmail', 'contestantData.bio', 'contestantData.achievements')
+      template.sample['contestantData.contestantNumber'] = '001'
+      template.sample['contestantData.age'] = '16'
+      template.sample['contestantData.school'] = 'High School'
+      template.sample['contestantData.grade'] = '11'
+      template.sample['contestantData.parentGuardian'] = 'Jane Doe'
+      template.sample['contestantData.parentPhone'] = '555-5678'
+      template.sample['contestantData.parentEmail'] = 'jane.doe@example.com'
+      template.sample['contestantData.bio'] = 'Student bio'
+      template.sample['contestantData.achievements'] = 'Previous awards'
+    }
+
+    res.json(template)
+  } catch (error) {
+    console.error('Get CSV template error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
 module.exports = {
   getAllUsers,
   getUserById,
   createUser,
   updateUser,
   deleteUser,
-  resetPassword
+  resetPassword,
+  importUsersFromCSV,
+  getCSVTemplate
 }
 EOF
 
@@ -1693,6 +1903,264 @@ const finalCertification = async (req, res) => {
   }
 }
 
+// Point deduction approval functionality
+const requestDeduction = async (req, res) => {
+  try {
+    const { categoryId, contestantId, deduction, reason } = req.body
+    const requestedBy = req.user.id
+
+    if (!categoryId || !contestantId || deduction === undefined || !reason) {
+      return res.status(400).json({ error: 'Category ID, Contestant ID, deduction amount, and reason are required' })
+    }
+
+    // Check if user has permission to request deductions
+    if (!['JUDGE', 'TALLY_MASTER', 'AUDITOR', 'BOARD'].includes(req.user.role)) {
+      return res.status(403).json({ error: 'Insufficient permissions to request deductions' })
+    }
+
+    // Check if deduction already exists
+    const existingDeduction = await prisma.overallDeduction.findUnique({
+      where: {
+        categoryId_contestantId: {
+          categoryId,
+          contestantId
+        }
+      }
+    })
+
+    if (existingDeduction) {
+      return res.status(400).json({ error: 'Deduction already exists for this contestant in this category' })
+    }
+
+    // Create deduction request
+    const deductionRequest = await prisma.overallDeduction.create({
+      data: {
+        categoryId,
+        contestantId,
+        deduction,
+        reason,
+        requestedBy
+      },
+      include: {
+        category: {
+          include: {
+            contest: {
+              include: {
+                event: true
+              }
+            }
+          }
+        },
+        contestant: {
+          include: {
+            user: true
+          }
+        }
+      }
+    })
+
+    res.json({
+      message: 'Deduction request created successfully',
+      deduction: deductionRequest
+    })
+  } catch (error) {
+    console.error('Request deduction error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const approveDeduction = async (req, res) => {
+  try {
+    const { deductionId } = req.params
+    const { signature } = req.body
+    const userId = req.user.id
+    const userRole = req.user.role
+
+    if (!signature) {
+      return res.status(400).json({ error: 'Signature is required' })
+    }
+
+    // Check if user has permission to approve deductions
+    if (!['BOARD', 'AUDITOR', 'TALLY_MASTER'].includes(userRole)) {
+      return res.status(403).json({ error: 'Insufficient permissions to approve deductions' })
+    }
+
+    const deduction = await prisma.overallDeduction.findUnique({
+      where: { id: deductionId },
+      include: {
+        category: true,
+        contestant: {
+          include: {
+            user: true
+          }
+        }
+      }
+    })
+
+    if (!deduction) {
+      return res.status(404).json({ error: 'Deduction not found' })
+    }
+
+    // Update the deduction with the signature
+    let updateData = {}
+    if (userRole === 'TALLY_MASTER') {
+      updateData = {
+        tallySignature: signature,
+        tallySignedAt: new Date(),
+        tallySignedBy: userId
+      }
+    } else if (userRole === 'AUDITOR') {
+      updateData = {
+        auditorSignature: signature,
+        auditorSignedAt: new Date(),
+        auditorSignedBy: userId
+      }
+    } else if (userRole === 'BOARD') {
+      updateData = {
+        boardSignature: signature,
+        boardSignedAt: new Date(),
+        boardSignedBy: userId
+      }
+    }
+
+    const updatedDeduction = await prisma.overallDeduction.update({
+      where: { id: deductionId },
+      data: updateData,
+      include: {
+        category: {
+          include: {
+            contest: {
+              include: {
+                event: true
+              }
+            }
+          }
+        },
+        contestant: {
+          include: {
+            user: true
+          }
+        }
+      }
+    })
+
+    // Check if all required signatures are present
+    const hasTallySignature = !!updatedDeduction.tallySignature
+    const hasAuditorSignature = !!updatedDeduction.auditorSignature
+    const hasBoardSignature = !!updatedDeduction.boardSignature
+
+    if (hasTallySignature && hasAuditorSignature && hasBoardSignature) {
+      // All signatures present, deduction is approved
+      await prisma.overallDeduction.update({
+        where: { id: deductionId },
+        data: { status: 'APPROVED' }
+      })
+
+      res.json({
+        message: 'Deduction approved successfully',
+        deduction: updatedDeduction
+      })
+    } else {
+      res.json({
+        message: 'Signature added, waiting for additional signatures',
+        deduction: updatedDeduction
+      })
+    }
+  } catch (error) {
+    console.error('Approve deduction error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const rejectDeduction = async (req, res) => {
+  try {
+    const { deductionId } = req.params
+    const { reason } = req.body
+
+    if (!reason) {
+      return res.status(400).json({ error: 'Rejection reason is required' })
+    }
+
+    // Check if user has permission to reject deductions
+    if (!['BOARD', 'AUDITOR'].includes(req.user.role)) {
+      return res.status(403).json({ error: 'Insufficient permissions to reject deductions' })
+    }
+
+    const deduction = await prisma.overallDeduction.update({
+      where: { id: deductionId },
+      data: {
+        status: 'REJECTED',
+        rejectionReason: reason,
+        rejectedAt: new Date(),
+        rejectedBy: req.user.id
+      },
+      include: {
+        category: {
+          include: {
+            contest: {
+              include: {
+                event: true
+              }
+            }
+          }
+        },
+        contestant: {
+          include: {
+            user: true
+          }
+        }
+      }
+    })
+
+    res.json({
+      message: 'Deduction rejected successfully',
+      deduction
+    })
+  } catch (error) {
+    console.error('Reject deduction error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getDeductions = async (req, res) => {
+  try {
+    const { categoryId } = req.query
+
+    let whereClause = {}
+    if (categoryId) {
+      whereClause.categoryId = categoryId
+    }
+
+    const deductions = await prisma.overallDeduction.findMany({
+      where: whereClause,
+      include: {
+        category: {
+          include: {
+            contest: {
+              include: {
+                event: true
+              }
+            }
+          }
+        },
+        contestant: {
+          include: {
+            user: true
+          }
+        }
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    })
+
+    res.json(deductions)
+  } catch (error) {
+    console.error('Get deductions error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
 module.exports = {
   getScores,
   submitScore,
@@ -1700,7 +2168,11 @@ module.exports = {
   deleteScore,
   certifyScores,
   certifyTotals,
-  finalCertification
+  finalCertification,
+  requestDeduction,
+  approveDeduction,
+  rejectDeduction,
+  getDeductions
 }
 EOF
 
@@ -2211,6 +2683,180 @@ module.exports = {
 }
 EOF
 
+    # Database Browser Controller
+    cat > "$APP_DIR/src/controllers/databaseBrowserController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+// Get all database tables
+const getDatabaseTables = async (req, res) => {
+  try {
+    const tables = await prisma.$queryRaw`
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_schema = 'public' 
+      AND table_type = 'BASE TABLE'
+      ORDER BY table_name
+    `
+
+    res.json(tables)
+  } catch (error) {
+    console.error('Get database tables error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Get table data with pagination and search
+const getTableData = async (req, res) => {
+  try {
+    const { tableName } = req.params
+    const { page = 1, limit = 50, search = '', sortBy = '', sortOrder = 'asc' } = req.query
+
+    // Validate table name to prevent SQL injection
+    const validTables = ['users', 'events', 'contests', 'categories', 'scores', 'judges', 'contestants', 'assignments', 'certifications', 'files', 'performance_logs', 'reports', 'emcee_scripts', 'winner_signatures', 'score_removal_requests']
+    
+    if (!validTables.includes(tableName)) {
+      return res.status(400).json({ error: 'Invalid table name' })
+    }
+
+    const offset = (page - 1) * limit
+    let query = `SELECT * FROM "${tableName}"`
+    let countQuery = `SELECT COUNT(*) as count FROM "${tableName}"`
+
+    // Add search functionality
+    if (search) {
+      const searchCondition = `WHERE ${Object.keys(await prisma[tableName].findFirst() || {}).slice(0, 5).map(col => `"${col}" ILIKE '%${search}%'`).join(' OR ')}`
+      query += ` ${searchCondition}`
+      countQuery += ` ${searchCondition}`
+    }
+
+    // Add sorting
+    if (sortBy) {
+      query += ` ORDER BY "${sortBy}" ${sortOrder.toUpperCase()}`
+    }
+
+    // Add pagination
+    query += ` LIMIT ${limit} OFFSET ${offset}`
+
+    const [data, countResult] = await Promise.all([
+      prisma.$queryRawUnsafe(query),
+      prisma.$queryRawUnsafe(countQuery)
+    ])
+
+    const total = parseInt(countResult[0].count)
+
+    res.json({
+      data,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / limit)
+      }
+    })
+  } catch (error) {
+    console.error('Get table data error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Get table schema
+const getTableSchema = async (req, res) => {
+  try {
+    const { tableName } = req.params
+
+    // Validate table name
+    const validTables = ['users', 'events', 'contests', 'categories', 'scores', 'judges', 'contestants', 'assignments', 'certifications', 'files', 'performance_logs', 'reports', 'emcee_scripts', 'winner_signatures', 'score_removal_requests']
+    
+    if (!validTables.includes(tableName)) {
+      return res.status(400).json({ error: 'Invalid table name' })
+    }
+
+    const schema = await prisma.$queryRaw`
+      SELECT 
+        column_name,
+        data_type,
+        is_nullable,
+        column_default,
+        character_maximum_length
+      FROM information_schema.columns 
+      WHERE table_name = ${tableName}
+      AND table_schema = 'public'
+      ORDER BY ordinal_position
+    `
+
+    res.json(schema)
+  } catch (error) {
+    console.error('Get table schema error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Execute custom query (read-only)
+const executeQuery = async (req, res) => {
+  try {
+    const { query } = req.body
+
+    if (!query) {
+      return res.status(400).json({ error: 'Query is required' })
+    }
+
+    // Basic security check - only allow SELECT statements
+    const trimmedQuery = query.trim().toLowerCase()
+    if (!trimmedQuery.startsWith('select')) {
+      return res.status(400).json({ error: 'Only SELECT queries are allowed' })
+    }
+
+    // Additional security checks
+    const dangerousKeywords = ['drop', 'delete', 'update', 'insert', 'alter', 'create', 'truncate', 'exec', 'execute']
+    if (dangerousKeywords.some(keyword => trimmedQuery.includes(keyword))) {
+      return res.status(400).json({ error: 'Query contains dangerous keywords' })
+    }
+
+    const result = await prisma.$queryRawUnsafe(query)
+
+    res.json({
+      data: result,
+      rowCount: result.length
+    })
+  } catch (error) {
+    console.error('Execute query error:', error)
+    res.status(500).json({ error: 'Query execution failed: ' + error.message })
+  }
+}
+
+// Get database statistics
+const getDatabaseStats = async (req, res) => {
+  try {
+    const stats = await prisma.$queryRaw`
+      SELECT 
+        schemaname,
+        tablename,
+        attname,
+        n_distinct,
+        correlation
+      FROM pg_stats 
+      WHERE schemaname = 'public'
+      ORDER BY tablename, attname
+    `
+
+    res.json(stats)
+  } catch (error) {
+    console.error('Get database stats error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+module.exports = {
+  getDatabaseTables,
+  getTableData,
+  getTableSchema,
+  executeQuery,
+  getDatabaseStats
+}
+EOF
+
     # Upload Controller
     cat > "$APP_DIR/src/controllers/uploadController.js" << 'EOF'
 const fs = require('fs')
@@ -2412,11 +3058,81 @@ const testSettings = async (req, res) => {
   }
 }
 
+// JWT/Session timeout configuration
+const updateJWTConfig = async (req, res) => {
+  try {
+    const { jwtExpiresIn, sessionTimeout, refreshTokenExpiresIn } = req.body
+
+    if (!jwtExpiresIn) {
+      return res.status(400).json({ error: 'JWT expiration time is required' })
+    }
+
+    // Validate JWT expiration format (e.g., "24h", "7d", "30m")
+    const jwtExpirationRegex = /^\d+[hdm]$/
+    if (!jwtExpirationRegex.test(jwtExpiresIn)) {
+      return res.status(400).json({ error: 'Invalid JWT expiration format. Use format like "24h", "7d", "30m"' })
+    }
+
+    // Update JWT settings
+    await prisma.systemSetting.upsert({
+      where: { key: 'JWT_EXPIRES_IN' },
+      update: { value: jwtExpiresIn },
+      create: { key: 'JWT_EXPIRES_IN', value: jwtExpiresIn, description: 'JWT token expiration time' }
+    })
+
+    if (sessionTimeout) {
+      await prisma.systemSetting.upsert({
+        where: { key: 'SESSION_TIMEOUT' },
+        update: { value: sessionTimeout.toString() },
+        create: { key: 'SESSION_TIMEOUT', value: sessionTimeout.toString(), description: 'Session timeout in minutes' }
+      })
+    }
+
+    if (refreshTokenExpiresIn) {
+      await prisma.systemSetting.upsert({
+        where: { key: 'REFRESH_TOKEN_EXPIRES_IN' },
+        update: { value: refreshTokenExpiresIn },
+        create: { key: 'REFRESH_TOKEN_EXPIRES_IN', value: refreshTokenExpiresIn, description: 'Refresh token expiration time' }
+      })
+    }
+
+    res.json({ message: 'JWT configuration updated successfully' })
+  } catch (error) {
+    console.error('Update JWT config error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getJWTConfig = async (req, res) => {
+  try {
+    const settings = await prisma.systemSetting.findMany({
+      where: {
+        key: {
+          in: ['JWT_EXPIRES_IN', 'SESSION_TIMEOUT', 'REFRESH_TOKEN_EXPIRES_IN']
+        }
+      }
+    })
+
+    const config = {
+      jwtExpiresIn: settings.find(s => s.key === 'JWT_EXPIRES_IN')?.value || '24h',
+      sessionTimeout: parseInt(settings.find(s => s.key === 'SESSION_TIMEOUT')?.value || '1440'), // 24 hours in minutes
+      refreshTokenExpiresIn: settings.find(s => s.key === 'REFRESH_TOKEN_EXPIRES_IN')?.value || '7d'
+    }
+
+    res.json(config)
+  } catch (error) {
+    console.error('Get JWT config error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
 module.exports = {
   getAllSettings,
   getSettings,
   updateSettings,
-  testSettings
+  testSettings,
+  updateJWTConfig,
+  getJWTConfig
 }
 EOF
 
@@ -4689,6 +5405,254 @@ const getTallyMasterHistory = async (req, res) => {
   }
 }
 
+// Score removal functionality
+const requestScoreRemoval = async (req, res) => {
+  try {
+    const { categoryId, judgeId, reason } = req.body
+    const requestedBy = req.user.id
+
+    if (!categoryId || !judgeId || !reason) {
+      return res.status(400).json({ error: 'Category ID, Judge ID, and reason are required' })
+    }
+
+    // Check if user has permission to request score removal
+    if (req.user.role !== 'TALLY_MASTER' && req.user.role !== 'AUDITOR' && req.user.role !== 'BOARD') {
+      return res.status(403).json({ error: 'Insufficient permissions to request score removal' })
+    }
+
+    // Create score removal request
+    const scoreRemovalRequest = await prisma.scoreRemovalRequest.create({
+      data: {
+        categoryId,
+        judgeId,
+        reason,
+        requestedBy,
+        status: 'PENDING'
+      },
+      include: {
+        category: {
+          include: {
+            contest: {
+              include: {
+                event: true
+              }
+            }
+          }
+        },
+        judge: {
+          include: {
+            user: true
+          }
+        }
+      }
+    })
+
+    res.json({
+      message: 'Score removal request created successfully',
+      request: scoreRemovalRequest
+    })
+  } catch (error) {
+    console.error('Request score removal error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getScoreRemovalRequests = async (req, res) => {
+  try {
+    const requests = await prisma.scoreRemovalRequest.findMany({
+      include: {
+        category: {
+          include: {
+            contest: {
+              include: {
+                event: true
+              }
+            }
+          }
+        },
+        judge: {
+          include: {
+            user: true
+          }
+        }
+      },
+      orderBy: {
+        requestedAt: 'desc'
+      }
+    })
+
+    res.json(requests)
+  } catch (error) {
+    console.error('Get score removal requests error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const approveScoreRemoval = async (req, res) => {
+  try {
+    const { requestId } = req.params
+    const userId = req.user.id
+    const userRole = req.user.role
+    const { signature } = req.body
+
+    if (!signature) {
+      return res.status(400).json({ error: 'Signature is required' })
+    }
+
+    // Check if user has permission to approve
+    if (!['TALLY_MASTER', 'AUDITOR', 'BOARD'].includes(userRole)) {
+      return res.status(403).json({ error: 'Insufficient permissions to approve score removal' })
+    }
+
+    const request = await prisma.scoreRemovalRequest.findUnique({
+      where: { id: requestId },
+      include: {
+        category: true,
+        judge: {
+          include: {
+            user: true
+          }
+        }
+      }
+    })
+
+    if (!request) {
+      return res.status(404).json({ error: 'Score removal request not found' })
+    }
+
+    if (request.status !== 'PENDING') {
+      return res.status(400).json({ error: 'Request is not pending' })
+    }
+
+    // Update the request with the signature
+    let updateData = {}
+    if (userRole === 'TALLY_MASTER') {
+      updateData = {
+        tallySignature: signature,
+        tallySignedAt: new Date(),
+        tallySignedBy: userId
+      }
+    } else if (userRole === 'AUDITOR') {
+      updateData = {
+        auditorSignature: signature,
+        auditorSignedAt: new Date(),
+        auditorSignedBy: userId
+      }
+    } else if (userRole === 'BOARD') {
+      updateData = {
+        boardSignature: signature,
+        boardSignedAt: new Date(),
+        boardSignedBy: userId
+      }
+    }
+
+    const updatedRequest = await prisma.scoreRemovalRequest.update({
+      where: { id: requestId },
+      data: updateData,
+      include: {
+        category: {
+          include: {
+            contest: {
+              include: {
+                event: true
+              }
+            }
+          }
+        },
+        judge: {
+          include: {
+            user: true
+          }
+        }
+      }
+    })
+
+    // Check if all required signatures are present
+    const hasTallySignature = !!updatedRequest.tallySignature
+    const hasAuditorSignature = !!updatedRequest.auditorSignature
+    const hasBoardSignature = !!updatedRequest.boardSignature
+
+    if (hasTallySignature && hasAuditorSignature && hasBoardSignature) {
+      // All signatures present, remove the scores
+      await prisma.score.deleteMany({
+        where: {
+          categoryId: request.categoryId,
+          judgeId: request.judgeId
+        }
+      })
+
+      // Update request status to approved
+      await prisma.scoreRemovalRequest.update({
+        where: { id: requestId },
+        data: { status: 'APPROVED' }
+      })
+
+      res.json({
+        message: 'Score removal request approved and scores removed',
+        request: updatedRequest
+      })
+    } else {
+      res.json({
+        message: 'Signature added, waiting for additional signatures',
+        request: updatedRequest
+      })
+    }
+  } catch (error) {
+    console.error('Approve score removal error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const rejectScoreRemoval = async (req, res) => {
+  try {
+    const { requestId } = req.params
+    const { reason } = req.body
+
+    if (!reason) {
+      return res.status(400).json({ error: 'Rejection reason is required' })
+    }
+
+    // Check if user has permission to reject
+    if (!['BOARD', 'AUDITOR'].includes(req.user.role)) {
+      return res.status(403).json({ error: 'Insufficient permissions to reject score removal' })
+    }
+
+    const request = await prisma.scoreRemovalRequest.update({
+      where: { id: requestId },
+      data: {
+        status: 'REJECTED',
+        rejectionReason: reason,
+        rejectedAt: new Date(),
+        rejectedBy: req.user.id
+      },
+      include: {
+        category: {
+          include: {
+            contest: {
+              include: {
+                event: true
+              }
+            }
+          }
+        },
+        judge: {
+          include: {
+            user: true
+          }
+        }
+      }
+    })
+
+    res.json({
+      message: 'Score removal request rejected',
+      request
+    })
+  } catch (error) {
+    console.error('Reject score removal error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
 module.exports = {
   getStats,
   getCertifications,
@@ -4698,7 +5662,11 @@ module.exports = {
   getScoreReview,
   getCertificationWorkflow,
   getBiasCheckingTools,
-  getTallyMasterHistory
+  getTallyMasterHistory,
+  requestScoreRemoval,
+  getScoreRemovalRequests,
+  approveScoreRemoval,
+  rejectScoreRemoval
 }
 EOF
 
@@ -6349,6 +7317,185 @@ const getLogs = async (req, res) => {
   }
 }
 
+// Send email to multiple recipients
+const sendMultipleEmails = async (req, res) => {
+  try {
+    const { recipients, subject, content, type = 'CUSTOM' } = req.body
+
+    if (!recipients || !Array.isArray(recipients) || recipients.length === 0) {
+      return res.status(400).json({ error: 'Recipients array is required' })
+    }
+
+    if (!subject || !content) {
+      return res.status(400).json({ error: 'Subject and content are required' })
+    }
+
+    const results = []
+    const transporter = createTransporter()
+
+    for (const recipient of recipients) {
+      try {
+        const mailOptions = {
+          from: process.env.SMTP_FROM || 'noreply@eventmanager.com',
+          to: recipient.email || recipient,
+          subject: subject,
+          html: content,
+          text: content.replace(/<[^>]*>/g, '') // Strip HTML for text version
+        }
+
+        const info = await transporter.sendMail(mailOptions)
+        
+        // Log successful email
+        await prisma.emailLog.create({
+          data: {
+            to: recipient.email || recipient,
+            subject: subject,
+            status: 'SENT',
+            sentAt: new Date(),
+            messageId: info.messageId
+          }
+        })
+
+        results.push({
+          recipient: recipient.email || recipient,
+          status: 'SENT',
+          messageId: info.messageId
+        })
+      } catch (error) {
+        console.error(`Failed to send email to ${recipient.email || recipient}:`, error)
+        
+        // Log failed email
+        await prisma.emailLog.create({
+          data: {
+            to: recipient.email || recipient,
+            subject: subject,
+            status: 'FAILED',
+            sentAt: new Date(),
+            errorMessage: error.message
+          }
+        })
+
+        results.push({
+          recipient: recipient.email || recipient,
+          status: 'FAILED',
+          error: error.message
+        })
+      }
+    }
+
+    res.json({
+      message: 'Bulk email processing completed',
+      results: results,
+      totalSent: results.filter(r => r.status === 'SENT').length,
+      totalFailed: results.filter(r => r.status === 'FAILED').length
+    })
+  } catch (error) {
+    console.error('Send multiple emails error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Send email to users by role
+const sendEmailByRole = async (req, res) => {
+  try {
+    const { roles, subject, content, type = 'CUSTOM' } = req.body
+
+    if (!roles || !Array.isArray(roles) || roles.length === 0) {
+      return res.status(400).json({ error: 'Roles array is required' })
+    }
+
+    if (!subject || !content) {
+      return res.status(400).json({ error: 'Subject and content are required' })
+    }
+
+    // Get users with specified roles
+    const users = await prisma.user.findMany({
+      where: {
+        role: { in: roles },
+        isActive: true
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true
+      }
+    })
+
+    if (users.length === 0) {
+      return res.status(404).json({ error: 'No users found with specified roles' })
+    }
+
+    const results = []
+    const transporter = createTransporter()
+
+    for (const user of users) {
+      try {
+        const mailOptions = {
+          from: process.env.SMTP_FROM || 'noreply@eventmanager.com',
+          to: user.email,
+          subject: subject,
+          html: content,
+          text: content.replace(/<[^>]*>/g, '') // Strip HTML for text version
+        }
+
+        const info = await transporter.sendMail(mailOptions)
+        
+        // Log successful email
+        await prisma.emailLog.create({
+          data: {
+            to: user.email,
+            subject: subject,
+            status: 'SENT',
+            sentAt: new Date(),
+            messageId: info.messageId
+          }
+        })
+
+        results.push({
+          user: user.name,
+          email: user.email,
+          role: user.role,
+          status: 'SENT',
+          messageId: info.messageId
+        })
+      } catch (error) {
+        console.error(`Failed to send email to ${user.email}:`, error)
+        
+        // Log failed email
+        await prisma.emailLog.create({
+          data: {
+            to: user.email,
+            subject: subject,
+            status: 'FAILED',
+            sentAt: new Date(),
+            errorMessage: error.message
+          }
+        })
+
+        results.push({
+          user: user.name,
+          email: user.email,
+          role: user.role,
+          status: 'FAILED',
+          error: error.message
+        })
+      }
+    }
+
+    res.json({
+      message: 'Role-based email processing completed',
+      results: results,
+      totalSent: results.filter(r => r.status === 'SENT').length,
+      totalFailed: results.filter(r => r.status === 'FAILED').length,
+      roles: roles
+    })
+  } catch (error) {
+    console.error('Send email by role error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
 module.exports = {
   getTemplates,
   createTemplate,
@@ -6357,7 +7504,9 @@ module.exports = {
   getCampaigns,
   createCampaign,
   sendCampaign,
-  getLogs
+  getLogs,
+  sendMultipleEmails,
+  sendEmailByRole
 }
 EOF
 
@@ -11546,6 +12695,309 @@ module.exports = {
 }
 EOF
 
+    # Winners Controller
+    cat > "$APP_DIR/src/controllers/winnersController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+const crypto = require('crypto')
+
+const prisma = new PrismaClient()
+
+// Generate signature for winner verification
+const generateSignature = (userId, categoryId, userRole, ipAddress, userAgent) => {
+  const timestamp = new Date().toISOString()
+  const data = `${userId}-${categoryId}-${userRole}-${timestamp}-${ipAddress || ''}-${userAgent || ''}`
+  return crypto.createHash('sha256').update(data).digest('hex')
+}
+
+// Get winners by category with signature verification
+const getWinnersByCategory = async (req, res) => {
+  try {
+    const { categoryId } = req.params
+    const userRole = req.user.role
+
+    // Get category with contest and event info
+    const category = await prisma.category.findUnique({
+      where: { id: categoryId },
+      include: {
+        contest: {
+          include: {
+            event: true
+          }
+        },
+        contestants: {
+          include: {
+            contestant: true
+          }
+        }
+      }
+    })
+
+    if (!category) {
+      return res.status(404).json({ error: 'Category not found' })
+    }
+
+    // Get all scores for this category
+    const scores = await prisma.score.findMany({
+      where: { categoryId },
+      include: {
+        contestant: true,
+        judge: {
+          include: {
+            user: true
+          }
+        },
+        criterion: true
+      }
+    })
+
+    // Calculate total scores per contestant
+    const contestantScores = {}
+    scores.forEach(score => {
+      const contestantId = score.contestantId
+      if (!contestantScores[contestantId]) {
+        contestantScores[contestantId] = {
+          contestant: score.contestant,
+          totalScore: 0,
+          averageScore: 0,
+          scores: []
+        }
+      }
+      contestantScores[contestantId].totalScore += score.score
+      contestantScores[contestantId].scores.push(score)
+    })
+
+    // Calculate averages and sort by total score
+    const contestants = Object.values(contestantScores).map(contestant => {
+      const scoreCount = contestant.scores.length
+      contestant.averageScore = scoreCount > 0 ? contestant.totalScore / scoreCount : 0
+      return contestant
+    }).sort((a, b) => b.totalScore - a.totalScore)
+
+    // Get signatures for this category
+    const signatures = await prisma.winnerSignature.findMany({
+      where: { categoryId },
+      include: {
+        user: true
+      }
+    })
+
+    // Check if all required signatures are present
+    const requiredRoles = ['JUDGE', 'TALLY_MASTER', 'AUDITOR', 'BOARD']
+    const signedRoles = signatures.map(sig => sig.userRole)
+    const allSigned = requiredRoles.every(role => signedRoles.includes(role))
+
+    // For emcee role, require board signature
+    const boardSigned = signatures.some(sig => sig.userRole === 'BOARD')
+    const canShowWinners = userRole === 'EMCEE' ? boardSigned : allSigned
+
+    res.json({
+      category,
+      contestants: canShowWinners ? contestants : [],
+      signatures,
+      allSigned,
+      boardSigned,
+      canShowWinners,
+      requiredRoles,
+      message: canShowWinners ? 'Winners available' : 'Waiting for required signatures'
+    })
+  } catch (error) {
+    console.error('Get winners by category error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Get winners by contest
+const getWinnersByContest = async (req, res) => {
+  try {
+    const { contestId } = req.params
+    const userRole = req.user.role
+
+    // Get contest with categories
+    const contest = await prisma.contest.findUnique({
+      where: { id: contestId },
+      include: {
+        event: true,
+        categories: {
+          include: {
+            contestants: {
+              include: {
+                contestant: true
+              }
+            }
+          }
+        }
+      }
+    })
+
+    if (!contest) {
+      return res.status(404).json({ error: 'Contest not found' })
+    }
+
+    const categoryResults = []
+
+    for (const category of contest.categories) {
+      // Get scores for this category
+      const scores = await prisma.score.findMany({
+        where: { categoryId: category.id },
+        include: {
+          contestant: true,
+          judge: {
+            include: {
+              user: true
+            }
+          },
+          criterion: true
+        }
+      })
+
+      // Calculate scores
+      const contestantScores = {}
+      scores.forEach(score => {
+        const contestantId = score.contestantId
+        if (!contestantScores[contestantId]) {
+          contestantScores[contestantId] = {
+            contestant: score.contestant,
+            totalScore: 0,
+            averageScore: 0,
+            scores: []
+          }
+        }
+        contestantScores[contestantId].totalScore += score.score
+        contestantScores[contestantId].scores.push(score)
+      })
+
+      const contestants = Object.values(contestantScores).map(contestant => {
+        const scoreCount = contestant.scores.length
+        contestant.averageScore = scoreCount > 0 ? contestant.totalScore / scoreCount : 0
+        return contestant
+      }).sort((a, b) => b.totalScore - a.totalScore)
+
+      // Get signatures
+      const signatures = await prisma.winnerSignature.findMany({
+        where: { categoryId: category.id },
+        include: {
+          user: true
+        }
+      })
+
+      const requiredRoles = ['JUDGE', 'TALLY_MASTER', 'AUDITOR', 'BOARD']
+      const signedRoles = signatures.map(sig => sig.userRole)
+      const allSigned = requiredRoles.every(role => signedRoles.includes(role))
+      const boardSigned = signatures.some(sig => sig.userRole === 'BOARD')
+      const canShowWinners = userRole === 'EMCEE' ? boardSigned : allSigned
+
+      categoryResults.push({
+        category,
+        contestants: canShowWinners ? contestants : [],
+        signatures,
+        allSigned,
+        boardSigned,
+        canShowWinners
+      })
+    }
+
+    res.json({
+      contest,
+      categories: categoryResults,
+      message: 'Contest winners retrieved'
+    })
+  } catch (error) {
+    console.error('Get winners by contest error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Sign winners (add signature)
+const signWinners = async (req, res) => {
+  try {
+    const { categoryId } = req.params
+    const userId = req.user.id
+    const userRole = req.user.role
+    const ipAddress = req.ip || req.connection.remoteAddress
+    const userAgent = req.headers['user-agent']
+
+    // Check if user already signed this category
+    const existingSignature = await prisma.winnerSignature.findFirst({
+      where: {
+        categoryId,
+        userId
+      }
+    })
+
+    if (existingSignature) {
+      return res.status(400).json({ error: 'User has already signed this category' })
+    }
+
+    // Generate signature
+    const signature = generateSignature(userId, categoryId, userRole, ipAddress, userAgent)
+
+    // Create signature record
+    const winnerSignature = await prisma.winnerSignature.create({
+      data: {
+        categoryId,
+        contestId: req.body.contestId,
+        eventId: req.body.eventId,
+        userId,
+        userRole,
+        signature,
+        ipAddress,
+        userAgent
+      },
+      include: {
+        user: true,
+        category: true
+      }
+    })
+
+    res.json({
+      message: 'Winners signed successfully',
+      signature: winnerSignature
+    })
+  } catch (error) {
+    console.error('Sign winners error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Get signature status for a category
+const getSignatureStatus = async (req, res) => {
+  try {
+    const { categoryId } = req.params
+
+    const signatures = await prisma.winnerSignature.findMany({
+      where: { categoryId },
+      include: {
+        user: true
+      }
+    })
+
+    const requiredRoles = ['JUDGE', 'TALLY_MASTER', 'AUDITOR', 'BOARD']
+    const signedRoles = signatures.map(sig => sig.userRole)
+    const allSigned = requiredRoles.every(role => signedRoles.includes(role))
+    const boardSigned = signatures.some(sig => sig.userRole === 'BOARD')
+
+    res.json({
+      signatures,
+      allSigned,
+      boardSigned,
+      requiredRoles,
+      signedRoles,
+      missingRoles: requiredRoles.filter(role => !signedRoles.includes(role))
+    })
+  } catch (error) {
+    console.error('Get signature status error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+module.exports = {
+  getWinnersByCategory,
+  getWinnersByContest,
+  signWinners,
+  getSignatureStatus
+}
+EOF
+
     print_success "Controller files created successfully"
 }
 
@@ -11645,7 +13097,7 @@ EOF
     # Users Routes
     cat > "$APP_DIR/src/routes/usersRoutes.js" << 'EOF'
 const express = require('express')
-const { getAllUsers, getUserById, createUser, updateUser, deleteUser, resetPassword } = require('../controllers/usersController')
+const { getAllUsers, getUserById, createUser, updateUser, deleteUser, resetPassword, importUsersFromCSV, getCSVTemplate } = require('../controllers/usersController')
 const { authenticateToken, requireRole } = require('../middleware/auth')
 const { validateUser, validateUserUpdate } = require('../middleware/validation')
 const { logActivity } = require('../middleware/errorHandler')
@@ -11664,13 +13116,17 @@ router.put('/profile/:id', validateUserUpdate, logActivity('UPDATE_PROFILE', 'US
 router.delete('/:id', requireRole(['ORGANIZER', 'BOARD']), logActivity('DELETE_USER', 'USER'), deleteUser)
 router.post('/:id/reset-password', requireRole(['ORGANIZER', 'BOARD']), resetPassword)
 
+// CSV Import routes
+router.post('/import-csv', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), logActivity('IMPORT_USERS_CSV', 'USER'), importUsersFromCSV)
+router.get('/csv-template', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), getCSVTemplate)
+
 module.exports = router
 EOF
 
     # Scoring Routes
     cat > "$APP_DIR/src/routes/scoringRoutes.js" << 'EOF'
 const express = require('express')
-const { getScores, submitScore, updateScore, deleteScore, certifyScores, certifyTotals, finalCertification } = require('../controllers/scoringController')
+const { getScores, submitScore, updateScore, deleteScore, certifyScores, certifyTotals, finalCertification, requestDeduction, approveDeduction, rejectDeduction, getDeductions } = require('../controllers/scoringController')
 const { authenticateToken, requireRole } = require('../middleware/auth')
 const { logActivity } = require('../middleware/errorHandler')
 
@@ -11688,6 +13144,12 @@ router.delete('/:scoreId', requireRole(['JUDGE']), logActivity('DELETE_SCORE', '
 router.post('/category/:categoryId/certify', requireRole(['JUDGE']), certifyScores)
 router.post('/category/:categoryId/certify-totals', requireRole(['TALLY_MASTER']), certifyTotals)
 router.post('/category/:categoryId/final-certification', requireRole(['AUDITOR']), finalCertification)
+
+// Deduction endpoints
+router.post('/deductions', requireRole(['JUDGE', 'TALLY_MASTER', 'AUDITOR', 'BOARD']), logActivity('REQUEST_DEDUCTION', 'DEDUCTION'), requestDeduction)
+router.get('/deductions', requireRole(['JUDGE', 'TALLY_MASTER', 'AUDITOR', 'BOARD']), getDeductions)
+router.post('/deductions/:deductionId/approve', requireRole(['BOARD', 'AUDITOR', 'TALLY_MASTER']), logActivity('APPROVE_DEDUCTION', 'DEDUCTION'), approveDeduction)
+router.post('/deductions/:deductionId/reject', requireRole(['BOARD', 'AUDITOR']), logActivity('REJECT_DEDUCTION', 'DEDUCTION'), rejectDeduction)
 
 module.exports = router
 EOF
@@ -11718,6 +13180,7 @@ EOF
     cat > "$APP_DIR/src/routes/adminRoutes.js" << 'EOF'
 const express = require('express')
 const { getStats, getLogs, getActiveUsers, getSettings, updateSettings, getUsers, getEvents, getContests, getCategories, getScores, getActivityLogs, getAuditLogs, exportAuditLogs, testConnection } = require('../controllers/adminController')
+const { getDatabaseTables, getTableData, getTableSchema, executeQuery, getDatabaseStats } = require('../controllers/databaseBrowserController')
 const { authenticateToken, requireRole } = require('../middleware/auth')
 
 const router = express.Router()
@@ -11741,6 +13204,13 @@ router.get('/scores', getScores)
 router.get('/audit-logs', getAuditLogs)
 router.post('/export-audit-logs', exportAuditLogs)
 router.post('/test/:type', testConnection)
+
+// Database browser routes
+router.get('/database/tables', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), getDatabaseTables)
+router.get('/database/tables/:tableName', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), getTableData)
+router.get('/database/tables/:tableName/schema', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), getTableSchema)
+router.post('/database/query', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), executeQuery)
+router.get('/database/stats', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), getDatabaseStats)
 
 module.exports = router
 EOF
@@ -11785,7 +13255,7 @@ EOF
     # Settings Routes
     cat > "$APP_DIR/src/routes/settingsRoutes.js" << 'EOF'
 const express = require('express')
-const { getAllSettings, getSettings, updateSettings, testSettings } = require('../controllers/settingsController')
+const { getAllSettings, getSettings, updateSettings, testSettings, updateJWTConfig, getJWTConfig } = require('../controllers/settingsController')
 const { authenticateToken, requireRole } = require('../middleware/auth')
 const { logActivity } = require('../middleware/errorHandler')
 
@@ -11816,6 +13286,10 @@ router.put('/backup', requireRole(['ORGANIZER', 'BOARD']), logActivity('UPDATE_B
 // Email settings
 router.get('/email', getAllSettings)
 router.put('/email', requireRole(['ORGANIZER', 'BOARD']), logActivity('UPDATE_EMAIL_SETTINGS', 'SETTINGS'), updateSettings)
+
+// JWT configuration routes
+router.get('/jwt-config', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), getJWTConfig)
+router.put('/jwt-config', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), logActivity('UPDATE_JWT_CONFIG', 'SETTINGS'), updateJWTConfig)
 
 module.exports = router
 EOF
@@ -12032,7 +13506,11 @@ const {
   getScoreReview,
   getCertificationWorkflow,
   getBiasCheckingTools,
-  getTallyMasterHistory
+  getTallyMasterHistory,
+  requestScoreRemoval,
+  getScoreRemovalRequests,
+  approveScoreRemoval,
+  rejectScoreRemoval
 } = require('../controllers/tallyMasterController')
 const { authenticateToken, requireRole } = require('../middleware/auth')
 const { logActivity } = require('../middleware/errorHandler')
@@ -12064,13 +13542,19 @@ router.post('/certify-totals', logActivity('CERTIFY_TOTALS', 'CATEGORY'), certif
 // Tally master history
 router.get('/history', getTallyMasterHistory)
 
+// Score removal routes
+router.post('/score-removal-requests', requireRole(['TALLY_MASTER', 'AUDITOR', 'BOARD']), logActivity('REQUEST_SCORE_REMOVAL', 'SCORE_REMOVAL'), requestScoreRemoval)
+router.get('/score-removal-requests', requireRole(['TALLY_MASTER', 'AUDITOR', 'BOARD']), getScoreRemovalRequests)
+router.post('/score-removal-requests/:id/approve', requireRole(['TALLY_MASTER', 'AUDITOR', 'BOARD']), logActivity('APPROVE_SCORE_REMOVAL', 'SCORE_REMOVAL'), approveScoreRemoval)
+router.post('/score-removal-requests/:id/reject', requireRole(['BOARD', 'AUDITOR']), logActivity('REJECT_SCORE_REMOVAL', 'SCORE_REMOVAL'), rejectScoreRemoval)
+
 module.exports = router
 EOF
 
     # Email Routes
     cat > "$APP_DIR/src/routes/emailRoutes.js" << 'EOF'
 const express = require('express')
-const { getTemplates, createTemplate, updateTemplate, deleteTemplate, getCampaigns, createCampaign, sendCampaign, getLogs } = require('../controllers/emailController')
+const { getTemplates, createTemplate, updateTemplate, deleteTemplate, getCampaigns, createCampaign, sendCampaign, getLogs, sendMultipleEmails, sendEmailByRole } = require('../controllers/emailController')
 const { authenticateToken, requireRole } = require('../middleware/auth')
 const { logActivity } = require('../middleware/errorHandler')
 
@@ -12088,6 +13572,10 @@ router.get('/campaigns', getCampaigns)
 router.post('/campaigns', requireRole(['ORGANIZER', 'BOARD']), logActivity('CREATE_EMAIL_CAMPAIGN', 'EMAIL'), createCampaign)
 router.post('/campaigns/:id/send', requireRole(['ORGANIZER', 'BOARD']), logActivity('SEND_CAMPAIGN', 'EMAIL'), sendCampaign)
 router.get('/logs', getLogs)
+
+// Multiple recipient email endpoints
+router.post('/send-multiple', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), logActivity('SEND_MULTIPLE_EMAILS', 'EMAIL'), sendMultipleEmails)
+router.post('/send-by-role', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), logActivity('SEND_EMAIL_BY_ROLE', 'EMAIL'), sendEmailByRole)
 
 module.exports = router
 EOF
@@ -15361,6 +16849,32 @@ router.post('/:id/reject', requireRole(['BOARD', 'AUDITOR']), logActivity('REJEC
 module.exports = router
 EOF
 
+    # Winners Routes
+    cat > "$APP_DIR/src/routes/winnersRoutes.js" << 'EOF'
+const express = require('express')
+const { 
+  getWinnersByCategory, 
+  getWinnersByContest, 
+  signWinners, 
+  getSignatureStatus 
+} = require('../controllers/winnersController')
+const { authenticateToken, requireRole } = require('../middleware/auth')
+const { logActivity } = require('../middleware/errorHandler')
+
+const router = express.Router()
+
+// Apply authentication to all routes
+router.use(authenticateToken)
+
+// Winners endpoints
+router.get('/category/:categoryId', requireRole(['ADMIN', 'BOARD', 'EMCEE']), getWinnersByCategory)
+router.get('/contest/:contestId', requireRole(['ADMIN', 'BOARD', 'EMCEE']), getWinnersByContest)
+router.post('/category/:categoryId/sign', requireRole(['JUDGE', 'TALLY_MASTER', 'AUDITOR', 'BOARD']), logActivity('SIGN_WINNERS', 'WINNER'), signWinners)
+router.get('/category/:categoryId/signatures', requireRole(['ADMIN', 'BOARD', 'TALLY_MASTER', 'AUDITOR']), getSignatureStatus)
+
+module.exports = router
+EOF
+
     print_success "Route files created successfully"
 }
 
@@ -15419,6 +16933,7 @@ const notificationsRoutes = require('./routes/notificationsRoutes')
 const emceeRoutes = require('./routes/emceeRoutes')
 const navigationRoutes = require('./routes/navigationRoutes')
 const advancedReportingRoutes = require('./routes/advancedReportingRoutes')
+const winnersRoutes = require('./routes/winnersRoutes')
 
 const app = express()
 const server = http.createServer(app)
@@ -15518,6 +17033,7 @@ app.use('/api/notifications', notificationsRoutes)
 app.use('/api/emcee', emceeRoutes)
 app.use('/api/navigation', navigationRoutes)
 app.use('/api/advanced-reports', advancedReportingRoutes)
+app.use('/api/winners', winnersRoutes)
 
 // Socket.IO connection handling
 io.on('connection', (socket) => {
@@ -15599,6 +17115,9 @@ model Event {
   // New relations
   assignments     Assignment[]
   certifications  Certification[]
+  files           File[]
+  performanceLogs PerformanceLog[]
+  winnerSignatures WinnerSignature[]
 
   @@map("events")
 }
@@ -15619,6 +17138,9 @@ model Contest {
   // New relations
   assignments     Assignment[]
   certifications  Certification[]
+  files           File[]
+  performanceLogs PerformanceLog[]
+  winnerSignatures WinnerSignature[]
 
   @@map("contests")
 }
@@ -15645,6 +17167,10 @@ model Category {
   // New relations
   assignments     Assignment[]
   certifications  Certification[]
+  files           File[]
+  performanceLogs PerformanceLog[]
+  winnerSignatures WinnerSignature[]
+  scoreRemovalRequests ScoreRemovalRequest[]
 
   @@map("categories")
 }
@@ -15778,6 +17304,8 @@ model User {
   files           File[]
   performanceLogs PerformanceLog[]
   reports         Report[]
+  winnerSignatures WinnerSignature[]
+  scoreRemovalRequests ScoreRemovalRequest[]
 
   @@map("users")
 }
@@ -16186,6 +17714,61 @@ enum RequestStatus {
   PENDING
   APPROVED
   REJECTED
+}
+
+model WinnerSignature {
+  id          String   @id @default(cuid())
+  categoryId  String
+  contestId   String
+  eventId     String
+  userId      String
+  userRole    String
+  signature   String
+  signedAt    DateTime @default(now())
+  ipAddress   String?
+  userAgent   String?
+  
+  category    Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  contest     Contest  @relation(fields: [contestId], references: [id], onDelete: Cascade)
+  event       Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@unique([categoryId, userId])
+  @@map("winner_signatures")
+}
+
+model ScoreRemovalRequest {
+  id          String   @id @default(cuid())
+  categoryId  String
+  judgeId     String
+  reason      String
+  status      RequestStatus @default(PENDING)
+  requestedBy String
+  requestedAt DateTime @default(now())
+  
+  // Approval signatures
+  tallySignature    String?
+  tallySignedAt     DateTime?
+  tallySignedBy     String?
+  
+  auditorSignature  String?
+  auditorSignedAt   DateTime?
+  auditorSignedBy   String?
+  
+  boardSignature    String?
+  boardSignedAt     DateTime?
+  boardSignedBy     String?
+  
+  category          Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  judge             User     @relation(fields: [judgeId], references: [id], onDelete: Cascade)
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  @@map("score_removal_requests")
 }
 
 enum AssignmentStatus {
@@ -17449,6 +19032,10 @@ export const scoringAPI = {
   certifyScores: (categoryId: string) => api.post(`/scoring/category/${categoryId}/certify`),
   certifyTotals: (categoryId: string) => api.post(`/scoring/category/${categoryId}/certify-totals`),
   finalCertification: (categoryId: string) => api.post(`/scoring/category/${categoryId}/final-certification`),
+  requestDeduction: (data: any) => api.post('/scoring/deductions', data),
+  getDeductions: (categoryId?: string) => api.get(`/scoring/deductions${categoryId ? `?categoryId=${categoryId}` : ''}`),
+  approveDeduction: (deductionId: string, signature: string) => api.post(`/scoring/deductions/${deductionId}/approve`, { signature }),
+  rejectDeduction: (deductionId: string, reason: string) => api.post(`/scoring/deductions/${deductionId}/reject`, { reason }),
 }
 
 export const resultsAPI = {
@@ -17468,6 +19055,8 @@ export const usersAPI = {
   updateProfile: (id: string, data: any) => api.put(`/users/profile/${id}`, data),
   delete: (id: string) => api.delete(`/users/${id}`),
   resetPassword: (id: string, data: any) => api.post(`/users/${id}/reset-password`, data),
+  importCSV: (data: { csvData: any[], userType: string }) => api.post('/users/import-csv', data),
+  getCSVTemplate: (userType: string) => api.get(`/users/csv-template?userType=${userType}`),
 }
 
 export const adminAPI = {
@@ -17602,6 +19191,19 @@ export const tallyMasterAPI = {
   getCertificationQueue: () => api.get('/tally-master/queue'),
   getPendingCertifications: () => api.get('/tally-master/pending'),
   certifyTotals: (categoryId: string, data: any) => api.post(`/tally-master/category/${categoryId}/certify-totals`, data),
+}
+
+export const emailAPI = {
+  getTemplates: () => api.get('/email/templates'),
+  createTemplate: (data: any) => api.post('/email/templates', data),
+  updateTemplate: (id: string, data: any) => api.put(`/email/templates/${id}`, data),
+  deleteTemplate: (id: string) => api.delete(`/email/templates/${id}`),
+  getCampaigns: () => api.get('/email/campaigns'),
+  createCampaign: (data: any) => api.post('/email/campaigns', data),
+  sendCampaign: (id: string) => api.post(`/email/campaigns/${id}/send`),
+  getLogs: () => api.get('/email/logs'),
+  sendMultiple: (data: { recipients: string[], subject: string, content: string }) => api.post('/email/send-multiple', data),
+  sendByRole: (data: { roles: string[], subject: string, content: string }) => api.post('/email/send-by-role', data),
 }
 
 // Export the api instance for direct use
@@ -18595,6 +20197,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     { name: 'Emcee', href: '/emcee', icon: MicrophoneIcon, roles: ['EMCEE'] },
     { name: 'Templates', href: '/templates', icon: DocumentTextIcon, roles: ['ORGANIZER', 'BOARD'] },
     { name: 'Reports', href: '/reports', icon: ChartBarIcon, roles: ['ORGANIZER', 'BOARD'] },
+    { name: 'Winners', href: '/winners', icon: TrophyIcon, roles: ['ADMIN', 'BOARD', 'EMCEE'] },
   ]
 
   const filteredNavigation = navigation.filter(item => 
@@ -22822,6 +24425,7 @@ import ProfilePage from './pages/ProfilePage'
 import EmceePage from './pages/EmceePage'
 import TemplatesPage from './pages/TemplatesPage'
 import ReportsPage from './pages/ReportsPage'
+import WinnersPage from './pages/WinnersPage'
 import ProtectedRoute from './components/ProtectedRoute'
 import ErrorBoundary from './components/ErrorBoundary'
 import './index.css'
@@ -22866,6 +24470,7 @@ function App() {
                               <Route path="/emcee" element={<EmceePage />} />
                               <Route path="/templates" element={<TemplatesPage />} />
                               <Route path="/reports" element={<ReportsPage />} />
+                              <Route path="/winners" element={<WinnersPage />} />
                             </Routes>
                           </Layout>
                         </ProtectedRoute>
@@ -23598,105 +25203,149 @@ const EventsPage: React.FC = () => {
 
       {/* Create/Edit Modal */}
       {showModal && (
-        <div className="modal">
-          <div className="modal-overlay" onClick={() => setShowModal(false)} />
-          <div className="modal-content">
-            <h2 className="text-xl font-bold mb-4">
-              {editingEvent ? 'Edit Event' : 'Create Event'}
-            </h2>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="label">Event Name</label>
-                <input
-                  type="text"
-                  value={formData.name || ''}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="input"
-                  required
-                />
-              </div>
-              <div>
-                <label className="label">Description</label>
-                <textarea
-                  value={formData.description || ''}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="input"
-                  rows={3}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="label">Start Date</label>
-                  <input
-                    type="datetime-local"
-                    value={formData.startDate || ''}
-                    onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-                    className="input"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="label">End Date</label>
-                  <input
-                    type="datetime-local"
-                    value={formData.endDate || ''}
-                    onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
-                    className="input"
-                    required
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="label">Location</label>
-                <input
-                  type="text"
-                  value={formData.location || ''}
-                  onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                  className="input"
-                  required
-                />
-              </div>
-              <div>
-                <label className="label">Max Contestants</label>
-                <input
-                  type="number"
-                  value={formData.maxContestants || 100}
-                  onChange={(e) => setFormData({ ...formData, maxContestants: parseInt(e.target.value) })}
-                  className="input"
-                  min="1"
-                  required
-                />
-              </div>
-              <div>
-                <label className="label">Status</label>
-                <select
-                  value={formData.status || 'DRAFT'}
-                  onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
-                  className="input"
-                >
-                  <option value="DRAFT">Draft</option>
-                  <option value="ACTIVE">Active</option>
-                  <option value="COMPLETED">Completed</option>
-                  <option value="ARCHIVED">Archived</option>
-                </select>
-              </div>
-              <div className="flex justify-end space-x-2">
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-full max-w-3xl shadow-lg rounded-md bg-white dark:bg-gray-800">
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+                  {editingEvent ? 'Edit Event' : 'Create Event'}
+                </h3>
                 <button
-                  type="button"
                   onClick={() => setShowModal(false)}
-                  className="btn-secondary"
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
                 >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="btn-primary"
-                  disabled={createMutation.isLoading || updateMutation.isLoading}
-                >
-                  {createMutation.isLoading || updateMutation.isLoading ? 'Saving...' : 'Save'}
+                  <XMarkIcon className="h-6 w-6" />
                 </button>
               </div>
-            </form>
+              
+              <form onSubmit={handleSubmit} className="space-y-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Event Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.name || ''}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                    placeholder="Enter event name"
+                    required
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Description
+                  </label>
+                  <textarea
+                    value={formData.description || ''}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                    rows={3}
+                    placeholder="Enter event description"
+                  />
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Start Date *
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={formData.startDate || ''}
+                      onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      End Date *
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={formData.endDate || ''}
+                      onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                      required
+                    />
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Location *
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.location || ''}
+                      onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                      placeholder="Enter event location"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Max Contestants *
+                    </label>
+                    <input
+                      type="number"
+                      value={formData.maxContestants || 100}
+                      onChange={(e) => setFormData({ ...formData, maxContestants: parseInt(e.target.value) })}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                      min="1"
+                      required
+                    />
+                  </div>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Status
+                  </label>
+                  <select
+                    value={formData.status || 'DRAFT'}
+                    onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                  >
+                    <option value="DRAFT">Draft</option>
+                    <option value="ACTIVE">Active</option>
+                    <option value="COMPLETED">Completed</option>
+                    <option value="ARCHIVED">Archived</option>
+                  </select>
+                </div>
+
+                <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200 dark:border-gray-600">
+                  <button
+                    type="button"
+                    onClick={() => setShowModal(false)}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={createMutation.isLoading || updateMutation.isLoading}
+                    className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {createMutation.isLoading || updateMutation.isLoading ? (
+                      <span className="flex items-center">
+                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Saving...
+                      </span>
+                    ) : (
+                      'Save Event'
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
       )}
@@ -25105,18 +26754,24 @@ const ResultsPage: React.FC = () => {
 
       {/* Print Reports Modal */}
       {showPrintModal && (
-        <div className="modal">
-          <div className="modal-overlay" onClick={() => setShowPrintModal(false)} />
-          <div className="modal-content max-w-4xl">
-            <h2 className="text-xl font-bold mb-4">Print Reports</h2>
-            <PrintReports />
-            <div className="flex justify-end mt-4">
-              <button
-                onClick={() => setShowPrintModal(false)}
-                className="btn-secondary"
-              >
-                Close
-              </button>
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-full max-w-6xl shadow-lg rounded-md bg-white dark:bg-gray-800">
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+                  Print Reports
+                </h3>
+                <button
+                  onClick={() => setShowPrintModal(false)}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                >
+                  <XMarkIcon className="h-6 w-6" />
+                </button>
+              </div>
+              
+              <div className="space-y-6">
+                <PrintReports />
+              </div>
             </div>
           </div>
         </div>
@@ -25469,102 +27124,173 @@ const UsersPage: React.FC = () => {
 
       {/* User Modal */}
       {showModal && (
-        <div className="modal">
-          <div className="modal-overlay" onClick={() => setShowModal(false)} />
-          <div className="modal-content">
-            <h2 className="text-xl font-bold mb-4">
-              {editingUser ? 'Edit User' : 'Add User'}
-            </h2>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Name
-                </label>
-                <input
-                  type="text"
-                  value={formData.name || ''}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="input"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Email
-                </label>
-                <input
-                  type="email"
-                  value={formData.email || ''}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="input"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Role
-                </label>
-                <select
-                  value={formData.role || ''}
-                  onChange={(e) => setFormData({ ...formData, role: e.target.value as any })}
-                  className="input"
-                  required
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-full max-w-2xl shadow-lg rounded-md bg-white dark:bg-gray-800">
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+                  {editingUser ? 'Edit User' : 'Add User'}
+                </h3>
+                <button
+                  onClick={() => setShowModal(false)}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
                 >
-                  <option value="">Select Role</option>
-                  <option value="ORGANIZER">Organizer</option>
-                  <option value="BOARD">Board Member</option>
-                  <option value="JUDGE">Judge</option>
-                  <option value="TALLY_MASTER">Tally Master</option>
-                  <option value="AUDITOR">Auditor</option>
-                  <option value="CONTESTANT">Contestant</option>
-                </select>
+                  <XMarkIcon className="h-6 w-6" />
+                </button>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Status
-                </label>
-                <select
-                  value={formData.status || ''}
-                  onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
-                  className="input"
-                  required
-                >
-                  <option value="">Select Status</option>
-                  <option value="ACTIVE">Active</option>
-                  <option value="INACTIVE">Inactive</option>
-                  <option value="PENDING">Pending</option>
-                </select>
-              </div>
-              {!editingUser && (
+              
+              <form onSubmit={handleSubmit} className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Name *
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.name || ''}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                      placeholder="Enter full name"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Email *
+                    </label>
+                    <input
+                      type="email"
+                      value={formData.email || ''}
+                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                      placeholder="Enter email address"
+                      required
+                    />
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Role *
+                    </label>
+                    <select
+                      value={formData.role || ''}
+                      onChange={(e) => setFormData({ ...formData, role: e.target.value as any })}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                      required
+                    >
+                      <option value="">Select Role</option>
+                      <option value="ORGANIZER">Organizer</option>
+                      <option value="BOARD">Board Member</option>
+                      <option value="JUDGE">Judge</option>
+                      <option value="TALLY_MASTER">Tally Master</option>
+                      <option value="AUDITOR">Auditor</option>
+                      <option value="CONTESTANT">Contestant</option>
+                      <option value="EMCEE">Emcee</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Status
+                    </label>
+                    <select
+                      value={formData.status || ''}
+                      onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                      required
+                    >
+                      <option value="">Select Status</option>
+                      <option value="ACTIVE">Active</option>
+                      <option value="INACTIVE">Inactive</option>
+                      <option value="PENDING">Pending</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Preferred Name
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.preferredName || ''}
+                      onChange={(e) => setFormData({ ...formData, preferredName: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                      placeholder="Enter preferred name"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Pronouns
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.pronouns || ''}
+                      onChange={(e) => setFormData({ ...formData, pronouns: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                      placeholder="e.g., he/him, she/her, they/them"
+                    />
+                  </div>
+                </div>
+
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Password
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Phone Number
                   </label>
                   <input
-                    type="password"
-                    name="password"
-                    className="input"
-                    required
+                    type="tel"
+                    value={formData.phone || ''}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                    placeholder="Enter phone number"
                   />
                 </div>
-              )}
-              <div className="flex justify-end space-x-2">
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="btn-secondary"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="btn-primary"
-                  disabled={createMutation.isLoading || updateMutation.isLoading}
-                >
-                  {editingUser ? 'Update' : 'Create'}
-                </button>
-              </div>
-            </form>
+
+                {!editingUser && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Password *
+                    </label>
+                    <input
+                      type="password"
+                      name="password"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                      placeholder="Enter password"
+                      required
+                    />
+                  </div>
+                )}
+
+                <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200 dark:border-gray-600">
+                  <button
+                    type="button"
+                    onClick={() => setShowModal(false)}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={createMutation.isLoading || updateMutation.isLoading}
+                    className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {createMutation.isLoading || updateMutation.isLoading ? (
+                      <span className="flex items-center">
+                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        {editingUser ? 'Updating...' : 'Creating...'}
+                      </span>
+                    ) : (
+                      editingUser ? 'Update User' : 'Create User'
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
       )}
@@ -32704,6 +34430,510 @@ const TallyMasterPage: React.FC = () => {
 }
 
 export default TallyMasterPage
+EOF
+
+    # Add WinnersPage
+    cat > "$APP_DIR/frontend/src/pages/WinnersPage.tsx" << 'EOF'
+import React, { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from 'react-query'
+import { useAuth } from '../contexts/AuthContext'
+import { eventsAPI, contestsAPI, categoriesAPI } from '../services/api'
+import {
+  TrophyIcon,
+  CheckCircleIcon,
+  XCircleIcon,
+  ClockIcon,
+  DocumentTextIcon,
+  PrinterIcon,
+  ArrowDownTrayIcon,
+  EyeIcon,
+  PencilIcon
+} from '@heroicons/react/24/outline'
+
+interface Winner {
+  contestant: {
+    id: string
+    name: string
+    email: string
+    contestantNumber?: string
+  }
+  totalScore: number
+  averageScore: number
+  scores: Array<{
+    id: string
+    score: number
+    comment?: string
+    judge: {
+      id: string
+      name: string
+    }
+    criterion: {
+      id: string
+      name: string
+      maxScore: number
+    }
+  }>
+}
+
+interface Signature {
+  id: string
+  userId: string
+  userRole: string
+  signature: string
+  signedAt: string
+  user: {
+    id: string
+    name: string
+    role: string
+  }
+}
+
+interface WinnersData {
+  category?: {
+    id: string
+    name: string
+    description: string
+    contest: {
+      id: string
+      name: string
+      event: {
+        id: string
+        name: string
+      }
+    }
+  }
+  contest?: {
+    id: string
+    name: string
+    description: string
+    event: {
+      id: string
+      name: string
+    }
+    categories: Array<{
+      category: {
+        id: string
+        name: string
+        description: string
+      }
+      contestants: Winner[]
+      signatures: Signature[]
+      allSigned: boolean
+      boardSigned: boolean
+      canShowWinners: boolean
+    }>
+  }
+  contestants: Winner[]
+  signatures: Signature[]
+  allSigned: boolean
+  boardSigned: boolean
+  canShowWinners: boolean
+  requiredRoles: string[]
+  message: string
+}
+
+const WinnersPage: React.FC = () => {
+  const { user } = useAuth()
+  const queryClient = useQueryClient()
+  const [selectedEvent, setSelectedEvent] = useState('')
+  const [selectedContest, setSelectedContest] = useState('')
+  const [selectedCategory, setSelectedCategory] = useState('')
+  const [viewMode, setViewMode] = useState<'category' | 'contest'>('category')
+  const [showSignatureModal, setShowSignatureModal] = useState(false)
+
+  // Fetch events
+  const { data: events = [] } = useQuery('events', eventsAPI.getAll)
+
+  // Fetch contests for selected event
+  const { data: contests = [] } = useQuery(
+    ['contests', selectedEvent],
+    () => contestsAPI.getByEvent(selectedEvent),
+    { enabled: !!selectedEvent }
+  )
+
+  // Fetch categories for selected contest
+  const { data: categories = [] } = useQuery(
+    ['categories', selectedContest],
+    () => categoriesAPI.getByContest(selectedContest),
+    { enabled: !!selectedContest }
+  )
+
+  // Fetch winners data
+  const { data: winnersData, isLoading: winnersLoading } = useQuery(
+    ['winners', viewMode, selectedCategory, selectedContest],
+    () => {
+      if (viewMode === 'category' && selectedCategory) {
+        return fetch(`/api/winners/category/${selectedCategory}`).then(res => res.json())
+      } else if (viewMode === 'contest' && selectedContest) {
+        return fetch(`/api/winners/contest/${selectedContest}`).then(res => res.json())
+      }
+      return null
+    },
+    { enabled: (viewMode === 'category' && !!selectedCategory) || (viewMode === 'contest' && !!selectedContest) }
+  )
+
+  // Sign winners mutation
+  const signMutation = useMutation(
+    (data: { categoryId: string; contestId: string; eventId: string }) =>
+      fetch(`/api/winners/category/${data.categoryId}/sign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contestId: data.contestId, eventId: data.eventId })
+      }).then(res => res.json()),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries(['winners'])
+        setShowSignatureModal(false)
+      }
+    }
+  )
+
+  const handleSignWinners = () => {
+    if (selectedCategory && winnersData?.category) {
+      signMutation.mutate({
+        categoryId: selectedCategory,
+        contestId: winnersData.category.contest.id,
+        eventId: winnersData.category.contest.event.id
+      })
+    }
+  }
+
+  const getSignatureIcon = (role: string) => {
+    switch (role) {
+      case 'JUDGE': return <PencilIcon className="w-5 h-5 text-blue-500" />
+      case 'TALLY_MASTER': return <DocumentTextIcon className="w-5 h-5 text-green-500" />
+      case 'AUDITOR': return <EyeIcon className="w-5 h-5 text-purple-500" />
+      case 'BOARD': return <TrophyIcon className="w-5 h-5 text-yellow-500" />
+      default: return <ClockIcon className="w-5 h-5 text-gray-500" />
+    }
+  }
+
+  const getSignatureStatus = (role: string, signatures: Signature[]) => {
+    const signature = signatures.find(sig => sig.userRole === role)
+    if (signature) {
+      return { signed: true, signature }
+    }
+    return { signed: false, signature: null }
+  }
+
+  const renderCategoryWinners = () => {
+    if (!winnersData?.category) return null
+
+    const { category, contestants, signatures, allSigned, boardSigned, canShowWinners, requiredRoles } = winnersData
+
+    return (
+      <div className="space-y-6">
+        {/* Category Header */}
+        <div className="bg-white rounded-lg shadow p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">{category.name}</h2>
+              <p className="text-gray-600">{category.description}</p>
+              <p className="text-sm text-gray-500">
+                {category.contest.name} - {category.contest.event.name}
+              </p>
+            </div>
+            <div className="flex items-center space-x-2">
+              {canShowWinners ? (
+                <CheckCircleIcon className="w-8 h-8 text-green-500" />
+              ) : (
+                <ClockIcon className="w-8 h-8 text-yellow-500" />
+              )}
+              <span className={`font-semibold ${canShowWinners ? 'text-green-600' : 'text-yellow-600'}`}>
+                {canShowWinners ? 'Winners Available' : 'Waiting for Signatures'}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Signature Status */}
+        <div className="bg-white rounded-lg shadow p-6">
+          <h3 className="text-lg font-semibold mb-4">Signature Status</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {requiredRoles.map(role => {
+              const { signed, signature } = getSignatureStatus(role, signatures)
+              return (
+                <div key={role} className={`p-4 rounded-lg border ${signed ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}>
+                  <div className="flex items-center space-x-2">
+                    {getSignatureIcon(role)}
+                    <span className="font-medium">{role.replace('_', ' ')}</span>
+                  </div>
+                  {signed ? (
+                    <div className="mt-2 text-sm text-green-600">
+                      <div>✓ Signed by {signature?.user.name}</div>
+                      <div>{new Date(signature?.signedAt || '').toLocaleDateString()}</div>
+                    </div>
+                  ) : (
+                    <div className="mt-2 text-sm text-gray-500">Pending</div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+          
+          {!canShowWinners && (user?.role === 'JUDGE' || user?.role === 'TALLY_MASTER' || user?.role === 'AUDITOR' || user?.role === 'BOARD') && (
+            <div className="mt-4">
+              <button
+                onClick={() => setShowSignatureModal(true)}
+                className="btn btn-primary"
+                disabled={signMutation.isLoading}
+              >
+                {signMutation.isLoading ? 'Signing...' : 'Sign Winners'}
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Winners List */}
+        {canShowWinners && (
+          <div className="bg-white rounded-lg shadow">
+            <div className="p-6 border-b">
+              <h3 className="text-lg font-semibold">Winners</h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rank</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contestant</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Score</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Average Score</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {contestants.map((winner, index) => (
+                    <tr key={winner.contestant.id} className={index < 3 ? 'bg-yellow-50' : ''}>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          {index === 0 && <TrophyIcon className="w-5 h-5 text-yellow-500 mr-2" />}
+                          {index === 1 && <TrophyIcon className="w-5 h-5 text-gray-400 mr-2" />}
+                          {index === 2 && <TrophyIcon className="w-5 h-5 text-orange-500 mr-2" />}
+                          <span className="font-semibold">{index + 1}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">{winner.contestant.name}</div>
+                          {winner.contestant.contestantNumber && (
+                            <div className="text-sm text-gray-500">#{winner.contestant.contestantNumber}</div>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
+                        {winner.totalScore.toFixed(2)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {winner.averageScore.toFixed(2)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <button className="text-indigo-600 hover:text-indigo-900 mr-3">
+                          <EyeIcon className="w-4 h-4" />
+                        </button>
+                        <button className="text-green-600 hover:text-green-900">
+                          <PrinterIcon className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  const renderContestWinners = () => {
+    if (!winnersData?.contest) return null
+
+    const { contest, categories } = winnersData
+
+    return (
+      <div className="space-y-6">
+        {/* Contest Header */}
+        <div className="bg-white rounded-lg shadow p-6">
+          <h2 className="text-2xl font-bold text-gray-900">{contest.name}</h2>
+          <p className="text-gray-600">{contest.description}</p>
+          <p className="text-sm text-gray-500">{contest.event.name}</p>
+        </div>
+
+        {/* Categories */}
+        {categories.map((categoryData, index) => (
+          <div key={categoryData.category.id} className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold">{categoryData.category.name}</h3>
+              <div className="flex items-center space-x-2">
+                {categoryData.canShowWinners ? (
+                  <CheckCircleIcon className="w-6 h-6 text-green-500" />
+                ) : (
+                  <ClockIcon className="w-6 h-6 text-yellow-500" />
+                )}
+                <span className={`text-sm font-medium ${categoryData.canShowWinners ? 'text-green-600' : 'text-yellow-600'}`}>
+                  {categoryData.canShowWinners ? 'Complete' : 'Pending'}
+                </span>
+              </div>
+            </div>
+
+            {categoryData.canShowWinners && categoryData.contestants.length > 0 && (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Rank</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Contestant</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Score</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {categoryData.contestants.slice(0, 3).map((winner, winnerIndex) => (
+                      <tr key={winner.contestant.id} className={winnerIndex < 3 ? 'bg-yellow-50' : ''}>
+                        <td className="px-4 py-2 whitespace-nowrap">
+                          <div className="flex items-center">
+                            {winnerIndex === 0 && <TrophyIcon className="w-4 h-4 text-yellow-500 mr-1" />}
+                            <span className="font-semibold">{winnerIndex + 1}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {winner.contestant.name}
+                        </td>
+                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
+                          {winner.totalScore.toFixed(2)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  return (
+    <div className="p-6">
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold text-gray-900">Winners</h1>
+        <p className="text-gray-600">View contest and category winners with signature verification</p>
+      </div>
+
+      {/* Controls */}
+      <div className="bg-white rounded-lg shadow p-6 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">View Mode</label>
+            <select
+              value={viewMode}
+              onChange={(e) => setViewMode(e.target.value as 'category' | 'contest')}
+              className="input"
+            >
+              <option value="category">By Category</option>
+              <option value="contest">By Contest</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Event</label>
+            <select
+              value={selectedEvent}
+              onChange={(e) => {
+                setSelectedEvent(e.target.value)
+                setSelectedContest('')
+                setSelectedCategory('')
+              }}
+              className="input"
+            >
+              <option value="">Select Event</option>
+              {events.map((event: any) => (
+                <option key={event.id} value={event.id}>{event.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Contest</label>
+            <select
+              value={selectedContest}
+              onChange={(e) => {
+                setSelectedContest(e.target.value)
+                setSelectedCategory('')
+              }}
+              className="input"
+              disabled={!selectedEvent}
+            >
+              <option value="">Select Contest</option>
+              {contests.map((contest: any) => (
+                <option key={contest.id} value={contest.id}>{contest.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {viewMode === 'category' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
+              <select
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="input"
+                disabled={!selectedContest}
+              >
+                <option value="">Select Category</option>
+                {categories.map((category: any) => (
+                  <option key={category.id} value={category.id}>{category.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Winners Display */}
+      {winnersLoading ? (
+        <div className="flex justify-center items-center h-64">
+          <div className="loading-spinner"></div>
+        </div>
+      ) : (
+        <>
+          {viewMode === 'category' && renderCategoryWinners()}
+          {viewMode === 'contest' && renderContestWinners()}
+        </>
+      )}
+
+      {/* Signature Modal */}
+      {showSignatureModal && (
+        <div className="modal">
+          <div className="modal-overlay" onClick={() => setShowSignatureModal(false)}></div>
+          <div className="modal-content">
+            <h3 className="text-lg font-semibold mb-4">Sign Winners</h3>
+            <p className="text-gray-600 mb-6">
+              By signing, you confirm that you have reviewed and verified the winners for this category.
+            </p>
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => setShowSignatureModal(false)}
+                className="btn btn-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSignWinners}
+                className="btn btn-primary"
+                disabled={signMutation.isLoading}
+              >
+                {signMutation.isLoading ? 'Signing...' : 'Sign Winners'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default WinnersPage
 EOF
 
     cat > "$APP_DIR/frontend/index.html" << 'EOF'
