@@ -166,27 +166,8 @@ safe_npm_install() {
         if npm install canvas 2>/dev/null; then
             print_success "Canvas installed successfully"
         else
-            # Strategy 2: Try installing canvas with specific node-pre-gyp version
-            print_status "Attempting canvas installation with compatible node-pre-gyp..."
-            npm install @mapbox/node-pre-gyp@1.0.10 --no-save --legacy-peer-deps --force 2>/dev/null || true
-            
-            # Strategy 3: Try installing canvas with Python 2.7 compatibility
-            print_status "Setting up Python 2.7 compatibility..."
-            sudo apt-get install -y python2.7 python2.7-dev 2>/dev/null || true
-            sudo update-alternatives --install /usr/bin/python python /usr/bin/python2.7 1 2>/dev/null || true
-            
-            # Strategy 4: Try installing canvas with environment variables
-            print_status "Attempting canvas installation with compatibility flags..."
-            export PYTHON=/usr/bin/python2.7
-            export npm_config_python=/usr/bin/python2.7
-            export npm_config_build_from_source=true
-            
-            if npm install canvas --legacy-peer-deps --force 2>/dev/null; then
-                print_success "Canvas installed successfully with Python 2.7 compatibility"
-            else
                 print_warning "Canvas installation failed - will try alternative approach"
             fi
-        fi
         
         # Verify canvas can be imported after system dependencies are installed
         print_status "Testing canvas module compatibility..."
