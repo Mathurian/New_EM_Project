@@ -416,21 +416,36 @@ show_help() {
 
 # Generate secure secrets
 generate_secrets() {
+    print_status "Generating secure secrets..."
+    
+    # Generate JWT secret (64 bytes for better security)
     if [[ -z "$JWT_SECRET" ]]; then
         if command -v openssl &> /dev/null; then
-            JWT_SECRET=$(openssl rand -base64 32)
+            JWT_SECRET=$(openssl rand -base64 64)
         else
-            JWT_SECRET=$(head -c 32 /dev/urandom | base64)
+            JWT_SECRET=$(head -c 64 /dev/urandom | base64)
         fi
     fi
     
+    # Generate session secret (64 bytes for better security)
     if [[ -z "$SESSION_SECRET" ]]; then
         if command -v openssl &> /dev/null; then
-            SESSION_SECRET=$(openssl rand -base64 32)
+            SESSION_SECRET=$(openssl rand -base64 64)
         else
-            SESSION_SECRET=$(head -c 32 /dev/urandom | base64)
+            SESSION_SECRET=$(head -c 64 /dev/urandom | base64)
         fi
     fi
+    
+    # Generate database password if not provided
+    if [[ -z "$DB_PASSWORD" ]]; then
+        if command -v openssl &> /dev/null; then
+            DB_PASSWORD=$(openssl rand -base64 32)
+        else
+            DB_PASSWORD=$(head -c 32 /dev/urandom | base64)
+        fi
+    fi
+    
+    print_success "Secrets generated successfully!"
 }
 
 # Install prerequisites
@@ -4177,6 +4192,9 @@ const compression = require('compression')
 const { Server } = require('socket.io')
 const http = require('http')
 const { PrismaClient } = require('@prisma/client')
+
+// Load environment variables
+require('dotenv').config()
 
 // Import middleware
 const { generalLimiter, authLimiter } = require('./middleware/rateLimiting')
