@@ -4176,6 +4176,240 @@ router.post('/test/:type', requireRole(['ORGANIZER', 'BOARD']), testSettings)
 module.exports = router
 EOF
 
+    # Archive Routes
+    cat > "$APP_DIR/src/routes/archiveRoutes.js" << 'EOF'
+const express = require('express')
+const { getAllArchives, archiveEvent, restoreEvent, deleteArchive } = require('../controllers/archiveController')
+const { authenticateToken, requireRole } = require('../middleware/auth')
+const { logActivity } = require('../middleware/errorHandler')
+
+const router = express.Router()
+
+// Apply authentication to all routes
+router.use(authenticateToken)
+
+// Archive endpoints
+router.get('/', getAllArchives)
+router.post('/events/:eventId', requireRole(['ORGANIZER', 'BOARD']), logActivity('ARCHIVE_EVENT', 'EVENT'), archiveEvent)
+router.post('/events/:eventId/restore', requireRole(['ORGANIZER', 'BOARD']), logActivity('RESTORE_EVENT', 'EVENT'), restoreEvent)
+router.delete('/events/:eventId', requireRole(['ORGANIZER', 'BOARD']), logActivity('DELETE_ARCHIVE', 'EVENT'), deleteArchive)
+
+module.exports = router
+EOF
+
+    # Backup Routes
+    cat > "$APP_DIR/src/routes/backupRoutes.js" << 'EOF'
+const express = require('express')
+const multer = require('multer')
+const { createBackup, restoreBackup, downloadBackup, listBackups, deleteBackup } = require('../controllers/backupController')
+const { authenticateToken, requireRole } = require('../middleware/auth')
+const { logActivity } = require('../middleware/errorHandler')
+
+const router = express.Router()
+
+const upload = multer({ dest: 'temp/' })
+
+// Apply authentication to all routes
+router.use(authenticateToken)
+
+// Backup endpoints
+router.get('/', listBackups)
+router.post('/create', requireRole(['ORGANIZER', 'BOARD']), logActivity('CREATE_BACKUP', 'BACKUP'), createBackup)
+router.post('/restore', requireRole(['ORGANIZER', 'BOARD']), upload.single('backup'), logActivity('RESTORE_BACKUP', 'BACKUP'), restoreBackup)
+router.get('/download/:filename', requireRole(['ORGANIZER', 'BOARD']), downloadBackup)
+router.delete('/:filename', requireRole(['ORGANIZER', 'BOARD']), logActivity('DELETE_BACKUP', 'BACKUP'), deleteBackup)
+
+module.exports = router
+EOF
+
+    # Assignments Routes
+    cat > "$APP_DIR/src/routes/assignmentsRoutes.js" << 'EOF'
+const express = require('express')
+const { getAssignments, createAssignment, updateAssignment, deleteAssignment } = require('../controllers/assignmentsController')
+const { authenticateToken, requireRole } = require('../middleware/auth')
+const { logActivity } = require('../middleware/errorHandler')
+
+const router = express.Router()
+
+// Apply authentication to all routes
+router.use(authenticateToken)
+
+// Assignment endpoints
+router.get('/', getAssignments)
+router.post('/', requireRole(['ORGANIZER', 'BOARD']), logActivity('CREATE_ASSIGNMENT', 'ASSIGNMENT'), createAssignment)
+router.put('/:id', requireRole(['ORGANIZER', 'BOARD']), logActivity('UPDATE_ASSIGNMENT', 'ASSIGNMENT'), updateAssignment)
+router.delete('/:id', requireRole(['ORGANIZER', 'BOARD']), logActivity('DELETE_ASSIGNMENT', 'ASSIGNMENT'), deleteAssignment)
+
+module.exports = router
+EOF
+
+    # Auditor Routes
+    cat > "$APP_DIR/src/routes/auditorRoutes.js" << 'EOF'
+const express = require('express')
+const { getAuditLogs, getAuditStats, exportAuditLogs } = require('../controllers/auditorController')
+const { authenticateToken, requireRole } = require('../middleware/auth')
+
+const router = express.Router()
+
+// Apply authentication to all routes
+router.use(authenticateToken)
+router.use(requireRole(['AUDITOR', 'ORGANIZER', 'BOARD']))
+
+// Auditor endpoints
+router.get('/logs', getAuditLogs)
+router.get('/stats', getAuditStats)
+router.post('/export', exportAuditLogs)
+
+module.exports = router
+EOF
+
+    # Board Routes
+    cat > "$APP_DIR/src/routes/boardRoutes.js" << 'EOF'
+const express = require('express')
+const { getBoardStats, getBoardReports, updateBoardSettings } = require('../controllers/boardController')
+const { authenticateToken, requireRole } = require('../middleware/auth')
+
+const router = express.Router()
+
+// Apply authentication to all routes
+router.use(authenticateToken)
+router.use(requireRole(['BOARD', 'ORGANIZER']))
+
+// Board endpoints
+router.get('/stats', getBoardStats)
+router.get('/reports', getBoardReports)
+router.put('/settings', updateBoardSettings)
+
+module.exports = router
+EOF
+
+    # Tally Master Routes
+    cat > "$APP_DIR/src/routes/tallyMasterRoutes.js" << 'EOF'
+const express = require('express')
+const { getTallyData, updateTally, getTallyStats } = require('../controllers/tallyMasterController')
+const { authenticateToken, requireRole } = require('../middleware/auth')
+
+const router = express.Router()
+
+// Apply authentication to all routes
+router.use(authenticateToken)
+router.use(requireRole(['TALLY_MASTER', 'ORGANIZER', 'BOARD']))
+
+// Tally Master endpoints
+router.get('/data', getTallyData)
+router.put('/update', updateTally)
+router.get('/stats', getTallyStats)
+
+module.exports = router
+EOF
+
+    # Email Routes
+    cat > "$APP_DIR/src/routes/emailRoutes.js" << 'EOF'
+const express = require('express')
+const { sendEmail, getEmailTemplates, updateEmailTemplate, testEmail } = require('../controllers/emailController')
+const { authenticateToken, requireRole } = require('../middleware/auth')
+const { logActivity } = require('../middleware/errorHandler')
+
+const router = express.Router()
+
+// Apply authentication to all routes
+router.use(authenticateToken)
+
+// Email endpoints
+router.post('/send', requireRole(['ORGANIZER', 'BOARD']), logActivity('SEND_EMAIL', 'EMAIL'), sendEmail)
+router.get('/templates', getEmailTemplates)
+router.put('/templates/:id', requireRole(['ORGANIZER', 'BOARD']), logActivity('UPDATE_EMAIL_TEMPLATE', 'EMAIL'), updateEmailTemplate)
+router.post('/test', requireRole(['ORGANIZER', 'BOARD']), testEmail)
+
+module.exports = router
+EOF
+
+    # Reports Routes
+    cat > "$APP_DIR/src/routes/reportsRoutes.js" << 'EOF'
+const express = require('express')
+const { generateReport, getReportTemplates, downloadReport } = require('../controllers/reportsController')
+const { authenticateToken, requireRole } = require('../middleware/auth')
+const { logActivity } = require('../middleware/errorHandler')
+
+const router = express.Router()
+
+// Apply authentication to all routes
+router.use(authenticateToken)
+
+// Reports endpoints
+router.post('/generate', requireRole(['ORGANIZER', 'BOARD', 'JUDGE']), logActivity('GENERATE_REPORT', 'REPORT'), generateReport)
+router.get('/templates', getReportTemplates)
+router.get('/download/:reportId', requireRole(['ORGANIZER', 'BOARD', 'JUDGE']), downloadReport)
+
+module.exports = router
+EOF
+
+    # Templates Routes
+    cat > "$APP_DIR/src/routes/templatesRoutes.js" << 'EOF'
+const express = require('express')
+const { getTemplates, createTemplate, updateTemplate, deleteTemplate } = require('../controllers/templatesController')
+const { authenticateToken, requireRole } = require('../middleware/auth')
+const { logActivity } = require('../middleware/errorHandler')
+
+const router = express.Router()
+
+// Apply authentication to all routes
+router.use(authenticateToken)
+
+// Templates endpoints
+router.get('/', getTemplates)
+router.post('/', requireRole(['ORGANIZER', 'BOARD']), logActivity('CREATE_TEMPLATE', 'TEMPLATE'), createTemplate)
+router.put('/:id', requireRole(['ORGANIZER', 'BOARD']), logActivity('UPDATE_TEMPLATE', 'TEMPLATE'), updateTemplate)
+router.delete('/:id', requireRole(['ORGANIZER', 'BOARD']), logActivity('DELETE_TEMPLATE', 'TEMPLATE'), deleteTemplate)
+
+module.exports = router
+EOF
+
+    # Notifications Routes
+    cat > "$APP_DIR/src/routes/notificationsRoutes.js" << 'EOF'
+const express = require('express')
+const { getNotifications, createNotification, updateNotification, deleteNotification } = require('../controllers/notificationsController')
+const { authenticateToken, requireRole } = require('../middleware/auth')
+const { logActivity } = require('../middleware/errorHandler')
+
+const router = express.Router()
+
+// Apply authentication to all routes
+router.use(authenticateToken)
+
+// Notifications endpoints
+router.get('/', getNotifications)
+router.post('/', requireRole(['ORGANIZER', 'BOARD']), logActivity('CREATE_NOTIFICATION', 'NOTIFICATION'), createNotification)
+router.put('/:id', requireRole(['ORGANIZER', 'BOARD']), logActivity('UPDATE_NOTIFICATION', 'NOTIFICATION'), updateNotification)
+router.delete('/:id', requireRole(['ORGANIZER', 'BOARD']), logActivity('DELETE_NOTIFICATION', 'NOTIFICATION'), deleteNotification)
+
+module.exports = router
+EOF
+
+    # Emcee Routes
+    cat > "$APP_DIR/src/routes/emceeRoutes.js" << 'EOF'
+const express = require('express')
+const { getScripts, getCurrentEvent, getAnnouncements, createAnnouncement, updateAnnouncement, deleteAnnouncement } = require('../controllers/emceeController')
+const { authenticateToken, requireRole } = require('../middleware/auth')
+const { logActivity } = require('../middleware/errorHandler')
+
+const router = express.Router()
+
+// Apply authentication to all routes
+router.use(authenticateToken)
+router.use(requireRole(['EMCEE', 'ORGANIZER', 'BOARD']))
+
+// Emcee endpoints
+router.get('/scripts', getScripts)
+router.get('/current-event', getCurrentEvent)
+router.get('/announcements', getAnnouncements)
+router.post('/announcements', logActivity('CREATE_ANNOUNCEMENT', 'ANNOUNCEMENT'), createAnnouncement)
+router.put('/announcements/:id', logActivity('UPDATE_ANNOUNCEMENT', 'ANNOUNCEMENT'), updateAnnouncement)
+router.delete('/announcements/:id', logActivity('DELETE_ANNOUNCEMENT', 'ANNOUNCEMENT'), deleteAnnouncement)
+
+module.exports = router
+EOF
+
     print_success "Route files created successfully"
 }
 
