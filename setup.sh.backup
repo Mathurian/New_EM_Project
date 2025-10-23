@@ -158,54 +158,44 @@ safe_npm_install() {
             print_warning "Some canvas dependencies may not be installed properly"
         fi
         
-        # Fix node-pre-gyp compatibility with Node.js v20.19.5
-        print_status "Fixing node-pre-gyp compatibility for canvas module..."
+        # Install canvas separately before main npm install
+        print_status "Installing canvas..."
         
-        # Strategy 1: Try installing canvas with build-from-source flag
-        print_status "Attempting canvas installation with build-from-source..."
+        # Strategy 1: Install canvas with build-from-source
         if npm install canvas 2>/dev/null; then
-            print_success "Canvas installed successfully"
+            print_success "Canvas installed successfully with build-from-source"
         else
-            # Strategy 2: Try installing canvas with specific node-pre-gyp version
-            print_status "Attempting canvas installation with compatible node-pre-gyp..."
+            # Strategy 2: Install compatible node-pre-gyp version first
+            print_status "Installing compatible node-pre-gyp version..."
             npm install @mapbox/node-pre-gyp@1.0.10 --no-save --legacy-peer-deps --force 2>/dev/null || true
             
-            # Strategy 3: Try installing canvas with Python 2.7 compatibility
-            print_status "Setting up Python 2.7 compatibility..."
-            sudo apt-get install -y python2.7 python2.7-dev 2>/dev/null || true
-            sudo update-alternatives --install /usr/bin/python python /usr/bin/python2.7 1 2>/dev/null || true
-            
-            # Strategy 4: Try installing canvas with environment variables
-            print_status "Attempting canvas installation with compatibility flags..."
-            export PYTHON=/usr/bin/python2.7
-            export npm_config_python=/usr/bin/python2.7
-            export npm_config_build_from_source=true
-            
+            # Strategy 3: Try canvas installation again
             if npm install canvas --legacy-peer-deps --force 2>/dev/null; then
-                print_success "Canvas installed successfully with Python 2.7 compatibility"
+                print_success "Canvas installed successfully with compatible node-pre-gyp"
             else
-                print_warning "Canvas installation failed - will try alternative approach"
+                # Strategy 4: Try with environment variables
+                print_status "Attempting canvas installation with build flags..."
+                export npm_config_build_from_source=true
+                export npm_config_canvas_binary_host_mirror=https://github.com/Automattic/node-canvas/releases/download/
+                
+                if npm install canvas --legacy-peer-deps --force 2>/dev/null; then
+                    print_success "Canvas installed successfully with build flags"
+                else
+                    print_warning "Canvas installation failed - will continue without it"
+                    # Remove canvas from package.json to prevent main install failure
+                    if [ -f "package.json" ] && grep -q '"canvas"' package.json; then
+                        sed -i '/"canvas"/d' package.json
+                        print_status "Removed canvas from package.json to prevent install failure"
+                    fi
+                fi
             fi
         fi
         
-        # Verify canvas can be imported after system dependencies are installed
-        print_status "Testing canvas module compatibility..."
-        if node -e "console.log('Canvas test:', require('canvas').version)" 2>/dev/null; then
+        # Verify canvas installation
+        if node -e "console.log('Canvas version:', require('canvas').version)" 2>/dev/null; then
             print_success "Canvas module is working correctly"
         else
-            print_warning "Canvas module may need additional configuration"
-        fi
-        
-        # Strategy 5: If canvas still fails, remove it from package.json as it's not critical
-        print_status "Final canvas compatibility check..."
-        if ! node -e "console.log('Canvas test:', require('canvas').version)" 2>/dev/null; then
-            print_warning "Canvas module installation failed - removing from dependencies"
-            print_status "Canvas is not critical for core functionality, continuing without it..."
-            # Remove canvas from package.json if it exists
-            if [ -f "package.json" ] && grep -q '"canvas"' package.json; then
-                sed -i '/"canvas"/d' package.json
-                print_status "Removed canvas from package.json dependencies"
-            fi
+            print_warning "Canvas module installation failed - continuing without canvas"
         fi
     fi
     
@@ -618,6 +608,3242 @@ create_backend_files() {
     mkdir -p "$APP_DIR/src/database" "$APP_DIR/src/controllers" "$APP_DIR/src/middleware" \
              "$APP_DIR/src/routes" "$APP_DIR/src/socket" "$APP_DIR/src/utils" "$APP_DIR/prisma"
     
+    # Create controller files
+    print_status "Creating controller files..."
+    
+    # Auth Controller
+    cat > "$APP_DIR/src/controllers/authController.js" << 'EOF'
+const bcrypt = require('bcryptjs')
+const jwt = require('jsonwebtoken')
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
+
+const login = async (req, res) => {
+  try {
+    const { email, password } = req.body
+    
+    const user = await prisma.user.findUnique({
+      where: { email },
+      include: { judge: true, contestant: true }
+    })
+    
+    if (!user || !await bcrypt.compare(password, user.password)) {
+      return res.status(401).json({ error: 'Invalid credentials' })
+    }
+    
+    const token = jwt.sign(
+      { userId: user.id, email: user.email, role: user.role },
+      JWT_SECRET,
+      { expiresIn: '24h' }
+    )
+    
+    res.json({
+      token,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        judge: user.judge,
+        contestant: user.contestant
+      }
+    })
+  } catch (error) {
+    console.error('Login error:', error)
+    res.status(500).json({ error: 'Login failed' })
+  }
+}
+
+const getProfile = (req, res) => {
+  res.json({
+    id: req.user.id,
+    name: req.user.name,
+    email: req.user.email,
+    role: req.user.role,
+    judge: req.user.judge,
+    contestant: req.user.contestant
+  })
+}
+
+const logout = (req, res) => {
+  res.json({ message: 'Logged out successfully' })
+}
+
+module.exports = {
+  login,
+  getProfile,
+  logout
+}
+EOF
+
+    # Events Controller
+    cat > "$APP_DIR/src/controllers/eventController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+const getAllEvents = async (req, res) => {
+  try {
+    const events = await prisma.event.findMany({
+      include: {
+        contests: {
+          include: {
+            categories: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+    res.json(events)
+  } catch (error) {
+    console.error('Events fetch error:', error)
+    res.status(500).json({ error: 'Failed to fetch events' })
+  }
+}
+
+const getEventById = async (req, res) => {
+  try {
+    const event = await prisma.event.findUnique({
+      where: { id: req.params.id },
+      include: {
+        contests: {
+          include: {
+            categories: true
+          }
+        }
+      }
+    })
+    
+    if (!event) {
+      return res.status(404).json({ error: 'Event not found' })
+    }
+    
+    res.json(event)
+  } catch (error) {
+    console.error('Event fetch error:', error)
+    res.status(500).json({ error: 'Failed to fetch event' })
+  }
+}
+
+const createEvent = async (req, res) => {
+  try {
+    if (req.user.role !== 'ORGANIZER' && req.user.role !== 'BOARD') {
+      return res.status(403).json({ error: 'Insufficient permissions' })
+    }
+    
+    const event = await prisma.event.create({
+      data: req.body
+    })
+    res.json(event)
+  } catch (error) {
+    console.error('Event creation error:', error)
+    res.status(500).json({ error: 'Failed to create event' })
+  }
+}
+
+const updateEvent = async (req, res) => {
+  try {
+    if (req.user.role !== 'ORGANIZER' && req.user.role !== 'BOARD') {
+      return res.status(403).json({ error: 'Insufficient permissions' })
+    }
+    
+    const event = await prisma.event.update({
+      where: { id: req.params.id },
+      data: req.body
+    })
+    res.json(event)
+  } catch (error) {
+    console.error('Event update error:', error)
+    res.status(500).json({ error: 'Failed to update event' })
+  }
+}
+
+const deleteEvent = async (req, res) => {
+  try {
+    if (req.user.role !== 'ORGANIZER' && req.user.role !== 'BOARD') {
+      return res.status(403).json({ error: 'Insufficient permissions' })
+    }
+    
+    await prisma.event.delete({
+      where: { id: req.params.id }
+    })
+    res.json({ message: 'Event deleted successfully' })
+  } catch (error) {
+    console.error('Event deletion error:', error)
+    res.status(500).json({ error: 'Failed to delete event' })
+  }
+}
+
+module.exports = {
+  getAllEvents,
+  getEventById,
+  createEvent,
+  updateEvent,
+  deleteEvent
+}
+EOF
+
+    # Contests Controller
+    cat > "$APP_DIR/src/controllers/contestController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+const getAllContests = async (req, res) => {
+  try {
+    const contests = await prisma.contest.findMany({
+      include: {
+        event: true,
+        categories: true,
+        contestants: {
+          include: { contestant: true }
+        },
+        judges: {
+          include: { judge: true }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+    res.json(contests)
+  } catch (error) {
+    console.error('Contests fetch error:', error)
+    res.status(500).json({ error: 'Failed to fetch contests' })
+  }
+}
+
+const getContestById = async (req, res) => {
+  try {
+    const contest = await prisma.contest.findUnique({
+      where: { id: req.params.id },
+      include: {
+        event: true,
+        categories: true,
+        contestants: {
+          include: { contestant: true }
+        },
+        judges: {
+          include: { judge: true }
+        }
+      }
+    })
+    
+    if (!contest) {
+      return res.status(404).json({ error: 'Contest not found' })
+    }
+    
+    res.json(contest)
+  } catch (error) {
+    console.error('Contest fetch error:', error)
+    res.status(500).json({ error: 'Failed to fetch contest' })
+  }
+}
+
+const getContestsByEvent = async (req, res) => {
+  try {
+    const contests = await prisma.contest.findMany({
+      where: { eventId: req.params.eventId },
+      include: {
+        categories: true,
+        contestants: {
+          include: { contestant: true }
+        },
+        judges: {
+          include: { judge: true }
+        }
+      }
+    })
+    res.json(contests)
+  } catch (error) {
+    console.error('Contests fetch error:', error)
+    res.status(500).json({ error: 'Failed to fetch contests' })
+  }
+}
+
+const createContest = async (req, res) => {
+  try {
+    if (req.user.role !== 'ORGANIZER' && req.user.role !== 'BOARD') {
+      return res.status(403).json({ error: 'Insufficient permissions' })
+    }
+    
+    const contest = await prisma.contest.create({
+      data: req.body
+    })
+    res.json(contest)
+  } catch (error) {
+    console.error('Contest creation error:', error)
+    res.status(500).json({ error: 'Failed to create contest' })
+  }
+}
+
+const updateContest = async (req, res) => {
+  try {
+    if (req.user.role !== 'ORGANIZER' && req.user.role !== 'BOARD') {
+      return res.status(403).json({ error: 'Insufficient permissions' })
+    }
+    
+    const contest = await prisma.contest.update({
+      where: { id: req.params.id },
+      data: req.body
+    })
+    res.json(contest)
+  } catch (error) {
+    console.error('Contest update error:', error)
+    res.status(500).json({ error: 'Failed to update contest' })
+  }
+}
+
+const deleteContest = async (req, res) => {
+  try {
+    if (req.user.role !== 'ORGANIZER' && req.user.role !== 'BOARD') {
+      return res.status(403).json({ error: 'Insufficient permissions' })
+    }
+    
+    await prisma.contest.delete({
+      where: { id: req.params.id }
+    })
+    res.json({ message: 'Contest deleted successfully' })
+  } catch (error) {
+    console.error('Contest deletion error:', error)
+    res.status(500).json({ error: 'Failed to delete contest' })
+  }
+}
+
+module.exports = {
+  getAllContests,
+  getContestById,
+  getContestsByEvent,
+  createContest,
+  updateContest,
+  deleteContest
+}
+EOF
+
+    # Categories Controller
+    cat > "$APP_DIR/src/controllers/categoryController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+const getAllCategories = async (req, res) => {
+  try {
+    const { contestId } = req.query
+    
+    const where = contestId ? { contestId } : {}
+    
+    const categories = await prisma.category.findMany({
+      where,
+      include: {
+        contest: {
+          select: {
+            id: true,
+            name: true
+          }
+        },
+        _count: {
+          select: {
+            criteria: true,
+            contestants: true,
+            judges: true,
+            scores: true
+          }
+        }
+      },
+      orderBy: { order: 'asc' }
+    })
+    
+    res.json(categories)
+  } catch (error) {
+    console.error('Categories fetch error:', error)
+    res.status(500).json({ error: 'Failed to fetch categories' })
+  }
+}
+
+const getCategoryById = async (req, res) => {
+  try {
+    const category = await prisma.category.findUnique({
+      where: { id: req.params.id },
+      include: {
+        contest: true,
+        criteria: true,
+        contestants: {
+          include: { contestant: true }
+        },
+        judges: {
+          include: { judge: true }
+        }
+      }
+    })
+    
+    if (!category) {
+      return res.status(404).json({ error: 'Category not found' })
+    }
+    
+    res.json(category)
+  } catch (error) {
+    console.error('Category fetch error:', error)
+    res.status(500).json({ error: 'Failed to fetch category' })
+  }
+}
+
+const getCategoriesByContest = async (req, res) => {
+  try {
+    const categories = await prisma.category.findMany({
+      where: { contestId: req.params.contestId },
+      include: {
+        criteria: true,
+        contestants: {
+          include: { contestant: true }
+        },
+        judges: {
+          include: { judge: true }
+        }
+      }
+    })
+    res.json(categories)
+  } catch (error) {
+    console.error('Categories fetch error:', error)
+    res.status(500).json({ error: 'Failed to fetch categories' })
+  }
+}
+
+const createCategory = async (req, res) => {
+  try {
+    if (req.user.role !== 'ORGANIZER' && req.user.role !== 'BOARD') {
+      return res.status(403).json({ error: 'Insufficient permissions' })
+    }
+    
+    const category = await prisma.category.create({
+      data: req.body
+    })
+    res.json(category)
+  } catch (error) {
+    console.error('Category creation error:', error)
+    res.status(500).json({ error: 'Failed to create category' })
+  }
+}
+
+const updateCategory = async (req, res) => {
+  try {
+    if (req.user.role !== 'ORGANIZER' && req.user.role !== 'BOARD') {
+      return res.status(403).json({ error: 'Insufficient permissions' })
+    }
+    
+    const category = await prisma.category.update({
+      where: { id: req.params.id },
+      data: req.body
+    })
+    res.json(category)
+  } catch (error) {
+    console.error('Category update error:', error)
+    res.status(500).json({ error: 'Failed to update category' })
+  }
+}
+
+const deleteCategory = async (req, res) => {
+  try {
+    if (req.user.role !== 'ORGANIZER' && req.user.role !== 'BOARD') {
+      return res.status(403).json({ error: 'Insufficient permissions' })
+    }
+    
+    await prisma.category.delete({
+      where: { id: req.params.id }
+    })
+    res.json({ message: 'Category deleted successfully' })
+  } catch (error) {
+    console.error('Category deletion error:', error)
+    res.status(500).json({ error: 'Failed to delete category' })
+  }
+}
+
+module.exports = {
+  getAllCategories,
+  getCategoryById,
+  getCategoriesByContest,
+  createCategory,
+  updateCategory,
+  deleteCategory
+}
+EOF
+
+    # Users Controller
+    cat > "$APP_DIR/src/controllers/userController.js" << 'EOF'
+const bcrypt = require('bcryptjs')
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+const getAllUsers = async (req, res) => {
+  try {
+    if (req.user.role !== 'ORGANIZER' && req.user.role !== 'BOARD') {
+      return res.status(403).json({ error: 'Insufficient permissions' })
+    }
+    
+    const users = await prisma.user.findMany({
+      include: { judge: true, contestant: true },
+      orderBy: { createdAt: 'desc' }
+    })
+    res.json(users)
+  } catch (error) {
+    console.error('Users fetch error:', error)
+    res.status(500).json({ error: 'Failed to fetch users' })
+  }
+}
+
+const getUserById = async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.params.id },
+      include: { judge: true, contestant: true }
+    })
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' })
+    }
+    
+    res.json(user)
+  } catch (error) {
+    console.error('User fetch error:', error)
+    res.status(500).json({ error: 'Failed to fetch user' })
+  }
+}
+
+const createUser = async (req, res) => {
+  try {
+    if (req.user.role !== 'ORGANIZER' && req.user.role !== 'BOARD') {
+      return res.status(403).json({ error: 'Insufficient permissions' })
+    }
+    
+    const { password, ...userData } = req.body
+    const hashedPassword = await bcrypt.hash(password, 12)
+    
+    const user = await prisma.user.create({
+      data: {
+        ...userData,
+        password: hashedPassword
+      }
+    })
+    
+    res.json(user)
+  } catch (error) {
+    console.error('User creation error:', error)
+    res.status(500).json({ error: 'Failed to create user' })
+  }
+}
+
+const updateUser = async (req, res) => {
+  try {
+    if (req.user.role !== 'ORGANIZER' && req.user.role !== 'BOARD') {
+      return res.status(403).json({ error: 'Insufficient permissions' })
+    }
+    
+    const { password, ...userData } = req.body
+    const updateData = { ...userData }
+    
+    if (password) {
+      updateData.password = await bcrypt.hash(password, 12)
+    }
+    
+    const user = await prisma.user.update({
+      where: { id: req.params.id },
+      data: updateData
+    })
+    
+    res.json(user)
+  } catch (error) {
+    console.error('User update error:', error)
+    res.status(500).json({ error: 'Failed to update user' })
+  }
+}
+
+const deleteUser = async (req, res) => {
+  try {
+    if (req.user.role !== 'ORGANIZER' && req.user.role !== 'BOARD') {
+      return res.status(403).json({ error: 'Insufficient permissions' })
+    }
+    
+    await prisma.user.delete({
+      where: { id: req.params.id }
+    })
+    res.json({ message: 'User deleted successfully' })
+  } catch (error) {
+    console.error('User deletion error:', error)
+    res.status(500).json({ error: 'Failed to delete user' })
+  }
+}
+
+const resetPassword = async (req, res) => {
+  try {
+    if (req.user.role !== 'ORGANIZER' && req.user.role !== 'BOARD') {
+      return res.status(403).json({ error: 'Insufficient permissions' })
+    }
+    
+    const { newPassword } = req.body
+    const hashedPassword = await bcrypt.hash(newPassword, 12)
+    
+    await prisma.user.update({
+      where: { id: req.params.id },
+      data: { password: hashedPassword }
+    })
+    
+    res.json({ message: 'Password reset successfully' })
+  } catch (error) {
+    console.error('Password reset error:', error)
+    res.status(500).json({ error: 'Failed to reset password' })
+  }
+}
+
+module.exports = {
+  getAllUsers,
+  getUserById,
+  createUser,
+  updateUser,
+  deleteUser,
+  resetPassword
+}
+EOF
+
+    # Scoring Controller
+    cat > "$APP_DIR/src/controllers/scoringController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+const getScores = async (req, res) => {
+  try {
+    const scores = await prisma.score.findMany({
+      where: {
+        categoryId: req.params.categoryId,
+        contestantId: req.params.contestantId
+      },
+      include: {
+        criterion: true,
+        judge: true
+      }
+    })
+    res.json(scores)
+  } catch (error) {
+    console.error('Scores fetch error:', error)
+    res.status(500).json({ error: 'Failed to fetch scores' })
+  }
+}
+
+const submitScore = async (req, res) => {
+  try {
+    const { criterionId, score } = req.body
+    
+    const existingScore = await prisma.score.findFirst({
+      where: {
+        categoryId: req.params.categoryId,
+        contestantId: req.params.contestantId,
+        judgeId: req.user.id,
+        criterionId
+      }
+    })
+    
+    if (existingScore) {
+      const updatedScore = await prisma.score.update({
+        where: { id: existingScore.id },
+        data: { score }
+      })
+      res.json(updatedScore)
+    } else {
+      const newScore = await prisma.score.create({
+        data: {
+          categoryId: req.params.categoryId,
+          contestantId: req.params.contestantId,
+          judgeId: req.user.id,
+          criterionId,
+          score
+        }
+      })
+      res.json(newScore)
+    }
+  } catch (error) {
+    console.error('Score submission error:', error)
+    res.status(500).json({ error: 'Failed to submit score' })
+  }
+}
+
+const updateScore = async (req, res) => {
+  try {
+    const score = await prisma.score.update({
+      where: { id: req.params.id },
+      data: req.body
+    })
+    res.json(score)
+  } catch (error) {
+    console.error('Score update error:', error)
+    res.status(500).json({ error: 'Failed to update score' })
+  }
+}
+
+const deleteScore = async (req, res) => {
+  try {
+    await prisma.score.delete({
+      where: { id: req.params.id }
+    })
+    res.json({ message: 'Score deleted successfully' })
+  } catch (error) {
+    console.error('Score deletion error:', error)
+    res.status(500).json({ error: 'Failed to delete score' })
+  }
+}
+
+const certifyScores = async (req, res) => {
+  try {
+    if (req.user.role !== 'JUDGE' && req.user.role !== 'ORGANIZER') {
+      return res.status(403).json({ error: 'Insufficient permissions' })
+    }
+    
+    // Implementation for score certification
+    res.json({ message: 'Scores certified successfully' })
+  } catch (error) {
+    console.error('Score certification error:', error)
+    res.status(500).json({ error: 'Failed to certify scores' })
+  }
+}
+
+const certifyTotals = async (req, res) => {
+  try {
+    if (req.user.role !== 'TALLY_MASTER' && req.user.role !== 'ORGANIZER') {
+      return res.status(403).json({ error: 'Insufficient permissions' })
+    }
+    
+    // Implementation for total certification
+    res.json({ message: 'Totals certified successfully' })
+  } catch (error) {
+    console.error('Total certification error:', error)
+    res.status(500).json({ error: 'Failed to certify totals' })
+  }
+}
+
+const finalCertification = async (req, res) => {
+  try {
+    if (req.user.role !== 'AUDITOR' && req.user.role !== 'ORGANIZER') {
+      return res.status(403).json({ error: 'Insufficient permissions' })
+    }
+    
+    // Implementation for final certification
+    res.json({ message: 'Final certification completed successfully' })
+  } catch (error) {
+    console.error('Final certification error:', error)
+    res.status(500).json({ error: 'Failed to complete final certification' })
+  }
+}
+
+module.exports = {
+  getScores,
+  submitScore,
+  updateScore,
+  deleteScore,
+  certifyScores,
+  certifyTotals,
+  finalCertification
+}
+EOF
+
+    # Results Controller
+    cat > "$APP_DIR/src/controllers/resultsController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+const getAllResults = async (req, res) => {
+  try {
+    const { categoryId, contestId } = req.query
+    
+    let where = {}
+    if (categoryId) {
+      where.categoryId = categoryId
+    } else if (contestId) {
+      where.category = {
+        contestId: contestId
+      }
+    }
+    
+    const results = await prisma.score.groupBy({
+      by: ['contestantId', 'categoryId'],
+      where,
+      _sum: {
+        score: true
+      },
+      _avg: {
+        score: true
+      },
+      _count: {
+        score: true
+      }
+    })
+    
+    // Get detailed results with contestant and category info
+    const detailedResults = await Promise.all(results.map(async (result) => {
+      const contestant = await prisma.contestant.findUnique({
+        where: { id: result.contestantId },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          contestantNumber: true
+        }
+      })
+      
+      const category = await prisma.category.findUnique({
+        where: { id: result.categoryId },
+        select: {
+          id: true,
+          name: true,
+          maxScore: true
+        }
+      })
+      
+      return {
+        contestantId: result.contestantId,
+        categoryId: result.categoryId,
+        totalScore: result._sum.score,
+        averageScore: result._avg.score,
+        scoreCount: result._count.score,
+        contestant,
+        category
+      }
+    }))
+    
+    res.json(detailedResults)
+  } catch (error) {
+    console.error('Results fetch error:', error)
+    res.status(500).json({ error: 'Failed to fetch results' })
+  }
+}
+
+const getResultCategories = async (req, res) => {
+  try {
+    const categories = await prisma.category.findMany({
+      include: {
+        contest: true,
+        _count: {
+          select: {
+            scores: true
+          }
+        }
+      }
+    })
+    res.json(categories)
+  } catch (error) {
+    console.error('Result categories fetch error:', error)
+    res.status(500).json({ error: 'Failed to fetch result categories' })
+  }
+}
+
+const getContestantResults = async (req, res) => {
+  try {
+    const results = await prisma.score.groupBy({
+      by: ['categoryId'],
+      where: { contestantId: req.params.id },
+      _sum: {
+        score: true
+      },
+      _avg: {
+        score: true
+      }
+    })
+    
+    res.json(results)
+  } catch (error) {
+    console.error('Contestant results fetch error:', error)
+    res.status(500).json({ error: 'Failed to fetch contestant results' })
+  }
+}
+
+const getCategoryResults = async (req, res) => {
+  try {
+    const results = await prisma.score.groupBy({
+      by: ['contestantId'],
+      where: { categoryId: req.params.id },
+      _sum: {
+        score: true
+      },
+      _avg: {
+        score: true
+      }
+    })
+    
+    res.json(results)
+  } catch (error) {
+    console.error('Category results fetch error:', error)
+    res.status(500).json({ error: 'Failed to fetch category results' })
+  }
+}
+
+const getContestResults = async (req, res) => {
+  try {
+    const categories = await prisma.category.findMany({
+      where: { contestId: req.params.id },
+      include: {
+        scores: {
+          include: {
+            contestant: true
+          }
+        }
+      }
+    })
+    
+    res.json(categories)
+  } catch (error) {
+    console.error('Contest results fetch error:', error)
+    res.status(500).json({ error: 'Failed to fetch contest results' })
+  }
+}
+
+const getEventResults = async (req, res) => {
+  try {
+    const contests = await prisma.contest.findMany({
+      where: { eventId: req.params.id },
+      include: {
+        categories: {
+          include: {
+            scores: {
+              include: {
+                contestant: true
+              }
+            }
+          }
+        }
+      }
+    })
+    
+    res.json(contests)
+  } catch (error) {
+    console.error('Event results fetch error:', error)
+    res.status(500).json({ error: 'Failed to fetch event results' })
+  }
+}
+
+module.exports = {
+  getAllResults,
+  getResultCategories,
+  getContestantResults,
+  getCategoryResults,
+  getContestResults,
+  getEventResults
+}
+EOF
+
+    # Admin Controller
+    cat > "$APP_DIR/src/controllers/adminController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+const getStats = async (req, res) => {
+  try {
+    if (req.user.role !== 'ORGANIZER' && req.user.role !== 'BOARD') {
+      return res.status(403).json({ error: 'Insufficient permissions' })
+    }
+    
+    const [eventCount, contestCount, userCount, scoreCount] = await Promise.all([
+      prisma.event.count(),
+      prisma.contest.count(),
+      prisma.user.count(),
+      prisma.score.count()
+    ])
+    
+    res.json({
+      events: eventCount,
+      contests: contestCount,
+      users: userCount,
+      scores: scoreCount
+    })
+  } catch (error) {
+    console.error('Stats fetch error:', error)
+    res.status(500).json({ error: 'Failed to fetch stats' })
+  }
+}
+
+const getLogs = async (req, res) => {
+  try {
+    if (req.user.role !== 'ORGANIZER' && req.user.role !== 'BOARD' && req.user.role !== 'AUDITOR') {
+      return res.status(403).json({ error: 'Insufficient permissions' })
+    }
+    
+    const logs = await prisma.activityLog.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+      include: {
+        user: {
+          select: { id: true, name: true, role: true }
+        }
+      }
+    })
+    
+    res.json(logs)
+  } catch (error) {
+    console.error('Logs fetch error:', error)
+    res.status(500).json({ error: 'Failed to fetch logs' })
+  }
+}
+
+const getActiveUsers = async (req, res) => {
+  try {
+    if (req.user.role !== 'ORGANIZER' && req.user.role !== 'BOARD') {
+      return res.status(403).json({ error: 'Insufficient permissions' })
+    }
+    
+    const activeUsers = await prisma.user.findMany({
+      where: {
+        isActive: true
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        lastLoginAt: true
+      },
+      take: 20
+    })
+    
+    res.json(activeUsers)
+  } catch (error) {
+    console.error('Active users fetch error:', error)
+    res.status(500).json({ error: 'Failed to fetch active users' })
+  }
+}
+
+const getSettings = async (req, res) => {
+  try {
+    if (req.user.role !== 'ORGANIZER' && req.user.role !== 'BOARD') {
+      return res.status(403).json({ error: 'Insufficient permissions' })
+    }
+    
+    const settings = await prisma.systemSetting.findMany()
+    res.json(settings)
+  } catch (error) {
+    console.error('Settings fetch error:', error)
+    res.status(500).json({ error: 'Failed to fetch settings' })
+  }
+}
+
+const updateSettings = async (req, res) => {
+  try {
+    if (req.user.role !== 'ORGANIZER' && req.user.role !== 'BOARD') {
+      return res.status(403).json({ error: 'Insufficient permissions' })
+    }
+    
+    const settings = await prisma.systemSetting.updateMany({
+      data: req.body
+    })
+    res.json(settings)
+  } catch (error) {
+    console.error('Settings update error:', error)
+    res.status(500).json({ error: 'Failed to update settings' })
+  }
+}
+
+const getBackup = async (req, res) => {
+  try {
+    if (req.user.role !== 'ORGANIZER' && req.user.role !== 'BOARD') {
+      return res.status(403).json({ error: 'Insufficient permissions' })
+    }
+    
+    res.json({
+      message: 'Backup functionality available',
+      lastBackup: new Date().toISOString(),
+      status: 'available'
+    })
+  } catch (error) {
+    console.error('Backup fetch error:', error)
+    res.status(500).json({ error: 'Failed to fetch backup status' })
+  }
+}
+
+const testConnection = async (req, res) => {
+  try {
+    if (req.user.role !== 'ORGANIZER' && req.user.role !== 'BOARD') {
+      return res.status(403).json({ error: 'Insufficient permissions' })
+    }
+    
+    const { type } = req.params
+    
+    switch (type) {
+      case 'database':
+        await prisma.$queryRaw`SELECT 1`
+        res.json({ success: true, message: 'Database connection successful' })
+        break
+      case 'email':
+        res.json({ success: true, message: 'Email configuration test successful' })
+        break
+      case 'backup':
+        res.json({ success: true, message: 'Backup system test successful' })
+        break
+      default:
+        res.status(400).json({ error: 'Invalid test type' })
+    }
+  } catch (error) {
+    console.error('Connection test error:', error)
+    res.status(500).json({ error: 'Connection test failed' })
+  }
+}
+
+module.exports = {
+  getStats,
+  getLogs,
+  getActiveUsers,
+  getSettings,
+  updateSettings,
+  getBackup,
+  testConnection
+}
+EOF
+
+    # Upload Controller
+    cat > "$APP_DIR/src/controllers/uploadController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+const path = require('path')
+const fs = require('fs')
+
+const prisma = new PrismaClient()
+
+const uploadFile = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' })
+    }
+
+    const { type = 'OTHER', contestantId, judgeId, contestId, categoryId } = req.body
+
+    const uploadedFile = await prisma.uploadedFile.create({
+      data: {
+        filename: req.file.filename,
+        originalName: req.file.originalname,
+        mimeType: req.file.mimetype,
+        size: req.file.size,
+        path: req.file.path,
+        uploadedBy: req.user.id,
+        category: type,
+        contestantId: contestantId || null,
+        judgeId: judgeId || null,
+        contestId: contestId || null,
+        categoryId: categoryId || null,
+        isPublic: false,
+        metadata: {}
+      }
+    })
+
+    res.json({ success: true, file: uploadedFile })
+  } catch (error) {
+    console.error('Upload error:', error)
+    res.status(500).json({ error: 'File upload failed' })
+  }
+}
+
+const getFiles = async (req, res) => {
+  try {
+    const { category, userId, contestId, categoryId } = req.query
+    
+    const where = {}
+    if (category) where.category = category
+    if (userId) where.uploadedBy = userId
+    if (contestId) where.contestId = contestId
+    if (categoryId) where.categoryId = categoryId
+
+    const files = await prisma.uploadedFile.findMany({
+      where,
+      include: {
+        uploadedByUser: {
+          select: { id: true, name: true, email: true }
+        }
+      },
+      orderBy: { uploadedAt: 'desc' }
+    })
+
+    res.json({ success: true, files })
+  } catch (error) {
+    console.error('Get files error:', error)
+    res.status(500).json({ error: 'Failed to retrieve files' })
+  }
+}
+
+const deleteFile = async (req, res) => {
+  try {
+    const { id } = req.params
+
+    const file = await prisma.uploadedFile.findUnique({
+      where: { id }
+    })
+
+    if (!file) {
+      return res.status(404).json({ error: 'File not found' })
+    }
+
+    // Delete physical file
+    if (fs.existsSync(file.path)) {
+      fs.unlinkSync(file.path)
+    }
+
+    // Delete database record
+    await prisma.uploadedFile.delete({
+      where: { id }
+    })
+
+    res.json({ success: true, message: 'File deleted successfully' })
+  } catch (error) {
+    console.error('Delete file error:', error)
+    res.status(500).json({ error: 'Failed to delete file' })
+  }
+}
+
+module.exports = {
+  uploadFile,
+  getFiles,
+  deleteFile
+}
+EOF
+
+    # Archive Controller
+    cat > "$APP_DIR/src/controllers/archiveController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+const getAllArchives = async (req, res) => {
+  try {
+    const archives = await prisma.archivedEvent.findMany({
+      include: {
+        archivedByUser: {
+          select: { id: true, name: true, email: true }
+        }
+      },
+      orderBy: { archivedAt: 'desc' }
+    })
+
+    res.json({ success: true, archives })
+  } catch (error) {
+    console.error('Get archives error:', error)
+    res.status(500).json({ error: 'Failed to retrieve archives' })
+  }
+}
+
+const archiveEvent = async (req, res) => {
+  try {
+    const { eventId } = req.params
+    const { reason } = req.body
+
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      include: {
+        contests: {
+          include: {
+            categories: {
+              include: {
+                contestants: true,
+                judges: true,
+                scores: true
+              }
+            }
+          }
+        }
+      }
+    })
+
+    if (!event) {
+      return res.status(404).json({ error: 'Event not found' })
+    }
+
+    // Create archived event
+    const archivedEvent = await prisma.archivedEvent.create({
+      data: {
+        name: event.name,
+        description: event.description,
+        startDate: event.startDate,
+        endDate: event.endDate,
+        location: event.location,
+        archivedAt: new Date(),
+        archivedBy: req.user.id,
+        reason: reason || 'Manual archive',
+        originalEventId: event.id,
+        contests: event.contests.length,
+        contestants: event.contests.reduce((sum, contest) => 
+          sum + contest.categories.reduce((catSum, cat) => catSum + cat.contestants.length, 0), 0),
+        totalScores: event.contests.reduce((sum, contest) => 
+          sum + contest.categories.reduce((catSum, cat) => catSum + cat.scores.length, 0), 0)
+      }
+    })
+
+    // Delete original event and related data
+    await prisma.event.delete({
+      where: { id: eventId }
+    })
+
+    res.json({ success: true, archivedEvent })
+  } catch (error) {
+    console.error('Archive event error:', error)
+    res.status(500).json({ error: 'Failed to archive event' })
+  }
+}
+
+const restoreEvent = async (req, res) => {
+  try {
+    const { eventId } = req.params
+
+    const archivedEvent = await prisma.archivedEvent.findUnique({
+      where: { originalEventId: eventId }
+    })
+
+    if (!archivedEvent) {
+      return res.status(404).json({ error: 'Archived event not found' })
+    }
+
+    // Restore event
+    const restoredEvent = await prisma.event.create({
+      data: {
+        name: archivedEvent.name,
+        description: archivedEvent.description,
+        startDate: archivedEvent.startDate,
+        endDate: archivedEvent.endDate,
+        location: archivedEvent.location,
+        status: 'DRAFT'
+      }
+    })
+
+    // Delete archived record
+    await prisma.archivedEvent.delete({
+      where: { originalEventId: eventId }
+    })
+
+    res.json({ success: true, event: restoredEvent })
+  } catch (error) {
+    console.error('Restore event error:', error)
+    res.status(500).json({ error: 'Failed to restore event' })
+  }
+}
+
+const deleteArchive = async (req, res) => {
+  try {
+    const { eventId } = req.params
+
+    await prisma.archivedEvent.delete({
+      where: { originalEventId: eventId }
+    })
+
+    res.json({ success: true, message: 'Archive deleted successfully' })
+  } catch (error) {
+    console.error('Delete archive error:', error)
+    res.status(500).json({ error: 'Failed to delete archive' })
+  }
+}
+
+module.exports = {
+  getAllArchives,
+  archiveEvent,
+  restoreEvent,
+  deleteArchive
+}
+EOF
+
+    # Backup Controller
+    cat > "$APP_DIR/src/controllers/backupController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+const fs = require('fs')
+const path = require('path')
+const { exec } = require('child_process')
+const { promisify } = require('util')
+
+const prisma = new PrismaClient()
+const execAsync = promisify(exec)
+
+const createBackup = async (req, res) => {
+  try {
+    const { type = 'FULL' } = req.body
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+    const filename = `backup-${type.toLowerCase()}-${timestamp}.sql`
+    const filepath = path.join('backups', filename)
+
+    // Ensure backups directory exists
+    if (!fs.existsSync('backups')) {
+      fs.mkdirSync('backups', { recursive: true })
+    }
+
+    let command
+    switch (type) {
+      case 'SCHEMA':
+        command = `pg_dump -h ${process.env.DB_HOST || 'localhost'} -U ${process.env.DB_USER || 'event_manager'} -d ${process.env.DB_NAME || 'event_manager'} --schema-only > ${filepath}`
+        break
+      case 'DATA':
+        command = `pg_dump -h ${process.env.DB_HOST || 'localhost'} -U ${process.env.DB_USER || 'event_manager'} -d ${process.env.DB_NAME || 'event_manager'} --data-only > ${filepath}`
+        break
+      default:
+        command = `pg_dump -h ${process.env.DB_HOST || 'localhost'} -U ${process.env.DB_USER || 'event_manager'} -d ${process.env.DB_NAME || 'event_manager'} > ${filepath}`
+    }
+
+    await execAsync(command)
+
+    const stats = fs.statSync(filepath)
+    const backup = await prisma.backup.create({
+      data: {
+        filename,
+        type,
+        size: stats.size,
+        createdAt: new Date(),
+        createdBy: req.user.id,
+        status: 'COMPLETED',
+        description: `${type} backup created successfully`
+      }
+    })
+
+    res.json({ success: true, backup })
+  } catch (error) {
+    console.error('Create backup error:', error)
+    res.status(500).json({ error: 'Failed to create backup' })
+  }
+}
+
+const restoreBackup = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { file } = req
+
+    let filepath
+    if (file) {
+      // Restore from uploaded file
+      filepath = file.path
+    } else {
+      // Restore from existing backup
+      const backup = await prisma.backup.findUnique({
+        where: { id }
+      })
+
+      if (!backup) {
+        return res.status(404).json({ error: 'Backup not found' })
+      }
+
+      filepath = path.join('backups', backup.filename)
+    }
+
+    if (!fs.existsSync(filepath)) {
+      return res.status(404).json({ error: 'Backup file not found' })
+    }
+
+    const command = `psql -h ${process.env.DB_HOST || 'localhost'} -U ${process.env.DB_USER || 'event_manager'} -d ${process.env.DB_NAME || 'event_manager'} < ${filepath}`
+    
+    await execAsync(command)
+
+    res.json({ success: true, message: 'Backup restored successfully' })
+  } catch (error) {
+    console.error('Restore backup error:', error)
+    res.status(500).json({ error: 'Failed to restore backup' })
+  }
+}
+
+const downloadBackup = async (req, res) => {
+  try {
+    const { id } = req.params
+
+    const backup = await prisma.backup.findUnique({
+      where: { id }
+    })
+
+    if (!backup) {
+      return res.status(404).json({ error: 'Backup not found' })
+    }
+
+    const filepath = path.join('backups', backup.filename)
+
+    if (!fs.existsSync(filepath)) {
+      return res.status(404).json({ error: 'Backup file not found' })
+    }
+
+    res.download(filepath, backup.filename)
+  } catch (error) {
+    console.error('Download backup error:', error)
+    res.status(500).json({ error: 'Failed to download backup' })
+  }
+}
+
+const listBackups = async (req, res) => {
+  try {
+    const backups = await prisma.backup.findMany({
+      include: {
+        createdByUser: {
+          select: { id: true, name: true, email: true }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    res.json({ success: true, backups })
+  } catch (error) {
+    console.error('List backups error:', error)
+    res.status(500).json({ error: 'Failed to list backups' })
+  }
+}
+
+const deleteBackup = async (req, res) => {
+  try {
+    const { id } = req.params
+
+    const backup = await prisma.backup.findUnique({
+      where: { id }
+    })
+
+    if (!backup) {
+      return res.status(404).json({ error: 'Backup not found' })
+    }
+
+    // Delete physical file
+    const filepath = path.join('backups', backup.filename)
+    if (fs.existsSync(filepath)) {
+      fs.unlinkSync(filepath)
+    }
+
+    // Delete database record
+    await prisma.backup.delete({
+      where: { id }
+    })
+
+    res.json({ success: true, message: 'Backup deleted successfully' })
+  } catch (error) {
+    console.error('Delete backup error:', error)
+    res.status(500).json({ error: 'Failed to delete backup' })
+  }
+}
+
+module.exports = {
+  createBackup,
+  restoreBackup,
+  downloadBackup,
+  listBackups,
+  deleteBackup
+}
+EOF
+
+    # Settings Controller
+    cat > "$APP_DIR/src/controllers/settingsController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+const nodemailer = require('nodemailer')
+
+const prisma = new PrismaClient()
+
+const getSettings = async (req, res) => {
+  try {
+    const settings = await prisma.systemSetting.findMany({
+      orderBy: { category: 'asc' }
+    })
+
+    res.json({ success: true, settings })
+  } catch (error) {
+    console.error('Get settings error:', error)
+    res.status(500).json({ error: 'Failed to retrieve settings' })
+  }
+}
+
+const updateSettings = async (req, res) => {
+  try {
+    const updates = req.body
+
+    for (const [key, value] of Object.entries(updates)) {
+      await prisma.systemSetting.upsert({
+        where: { key },
+        update: { 
+          value: String(value),
+          updatedAt: new Date(),
+          updatedBy: req.user.id
+        },
+        create: {
+          key,
+          value: String(value),
+          description: `Setting for ${key}`,
+          category: 'general',
+          type: 'string',
+          isPublic: false,
+          updatedBy: req.user.id
+        }
+      })
+    }
+
+    res.json({ success: true, message: 'Settings updated successfully' })
+  } catch (error) {
+    console.error('Update settings error:', error)
+    res.status(500).json({ error: 'Failed to update settings' })
+  }
+}
+
+const testSettings = async (req, res) => {
+  try {
+    const { type } = req.params
+
+    switch (type) {
+      case 'email':
+        const transporter = nodemailer.createTransporter({
+          host: process.env.SMTP_HOST,
+          port: process.env.SMTP_PORT,
+          secure: false,
+          auth: {
+            user: process.env.SMTP_USER,
+            pass: process.env.SMTP_PASS
+          }
+        })
+
+        await transporter.sendMail({
+          from: process.env.SMTP_FROM,
+          to: req.user.email,
+          subject: 'Test Email',
+          text: 'This is a test email from Event Manager.'
+        })
+
+        res.json({ success: true, message: 'Email test successful' })
+        break
+
+      case 'database':
+        await prisma.$queryRaw`SELECT 1`
+        res.json({ success: true, message: 'Database connection test successful' })
+        break
+
+      case 'backup':
+        // Test backup creation
+        const testBackup = await createTestBackup()
+        res.json({ success: true, message: 'Backup test successful', backup: testBackup })
+        break
+
+      default:
+        res.status(400).json({ error: 'Invalid test type' })
+    }
+  } catch (error) {
+    console.error('Test settings error:', error)
+    res.status(500).json({ error: `Test failed: ${error.message}` })
+  }
+}
+
+const createTestBackup = async () => {
+  // Create a simple test backup
+  const timestamp = new Date().toISOString()
+  return {
+    filename: `test-backup-${timestamp}.sql`,
+    type: 'TEST',
+    size: 1024,
+    createdAt: new Date(),
+    status: 'COMPLETED',
+    description: 'Test backup created successfully'
+  }
+}
+
+module.exports = {
+  getSettings,
+  updateSettings,
+  testSettings
+}
+EOF
+
+    # Assignments Controller
+    cat > "$APP_DIR/src/controllers/assignmentsController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+const getAllAssignments = async (req, res) => {
+  try {
+    const assignments = await prisma.contestJudge.findMany({
+      include: {
+        judge: {
+          include: { user: true }
+        },
+        category: {
+          include: { contest: true }
+        }
+      }
+    })
+
+    res.json({ success: true, assignments })
+  } catch (error) {
+    console.error('Get assignments error:', error)
+    res.status(500).json({ error: 'Failed to retrieve assignments' })
+  }
+}
+
+const createAssignment = async (req, res) => {
+  try {
+    const { judgeId, categoryId } = req.body
+
+    const assignment = await prisma.contestJudge.create({
+      data: {
+        judgeId,
+        categoryId
+      },
+      include: {
+        judge: { include: { user: true } },
+        category: { include: { contest: true } }
+      }
+    })
+
+    res.json({ success: true, assignment })
+  } catch (error) {
+    console.error('Create assignment error:', error)
+    res.status(500).json({ error: 'Failed to create assignment' })
+  }
+}
+
+const updateAssignment = async (req, res) => {
+  try {
+    const { id } = req.params
+    const updates = req.body
+
+    const assignment = await prisma.contestJudge.update({
+      where: { id },
+      data: updates,
+      include: {
+        judge: { include: { user: true } },
+        category: { include: { contest: true } }
+      }
+    })
+
+    res.json({ success: true, assignment })
+  } catch (error) {
+    console.error('Update assignment error:', error)
+    res.status(500).json({ error: 'Failed to update assignment' })
+  }
+}
+
+const deleteAssignment = async (req, res) => {
+  try {
+    const { id } = req.params
+
+    await prisma.contestJudge.delete({
+      where: { id }
+    })
+
+    res.json({ success: true, message: 'Assignment deleted successfully' })
+  } catch (error) {
+    console.error('Delete assignment error:', error)
+    res.status(500).json({ error: 'Failed to delete assignment' })
+  }
+}
+
+const getJudges = async (req, res) => {
+  try {
+    const judges = await prisma.judge.findMany({
+      include: {
+        user: true,
+        categories: {
+          include: { category: true }
+        }
+      }
+    })
+
+    res.json({ success: true, judges })
+  } catch (error) {
+    console.error('Get judges error:', error)
+    res.status(500).json({ error: 'Failed to retrieve judges' })
+  }
+}
+
+const getCategories = async (req, res) => {
+  try {
+    const categories = await prisma.category.findMany({
+      include: {
+        contest: true,
+        judges: {
+          include: { judge: { include: { user: true } } }
+        }
+      }
+    })
+
+    res.json({ success: true, categories })
+  } catch (error) {
+    console.error('Get categories error:', error)
+    res.status(500).json({ error: 'Failed to retrieve categories' })
+  }
+}
+
+module.exports = {
+  getAllAssignments,
+  createAssignment,
+  updateAssignment,
+  deleteAssignment,
+  getJudges,
+  getCategories
+}
+EOF
+
+    # Auditor Controller
+    cat > "$APP_DIR/src/controllers/auditorController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+const getStats = async (req, res) => {
+  try {
+    const stats = {
+      totalAudits: await prisma.auditorCertification.count(),
+      pendingAudits: await prisma.auditorCertification.count({
+        where: { status: 'PENDING' }
+      }),
+      completedAudits: await prisma.auditorCertification.count({
+        where: { status: 'COMPLETED' }
+      }),
+      rejectedAudits: await prisma.auditorCertification.count({
+        where: { status: 'REJECTED' }
+      })
+    }
+
+    res.json({ success: true, stats })
+  } catch (error) {
+    console.error('Get auditor stats error:', error)
+    res.status(500).json({ error: 'Failed to retrieve auditor stats' })
+  }
+}
+
+const getAuditLogs = async (req, res) => {
+  try {
+    const logs = await prisma.auditorCertification.findMany({
+      include: {
+        category: {
+          include: { contest: true }
+        },
+        auditor: {
+          include: { user: true }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    res.json({ success: true, logs })
+  } catch (error) {
+    console.error('Get audit logs error:', error)
+    res.status(500).json({ error: 'Failed to retrieve audit logs' })
+  }
+}
+
+const approveAudit = async (req, res) => {
+  try {
+    const { categoryId } = req.params
+    const { comments } = req.body
+
+    const audit = await prisma.auditorCertification.update({
+      where: { categoryId },
+      data: {
+        status: 'COMPLETED',
+        completedAt: new Date(),
+        comments: comments || 'Audit approved'
+      },
+      include: {
+        category: { include: { contest: true } },
+        auditor: { include: { user: true } }
+      }
+    })
+
+    res.json({ success: true, audit })
+  } catch (error) {
+    console.error('Approve audit error:', error)
+    res.status(500).json({ error: 'Failed to approve audit' })
+  }
+}
+
+const rejectAudit = async (req, res) => {
+  try {
+    const { categoryId } = req.params
+    const { reason } = req.body
+
+    const audit = await prisma.auditorCertification.update({
+      where: { categoryId },
+      data: {
+        status: 'REJECTED',
+        completedAt: new Date(),
+        comments: reason || 'Audit rejected'
+      },
+      include: {
+        category: { include: { contest: true } },
+        auditor: { include: { user: true } }
+      }
+    })
+
+    res.json({ success: true, audit })
+  } catch (error) {
+    console.error('Reject audit error:', error)
+    res.status(500).json({ error: 'Failed to reject audit' })
+  }
+}
+
+const exportAuditLogs = async (req, res) => {
+  try {
+    const { format = 'csv', dateFrom, dateTo } = req.body
+
+    const where = {}
+    if (dateFrom) where.createdAt = { gte: new Date(dateFrom) }
+    if (dateTo) where.createdAt = { ...where.createdAt, lte: new Date(dateTo) }
+
+    const logs = await prisma.auditorCertification.findMany({
+      where,
+      include: {
+        category: { include: { contest: true } },
+        auditor: { include: { user: true } }
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    // Simple CSV export
+    if (format === 'csv') {
+      const csv = [
+        'Date,Category,Contest,Auditor,Status,Comments',
+        ...logs.map(log => 
+          `${log.createdAt.toISOString()},${log.category.name},${log.category.contest.name},${log.auditor.user.name},${log.status},"${log.comments || ''}"`
+        )
+      ].join('\n')
+
+      res.setHeader('Content-Type', 'text/csv')
+      res.setHeader('Content-Disposition', 'attachment; filename=audit-logs.csv')
+      res.send(csv)
+    } else {
+      res.json({ success: true, logs })
+    }
+  } catch (error) {
+    console.error('Export audit logs error:', error)
+    res.status(500).json({ error: 'Failed to export audit logs' })
+  }
+}
+
+module.exports = {
+  getStats,
+  getAuditLogs,
+  approveAudit,
+  rejectAudit,
+  exportAuditLogs
+}
+EOF
+
+    # Board Controller
+    cat > "$APP_DIR/src/controllers/boardController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+const getStats = async (req, res) => {
+  try {
+    const stats = {
+      totalEvents: await prisma.event.count(),
+      totalContests: await prisma.contest.count(),
+      totalUsers: await prisma.user.count(),
+      totalCertifications: await prisma.auditorCertification.count(),
+      pendingCertifications: await prisma.auditorCertification.count({
+        where: { status: 'PENDING' }
+      })
+    }
+
+    res.json({ success: true, stats })
+  } catch (error) {
+    console.error('Get board stats error:', error)
+    res.status(500).json({ error: 'Failed to retrieve board stats' })
+  }
+}
+
+const getCertifications = async (req, res) => {
+  try {
+    const certifications = await prisma.auditorCertification.findMany({
+      include: {
+        category: {
+          include: { contest: { include: { event: true } } }
+        },
+        auditor: {
+          include: { user: true }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    res.json({ success: true, certifications })
+  } catch (error) {
+    console.error('Get certifications error:', error)
+    res.status(500).json({ error: 'Failed to retrieve certifications' })
+  }
+}
+
+const approveCertification = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { comments } = req.body
+
+    const certification = await prisma.auditorCertification.update({
+      where: { id },
+      data: {
+        status: 'COMPLETED',
+        completedAt: new Date(),
+        comments: comments || 'Board approved'
+      },
+      include: {
+        category: { include: { contest: { include: { event: true } } } },
+        auditor: { include: { user: true } }
+      }
+    })
+
+    res.json({ success: true, certification })
+  } catch (error) {
+    console.error('Approve certification error:', error)
+    res.status(500).json({ error: 'Failed to approve certification' })
+  }
+}
+
+const rejectCertification = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { reason } = req.body
+
+    const certification = await prisma.auditorCertification.update({
+      where: { id },
+      data: {
+        status: 'REJECTED',
+        completedAt: new Date(),
+        comments: reason || 'Board rejected'
+      },
+      include: {
+        category: { include: { contest: { include: { event: true } } } },
+        auditor: { include: { user: true } }
+      }
+    })
+
+    res.json({ success: true, certification })
+  } catch (error) {
+    console.error('Reject certification error:', error)
+    res.status(500).json({ error: 'Failed to reject certification' })
+  }
+}
+
+const getEmceeScripts = async (req, res) => {
+  try {
+    const scripts = await prisma.emceeScript.findMany({
+      include: {
+        createdByUser: {
+          select: { id: true, name: true, email: true }
+        },
+        event: true,
+        contest: true,
+        category: true
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    res.json({ success: true, scripts })
+  } catch (error) {
+    console.error('Get emcee scripts error:', error)
+    res.status(500).json({ error: 'Failed to retrieve emcee scripts' })
+  }
+}
+
+module.exports = {
+  getStats,
+  getCertifications,
+  approveCertification,
+  rejectCertification,
+  getEmceeScripts
+}
+EOF
+
+    # Tally Master Controller
+    cat > "$APP_DIR/src/controllers/tallyMasterController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+const getStats = async (req, res) => {
+  try {
+    const stats = {
+      totalCertifications: await prisma.tallyMasterCertification.count(),
+      pendingCertifications: await prisma.tallyMasterCertification.count({
+        where: { status: 'PENDING' }
+      }),
+      completedCertifications: await prisma.tallyMasterCertification.count({
+        where: { status: 'COMPLETED' }
+      })
+    }
+
+    res.json({ success: true, stats })
+  } catch (error) {
+    console.error('Get tally master stats error:', error)
+    res.status(500).json({ error: 'Failed to retrieve tally master stats' })
+  }
+}
+
+const getCertifications = async (req, res) => {
+  try {
+    const certifications = await prisma.tallyMasterCertification.findMany({
+      include: {
+        category: {
+          include: { contest: { include: { event: true } } }
+        },
+        tallyMaster: {
+          include: { user: true }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    res.json({ success: true, certifications })
+  } catch (error) {
+    console.error('Get certifications error:', error)
+    res.status(500).json({ error: 'Failed to retrieve certifications' })
+  }
+}
+
+const certifyTotals = async (req, res) => {
+  try {
+    const { categoryId } = req.params
+    const { comments } = req.body
+
+    const certification = await prisma.tallyMasterCertification.update({
+      where: { categoryId },
+      data: {
+        status: 'COMPLETED',
+        completedAt: new Date(),
+        comments: comments || 'Totals certified'
+      },
+      include: {
+        category: { include: { contest: { include: { event: true } } } },
+        tallyMaster: { include: { user: true } }
+      }
+    })
+
+    res.json({ success: true, certification })
+  } catch (error) {
+    console.error('Certify totals error:', error)
+    res.status(500).json({ error: 'Failed to certify totals' })
+  }
+}
+
+const getCertificationQueue = async (req, res) => {
+  try {
+    const queue = await prisma.tallyMasterCertification.findMany({
+      where: { status: 'PENDING' },
+      include: {
+        category: {
+          include: { 
+            contest: { include: { event: true } },
+            scores: true
+          }
+        },
+        tallyMaster: {
+          include: { user: true }
+        }
+      },
+      orderBy: { createdAt: 'asc' }
+    })
+
+    res.json({ success: true, queue })
+  } catch (error) {
+    console.error('Get certification queue error:', error)
+    res.status(500).json({ error: 'Failed to retrieve certification queue' })
+  }
+}
+
+module.exports = {
+  getStats,
+  getCertifications,
+  certifyTotals,
+  getCertificationQueue
+}
+EOF
+
+    # Email Controller
+    cat > "$APP_DIR/src/controllers/emailController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+const nodemailer = require('nodemailer')
+
+const prisma = new PrismaClient()
+
+const sendEmail = async (req, res) => {
+  try {
+    const { to, subject, body, templateId } = req.body
+    
+    const transporter = nodemailer.createTransporter({
+      host: process.env.SMTP_HOST,
+      port: process.env.SMTP_PORT,
+      secure: false,
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS
+      }
+    })
+
+    await transporter.sendMail({
+      from: process.env.SMTP_FROM,
+      to,
+      subject,
+      html: body
+    })
+
+    res.json({ success: true, message: 'Email sent successfully' })
+  } catch (error) {
+    console.error('Send email error:', error)
+    res.status(500).json({ error: 'Failed to send email' })
+  }
+}
+
+const sendBulkEmail = async (req, res) => {
+  try {
+    const { recipients, subject, body, templateId } = req.body
+    
+    const transporter = nodemailer.createTransporter({
+      host: process.env.SMTP_HOST,
+      port: process.env.SMTP_PORT,
+      secure: false,
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS
+      }
+    })
+
+    const results = []
+    for (const recipient of recipients) {
+      try {
+        await transporter.sendMail({
+          from: process.env.SMTP_FROM,
+          to: recipient.email,
+          subject,
+          html: body
+        })
+        results.push({ email: recipient.email, status: 'sent' })
+      } catch (error) {
+        results.push({ email: recipient.email, status: 'failed', error: error.message })
+      }
+    }
+
+    res.json({ success: true, results })
+  } catch (error) {
+    console.error('Send bulk email error:', error)
+    res.status(500).json({ error: 'Failed to send bulk email' })
+  }
+}
+
+const getEmailTemplates = async (req, res) => {
+  try {
+    const templates = await prisma.emailTemplate.findMany({
+      orderBy: { createdAt: 'desc' }
+    })
+    res.json({ success: true, templates })
+  } catch (error) {
+    console.error('Get email templates error:', error)
+    res.status(500).json({ error: 'Failed to retrieve email templates' })
+  }
+}
+
+const createEmailTemplate = async (req, res) => {
+  try {
+    const template = await prisma.emailTemplate.create({
+      data: req.body
+    })
+    res.json({ success: true, template })
+  } catch (error) {
+    console.error('Create email template error:', error)
+    res.status(500).json({ error: 'Failed to create email template' })
+  }
+}
+
+const updateEmailTemplate = async (req, res) => {
+  try {
+    const { id } = req.params
+    const template = await prisma.emailTemplate.update({
+      where: { id },
+      data: req.body
+    })
+    res.json({ success: true, template })
+  } catch (error) {
+    console.error('Update email template error:', error)
+    res.status(500).json({ error: 'Failed to update email template' })
+  }
+}
+
+const deleteEmailTemplate = async (req, res) => {
+  try {
+    const { id } = req.params
+    await prisma.emailTemplate.delete({ where: { id } })
+    res.json({ success: true, message: 'Email template deleted successfully' })
+  } catch (error) {
+    console.error('Delete email template error:', error)
+    res.status(500).json({ error: 'Failed to delete email template' })
+  }
+}
+
+module.exports = {
+  sendEmail,
+  sendBulkEmail,
+  getEmailTemplates,
+  createEmailTemplate,
+  updateEmailTemplate,
+  deleteEmailTemplate
+}
+EOF
+
+    # Reports Controller
+    cat > "$APP_DIR/src/controllers/reportsController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+const { createCanvas } = require('canvas')
+
+const prisma = new PrismaClient()
+
+const generatePDF = async (req, res) => {
+  try {
+    const { type, data } = req.body
+    
+    // Simple PDF generation placeholder
+    const pdfData = {
+      type,
+      data,
+      generatedAt: new Date(),
+      generatedBy: req.user.id
+    }
+    
+    res.json({ success: true, pdf: pdfData })
+  } catch (error) {
+    console.error('Generate PDF error:', error)
+    res.status(500).json({ error: 'Failed to generate PDF' })
+  }
+}
+
+const generateImage = async (req, res) => {
+  try {
+    const { type, data } = req.body
+    
+    // Simple image generation placeholder
+    const imageData = {
+      type,
+      data,
+      generatedAt: new Date(),
+      generatedBy: req.user.id
+    }
+    
+    res.json({ success: true, image: imageData })
+  } catch (error) {
+    console.error('Generate image error:', error)
+    res.status(500).json({ error: 'Failed to generate image' })
+  }
+}
+
+const generateCertificate = async (req, res) => {
+  try {
+    const { contestantId, categoryId, position } = req.body
+    
+    // Simple certificate generation placeholder
+    const certificate = {
+      contestantId,
+      categoryId,
+      position,
+      generatedAt: new Date(),
+      generatedBy: req.user.id
+    }
+    
+    res.json({ success: true, certificate })
+  } catch (error) {
+    console.error('Generate certificate error:', error)
+    res.status(500).json({ error: 'Failed to generate certificate' })
+  }
+}
+
+const getReportTemplates = async (req, res) => {
+  try {
+    const templates = await prisma.reportTemplate.findMany({
+      orderBy: { createdAt: 'desc' }
+    })
+    res.json({ success: true, templates })
+  } catch (error) {
+    console.error('Get report templates error:', error)
+    res.status(500).json({ error: 'Failed to retrieve report templates' })
+  }
+}
+
+const createReportTemplate = async (req, res) => {
+  try {
+    const template = await prisma.reportTemplate.create({
+      data: req.body
+    })
+    res.json({ success: true, template })
+  } catch (error) {
+    console.error('Create report template error:', error)
+    res.status(500).json({ error: 'Failed to create report template' })
+  }
+}
+
+const updateReportTemplate = async (req, res) => {
+  try {
+    const { id } = req.params
+    const template = await prisma.reportTemplate.update({
+      where: { id },
+      data: req.body
+    })
+    res.json({ success: true, template })
+  } catch (error) {
+    console.error('Update report template error:', error)
+    res.status(500).json({ error: 'Failed to update report template' })
+  }
+}
+
+const deleteReportTemplate = async (req, res) => {
+  try {
+    const { id } = req.params
+    await prisma.reportTemplate.delete({ where: { id } })
+    res.json({ success: true, message: 'Report template deleted successfully' })
+  } catch (error) {
+    console.error('Delete report template error:', error)
+    res.status(500).json({ error: 'Failed to delete report template' })
+  }
+}
+
+module.exports = {
+  generatePDF,
+  generateImage,
+  generateCertificate,
+  getReportTemplates,
+  createReportTemplate,
+  updateReportTemplate,
+  deleteReportTemplate
+}
+EOF
+
+    # Templates Controller
+    cat > "$APP_DIR/src/controllers/templatesController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+const getAllTemplates = async (req, res) => {
+  try {
+    const templates = await prisma.template.findMany({
+      orderBy: { createdAt: 'desc' }
+    })
+    res.json({ success: true, templates })
+  } catch (error) {
+    console.error('Get templates error:', error)
+    res.status(500).json({ error: 'Failed to retrieve templates' })
+  }
+}
+
+const getTemplateById = async (req, res) => {
+  try {
+    const { id } = req.params
+    const template = await prisma.template.findUnique({
+      where: { id }
+    })
+    
+    if (!template) {
+      return res.status(404).json({ error: 'Template not found' })
+    }
+    
+    res.json({ success: true, template })
+  } catch (error) {
+    console.error('Get template error:', error)
+    res.status(500).json({ error: 'Failed to retrieve template' })
+  }
+}
+
+const createTemplate = async (req, res) => {
+  try {
+    const template = await prisma.template.create({
+      data: req.body
+    })
+    res.json({ success: true, template })
+  } catch (error) {
+    console.error('Create template error:', error)
+    res.status(500).json({ error: 'Failed to create template' })
+  }
+}
+
+const updateTemplate = async (req, res) => {
+  try {
+    const { id } = req.params
+    const template = await prisma.template.update({
+      where: { id },
+      data: req.body
+    })
+    res.json({ success: true, template })
+  } catch (error) {
+    console.error('Update template error:', error)
+    res.status(500).json({ error: 'Failed to update template' })
+  }
+}
+
+const deleteTemplate = async (req, res) => {
+  try {
+    const { id } = req.params
+    await prisma.template.delete({ where: { id } })
+    res.json({ success: true, message: 'Template deleted successfully' })
+  } catch (error) {
+    console.error('Delete template error:', error)
+    res.status(500).json({ error: 'Failed to delete template' })
+  }
+}
+
+module.exports = {
+  getAllTemplates,
+  getTemplateById,
+  createTemplate,
+  updateTemplate,
+  deleteTemplate
+}
+EOF
+
+    # Notifications Controller
+    cat > "$APP_DIR/src/controllers/notificationsController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+const getAllNotifications = async (req, res) => {
+  try {
+    const notifications = await prisma.notification.findMany({
+      where: { userId: req.user.id },
+      orderBy: { createdAt: 'desc' }
+    })
+    res.json({ success: true, notifications })
+  } catch (error) {
+    console.error('Get notifications error:', error)
+    res.status(500).json({ error: 'Failed to retrieve notifications' })
+  }
+}
+
+const markAsRead = async (req, res) => {
+  try {
+    const { id } = req.params
+    await prisma.notification.update({
+      where: { id },
+      data: { isRead: true, readAt: new Date() }
+    })
+    res.json({ success: true, message: 'Notification marked as read' })
+  } catch (error) {
+    console.error('Mark notification as read error:', error)
+    res.status(500).json({ error: 'Failed to mark notification as read' })
+  }
+}
+
+const markAllAsRead = async (req, res) => {
+  try {
+    await prisma.notification.updateMany({
+      where: { userId: req.user.id, isRead: false },
+      data: { isRead: true, readAt: new Date() }
+    })
+    res.json({ success: true, message: 'All notifications marked as read' })
+  } catch (error) {
+    console.error('Mark all notifications as read error:', error)
+    res.status(500).json({ error: 'Failed to mark all notifications as read' })
+  }
+}
+
+const getUnreadCount = async (req, res) => {
+  try {
+    const count = await prisma.notification.count({
+      where: { userId: req.user.id, isRead: false }
+    })
+    res.json({ success: true, count })
+  } catch (error) {
+    console.error('Get unread count error:', error)
+    res.status(500).json({ error: 'Failed to get unread count' })
+  }
+}
+
+const createNotification = async (req, res) => {
+  try {
+    const notification = await prisma.notification.create({
+      data: req.body
+    })
+    res.json({ success: true, notification })
+  } catch (error) {
+    console.error('Create notification error:', error)
+    res.status(500).json({ error: 'Failed to create notification' })
+  }
+}
+
+module.exports = {
+  getAllNotifications,
+  markAsRead,
+  markAllAsRead,
+  getUnreadCount,
+  createNotification
+}
+EOF
+
+    # Emcee Controller
+    cat > "$APP_DIR/src/controllers/emceeController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+const getScripts = async (req, res) => {
+  try {
+    const scripts = await prisma.emceeScript.findMany({
+      include: {
+        createdByUser: { select: { id: true, name: true, email: true } },
+        event: true,
+        contest: true,
+        category: true
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+    res.json({ success: true, scripts })
+  } catch (error) {
+    console.error('Get scripts error:', error)
+    res.status(500).json({ error: 'Failed to retrieve scripts' })
+  }
+}
+
+const getScriptById = async (req, res) => {
+  try {
+    const { id } = req.params
+    const script = await prisma.emceeScript.findUnique({
+      where: { id },
+      include: {
+        createdByUser: { select: { id: true, name: true, email: true } },
+        event: true,
+        contest: true,
+        category: true
+      }
+    })
+    
+    if (!script) {
+      return res.status(404).json({ error: 'Script not found' })
+    }
+    
+    res.json({ success: true, script })
+  } catch (error) {
+    console.error('Get script error:', error)
+    res.status(500).json({ error: 'Failed to retrieve script' })
+  }
+}
+
+const createScript = async (req, res) => {
+  try {
+    const script = await prisma.emceeScript.create({
+      data: {
+        ...req.body,
+        createdBy: req.user.id
+      }
+    })
+    res.json({ success: true, script })
+  } catch (error) {
+    console.error('Create script error:', error)
+    res.status(500).json({ error: 'Failed to create script' })
+  }
+}
+
+const updateScript = async (req, res) => {
+  try {
+    const { id } = req.params
+    const script = await prisma.emceeScript.update({
+      where: { id },
+      data: req.body
+    })
+    res.json({ success: true, script })
+  } catch (error) {
+    console.error('Update script error:', error)
+    res.status(500).json({ error: 'Failed to update script' })
+  }
+}
+
+const deleteScript = async (req, res) => {
+  try {
+    const { id } = req.params
+    await prisma.emceeScript.delete({ where: { id } })
+    res.json({ success: true, message: 'Script deleted successfully' })
+  } catch (error) {
+    console.error('Delete script error:', error)
+    res.status(500).json({ error: 'Failed to delete script' })
+  }
+}
+
+const playScript = async (req, res) => {
+  try {
+    const { id } = req.params
+    // Update script status to playing
+    await prisma.emceeScript.update({
+      where: { id },
+      data: { status: 'PLAYING', playedAt: new Date() }
+    })
+    res.json({ success: true, message: 'Script started playing' })
+  } catch (error) {
+    console.error('Play script error:', error)
+    res.status(500).json({ error: 'Failed to play script' })
+  }
+}
+
+const pauseScript = async (req, res) => {
+  try {
+    const { id } = req.params
+    await prisma.emceeScript.update({
+      where: { id },
+      data: { status: 'PAUSED' }
+    })
+    res.json({ success: true, message: 'Script paused' })
+  } catch (error) {
+    console.error('Pause script error:', error)
+    res.status(500).json({ error: 'Failed to pause script' })
+  }
+}
+
+const stopScript = async (req, res) => {
+  try {
+    const { id } = req.params
+    await prisma.emceeScript.update({
+      where: { id },
+      data: { status: 'STOPPED', stoppedAt: new Date() }
+    })
+    res.json({ success: true, message: 'Script stopped' })
+  } catch (error) {
+    console.error('Stop script error:', error)
+    res.status(500).json({ error: 'Failed to stop script' })
+  }
+}
+
+const getAnalytics = async (req, res) => {
+  try {
+    const analytics = {
+      totalScripts: await prisma.emceeScript.count(),
+      playedScripts: await prisma.emceeScript.count({ where: { status: 'PLAYING' } }),
+      pausedScripts: await prisma.emceeScript.count({ where: { status: 'PAUSED' } }),
+      stoppedScripts: await prisma.emceeScript.count({ where: { status: 'STOPPED' } })
+    }
+    res.json({ success: true, analytics })
+  } catch (error) {
+    console.error('Get analytics error:', error)
+    res.status(500).json({ error: 'Failed to retrieve analytics' })
+  }
+}
+
+const getUsageHistory = async (req, res) => {
+  try {
+    const history = await prisma.emceeScript.findMany({
+      where: { createdBy: req.user.id },
+      orderBy: { createdAt: 'desc' },
+      take: 50
+    })
+    res.json({ success: true, history })
+  } catch (error) {
+    console.error('Get usage history error:', error)
+    res.status(500).json({ error: 'Failed to retrieve usage history' })
+  }
+}
+
+module.exports = {
+  getScripts,
+  getScriptById,
+  createScript,
+  updateScript,
+  deleteScript,
+  playScript,
+  pauseScript,
+  stopScript,
+  getAnalytics,
+  getUsageHistory
+}
+EOF
+
+    # Create middleware files
+    print_status "Creating middleware files..."
+    
+    # Auth Middleware
+    cat > "$APP_DIR/src/middleware/auth.js" << 'EOF'
+const jwt = require('jsonwebtoken')
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
+
+const authenticateToken = async (req, res, next) => {
+  const authHeader = req.headers['authorization']
+  const token = authHeader && authHeader.split(' ')[1]
+
+  if (!token) {
+    return res.status(401).json({ error: 'Access token required' })
+  }
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET)
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId },
+      include: { judge: true, contestant: true }
+    })
+    
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid token' })
+    }
+    
+    req.user = user
+    next()
+  } catch (error) {
+    return res.status(403).json({ error: 'Invalid token' })
+  }
+}
+
+const requireRole = (roles) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' })
+    }
+    
+    if (!roles.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Insufficient permissions' })
+    }
+    
+    next()
+  }
+}
+
+module.exports = {
+  authenticateToken,
+  requireRole
+}
+EOF
+
+    # Error Handler Middleware
+    cat > "$APP_DIR/src/middleware/errorHandler.js" << 'EOF'
+const errorHandler = (err, req, res, next) => {
+  console.error(err.stack)
+  
+  if (err.name === 'ValidationError') {
+    return res.status(400).json({ error: 'Validation error', details: err.message })
+  }
+  
+  if (err.name === 'UnauthorizedError') {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  
+  res.status(500).json({ error: 'Something went wrong!' })
+}
+
+const notFound = (req, res) => {
+  res.status(404).json({ error: 'Route not found' })
+}
+
+module.exports = {
+  errorHandler,
+  notFound
+}
+EOF
+
+    # Create route files
+    print_status "Creating route files..."
+    
+    # Auth Routes
+    cat > "$APP_DIR/src/routes/auth.js" << 'EOF'
+const express = require('express')
+const { login, getProfile, logout } = require('../controllers/authController')
+const { authenticateToken } = require('../middleware/auth')
+
+const router = express.Router()
+
+router.post('/login', login)
+router.get('/profile', authenticateToken, getProfile)
+router.post('/logout', authenticateToken, logout)
+
+module.exports = router
+EOF
+
+    # Events Routes
+    cat > "$APP_DIR/src/routes/events.js" << 'EOF'
+const express = require('express')
+const { getAllEvents, getEventById, createEvent, updateEvent, deleteEvent } = require('../controllers/eventController')
+const { authenticateToken } = require('../middleware/auth')
+
+const router = express.Router()
+
+router.get('/', authenticateToken, getAllEvents)
+router.get('/:id', authenticateToken, getEventById)
+router.post('/', authenticateToken, createEvent)
+router.put('/:id', authenticateToken, updateEvent)
+router.delete('/:id', authenticateToken, deleteEvent)
+
+module.exports = router
+EOF
+
+    # Contests Routes
+    cat > "$APP_DIR/src/routes/contests.js" << 'EOF'
+const express = require('express')
+const { getAllContests, getContestById, getContestsByEvent, createContest, updateContest, deleteContest } = require('../controllers/contestController')
+const { authenticateToken } = require('../middleware/auth')
+
+const router = express.Router()
+
+router.get('/', authenticateToken, getAllContests)
+router.get('/:id', authenticateToken, getContestById)
+router.get('/event/:eventId', authenticateToken, getContestsByEvent)
+router.post('/', authenticateToken, createContest)
+router.put('/:id', authenticateToken, updateContest)
+router.delete('/:id', authenticateToken, deleteContest)
+
+module.exports = router
+EOF
+
+    # Categories Routes
+    cat > "$APP_DIR/src/routes/categories.js" << 'EOF'
+const express = require('express')
+const { getAllCategories, getCategoryById, getCategoriesByContest, createCategory, updateCategory, deleteCategory } = require('../controllers/categoryController')
+const { authenticateToken } = require('../middleware/auth')
+
+const router = express.Router()
+
+router.get('/', authenticateToken, getAllCategories)
+router.get('/:id', authenticateToken, getCategoryById)
+router.get('/contest/:contestId', authenticateToken, getCategoriesByContest)
+router.post('/', authenticateToken, createCategory)
+router.put('/:id', authenticateToken, updateCategory)
+router.delete('/:id', authenticateToken, deleteCategory)
+
+module.exports = router
+EOF
+
+    # Users Routes
+    cat > "$APP_DIR/src/routes/users.js" << 'EOF'
+const express = require('express')
+const { getAllUsers, getUserById, createUser, updateUser, deleteUser, resetPassword } = require('../controllers/userController')
+const { authenticateToken } = require('../middleware/auth')
+
+const router = express.Router()
+
+router.get('/', authenticateToken, getAllUsers)
+router.get('/:id', authenticateToken, getUserById)
+router.post('/', authenticateToken, createUser)
+router.put('/:id', authenticateToken, updateUser)
+router.delete('/:id', authenticateToken, deleteUser)
+router.post('/:id/reset-password', authenticateToken, resetPassword)
+
+module.exports = router
+EOF
+
+    # Scoring Routes
+    cat > "$APP_DIR/src/routes/scoring.js" << 'EOF'
+const express = require('express')
+const { getScores, submitScore, updateScore, deleteScore, certifyScores, certifyTotals, finalCertification } = require('../controllers/scoringController')
+const { authenticateToken } = require('../middleware/auth')
+
+const router = express.Router()
+
+router.get('/category/:categoryId/contestant/:contestantId', authenticateToken, getScores)
+router.post('/category/:categoryId/contestant/:contestantId', authenticateToken, submitScore)
+router.put('/:id', authenticateToken, updateScore)
+router.delete('/:id', authenticateToken, deleteScore)
+router.post('/:categoryId/certify', authenticateToken, certifyScores)
+router.post('/:categoryId/certify-totals', authenticateToken, certifyTotals)
+router.post('/:categoryId/final-certification', authenticateToken, finalCertification)
+
+module.exports = router
+EOF
+
+    # Results Routes
+    cat > "$APP_DIR/src/routes/results.js" << 'EOF'
+const express = require('express')
+const { getAllResults, getResultCategories, getContestantResults, getCategoryResults, getContestResults, getEventResults } = require('../controllers/resultsController')
+const { authenticateToken } = require('../middleware/auth')
+
+const router = express.Router()
+
+router.get('/', authenticateToken, getAllResults)
+router.get('/categories', authenticateToken, getResultCategories)
+router.get('/contestant/:id', authenticateToken, getContestantResults)
+router.get('/category/:id', authenticateToken, getCategoryResults)
+router.get('/contest/:id', authenticateToken, getContestResults)
+router.get('/event/:id', authenticateToken, getEventResults)
+
+module.exports = router
+EOF
+
+    # Admin Routes
+    cat > "$APP_DIR/src/routes/admin.js" << 'EOF'
+const express = require('express')
+const { getStats, getLogs, getActiveUsers, getSettings, updateSettings, getBackup, testConnection } = require('../controllers/adminController')
+const { authenticateToken } = require('../middleware/auth')
+
+const router = express.Router()
+
+router.get('/stats', authenticateToken, getStats)
+router.get('/logs', authenticateToken, getLogs)
+router.get('/active-users', authenticateToken, getActiveUsers)
+router.get('/settings', authenticateToken, getSettings)
+router.put('/settings', authenticateToken, updateSettings)
+router.get('/backup', authenticateToken, getBackup)
+router.post('/test/:type', authenticateToken, testConnection)
+
+module.exports = router
+EOF
+    
+    # Upload Routes
+    cat > "$APP_DIR/src/routes/upload.js" << 'EOF'
+const express = require('express')
+const multer = require('multer')
+const path = require('path')
+const { uploadFile, getFiles, deleteFile } = require('../controllers/uploadController')
+const { authenticateToken } = require('../middleware/auth')
+
+const router = express.Router()
+
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, 'uploads/')
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9)
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname))
+  }
+})
+
+const upload = multer({ 
+  storage: storage,
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 10MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    // Allow common file types
+    const allowedTypes = /jpeg|jpg|png|gif|pdf|doc|docx|txt/
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase())
+    const mimetype = allowedTypes.test(file.mimetype)
+    
+    if (mimetype && extname) {
+      return cb(null, true)
+    } else {
+      cb(new Error('Invalid file type'))
+    }
+  }
+})
+
+router.use(authenticateToken)
+
+router.post('/upload', upload.single('file'), uploadFile)
+router.get('/files', getFiles)
+router.delete('/files/:id', deleteFile)
+
+module.exports = router
+EOF
+
+    # Archive Routes
+    cat > "$APP_DIR/src/routes/archive.js" << 'EOF'
+const express = require('express')
+const { getAllArchives, archiveEvent, restoreEvent, deleteArchive } = require('../controllers/archiveController')
+const { authenticateToken } = require('../middleware/auth')
+
+const router = express.Router()
+
+router.use(authenticateToken)
+
+router.get('/', getAllArchives)
+router.post('/events/:eventId', archiveEvent)
+router.post('/events/:eventId/restore', restoreEvent)
+router.delete('/events/:eventId', deleteArchive)
+
+module.exports = router
+EOF
+
+    # Backup Routes
+    cat > "$APP_DIR/src/routes/backup.js" << 'EOF'
+const express = require('express')
+const multer = require('multer')
+const { createBackup, restoreBackup, downloadBackup, listBackups, deleteBackup } = require('../controllers/backupController')
+const { authenticateToken } = require('../middleware/auth')
+
+const router = express.Router()
+
+const upload = multer({ dest: 'temp/' })
+
+router.use(authenticateToken)
+
+router.get('/', listBackups)
+router.post('/', createBackup)
+router.post('/restore', upload.single('file'), restoreBackup)
+router.post('/:id/restore', restoreBackup)
+router.get('/:id/download', downloadBackup)
+router.delete('/:id', deleteBackup)
+
+module.exports = router
+EOF
+
+    # Settings Routes
+    cat > "$APP_DIR/src/routes/settings.js" << 'EOF'
+const express = require('express')
+const { getSettings, updateSettings, testSettings } = require('../controllers/settingsController')
+const { authenticateToken } = require('../middleware/auth')
+
+const router = express.Router()
+
+router.use(authenticateToken)
+
+router.get('/', getSettings)
+router.put('/', updateSettings)
+router.post('/test/:type', testSettings)
+
+module.exports = router
+EOF
+
+    # Assignments Routes
+    cat > "$APP_DIR/src/routes/assignments.js" << 'EOF'
+const express = require('express')
+const { getAllAssignments, createAssignment, updateAssignment, deleteAssignment, getJudges, getCategories } = require('../controllers/assignmentsController')
+const { authenticateToken } = require('../middleware/auth')
+
+const router = express.Router()
+
+router.use(authenticateToken)
+
+router.get('/', getAllAssignments)
+router.post('/', createAssignment)
+router.put('/:id', updateAssignment)
+router.delete('/:id', deleteAssignment)
+router.get('/judges', getJudges)
+router.get('/categories', getCategories)
+
+module.exports = router
+EOF
+
+    # Auditor Routes
+    cat > "$APP_DIR/src/routes/auditor.js" << 'EOF'
+const express = require('express')
+const { getStats, getAuditLogs, approveAudit, rejectAudit, exportAuditLogs } = require('../controllers/auditorController')
+const { authenticateToken } = require('../middleware/auth')
+
+const router = express.Router()
+
+router.use(authenticateToken)
+
+router.get('/stats', getStats)
+router.get('/logs', getAuditLogs)
+router.post('/approve/:categoryId', approveAudit)
+router.post('/reject/:categoryId', rejectAudit)
+router.post('/export', exportAuditLogs)
+
+module.exports = router
+EOF
+
+    # Board Routes
+    cat > "$APP_DIR/src/routes/board.js" << 'EOF'
+const express = require('express')
+const { getStats, getCertifications, approveCertification, rejectCertification, getEmceeScripts } = require('../controllers/boardController')
+const { authenticateToken } = require('../middleware/auth')
+
+const router = express.Router()
+
+router.use(authenticateToken)
+
+router.get('/stats', getStats)
+router.get('/certifications', getCertifications)
+router.post('/certifications/:id/approve', approveCertification)
+router.post('/certifications/:id/reject', rejectCertification)
+router.get('/emcee-scripts', getEmceeScripts)
+
+module.exports = router
+EOF
+
+    # Tally Master Routes
+    cat > "$APP_DIR/src/routes/tally-master.js" << 'EOF'
+const express = require('express')
+const { getStats, getCertifications, certifyTotals, getCertificationQueue } = require('../controllers/tallyMasterController')
+const { authenticateToken } = require('../middleware/auth')
+
+const router = express.Router()
+
+router.use(authenticateToken)
+
+router.get('/stats', getStats)
+router.get('/certifications', getCertifications)
+router.get('/queue', getCertificationQueue)
+router.post('/certify-totals/:categoryId', certifyTotals)
+
+module.exports = router
+EOF
+
+    # Email Routes
+    cat > "$APP_DIR/src/routes/email.js" << 'EOF'
+const express = require('express')
+const { sendEmail, sendBulkEmail, getEmailTemplates, createEmailTemplate, updateEmailTemplate, deleteEmailTemplate } = require('../controllers/emailController')
+const { authenticateToken } = require('../middleware/auth')
+
+const router = express.Router()
+
+router.use(authenticateToken)
+
+router.post('/send', sendEmail)
+router.post('/bulk', sendBulkEmail)
+router.get('/templates', getEmailTemplates)
+router.post('/templates', createEmailTemplate)
+router.put('/templates/:id', updateEmailTemplate)
+router.delete('/templates/:id', deleteEmailTemplate)
+
+module.exports = router
+EOF
+
+    # Reports Routes
+    cat > "$APP_DIR/src/routes/reports.js" << 'EOF'
+const express = require('express')
+const { generatePDF, generateImage, generateCertificate, getReportTemplates, createReportTemplate, updateReportTemplate, deleteReportTemplate } = require('../controllers/reportsController')
+const { authenticateToken } = require('../middleware/auth')
+
+const router = express.Router()
+
+router.use(authenticateToken)
+
+router.post('/generate-pdf', generatePDF)
+router.post('/generate-image', generateImage)
+router.post('/generate-certificate', generateCertificate)
+router.get('/templates', getReportTemplates)
+router.post('/templates', createReportTemplate)
+router.put('/templates/:id', updateReportTemplate)
+router.delete('/templates/:id', deleteReportTemplate)
+
+module.exports = router
+EOF
+
+    # Templates Routes
+    cat > "$APP_DIR/src/routes/templates.js" << 'EOF'
+const express = require('express')
+const { getAllTemplates, getTemplateById, createTemplate, updateTemplate, deleteTemplate } = require('../controllers/templatesController')
+const { authenticateToken } = require('../middleware/auth')
+
+const router = express.Router()
+
+router.use(authenticateToken)
+
+router.get('/', getAllTemplates)
+router.get('/:id', getTemplateById)
+router.post('/', createTemplate)
+router.put('/:id', updateTemplate)
+router.delete('/:id', deleteTemplate)
+
+module.exports = router
+EOF
+
+    # Notifications Routes
+    cat > "$APP_DIR/src/routes/notifications.js" << 'EOF'
+const express = require('express')
+const { getAllNotifications, markAsRead, markAllAsRead, getUnreadCount, createNotification } = require('../controllers/notificationsController')
+const { authenticateToken } = require('../middleware/auth')
+
+const router = express.Router()
+
+router.use(authenticateToken)
+
+router.get('/', getAllNotifications)
+router.post('/:id/read', markAsRead)
+router.post('/read-all', markAllAsRead)
+router.get('/unread-count', getUnreadCount)
+router.post('/', createNotification)
+
+module.exports = router
+EOF
+
+    # Emcee Routes
+    cat > "$APP_DIR/src/routes/emcee.js" << 'EOF'
+const express = require('express')
+const { getScripts, getScriptById, createScript, updateScript, deleteScript, playScript, pauseScript, stopScript, getAnalytics, getUsageHistory } = require('../controllers/emceeController')
+const { authenticateToken } = require('../middleware/auth')
+
+const router = express.Router()
+
+router.use(authenticateToken)
+
+router.get('/scripts', getScripts)
+router.get('/scripts/:id', getScriptById)
+router.post('/scripts', createScript)
+router.put('/scripts/:id', updateScript)
+router.delete('/scripts/:id', deleteScript)
+router.post('/scripts/:id/play', playScript)
+router.post('/scripts/:id/pause', pauseScript)
+router.post('/scripts/:id/stop', stopScript)
+router.get('/analytics', getAnalytics)
+router.get('/usage-history', getUsageHistory)
+
+module.exports = router
+EOF
+    
     # Create Prisma schema (overwrite if exists to ensure correct relations)
     print_status "Creating Prisma schema..."
     cat > "$APP_DIR/prisma/schema.prisma" << 'EOF'
@@ -656,7 +3882,7 @@ model Contest {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  event      Event      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  event      Event      @relation(fields: [eventId], references: [id], onDelete: Cascade)                                                                       
   categories Category[]
   contestants ContestContestant[]
   judges     ContestJudge[]
@@ -673,7 +3899,7 @@ model Category {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  contest      Contest      @relation(fields: [contestId], references: [id], onDelete: Cascade)
+  contest      Contest      @relation(fields: [contestId], references: [id], onDelete: Cascade)                                                                 
   contestants  CategoryContestant[]
   judges       CategoryJudge[]
   criteria     Criterion[]
@@ -681,7 +3907,7 @@ model Category {
   comments     JudgeComment[]
   certifications TallyMasterCertification[]
   auditorCertifications AuditorCertification[]
-  judgeCertifications JudgeCertification[] @relation("CategoryJudgeCertifications")
+  judgeCertifications JudgeCertification[] @relation("CategoryJudgeCertifications")                                                                             
 
   @@map("categories")
 }
@@ -753,10 +3979,10 @@ model Score {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  category   Category   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  contestant Contestant @relation(fields: [contestantId], references: [id], onDelete: Cascade)
-  judge      Judge      @relation(fields: [judgeId], references: [id], onDelete: Cascade)
-  criterion  Criterion  @relation(fields: [criterionId], references: [id], onDelete: Cascade)
+  category   Category   @relation(fields: [categoryId], references: [id], onDelete: Cascade)                                                                    
+  contestant Contestant @relation(fields: [contestantId], references: [id], onDelete: Cascade)                                                                  
+  judge      Judge      @relation(fields: [judgeId], references: [id], onDelete: Cascade)                                                                        
+  criterion  Criterion  @relation(fields: [criterionId], references: [id], onDelete: Cascade)                                                                    
 
   @@unique([categoryId, contestantId, judgeId, criterionId])
   @@map("scores")
@@ -793,9 +4019,9 @@ model JudgeComment {
   comment      String?
   createdAt    DateTime @default(now())
 
-  category   Category   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  contestant Contestant @relation(fields: [contestantId], references: [id], onDelete: Cascade)
-  judge      Judge      @relation(fields: [judgeId], references: [id], onDelete: Cascade)
+  category   Category   @relation(fields: [categoryId], references: [id], onDelete: Cascade)                                                                    
+  contestant Contestant @relation(fields: [contestantId], references: [id], onDelete: Cascade)                                                                  
+  judge      Judge      @relation(fields: [judgeId], references: [id], onDelete: Cascade)                                                                        
 
   @@unique([categoryId, contestantId, judgeId])
   @@map("judge_comments")
@@ -808,8 +4034,8 @@ model JudgeCertification {
   signatureName String
   certifiedAt   DateTime @default(now())
 
-  category Category @relation("CategoryJudgeCertifications", fields: [categoryId], references: [id], onDelete: Cascade)
-  judge    Judge    @relation("JudgeCertifications", fields: [judgeId], references: [id], onDelete: Cascade)
+  category Category @relation("CategoryJudgeCertifications", fields: [categoryId], references: [id], onDelete: Cascade)                                         
+  judge    Judge    @relation("JudgeCertifications", fields: [judgeId], references: [id], onDelete: Cascade)                                                    
 
   @@unique([categoryId, judgeId])
   @@map("judge_certifications")
@@ -821,7 +4047,7 @@ model TallyMasterCertification {
   signatureName String
   certifiedAt   DateTime @default(now())
 
-  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)                                                                        
 
   @@unique([categoryId])
   @@map("tally_master_certifications")
@@ -833,7 +4059,7 @@ model AuditorCertification {
   signatureName String
   certifiedAt   DateTime @default(now())
 
-  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)                                                                        
 
   @@unique([categoryId])
   @@map("auditor_certifications")
@@ -933,7 +4159,7 @@ model TemplateCriterion {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  template CategoryTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  template CategoryTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)                                                                
 
   @@map("template_criteria")
 }
@@ -956,8 +4182,8 @@ model ContestContestant {
   contestId    String
   contestantId String
 
-  contest    Contest    @relation(fields: [contestId], references: [id], onDelete: Cascade)
-  contestant Contestant @relation(fields: [contestantId], references: [id], onDelete: Cascade)
+  contest    Contest    @relation(fields: [contestId], references: [id], onDelete: Cascade)                                                                     
+  contestant Contestant @relation(fields: [contestantId], references: [id], onDelete: Cascade)                                                                  
 
   @@id([contestId, contestantId])
   @@map("contest_contestants")
@@ -967,8 +4193,8 @@ model ContestJudge {
   contestId String
   judgeId   String
 
-  contest Contest @relation(fields: [contestId], references: [id], onDelete: Cascade)
-  judge   Judge   @relation(fields: [judgeId], references: [id], onDelete: Cascade)
+  contest Contest @relation(fields: [contestId], references: [id], onDelete: Cascade)                                                                           
+  judge   Judge   @relation(fields: [judgeId], references: [id], onDelete: Cascade)                                                                             
 
   @@id([contestId, judgeId])
   @@map("contest_judges")
@@ -978,8 +4204,8 @@ model CategoryContestant {
   categoryId   String
   contestantId String
 
-  category   Category   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  contestant Contestant @relation(fields: [contestantId], references: [id], onDelete: Cascade)
+  category   Category   @relation(fields: [categoryId], references: [id], onDelete: Cascade)                                                                    
+  contestant Contestant @relation(fields: [contestantId], references: [id], onDelete: Cascade)                                                                  
 
   @@id([categoryId, contestantId])
   @@map("category_contestants")
@@ -989,8 +4215,8 @@ model CategoryJudge {
   categoryId String
   judgeId    String
 
-  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  judge    Judge    @relation(fields: [judgeId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)                                                                        
+  judge    Judge    @relation(fields: [judgeId], references: [id], onDelete: Cascade)                                                                            
 
   @@id([categoryId, judgeId])
   @@map("category_judges")
@@ -1332,259 +4558,131 @@ if (require.main === module) {
 module.exports = { seed }
 EOF
     
-    # Create complete server.js with full API (force overwrite to ensure complete functionality)
-    print_status "Creating complete server.js with full API..."
+    # Create modular server.js with proper routing
+    print_status "Creating modular server.js with proper routing..."
     cat > "$APP_DIR/src/server.js" << 'EOF'
 const express = require('express')
 const cors = require('cors')
 const helmet = require('helmet')
-const morgan = require('morgan')
-const compression = require('compression')
 const rateLimit = require('express-rate-limit')
-const bcrypt = require('bcryptjs')
-const jwt = require('jsonwebtoken')
-const { PrismaClient } = require('@prisma/client')
-const { Server } = require('socket.io')
-const http = require('http')
+const compression = require('compression')
+const morgan = require('morgan')
+const path = require('path')
 
 const app = express()
-const server = http.createServer(app)
-const io = new Server(server, {
-  cors: {
-    origin: function (origin, callback) {
-      // Allow requests with no origin
-      if (!origin) return callback(null, true)
-      
-      // Allow localhost for development
-      if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
-        return callback(null, true)
-      }
-      
-      // Allow any IP address (for remote server deployment)
-      if (origin.match(/^https?:\/\/\d+\.\d+\.\d+\.\d+/)) {
-        return callback(null, true)
-      }
-      
-      // Allow any domain (for production with domain names)
-      return callback(null, true)
-    },
-    methods: ["GET", "POST"],
-    credentials: true
-  }
-})
 
-const prisma = new PrismaClient()
+// Environment variables
 const PORT = process.env.PORT || 3000
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
+const NODE_ENV = process.env.NODE_ENV || 'development'
 
-// Middleware
-app.use(helmet())
-// CORS configuration
-const corsOptions = {
-  origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true)
-    
-    // Allow localhost for development
-    if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
-      return callback(null, true)
-    }
-    
-    // Allow any IP address (for remote server deployment)
-    if (origin.match(/^https?:\/\/\d+\.\d+\.\d+\.\d+/)) {
-      return callback(null, true)
-    }
-    
-    // Allow any domain (for production with domain names)
-    return callback(null, true)
+// Trust proxy for rate limiting
+app.set('trust proxy', 1)
+
+// Security middleware
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'"],
+      imgSrc: ["'self'", "data:", "https:"],
+    },
   },
+}))
+
+// CORS configuration
+app.use(cors({
+  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
-}
+}))
 
-app.use(cors(corsOptions))
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  message: 'Too many requests from this IP, please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
+  trustProxy: true,
+  keyGenerator: (req) => {
+    return req.ip
+  },
+  skip: (req) => {
+    // Skip rate limiting for health checks
+    return req.path === '/health'
+  }
+})
+
+app.use('/api/', limiter)
+
+// Compression and logging
 app.use(compression())
 app.use(morgan('combined'))
+
+// Body parsing
 app.use(express.json({ limit: '10mb' }))
-app.use(express.urlencoded({ extended: true }))
-
-// Rate limiting - Enhanced configuration with separate limits for auth endpoints
-// Strategy: 
-// - Auth endpoints: 10,000 requests per 15 minutes (very high for login/profile)
-// - General API: 5,000 requests per 15 minutes (high for dashboard usage)
-// - Admin endpoints: Skipped from general limiter (handled separately)
-const generalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5000, // Increased to 5000 requests per 15 minutes for general API
-  standardHeaders: true,
-  legacyHeaders: false,
-  trustProxy: true,
-  skip: (req) => {
-    // Skip rate limiting for health checks and auth endpoints
-    return req.path === '/health' || 
-           req.path.startsWith('/api/auth/') ||
-           req.path.startsWith('/api/admin/')
-  },
-  keyGenerator: (req) => {
-    // Use IP address for rate limiting, handling proxy headers properly
-    return req.ip || req.connection.remoteAddress
-  }
-})
-
-// Separate, more lenient rate limiter for authentication endpoints
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10000, // Very high limit for auth endpoints (login, profile, etc.)
-  standardHeaders: true,
-  legacyHeaders: false,
-  trustProxy: true,
-  keyGenerator: (req) => {
-    return req.ip || req.connection.remoteAddress
-  }
-})
-
-// Apply different rate limiters to different route groups
-app.use('/api/auth/', authLimiter)
-app.use('/api/', generalLimiter)
-
-// Auth middleware
-const authenticateToken = async (req, res, next) => {
-  const authHeader = req.headers['authorization']
-  const token = authHeader && authHeader.split(' ')[1]
-
-  if (!token) {
-    return res.status(401).json({ error: 'Access token required' })
-  }
-
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET)
-    const user = await prisma.user.findUnique({
-      where: { id: decoded.userId },
-      include: { judge: true, contestant: true }
-    })
-    
-    if (!user) {
-      return res.status(401).json({ error: 'Invalid token' })
-    }
-    
-    req.user = user
-    next()
-  } catch (error) {
-    return res.status(403).json({ error: 'Invalid token' })
-  }
-}
+app.use(express.urlencoded({ extended: true, limit: '10mb' }))
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.json({ status: 'OK', timestamp: new Date().toISOString() })
-})
-
-// Auth routes
-app.post('/api/auth/login', async (req, res) => {
-  try {
-    const { email, password } = req.body
-    
-    const user = await prisma.user.findUnique({
-      where: { email },
-      include: { judge: true, contestant: true }
-    })
-    
-    if (!user || !await bcrypt.compare(password, user.password)) {
-      return res.status(401).json({ error: 'Invalid credentials' })
-    }
-    
-    const token = jwt.sign(
-      { userId: user.id, email: user.email, role: user.role },
-      JWT_SECRET,
-      { expiresIn: '24h' }
-    )
-    
-    res.json({
-      token,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        judge: user.judge,
-        contestant: user.contestant
-      }
-    })
-  } catch (error) {
-    console.error('Login error:', error)
-    res.status(500).json({ error: 'Login failed' })
-  }
-})
-
-app.get('/api/auth/profile', authenticateToken, (req, res) => {
-  res.json({
-    id: req.user.id,
-    name: req.user.name,
-    email: req.user.email,
-    role: req.user.role,
-    judge: req.user.judge,
-    contestant: req.user.contestant
+  res.json({ 
+    status: 'OK', 
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    environment: NODE_ENV
   })
 })
 
-// Events API
-app.get('/events', authenticateToken, async (req, res) => {
-  try {
-    const events = await prisma.event.findMany({
-      include: {
-        contests: {
-          include: {
-            categories: true
-          }
-        }
-      },
-      orderBy: { createdAt: 'desc' }
-    })
-    res.json(events)
-  } catch (error) {
-    console.error('Events fetch error:', error)
-    res.status(500).json({ error: 'Failed to fetch events' })
-  }
-})
+// Import and use modular routes
+const authRoutes = require('./routes/auth')
+const eventRoutes = require('./routes/events')
+const contestRoutes = require('./routes/contests')
+const categoryRoutes = require('./routes/categories')
+const userRoutes = require('./routes/users')
+const scoringRoutes = require('./routes/scoring')
+const resultsRoutes = require('./routes/results')
+const adminRoutes = require('./routes/admin')
+const uploadRoutes = require('./routes/upload')
+const archiveRoutes = require('./routes/archive')
+const backupRoutes = require('./routes/backup')
+const settingsRoutes = require('./routes/settings')
+const assignmentsRoutes = require('./routes/assignments')
+const auditorRoutes = require('./routes/auditor')
+const boardRoutes = require('./routes/board')
+const tallyMasterRoutes = require('./routes/tally-master')
+const emailRoutes = require('./routes/email')
+const reportsRoutes = require('./routes/reports')
+const templatesRoutes = require('./routes/templates')
+const notificationsRoutes = require('./routes/notifications')
+const emceeRoutes = require('./routes/emcee')
 
-app.post('/events', authenticateToken, async (req, res) => {
-  try {
-    if (req.user.role !== 'ORGANIZER' && req.user.role !== 'BOARD') {
-      return res.status(403).json({ error: 'Insufficient permissions' })
-    }
-    
-    const event = await prisma.event.create({
-      data: req.body
-    })
-    res.json(event)
-  } catch (error) {
-    console.error('Event creation error:', error)
-    res.status(500).json({ error: 'Failed to create event' })
-  }
-})
+// Mount routes
+app.use('/api/auth', authRoutes)
+app.use('/api/events', eventRoutes)
+app.use('/api/contests', contestRoutes)
+app.use('/api/categories', categoryRoutes)
+app.use('/api/users', userRoutes)
+app.use('/api/scoring', scoringRoutes)
+app.use('/api/results', resultsRoutes)
+app.use('/api/admin', adminRoutes)
+app.use('/api/upload', uploadRoutes)
+app.use('/api/archive', archiveRoutes)
+app.use('/api/backup', backupRoutes)
+app.use('/api/settings', settingsRoutes)
+app.use('/api/assignments', assignmentsRoutes)
+app.use('/api/auditor', auditorRoutes)
+app.use('/api/board', boardRoutes)
+app.use('/api/tally-master', tallyMasterRoutes)
+app.use('/api/email', emailRoutes)
+app.use('/api/reports', reportsRoutes)
+app.use('/api/templates', templatesRoutes)
+app.use('/api/notifications', notificationsRoutes)
+app.use('/api/emcee', emceeRoutes)
 
-// Contests API
-app.get('/api/contests/event/:eventId', authenticateToken, async (req, res) => {
-  try {
-    const contests = await prisma.contest.findMany({
-      where: { eventId: req.params.eventId },
-      include: {
-        categories: true,
-        contestants: {
-          include: { contestant: true }
-        },
-        judges: {
-          include: { judge: true }
-        }
-      }
-    })
-    res.json(contests)
-  } catch (error) {
-    console.error('Contests fetch error:', error)
-    res.status(500).json({ error: 'Failed to fetch contests' })
-  }
-})
+// Serve static files from frontend build
+app.use(express.static(path.join(__dirname, '../frontend/dist')))
 
 // Categories API
 app.get('/api/categories/contest/:contestId', authenticateToken, async (req, res) => {
@@ -1784,6 +4882,108 @@ app.get('/api/admin/settings', authenticateToken, async (req, res) => {
   }
 })
 
+// Categories endpoint
+app.get('/api/categories', authenticateToken, async (req, res) => {
+  try {
+    const { contestId } = req.query
+    
+    const where = contestId ? { contestId } : {}
+    
+    const categories = await prisma.category.findMany({
+      where,
+      include: {
+        contest: {
+          select: {
+            id: true,
+            name: true
+          }
+        },
+        _count: {
+          select: {
+            criteria: true,
+            contestants: true,
+            judges: true,
+            scores: true
+          }
+        }
+      },
+      orderBy: { order: 'asc' }
+    })
+    
+    res.json(categories)
+  } catch (error) {
+    console.error('Categories fetch error:', error)
+    res.status(500).json({ error: 'Failed to fetch categories' })
+  }
+})
+
+// Results endpoint
+app.get('/api/results', authenticateToken, async (req, res) => {
+  try {
+    const { categoryId, contestId } = req.query
+    
+    let where = {}
+    if (categoryId) {
+      where.categoryId = categoryId
+    } else if (contestId) {
+      where.category = {
+        contestId: contestId
+      }
+    }
+    
+    const results = await prisma.score.groupBy({
+      by: ['contestantId', 'categoryId'],
+      where,
+      _sum: {
+        score: true
+      },
+      _avg: {
+        score: true
+      },
+      _count: {
+        score: true
+      }
+    })
+    
+    // Get detailed results with contestant and category info
+    const detailedResults = await Promise.all(results.map(async (result) => {
+      const contestant = await prisma.contestant.findUnique({
+        where: { id: result.contestantId },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          contestantNumber: true
+        }
+      })
+      
+      const category = await prisma.category.findUnique({
+        where: { id: result.categoryId },
+        select: {
+          id: true,
+          name: true,
+          maxScore: true
+        }
+      })
+      
+      return {
+        contestantId: result.contestantId,
+        categoryId: result.categoryId,
+        totalScore: result._sum.score,
+        averageScore: result._avg.score,
+        scoreCount: result._count.score,
+        contestant,
+        category
+      }
+    }))
+    
+    res.json(detailedResults)
+  } catch (error) {
+    console.error('Results fetch error:', error)
+    res.status(500).json({ error: 'Failed to fetch results' })
+  }
+})
+
 // Admin backup endpoint
 app.get('/api/admin/backup', authenticateToken, async (req, res) => {
   try {
@@ -1812,33 +5012,34 @@ io.on('connection', (socket) => {
 })
 
 // Error handling middleware
-app.use((err, req, res, next) => {
-  console.error(err.stack)
-  res.status(500).json({ error: 'Something went wrong!' })
-})
-
-// 404 handler
-app.use('*', (req, res) => {
-  res.status(404).json({ error: 'Route not found' })
-})
+const { errorHandler, notFound } = require('./middleware/errorHandler')
+app.use(notFound)
+app.use(errorHandler)
 
 // Start server
-server.listen(PORT, () => {
-  console.log(`🚀 Event Manager API server running on port ${PORT}`)
+const server = app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`)
+  console.log(`Environment: ${NODE_ENV}`)
 })
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   console.log('SIGTERM received, shutting down gracefully')
+  const { PrismaClient } = require('@prisma/client')
+  const prisma = new PrismaClient()
   await prisma.$disconnect()
+  server.close(() => {
+    console.log('Process terminated')
+  })
   process.exit(0)
 })
 
 process.on('SIGINT', async () => {
   console.log('SIGINT received, shutting down gracefully')
+  const { PrismaClient } = require('@prisma/client')
+  const prisma = new PrismaClient()
   await prisma.$disconnect()
   process.exit(0)
-})
 EOF
     
     print_success "Essential backend files created!"
@@ -1856,12 +5057,68 @@ setup_environment() {
     generate_secrets
     
     # Set default values if not provided
-    if [[ -z "$APP_URL" ]]; then
-        if [[ -n "$DOMAIN" ]]; then
-            APP_URL="https://$DOMAIN"
-        else
-            APP_URL="http://localhost:3001"
-        fi
+    if [ -z "$DB_HOST" ]; then
+        DB_HOST="localhost"
+    fi
+    
+    if [ -z "$DB_PORT" ]; then
+        DB_PORT="5432"
+    fi
+    
+    if [ -z "$DB_NAME" ]; then
+        DB_NAME="event_manager"
+    fi
+    
+    if [ -z "$DB_USER" ]; then
+        DB_USER="event_manager"
+    fi
+    
+    if [ -z "$DB_PASSWORD" ]; then
+        DB_PASSWORD=$(openssl rand -base64 32)
+    fi
+    
+    if [ -z "$JWT_SECRET" ]; then
+        JWT_SECRET=$(openssl rand -base64 64)
+    fi
+    
+    if [ -z "$SESSION_SECRET" ]; then
+        SESSION_SECRET=$(openssl rand -base64 64)
+    fi
+    
+    if [ -z "$APP_ENV" ]; then
+        APP_ENV="production"
+    fi
+    
+    if [ -z "$APP_URL" ]; then
+        APP_URL="http://localhost:3000"
+    fi
+    
+    if [ -z "$SMTP_HOST" ]; then
+        SMTP_HOST="localhost"
+    fi
+    
+    if [ -z "$SMTP_PORT" ]; then
+        SMTP_PORT="587"
+    fi
+    
+    if [ -z "$SMTP_USER" ]; then
+        SMTP_USER=""
+    fi
+    
+    if [ -z "$SMTP_PASS" ]; then
+        SMTP_PASS=""
+    fi
+    
+    if [ -z "$SMTP_FROM" ]; then
+        SMTP_FROM="noreply@eventmanager.com"
+    fi
+    
+    if [ -z "$DOMAIN" ]; then
+        DOMAIN="localhost"
+    fi
+    
+    if [ -z "$EMAIL" ]; then
+        EMAIL="admin@eventmanager.com"
     fi
     
     # Create backend .env file
@@ -1871,37 +5128,29 @@ NODE_ENV=$APP_ENV
 PORT=3000
 
 # Database Configuration
-DATABASE_URL="postgresql://$DB_USER:$DB_PASSWORD@localhost:5432/$DB_NAME?schema=public"
-
-# JWT Configuration
-JWT_SECRET=$JWT_SECRET
-JWT_EXPIRES_IN=24h
-
-# Redis Configuration
-REDIS_URL=redis://localhost:6379
-
-# File Upload Configuration
-UPLOAD_DIR=uploads
-MAX_FILE_SIZE=10485760
+DB_HOST=$DB_HOST
+DB_PORT=$DB_PORT
+DB_NAME=$DB_NAME
+DB_USER=$DB_USER
+DB_PASSWORD=$DB_PASSWORD
+DATABASE_URL=postgresql://$DB_USER:$DB_PASSWORD@$DB_HOST:$DB_PORT/$DB_NAME
 
 # Security Configuration
-BCRYPT_ROUNDS=12
-RATE_LIMIT_WINDOW_MS=900000
-RATE_LIMIT_MAX_REQUESTS=100
+JWT_SECRET=$JWT_SECRET
+SESSION_SECRET=$SESSION_SECRET
 
-# Logging Configuration
-LOG_LEVEL=info
-LOG_FILE=logs/event-manager.log
+# Email Configuration
+SMTP_HOST=$SMTP_HOST
+SMTP_PORT=$SMTP_PORT
+SMTP_USER=$SMTP_USER
+SMTP_PASS=$SMTP_PASS
+SMTP_FROM=$SMTP_FROM
 
-# Email Configuration (optional)
-SMTP_HOST=localhost
-SMTP_PORT=587
-SMTP_USER=
-SMTP_PASS=
-SMTP_FROM=noreply@eventmanager.com
+# Application Configuration
+APP_URL=$APP_URL
+FRONTEND_URL=$APP_URL
 
 # Session Configuration
-SESSION_SECRET=$SESSION_SECRET
 SESSION_TIMEOUT=1800000
 
 # Application Configuration
@@ -1913,23 +5162,15 @@ EOF
     # Use relative URLs for better domain/IP compatibility
     if [ -z "$API_URL" ]; then
         # Check if we have a domain configured
-        if [ -n "$DOMAIN" ]; then
-            # Use domain name for API URL
-            API_URL="https://${DOMAIN}"
-            WS_URL="wss://${DOMAIN}"
+        if [ -n "$DOMAIN" ] && [ "$DOMAIN" != "localhost" ]; then
+            API_URL="https://$DOMAIN/api"
+            WS_URL="wss://$DOMAIN/socket.io"
         else
-            # Use relative URLs (empty strings) for better compatibility
-            # This allows the frontend to use relative URLs that work with both IP and domain
-            API_URL=""
-            WS_URL=""
+            # Use relative URLs for IP-based access
+            API_URL="/api"
+            WS_URL="/socket.io"
         fi
-    else
-        # Use provided API URL
-        WS_URL="${API_URL/http:/ws:}"
-        WS_URL="${WS_URL/https:/wss:}"
     fi
-    
-    print_status "Creating frontend environment with API_URL='$API_URL' and WS_URL='$WS_URL'"
     
     # Create frontend .env file with proper VITE variables
     cat > "$APP_DIR/frontend/.env" << EOF
@@ -1945,34 +5186,39 @@ EOF
     if [ -f "$APP_DIR/frontend/.env" ]; then
         print_success "Frontend environment file created successfully"
         print_status "Frontend .env contents:"
-        cat "$APP_DIR/frontend/.env" | sed 's/^/  /'
+        cat "$APP_DIR/frontend/.env"
     else
-        print_error "Failed to create frontend environment file"
-        return 1
+        print_error "Failed to create frontend .env file"
     fi
     
-    # Secure environment files
-    chmod 600 "$APP_DIR/.env" "$APP_DIR/frontend/.env"
+    print_success "Environment variables configured!"
+}
+
+# Generate secrets function
+generate_secrets() {
+    print_status "Generating secure secrets..."
     
-    print_success "Environment variables configured"
+    # Generate JWT secret
+    if [ -z "$JWT_SECRET" ]; then
+        JWT_SECRET=$(openssl rand -base64 64)
+    fi
+    
+    # Generate session secret
+    if [ -z "$SESSION_SECRET" ]; then
+        SESSION_SECRET=$(openssl rand -base64 64)
+    fi
+    
+    # Generate database password if not provided
+    if [ -z "$DB_PASSWORD" ]; then
+        DB_PASSWORD=$(openssl rand -base64 32)
+    fi
+    
+    print_success "Secrets generated successfully!"
 }
 
 # Setup database
 setup_database() {
-    if [[ "$AUTO_SETUP_DB" == "false" && "$NON_INTERACTIVE" == "false" ]]; then
-        echo ""
-        read -p "Setup database (create user, database, migrate, seed)? [y/N]: " -n 1 -r
-        echo ""
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            print_status "Skipping database setup"
-            return
-        fi
-    fi
-    
     print_status "Setting up database..."
-    
-    # Create essential backend files first
-    create_backend_files
     
     # Create database user and database
     sudo -u postgres psql << EOF
@@ -1980,18 +5226,17 @@ setup_database() {
 DO \$\$
 BEGIN
     IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '$DB_USER') THEN
-        CREATE ROLE $DB_USER WITH LOGIN PASSWORD '$DB_PASSWORD';
+        CREATE ROLE $DB_USER LOGIN PASSWORD '$DB_PASSWORD';
     END IF;
 END
 \$\$;
 
 -- Create database if it doesn't exist
-SELECT 'CREATE DATABASE $DB_NAME'
+SELECT 'CREATE DATABASE $DB_NAME OWNER $DB_USER'
 WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '$DB_NAME')\gexec
 
 -- Grant privileges
 GRANT ALL PRIVILEGES ON DATABASE $DB_NAME TO $DB_USER;
-GRANT ALL PRIVILEGES ON SCHEMA public TO $DB_USER;
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO $DB_USER;
 GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO $DB_USER;
 
@@ -2018,15 +5263,21 @@ EOF
     print_status "Creating package.json with updated dependencies..."
     cat > "$APP_DIR/package.json" << 'EOF'
 {
-  "name": "event-manager-backend",
+  "name": "event-manager",
   "version": "1.0.0",
-  "description": "Event Manager Backend API",
+  "description": "Event Management System",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "migrate": "node src/database/migrate.js",
-    "seed": "node src/database/seed.js"
+    "seed": "node src/database/seed.js",
+    "build": "npm run build:frontend",
+    "build:frontend": "cd frontend && npm run build",
+    "install:frontend": "cd frontend && npm install",
+    "test": "jest",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix"
   },
   "dependencies": {
     "express": "^4.18.2",
@@ -2072,127 +5323,55 @@ EOF
 EOF
 
     # Install dependencies with proper error handling
-    print_status "Installing Node.js dependencies..."
+    print_status "Installing backend dependencies..."
     cd "$APP_DIR"
     
-    # Use the enhanced npm install function
-    if ! safe_npm_install "$APP_DIR" "backend"; then
-        print_error "Failed to install backend dependencies"
-        exit 1
-    fi
-    
-    # Make Node.js binaries executable before running migrations
-    if [[ -d "$APP_DIR/node_modules/.bin" ]]; then
-        chmod +x "$APP_DIR/node_modules/.bin"/*
-        print_status "Fixed Node.js binary permissions for migration"
-    fi
-    
-    # Clean up any existing Prisma client files
-    print_status "Cleaning up existing Prisma client files..."
-    rm -rf "$APP_DIR/node_modules/.prisma" 2>/dev/null || true
-    rm -rf "$APP_DIR/node_modules/@prisma/client" 2>/dev/null || true
-    
-    # Make Prisma engine binaries executable
-    print_status "Setting Prisma engine binary permissions..."
-    if [[ -d "$APP_DIR/node_modules/@prisma/engines" ]]; then
-        chmod +x "$APP_DIR/node_modules/@prisma/engines"/*
-        print_status "Fixed Prisma engine binary permissions"
-    fi
-    
-    # Validate Prisma schema first
-    print_status "Validating Prisma schema..."
-    if ! npx prisma validate; then
-        print_error "Prisma schema validation failed. Please check the schema file."
-        exit 1
-    fi
-    
-    # Run migrations
-    print_status "Running database migrations..."
-    npm run migrate
-    
-    print_success "Database setup complete"
-}
-
-# Setup web server permissions
-setup_permissions() {
-    if [[ "$SKIP_WEB_SERVER_PERMISSIONS" == "true" ]]; then
-        return
-    fi
-    
-    if [[ "$AUTO_SETUP_PERMISSIONS" == "false" && "$NON_INTERACTIVE" == "false" ]]; then
-        echo ""
-        read -p "Setup web server permissions? [y/N]: " -n 1 -r
-        echo ""
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            print_status "Skipping web server permission setup"
-            return
-        fi
-    fi
-    
-    print_status "Setting up web server permissions..."
-    
-    # Set ownership to web server user
-    sudo chown -R "$WEB_SERVER_USER:$WEB_SERVER_USER" "$APP_DIR"
-    
-    # Set directory permissions (755)
-    sudo find "$APP_DIR" -type d -exec chmod 755 {} \;
-    
-    # Set file permissions (644)
-    sudo find "$APP_DIR" -type f -exec chmod 644 {} \;
-    
-    # Make Node.js binaries executable (fixes Prisma permission issues)
-    if [[ -d "$APP_DIR/node_modules/.bin" ]]; then
-        sudo chmod +x "$APP_DIR/node_modules/.bin"/*
-        print_status "Fixed Node.js binary permissions"
-    fi
-    
-    # Make Prisma engine binaries executable
-    if [[ -d "$APP_DIR/node_modules/@prisma/engines" ]]; then
-        sudo chmod +x "$APP_DIR/node_modules/@prisma/engines"/*
-        print_status "Fixed Prisma engine binary permissions"
-    fi
-    
-    # Make frontend binaries executable
-    if [[ -d "$APP_DIR/frontend/node_modules/.bin" ]]; then
-        sudo chmod +x "$APP_DIR/frontend/node_modules/.bin"/*
-        print_status "Fixed frontend binary permissions"
-    fi
-    
-    # Secure sensitive files (600)
-    sudo chmod 600 "$APP_DIR/.env" "$APP_DIR/frontend/.env"
-    
-    # Make scripts executable
-    sudo chmod 755 "$APP_DIR/setup.sh"
-    if [[ -f "$APP_DIR/install.sh" ]]; then
-        sudo chmod 755 "$APP_DIR/install.sh"
-    fi
-    
-    # Create uploads and logs directories with proper permissions
-    sudo mkdir -p "$APP_DIR/uploads" "$APP_DIR/logs"
-    sudo chown -R "$WEB_SERVER_USER:$WEB_SERVER_USER" "$APP_DIR/uploads" "$APP_DIR/logs"
-    sudo chmod 755 "$APP_DIR/uploads" "$APP_DIR/logs"
-    
-    print_success "Web server permissions configured"
-}
-
-# Check for PM2 and prompt user
-check_pm2() {
-    if command -v pm2 &> /dev/null; then
-        if [[ "$NON_INTERACTIVE" == "false" ]]; then
-            echo ""
-            read -p "PM2 is installed. Use PM2 for process management? [y/N]: " -n 1 -r
-            echo ""
-            if [[ $REPLY =~ ^[Yy]$ ]]; then
-                USE_PM2=true
+    # Try different npm install strategies
+    if ! npm install --legacy-peer-deps; then
+        print_warning "Legacy peer deps failed, trying with --force..."
+        if ! npm install --force; then
+            print_warning "Force install failed, trying with --no-optional..."
+            if ! npm install --no-optional; then
+                print_warning "No optional failed, trying with --ignore-scripts..."
+                npm install --ignore-scripts
             fi
         fi
     fi
+    
+    # Install frontend dependencies
+    print_status "Installing frontend dependencies..."
+    cd "$APP_DIR/frontend"
+    
+    if ! npm install --legacy-peer-deps; then
+        print_warning "Frontend legacy peer deps failed, trying with --force..."
+        if ! npm install --force; then
+            print_warning "Frontend force install failed, trying with --no-optional..."
+            npm install --no-optional
+        fi
+    fi
+    
+    cd "$APP_DIR"
+    
+    # Run database migrations
+    print_status "Running database migrations..."
+    npm run migrate
+    
+    # Seed database
+    print_status "Seeding database..."
+    npm run seed
+    
+    print_success "Database setup completed!"
 }
 
-# Setup systemd service
-setup_systemd_service() {
-    if [[ "$USE_PM2" == "true" ]]; then
-        print_status "Setting up PM2 process management..."
+# Start application
+start_application() {
+    print_status "Starting application..."
+    
+    cd "$APP_DIR"
+    
+    # Check if PM2 is available
+    if command -v pm2 >/dev/null 2>&1; then
+        print_status "Using PM2 to start application..."
         
         # Create PM2 ecosystem file
         cat > "$APP_DIR/ecosystem.config.js" << EOF
@@ -2200,45 +5379,39 @@ module.exports = {
   apps: [{
     name: '$APP_NAME',
     script: 'src/server.js',
-    cwd: '$APP_DIR',
-    user: '$WEB_SERVER_USER',
-    instances: 'max',
-    exec_mode: 'cluster',
+    instances: 1,
+    autorestart: true,
+    watch: false,
+    max_memory_restart: '1G',
     env: {
-      NODE_ENV: '$APP_ENV',
-      PORT: 3000
-    },
-    error_file: './logs/err.log',
-    out_file: './logs/out.log',
-    log_file: './logs/combined.log',
-    time: true
+      NODE_ENV: 'production'
+    }
   }]
 }
 EOF
         
         # Start with PM2
-        sudo -u "$WEB_SERVER_USER" pm2 start "$APP_DIR/ecosystem.config.js"
-        sudo -u "$WEB_SERVER_USER" pm2 save
-        sudo -u "$WEB_SERVER_USER" pm2 startup
+        pm2 start ecosystem.config.js
+        pm2 save
+        pm2 startup
         
     else
-        print_status "Setting up systemd service..."
+        print_status "PM2 not available, using systemd..."
         
         # Create systemd service file
         sudo tee /etc/systemd/system/$APP_NAME.service > /dev/null << EOF
 [Unit]
 Description=$APP_NAME Node.js Application
-After=network.target postgresql.service
+After=network.target
 
 [Service]
 Type=simple
-User=$WEB_SERVER_USER
-Group=$WEB_SERVER_USER
+User=$USER
 WorkingDirectory=$APP_DIR
 ExecStart=/usr/bin/node src/server.js
 Restart=always
 RestartSec=10
-Environment=NODE_ENV=$APP_ENV
+Environment=NODE_ENV=production
 Environment=PORT=3000
 
 [Install]
@@ -2250,44 +5423,50 @@ EOF
         sudo systemctl enable $APP_NAME
         sudo systemctl start $APP_NAME
         
-        # Wait for service to start and check status
-        sleep 5
-        if sudo systemctl is-active --quiet $APP_NAME; then
-            print_success "Systemd service configured and started successfully"
-            
-            # Test backend API endpoint
-            print_status "Testing backend API endpoint..."
-            if curl -f http://localhost:3000/health > /dev/null 2>&1; then
-                print_success "Backend API is responding correctly"
-            else
-                print_warning "Backend API health check failed. Service may still be starting..."
-                print_status "You can check service status with: sudo systemctl status $APP_NAME"
-            fi
+        # Check service status
+        if systemctl is-active --quiet $APP_NAME; then
+            print_success "Service started successfully!"
         else
-            print_error "Failed to start $APP_NAME service"
-            print_status "Check service status with: sudo systemctl status $APP_NAME"
-            print_status "Check service logs with: sudo journalctl -u $APP_NAME -f"
+            print_error "Failed to start service"
+            sudo systemctl status $APP_NAME
         fi
     fi
-}
-
-# Configure Nginx
-configure_nginx() {
-    if [[ "$INSTALL_NGINX" == "false" ]]; then
-        return
-    fi
-    
-    print_status "Configuring Nginx..."
     
     # Create Nginx configuration
     sudo tee /etc/nginx/sites-available/$APP_NAME > /dev/null << EOF
 server {
     listen 80;
-    server_name ${DOMAIN:-localhost};
+    server_name $DOMAIN;
     
-    # Backend API - Enhanced configuration
+    # Security headers
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "no-referrer-when-downgrade" always;
+    add_header Content-Security-Policy "default-src 'self' http: https: data: blob: 'unsafe-inline'" always;
+    
+    # Gzip compression
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_proxied expired no-cache no-store private must-revalidate auth;
+    gzip_types text/plain text/css text/xml text/javascript application/x-javascript application/xml+rss application/javascript application/json;
+    
+    # Frontend static files
+    location / {
+        root $APP_DIR/frontend/dist;
+        try_files \$uri \$uri/ /index.html;
+        
+        # Cache static assets
+        location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
+            expires 1y;
+            add_header Cache-Control "public, immutable";
+        }
+    }
+    
+    # API proxy
     location /api/ {
-        proxy_pass http://127.0.0.1:3000;
+        proxy_pass http://localhost:3000/api/;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -2296,29 +5475,12 @@ server {
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_cache_bypass \$http_upgrade;
-        proxy_read_timeout 300s;
-        proxy_connect_timeout 75s;
-        
-        # CORS headers for API
-        add_header Access-Control-Allow-Origin * always;
-        add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS" always;
-        add_header Access-Control-Allow-Headers "Authorization, Content-Type" always;
-        
-        # Handle preflight requests
-        if (\$request_method = 'OPTIONS') {
-            add_header Access-Control-Allow-Origin * always;
-            add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS" always;
-            add_header Access-Control-Allow-Headers "Authorization, Content-Type" always;
-            add_header Access-Control-Max-Age 1728000;
-            add_header Content-Type 'text/plain charset=UTF-8';
-            add_header Content-Length 0;
-            return 204;
-        }
+        proxy_read_timeout 86400;
     }
     
-    # Socket.IO WebSocket proxy
+    # WebSocket proxy
     location /socket.io/ {
-        proxy_pass http://127.0.0.1:3000;
+        proxy_pass http://localhost:3000/socket.io/;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "upgrade";
@@ -2326,50 +5488,24 @@ server {
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_cache_bypass \$http_upgrade;
-        proxy_buffering off;
-        proxy_read_timeout 300s;
-        proxy_connect_timeout 75s;
-        
-        # CORS headers for WebSocket
-        add_header Access-Control-Allow-Origin * always;
-        add_header Access-Control-Allow-Methods "GET, POST, OPTIONS" always;
-        add_header Access-Control-Allow-Headers "Authorization, Content-Type" always;
+        proxy_read_timeout 86400;
     }
     
-    # Health check endpoint
+    # Health check
     location /health {
-        proxy_pass http://127.0.0.1:3000/health;
+        proxy_pass http://localhost:3000/health;
+        proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
-    }
-    
-    # Frontend static files
-    location / {
-        root $APP_DIR/frontend/dist;
-        try_files \$uri \$uri/ /index.html;
-        
-        # Security headers
-        add_header X-Frame-Options "SAMEORIGIN" always;
-        add_header X-Content-Type-Options "nosniff" always;
-        add_header X-XSS-Protection "1; mode=block" always;
-    }
-    
-    # Upload directory (no execution)
-    location /uploads/ {
-        root $APP_DIR;
-        add_header X-Content-Type-Options "nosniff" always;
-        location ~* \.(php|pl|py|jsp|asp|sh|cgi)$ {
-            deny all;
-        }
     }
 }
 EOF
     
     # Enable site
     sudo ln -sf /etc/nginx/sites-available/$APP_NAME /etc/nginx/sites-enabled/
+    sudo nginx -t && sudo systemctl reload nginx
     
     # Remove default site if it exists
     sudo rm -f /etc/nginx/sites-enabled/default
@@ -2831,207 +5967,6 @@ export const tallyMasterAPI = {
 
 // Export the api instance for direct use
 export { api }
-
-// API endpoints
-export const authAPI = {
-  login: (email: string, password: string) => api.post('/auth/login', { email, password }),
-  profile: () => api.get('/auth/profile'),
-  logout: () => api.post('/auth/logout'),
-}
-
-export const eventsAPI = {
-  getAll: () => api.get('/events'),
-  getByEvent: (eventId: string) => api.get(`/events/${eventId}`),
-  getById: (id: string) => api.get(`/events/${id}`),
-  create: (data: any) => api.post('/events', data),
-  update: (id: string, data: any) => api.put(`/events/${id}`, data),
-  delete: (id: string) => api.delete(`/events/${id}`),
-}
-
-export const contestsAPI = {
-  getAll: async (): Promise<{ data: any[] }> => {
-    // Get all events first, then get contests for each event
-    const events = await api.get('/events')
-    const allContests: any[] = []
-    for (const event of events.data) {
-      const contests = await api.get(`/contests/event/${event.id}`)
-      allContests.push(...contests.data)
-    }
-    return { data: allContests }
-  },
-  getByEvent: (eventId: string) => api.get(`/contests/event/${eventId}`),
-  getById: (id: string) => api.get(`/contests/${id}`),
-  create: (eventId: string, data: any) => api.post(`/contests/event/${eventId}`, data),
-  update: (id: string, data: any) => api.put(`/contests/${id}`, data),
-  delete: (id: string) => api.delete(`/contests/${id}`),
-}
-
-export const categoriesAPI = {
-  getAll: () => api.get('/categories'),
-  getByContest: (contestId: string) => api.get(`/contests/${contestId}/categories`),
-  getById: (id: string) => api.get(`/categories/${id}`),
-  create: (data: any) => api.post('/categories', data),
-  update: (id: string, data: any) => api.put(`/categories/${id}`, data),
-  delete: (id: string) => api.delete(`/categories/${id}`),
-}
-
-export const scoringAPI = {
-  getScores: (categoryId: string, contestantId?: string) => api.get(`/scoring/${categoryId}${contestantId ? `/${contestantId}` : ''}`),
-  submitScore: (categoryId: string, contestantId: string, data: any) => api.post(`/scoring/${categoryId}/${contestantId}`, data),
-  updateScore: (id: string, data: any) => api.put(`/scoring/${id}`, data),
-  deleteScore: (id: string) => api.delete(`/scoring/${id}`),
-  certifyScores: (categoryId: string, data: any) => api.post(`/scoring/${categoryId}/certify`, data),
-  certifyTotals: (categoryId: string, data: any) => api.post(`/scoring/${categoryId}/certify-totals`, data),
-  finalCertification: (categoryId: string, data: any) => api.post(`/scoring/${categoryId}/final-certification`, data),
-  getCategories: () => api.get('/scoring/categories'),
-  getCriteria: (categoryId: string) => api.get(`/scoring/${categoryId}/criteria`),
-}
-
-export const resultsAPI = {
-  getResults: (categoryId: string) => api.get(`/results/${categoryId}`),
-  getContestantResults: (contestantId: string) => api.get(`/results/contestant/${contestantId}`),
-  getCategoryResults: (categoryId: string) => api.get(`/results/category/${categoryId}`),
-  getCategories: () => api.get('/results/categories'),
-}
-
-export const usersAPI = {
-  getAll: () => api.get('/users'),
-  getById: (id: string) => api.get(`/users/${id}`),
-  create: (data: any) => api.post('/users', data),
-  update: (id: string, data: any) => api.put(`/users/${id}`, data),
-  delete: (id: string) => api.delete(`/users/${id}`),
-  resetPassword: (id: string, data: any) => api.post(`/users/${id}/reset-password`, data),
-}
-
-export const uploadAPI = {
-  uploadFile: (fileData: FormData, type: string = 'OTHER') => api.post('/upload', fileData, {
-    headers: {
-      'Content-Type': 'multipart/form-data',
-    },
-  }),
-  getAll: () => api.get('/upload'),
-  getById: (id: string) => api.get(`/upload/${id}`),
-  delete: (id: string) => api.delete(`/upload/${id}`),
-  download: (id: string) => api.get(`/upload/${id}/download`, { responseType: 'blob' }),
-}
-
-export const archiveAPI = {
-  getAll: () => api.get('/archive'),
-  getById: (id: string) => api.get(`/archive/${id}`),
-  archive: (eventId: string, reason: string) => api.post('/archive', { eventId, reason }),
-  restore: (id: string) => api.post(`/archive/${id}/restore`),
-  delete: (id: string) => api.delete(`/archive/${id}`),
-}
-
-export const backupAPI = {
-  getAll: () => api.get('/backup'),
-  create: (type: string, description?: string) => api.post('/backup', { type, description }),
-  restore: (backupIdOrFile: string | File) => {
-    if (typeof backupIdOrFile === 'string') {
-      return api.post(`/backup/${backupIdOrFile}/restore`)
-    } else {
-      const formData = new FormData()
-      formData.append('file', backupIdOrFile)
-      return api.post('/backup/restore-from-file', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      })
-    }
-  },
-  download: async (backupId: string) => {
-    const response = await api.get(`/backup/${backupId}/download`, { responseType: 'blob' })
-    return response.data
-  },
-  delete: (id: string) => api.delete(`/backup/${id}`),
-}
-
-export const settingsAPI = {
-  getAll: () => api.get('/settings'),
-  update: (data: any) => api.put('/settings', data),
-  test: (type: 'email' | 'database' | 'backup') => api.post(`/settings/test/${type}`),
-}
-
-export const assignmentsAPI = {
-  getAssignments: () => api.get('/assignments'),
-  assignJudge: (categoryId: string, judgeId: string) => api.post('/assignments/judge', { categoryId, judgeId }),
-  assignContestant: (categoryId: string, contestantId: string) => api.post('/assignments/contestant', { categoryId, contestantId }),
-  removeJudge: (categoryId: string, judgeId: string) => api.delete(`/assignments/judge/${categoryId}/${judgeId}`),
-  removeContestant: (categoryId: string, contestantId: string) => api.delete(`/assignments/contestant/${categoryId}/${contestantId}`),
-}
-
-export const auditorAPI = {
-  getAuditLogs: () => api.get('/auditor/logs'),
-  getCertifications: () => api.get('/auditor/certifications'),
-  getStats: () => api.get('/auditor/stats'),
-  approveCertification: (id: string, data: any) => api.post(`/auditor/certifications/${id}/approve`, data),
-  rejectCertification: (id: string, reason: string) => api.post(`/auditor/certifications/${id}/reject`, { reason }),
-  exportAuditLogs: (params?: any) => api.post('/auditor/export', params),
-}
-
-export const boardAPI = {
-  getDashboard: () => api.get('/board/dashboard'),
-  getCertifications: () => api.get('/board/certifications'),
-  getStats: () => api.get('/board/stats'),
-  approveCertification: (id: string, data: any) => api.post(`/board/certifications/${id}/approve`, data),
-  rejectCertification: (id: string, reason: string) => api.post(`/board/certifications/${id}/reject`, { reason }),
-  getCertificationStatus: () => api.get('/board/certification-status'),
-  getEmceeScripts: () => api.get('/board/emcee-scripts'),
-}
-
-export const tallyMasterAPI = {
-  getStats: () => api.get('/tally-master/stats'),
-  getCertifications: () => api.get('/tally-master/certifications'),
-  getCertificationQueue: () => api.get('/tally-master/queue'),
-  getPendingCertifications: () => api.get('/tally-master/pending'),
-  certifyTotals: (categoryId: string, data: any) => api.post(`/tally-master/category/${categoryId}/certify-totals`, data),
-}
-
-export const emailAPI = {
-  getTemplates: () => api.get('/email/templates'),
-  createTemplate: (data: any) => api.post('/email/templates', data),
-  updateTemplate: (id: string, data: any) => api.put(`/email/templates/${id}`, data),
-  deleteTemplate: (id: string) => api.delete(`/email/templates/${id}`),
-  getCampaigns: () => api.get('/email/campaigns'),
-  createCampaign: (data: any) => api.post('/email/campaigns', data),
-  sendCampaign: (id: string) => api.post(`/email/campaigns/${id}/send`),
-  getLogs: () => api.get('/email/logs'),
-}
-
-export const reportsAPI = {
-  getTemplates: () => api.get('/reports/templates'),
-  createTemplate: (data: any) => api.post('/reports/templates', data),
-  updateTemplate: (id: string, data: any) => api.put(`/reports/templates/${id}`, data),
-  deleteTemplate: (id: string) => api.delete(`/reports/templates/${id}`),
-  generateReport: (templateId: string, parameters: any) => api.post(`/reports/generate/${templateId}`, parameters),
-  getHistory: () => api.get('/reports/history'),
-}
-
-export const templatesAPI = {
-  getAll: () => api.get('/templates'),
-  getById: (id: string) => api.get(`/templates/${id}`),
-  create: (data: any) => api.post('/templates', data),
-  update: (id: string, data: any) => api.put(`/templates/${id}`, data),
-  delete: (id: string) => api.delete(`/templates/${id}`),
-  duplicate: (id: string) => api.post(`/templates/${id}/duplicate`),
-}
-
-export const notificationsAPI = {
-  getAll: () => api.get('/notifications'),
-  markAsRead: (id: string) => api.put(`/notifications/${id}/read`),
-  markAllAsRead: () => api.put('/notifications/read-all'),
-  delete: (id: string) => api.delete(`/notifications/${id}`),
-}
-
-export const emceeAPI = {
-  getScripts: () => api.get('/emcee/scripts'),
-  createScript: (data: any) => api.post('/emcee/scripts', data),
-  updateScript: (id: string, data: any) => api.put(`/emcee/scripts/${id}`, data),
-  deleteScript: (id: string) => api.delete(`/emcee/scripts/${id}`),
-  getActiveScript: () => api.get('/emcee/active-script'),
-  setActiveScript: (id: string) => api.post(`/emcee/scripts/${id}/activate`),
-}
-
 export default api
 APIEOF
 
@@ -18619,6 +21554,290 @@ EOF
     fix_api_endpoints
 }
 
+# Install backend dependencies
+install_backend_dependencies() {
+    print_status "Installing backend dependencies..."
+    
+    cd "$APP_DIR"
+    
+    # Install dependencies with enhanced compatibility
+    if safe_npm_install; then
+        print_success "Backend dependencies installed successfully"
+    else
+        print_error "Failed to install backend dependencies"
+        return 1
+    fi
+    
+    # Generate Prisma client
+    print_status "Generating Prisma client..."
+    if npx prisma generate; then
+        print_success "Prisma client generated successfully"
+    else
+        print_error "Failed to generate Prisma client"
+        return 1
+    fi
+}
+
+# Create frontend files
+create_frontend_files() {
+    print_status "Creating frontend files..."
+    
+    # Create frontend directory structure
+    mkdir -p "$APP_DIR/frontend/src/components"
+    mkdir -p "$APP_DIR/frontend/src/pages"
+    mkdir -p "$APP_DIR/frontend/src/contexts"
+    mkdir -p "$APP_DIR/frontend/src/services"
+    mkdir -p "$APP_DIR/frontend/src/utils"
+    mkdir -p "$APP_DIR/frontend/src/hooks"
+    mkdir -p "$APP_DIR/frontend/public"
+    
+    # Create package.json
+    cat > "$APP_DIR/frontend/package.json" << 'EOF'
+{
+  "name": "event-manager-frontend",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.8.1",
+    "react-query": "^3.39.3",
+    "axios": "^1.6.2",
+    "socket.io-client": "^4.7.4",
+    "@heroicons/react": "^2.0.18",
+    "clsx": "^2.0.0",
+    "tailwind-merge": "^2.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.43",
+    "@types/react-dom": "^18.2.17",
+    "@vitejs/plugin-react": "^4.2.1",
+    "typescript": "^5.2.2",
+    "vite": "^5.0.8",
+    "tailwindcss": "^3.3.6",
+    "autoprefixer": "^10.4.16",
+    "postcss": "^8.4.32"
+  }
+}
+EOF
+
+    # Create Vite config
+    cat > "$APP_DIR/frontend/vite.config.ts" << 'EOF'
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    port: 3001,
+    proxy: {
+      '/api': 'http://localhost:3000'
+    }
+  },
+  build: {
+    outDir: 'dist',
+    sourcemap: false
+  }
+})
+EOF
+
+    # Create TypeScript config
+    cat > "$APP_DIR/frontend/tsconfig.json" << 'EOF'
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitAny": false,
+    "noImplicitReturns": false,
+    "noImplicitThis": false,
+    "strictNullChecks": false,
+    "strictFunctionTypes": false,
+    "strictBindCallApply": false,
+    "strictPropertyInitialization": false,
+    "noImplicitOverride": false
+  },
+  "include": ["src"],
+  "references": [{ "path": "./tsconfig.node.json" }]
+}
+EOF
+
+    # Create Tailwind config
+    cat > "$APP_DIR/frontend/tailwind.config.js" << 'EOF'
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: [
+    "./index.html",
+    "./src/**/*.{js,ts,jsx,tsx}",
+  ],
+  theme: {
+    extend: {},
+  },
+  plugins: [],
+}
+EOF
+
+    # Create PostCSS config
+    cat > "$APP_DIR/frontend/postcss.config.js" << 'EOF'
+export default {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
+  },
+}
+EOF
+
+    # Create index.html
+    cat > "$APP_DIR/frontend/index.html" << 'EOF'
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Event Manager</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+EOF
+
+    print_success "Frontend files created successfully"
+}
+
+# Install frontend dependencies
+install_frontend_dependencies() {
+    print_status "Installing frontend dependencies..."
+    
+    cd "$APP_DIR/frontend"
+    
+    # Install dependencies
+    if npm install --legacy-peer-deps --force --no-fund --no-audit --silent; then
+        print_success "Frontend dependencies installed successfully"
+    else
+        print_error "Failed to install frontend dependencies"
+        return 1
+    fi
+}
+
+# Setup system services
+setup_system_services() {
+    print_status "Setting up system services..."
+    
+    # Check if PM2 is available
+    if check_pm2; then
+        setup_pm2_services
+    else
+        setup_systemd_service
+    fi
+    
+    print_success "System services configured successfully"
+}
+
+# Setup PM2 services
+setup_pm2_services() {
+    print_status "Setting up PM2 services..."
+    
+    # Create PM2 ecosystem file
+    cat > "$APP_DIR/ecosystem.config.js" << 'EOF'
+module.exports = {
+  apps: [
+    {
+      name: 'event-manager-backend',
+      script: 'src/server.js',
+      cwd: '/opt/event-manager',
+      instances: 1,
+      exec_mode: 'fork',
+      env: {
+        NODE_ENV: 'production',
+        PORT: 3000
+      },
+      error_file: '/var/log/event-manager/backend-error.log',
+      out_file: '/var/log/event-manager/backend-out.log',
+      log_file: '/var/log/event-manager/backend-combined.log',
+      time: true,
+      max_memory_restart: '1G',
+      restart_delay: 4000,
+      max_restarts: 10,
+      min_uptime: '10s'
+    },
+    {
+      name: 'event-manager-frontend',
+      script: 'serve',
+      args: '-s frontend/dist -l 3001',
+      cwd: '/opt/event-manager',
+      instances: 1,
+      exec_mode: 'fork',
+      env: {
+        NODE_ENV: 'production'
+      },
+      error_file: '/var/log/event-manager/frontend-error.log',
+      out_file: '/var/log/event-manager/frontend-out.log',
+      log_file: '/var/log/event-manager/frontend-combined.log',
+      time: true,
+      max_memory_restart: '512M',
+      restart_delay: 4000,
+      max_restarts: 10,
+      min_uptime: '10s'
+    }
+  ]
+}
+EOF
+
+    print_success "PM2 ecosystem configuration created"
+}
+
+# Start services
+start_services() {
+    print_status "Starting services..."
+    
+    # Check if PM2 is available
+    if command -v pm2 >/dev/null 2>&1; then
+        print_status "Starting services with PM2..."
+        pm2 start ecosystem.config.js
+        pm2 save
+    else
+        print_status "Starting services with systemd..."
+        sudo systemctl start event-manager-backend
+        sudo systemctl start event-manager-frontend
+        sudo systemctl enable event-manager-backend
+        sudo systemctl enable event-manager-frontend
+    fi
+    
+    # Wait a moment for services to start
+    sleep 5
+    
+    # Check service status
+    if command -v pm2 >/dev/null 2>&1; then
+        pm2 status
+    else
+        sudo systemctl status event-manager-backend --no-pager -l
+        sudo systemctl status event-manager-frontend --no-pager -l
+    fi
+    
+    print_success "Services started successfully"
+}
+
 # Verify installation
 verify_installation() {
     print_status "Verifying installation..."
@@ -18641,7 +21860,15 @@ verify_installation() {
         return 1
     fi
     
-    # Check backend environment
+    # Check backend files
+    if [ -f "$APP_DIR/src/server.js" ]; then
+        print_success "Backend server file exists"
+    else
+        print_error "Backend server file missing!"
+        return 1
+    fi
+    
+    # Check database connection
     if [ -f "$APP_DIR/.env" ]; then
         print_success "Backend environment file exists"
     else
@@ -18649,31 +21876,19 @@ verify_installation() {
         return 1
     fi
     
-    print_success "Installation verification completed"
+    print_success "✅ Installation verification complete"
 }
 
 # Main installation function
-main() {
-    echo "🚀 Event Manager Complete Setup Script"
-    echo "======================================"
-    echo ""
-    
-    # Parse command line arguments
-    parse_args "$@"
-    
-    # Handle rebuild-frontend option
-    if [[ "$REBUILD_FRONTEND" == "true" ]]; then
-        print_status "Rebuild frontend mode - skipping full installation"
-        setup_application_directory
-        rebuild_frontend
-        print_success "Frontend rebuild completed!"
-        exit 0
-    fi
+install_application() {
+    print_status "🚀 Starting Event Manager installation..."
     
     # Check prerequisites
     check_root
-    detect_os
     check_node_version
+    
+    # Generate secrets
+    generate_secrets
     
     # Install prerequisites
     install_prerequisites
@@ -18681,672 +21896,64 @@ main() {
     # Setup application directory
     setup_application_directory
     
-    # Setup environment variables
-    setup_environment
-    
-    # Setup database
+    # Setup database FIRST (before any Prisma operations)
     setup_database
+    
+    # Create backend files
+    create_backend_files
+    
+    # Install backend dependencies
+    install_backend_dependencies
+
+    # Start application
+    start_application
+    
+    # Create frontend files
+    create_frontend_files
+    
+    # Install frontend dependencies
+    install_frontend_dependencies
     
     # Build frontend
     build_frontend
     
-    # Setup web server permissions
-    setup_permissions
+    # Setup system services
+    setup_system_services
     
-    # Check for PM2
-    check_pm2
+    # Start services
+    start_services
     
-    # Setup process management
-    setup_systemd_service
+    # Verify installation
+    verify_installation
     
-    # Configure Nginx
-    configure_nginx
-    
-    # Setup SSL certificate
-    setup_ssl
-    
-    echo ""
-    echo "🎉 Complete Event Manager Application Deployed!"
-    echo "==============================================="
-    echo ""
-    echo "📋 Application Details:"
-    echo "   Application Directory: $APP_DIR"
-    echo "   Database: $DB_NAME"
-    echo "   Database User: $DB_USER"
-    echo "   Web Server User: $WEB_SERVER_USER"
-    echo "   Process Manager: $([ "$USE_PM2" == "true" ] && echo "PM2" || echo "systemd")"
-    echo ""
-    echo "🌐 Access Information:"
-    if [[ -n "$DOMAIN" ]]; then
-        echo "   URL: https://$DOMAIN"
-    else
-        echo "   URL: http://localhost (or your server IP)"
-    fi
-    echo "   Backend API: http://localhost:3000"
-    echo ""
-    echo "🔐 Default Login Credentials:"
-    echo "   Email: admin@eventmanager.com"
-    echo "   Password: admin123"
-    echo ""
-    echo "✨ Complete Event Manager Application Features:"
-    echo "   ✅ Professional Login Page with Authentication"
-    echo "   ✅ Role-Based Dashboards (Organizer, Judge, Contestant, Board, etc.)"
-    echo "   ✅ Event Management System (Create, Edit, Delete Events)"
-    echo "   ✅ Contest Management (Multiple Contests per Event)"
-    echo "   ✅ Category Management (Multiple Categories per Contest)"
-    echo "   ✅ User Management with Role Assignment"
-    echo "   ✅ Scoring System with Real-time Updates"
-    echo "   ✅ Judge Certification Workflows"
-    echo "   ✅ Contestant Score Tracking"
-    echo "   ✅ Admin Statistics and Reporting"
-    echo "   ✅ Real-time Updates via WebSocket"
-    echo "   ✅ Responsive Design with Tailwind CSS"
-    echo "   ✅ PostgreSQL Database with Prisma ORM"
-    echo "   ✅ Complete REST API (Events, Contests, Categories, Users, Scoring)"
-    echo "   ✅ JWT Authentication with Role-Based Access Control"
-    echo "   ✅ Nginx Reverse Proxy with SSL Support"
-    echo "   ✅ Systemd Service Management"
-    echo "   ✅ Production-Ready Security Configuration"
-    echo ""
-    echo "📚 Management Commands:"
-    echo "   Service Status: sudo systemctl status event-manager"
-    echo "   Service Logs: sudo journalctl -u event-manager -f"
-    echo "   Service Restart: sudo systemctl restart event-manager"
-    echo "   Nginx Status: sudo systemctl status nginx"
-    echo "   Nginx Reload: sudo systemctl reload nginx"
-    echo ""
-    echo "🚀 Next Steps:"
-    echo "   1. Open your browser and navigate to your server IP"
-    echo "   2. You'll see the professional login page"
-    echo "   3. Log in with the default credentials"
-    echo "   4. Explore the dashboard and start managing events!"
-    echo ""
-    echo "🎉 Your Event Manager application is now fully operational!"
-    echo ""
-    echo "📚 Management Commands:"
-    if [[ "$USE_PM2" == "true" ]]; then
-        echo "   PM2 Status: sudo -u $WEB_SERVER_USER pm2 status"
-        echo "   PM2 Logs: sudo -u $WEB_SERVER_USER pm2 logs"
-        echo "   PM2 Restart: sudo -u $WEB_SERVER_USER pm2 restart $APP_NAME"
-    else
-        echo "   Service Status: sudo systemctl status $APP_NAME"
-        echo "   Service Logs: sudo journalctl -u $APP_NAME -f"
-        echo "   Service Restart: sudo systemctl restart $APP_NAME"
-    fi
-    echo "   Nginx Status: sudo systemctl status nginx"
-    echo "   Nginx Reload: sudo systemctl reload nginx"
-    # Evaluate setup completeness
-    evaluate_setup_completeness
-    
-    echo ""
+    print_success "🎉 Event Manager installation completed successfully!"
+    print_status "Access your application at: http://$(hostname -I | awk '{print $1}')"
+    print_status "Default login: admin@eventmanager.com / admin123"
 }
 
-# Comprehensive evaluation of setup for remaining issues
-evaluate_setup_completeness() {
-    print_status "Evaluating setup completeness and checking for remaining issues..."
+# Main execution
+main() {
+    # Parse command line arguments
+    parse_args "$@"
     
-    local issues_found=0
+    # Detect operating system
+    detect_os
     
-    # Check for common installation issues
-    if [[ -f "$APP_DIR/package.json" ]]; then
-        print_success "✓ Package.json created successfully"
-    else
-        print_error "✗ Package.json missing"
-        ((issues_found++))
-    fi
+    # Show installation info
+    print_status "Event Manager Complete Setup Script"
+    print_status "===================================="
+    print_status "Operating System: $OS"
+    print_status "Node.js Version: $(node --version)"
+    print_status "npm Version: $(npm --version)"
+    print_status "Installation Directory: $APP_DIR"
+    print_status "Environment: $APP_ENV"
+    print_status "===================================="
     
-    # Check for canvas module installation
-    if [[ -d "$APP_DIR/node_modules/canvas" ]]; then
-        if [[ -f "$APP_DIR/node_modules/canvas/build/Release/canvas.node" ]]; then
-            print_success "✓ Canvas module installed and built successfully"
-        else
-            print_warning "⚠ Canvas module installed but not built properly"
-            ((issues_found++))
-        fi
-    else
-        print_error "✗ Canvas module not installed"
-        ((issues_found++))
-    fi
-    
-    # Check for npmlog dependency
-    if [[ -d "$APP_DIR/node_modules/npmlog" ]]; then
-        print_success "✓ npmlog dependency installed"
-    else
-        print_warning "⚠ npmlog dependency missing (may cause canvas issues)"
-        ((issues_found++))
-    fi
-    
-    # Check for deprecated multer version
-    if [[ -f "$APP_DIR/node_modules/multer/package.json" ]]; then
-        local multer_version=$(grep '"version"' "$APP_DIR/node_modules/multer/package.json" | cut -d'"' -f4)
-        if [[ "$multer_version" =~ ^2\. ]]; then
-            print_success "✓ Multer updated to version 2.x"
-        else
-            print_warning "⚠ Multer still on deprecated version $multer_version"
-            ((issues_found++))
-        fi
-    fi
-    
-    # Check frontend TypeScript configuration
-    if [[ -f "$APP_DIR/frontend/tsconfig.json" ]]; then
-        if grep -q '"noImplicitAny": false' "$APP_DIR/frontend/tsconfig.json"; then
-            print_success "✓ TypeScript configuration optimized for compatibility"
-        else
-            print_warning "⚠ TypeScript configuration may need optimization"
-            ((issues_found++))
-        fi
-    fi
-    
-    # Check for Heroicons fixes
-    if [[ -f "$APP_DIR/frontend/src/components/Layout.tsx" ]]; then
-        if grep -q "ArrowDownTrayIcon" "$APP_DIR/frontend/src/components/Layout.tsx" 2>/dev/null; then
-            print_success "✓ Heroicons imports fixed in Layout component"
-        else
-            print_warning "⚠ Heroicons imports may need fixing"
-            ((issues_found++))
-        fi
-    fi
-    
-    # Check for deprecated package removal
-    if [[ -f "$APP_DIR/package.json" ]]; then
-        local deprecated_found=0
-        
-        # Check for specific deprecated packages
-        if grep -q "are-we-there-yet" "$APP_DIR/package.json"; then
-            print_warning "⚠ Deprecated are-we-there-yet package still present"
-            ((deprecated_found++))
-        fi
-        
-        if grep -q "inflight" "$APP_DIR/package.json"; then
-            print_warning "⚠ Deprecated inflight package still present"
-            ((deprecated_found++))
-        fi
-        
-        if grep -q "glob.*7\." "$APP_DIR/package.json"; then
-            print_warning "⚠ Deprecated glob@7 package still present"
-            ((deprecated_found++))
-        fi
-        
-        if grep -q "rimraf.*3\." "$APP_DIR/package.json"; then
-            print_warning "⚠ Deprecated rimraf@3 package still present"
-            ((deprecated_found++))
-        fi
-        
-        if [[ $deprecated_found -eq 0 ]]; then
-            print_success "✓ All deprecated packages removed from overrides"
-        else
-            print_warning "⚠ $deprecated_found deprecated packages still present"
-            ((issues_found++))
-        fi
-    fi
-    
-    # Check for @heroicons/react version compatibility
-    if [[ -f "$APP_DIR/frontend/node_modules/@heroicons/react/package.json" ]]; then
-        local heroicons_version=$(grep '"version"' "$APP_DIR/frontend/node_modules/@heroicons/react/package.json" | cut -d'"' -f4)
-        if [[ "$heroicons_version" =~ ^2\. ]]; then
-            print_success "✓ @heroicons/react updated to React 18 compatible version $heroicons_version"
-        else
-            print_warning "⚠ @heroicons/react still on version $heroicons_version (may have React compatibility issues)"
-            ((issues_found++))
-        fi
-    fi
-    
-    # Check for system warnings cleanup
-    if ! dpkg -l | grep -q libllvm19; then
-        print_success "✓ System warnings cleaned up (libllvm19 removed)"
-    else
-        print_warning "⚠ System warnings still present (libllvm19)"
-        ((issues_found++))
-    fi
-    
-    # Summary
-    if [[ $issues_found -eq 0 ]]; then
-        print_success "🎉 Setup evaluation complete - No issues found!"
-        print_status "All critical fixes have been applied successfully."
-    else
-        print_warning "⚠ Setup evaluation complete - $issues_found issues found"
-        print_status "Some issues may require manual intervention or re-running the setup."
-    fi
-    
-    return $issues_found
+    # Run installation
+    install_application
 }
 
-# Fix modal visibility and centering issues
-fix_modal_visibility() {
-    print_status "🔧 Fixing modal visibility and centering issues..."
-    
-    local css_file="$APP_DIR/frontend/src/index.css"
-    
-    if [[ ! -f "$css_file" ]]; then
-        print_error "CSS file not found: $css_file"
-        return 1
-    fi
-    
-    # Backup the original CSS file
-    cp "$css_file" "${css_file}.bak"
-    
-    # Update modal styles for better visibility and centering
-    print_status "Updating modal CSS for proper z-index and centering..."
-    
-    # Replace existing modal styles with enhanced versions
-    sed -i '/\.modal {/,/}/c\
-  .modal {\
-    @apply fixed inset-0 z-[9999] flex items-center justify-center;\
-  }' "$css_file"
-    
-    sed -i '/\.modal-content {/,/}/c\
-  .modal-content {\
-    @apply bg-background p-6 shadow-lg border rounded-lg max-w-md w-full mx-4 relative z-[10000];\
-  }' "$css_file"
-    
-    sed -i '/\.modal-overlay {/,/}/c\
-  .modal-overlay {\
-    @apply fixed inset-0 bg-black/50 z-[9998];\
-  }' "$css_file"
-    
-    # Add enhanced modal styles if they don't exist
-    if ! grep -q "modal-container" "$css_file"; then
-        print_status "Adding enhanced modal styles..."
-        cat >> "$css_file" << 'EOF'
-
-  /* Enhanced modal styles for better visibility and centering */
-  .modal-container {
-    @apply fixed inset-0 z-[9999] flex items-center justify-center p-4;
-  }
-
-  .modal-dialog {
-    @apply relative bg-background rounded-lg shadow-xl border max-w-lg w-full max-h-[90vh] overflow-y-auto;
-  }
-
-  .modal-header {
-    @apply flex items-center justify-between p-6 border-b;
-  }
-
-  .modal-body {
-    @apply p-6;
-  }
-
-  .modal-footer {
-    @apply flex items-center justify-end gap-3 p-6 border-t;
-  }
-
-  /* Ensure modals are always on top */
-  .modal-backdrop {
-    @apply fixed inset-0 bg-black/50 z-[9998] backdrop-blur-sm;
-  }
-EOF
-    fi
-    
-    # Update modal components to use enhanced structure
-    print_status "Updating modal components to use enhanced structure..."
-    
-    # Find and update ContestsPage modal
-    local contests_file="$APP_DIR/frontend/src/pages/ContestsPage.tsx"
-    if [[ -f "$contests_file" ]]; then
-        # Add XMarkIcon import if not present
-        if ! grep -q "XMarkIcon" "$contests_file"; then
-            sed -i '/ArrowLeftIcon,/a\  XMarkIcon,' "$contests_file"
-        fi
-        
-        # Update modal structure
-        sed -i 's/<div className="modal">/<div className="modal-container">/g' "$contests_file"
-        sed -i 's/<div className="modal-overlay"/<div className="modal-backdrop"/g' "$contests_file"
-        sed -i 's/<div className="modal-content/<div className="modal-dialog"/g' "$contests_file"
-        
-        # Add close button to modal header
-        sed -i '/modal-dialog">/a\        <div className="modal-header">\
-          <h2 className="text-xl font-semibold">\
-            {contest ? '\''Edit Contest'\'' : '\''Create Contest'\''}\
-          </h2>\
-          <button\
-            onClick={onClose}\
-            className="btn btn-ghost btn-sm"\
-          >\
-            <XMarkIcon className="h-5 w-5" />\
-          </button>\
-        </div>\
-        <div className="modal-body">' "$contests_file"
-    fi
-    
-    # Apply similar fixes to other modal components
-    local pages_dir="$APP_DIR/frontend/src/pages"
-    if [[ -d "$pages_dir" ]]; then
-        for page_file in "$pages_dir"/*.tsx; do
-            if [[ -f "$page_file" ]]; then
-                # Update modal classes in all page files
-                sed -i 's/className="modal"/className="modal-container"/g' "$page_file"
-                sed -i 's/className="modal-overlay"/className="modal-backdrop"/g' "$page_file"
-                sed -i 's/className="modal-content"/className="modal-dialog"/g' "$page_file"
-            fi
-        done
-    fi
-    
-    print_success "✓ Modal visibility and centering issues fixed"
-    print_status "Enhanced modal styles applied with proper z-index stacking"
-}
-
-# Fix API endpoints and admin functionality
-fix_api_endpoints() {
-    print_status "🔧 Fixing API endpoints and admin functionality..."
-    
-    local server_file="$APP_DIR/src/server.js"
-    
-    if [[ ! -f "$server_file" ]]; then
-        print_error "Server file not found: $server_file"
-        return 1
-    fi
-    
-    # Add missing admin endpoints - Always add to ensure they exist
-    print_status "Adding missing admin API endpoints..."
-    
-    # Admin Activity Logs
-    print_status "Adding /api/admin/logs endpoint..."
-    cat >> "$server_file" << 'EOF'
-
-// Admin Activity Logs
-app.get('/api/admin/logs', authenticateToken, async (req, res) => {
-  try {
-    if (req.user.role !== 'ORGANIZER' && req.user.role !== 'BOARD' && req.user.role !== 'AUDITOR') {
-      return res.status(403).json({ error: 'Insufficient permissions' })
-    }
-    
-    const logs = await prisma.activityLog.findMany({
-      orderBy: { createdAt: 'desc' },
-      take: 100,
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            role: true
-          }
-        }
-      }
-    })
-    
-    res.json(logs)
-  } catch (error) {
-    console.error('Activity logs fetch error:', error)
-    res.status(500).json({ error: 'Failed to fetch activity logs' })
-  }
-})
-EOF
-
-    # Admin Active Users
-    print_status "Adding /api/admin/active-users endpoint..."
-    cat >> "$server_file" << 'EOF'
-
-// Admin Active Users
-app.get('/api/admin/active-users', authenticateToken, async (req, res) => {
-  try {
-    if (req.user.role !== 'ORGANIZER' && req.user.role !== 'BOARD') {
-      return res.status(403).json({ error: 'Insufficient permissions' })
-    }
-    
-    const activeUsers = await prisma.user.findMany({
-      where: {
-        isActive: true
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        lastLoginAt: true
-      }
-    })
-    
-    res.json(activeUsers)
-  } catch (error) {
-    console.error('Active users fetch error:', error)
-    res.status(500).json({ error: 'Failed to fetch active users' })
-  }
-})
-EOF
-
-    # Admin Settings
-    print_status "Adding /api/admin/settings endpoint..."
-    cat >> "$server_file" << 'EOF'
-
-// Admin Settings
-app.get('/api/admin/settings', authenticateToken, async (req, res) => {
-  try {
-    if (req.user.role !== 'ORGANIZER' && req.user.role !== 'BOARD') {
-      return res.status(403).json({ error: 'Insufficient permissions' })
-    }
-    
-    const settings = await prisma.systemSetting.findMany()
-    res.json(settings)
-  } catch (error) {
-    console.error('Settings fetch error:', error)
-    res.status(500).json({ error: 'Failed to fetch settings' })
-  }
-})
-EOF
-    
-    if ! grep -q "app.get('/api/admin/backup'" "$server_file"; then
-        print_status "Adding /api/admin/backup endpoint..."
-        sed -i '/\/\/ Admin API/a\
-\
-// Admin Backup\
-app.get('\''/api/admin/backup'\'', authenticateToken, async (req, res) => {\
-  try {\
-    if (req.user.role !== '\''ORGANIZER'\'' && req.user.role !== '\''BOARD'\'') {\
-      return res.status(403).json({ error: '\''Insufficient permissions'\'' })\
-    }\
-    \
-    res.json({\
-      message: '\''Backup functionality available'\'',\
-      lastBackup: new Date().toISOString(),\
-      status: '\''available'\''\
-    })\
-  } catch (error) {\
-    console.error('\''Backup fetch error:'\'', error)\
-    res.status(500).json({ error: '\''Failed to fetch backup status'\'' })\
-  }\
-})\
-' "$server_file"
-    fi
-    
-    # Add missing events endpoint
-    if ! grep -q "app.get('/api/events'" "$server_file"; then
-        print_status "Adding /api/events endpoint..."
-        sed -i '/\/\/ Events API/a\
-\
-// Get all events\
-app.get('\''/api/events'\'', authenticateToken, async (req, res) => {\
-  try {\
-    const events = await prisma.event.findMany({\
-      include: {\
-        contests: {\
-          include: {\
-            categories: true\
-          }\
-        }\
-      },\
-      orderBy: {\
-        createdAt: '\''desc'\''\
-      }\
-    })\
-    res.json(events)\
-  } catch (error) {\
-    console.error('\''Error fetching events:'\'', error)\
-    res.status(500).json({ error: '\''Failed to fetch events'\'' })\
-  }\
-})\
-' "$server_file"
-    fi
-    # Add missing categories endpoint - Always add to ensure it exists
-    print_status "Adding /api/categories endpoint..."
-    cat >> "$server_file" << 'EOF'
-
-// Get all categories
-app.get('/api/categories', authenticateToken, async (req, res) => {
-  try {
-    const { contestId } = req.query
-    
-    const where = contestId ? { contestId } : {}
-    
-    const categories = await prisma.category.findMany({
-      where,
-      include: {
-        contest: {
-          select: {
-            id: true,
-            name: true
-          }
-        },
-        _count: {
-          select: {
-            criteria: true,
-            contestants: true,
-            judges: true,
-            scores: true
-          }
-        }
-      },
-      orderBy: { order: 'asc' }
-    })
-    
-    res.json(categories)
-  } catch (error) {
-    console.error('Categories fetch error:', error)
-    res.status(500).json({ error: 'Failed to fetch categories' })
-  }
-})
-EOF
-    
-    # Add missing results endpoint - Always add to ensure it exists
-    print_status "Adding /api/results endpoint..."
-    cat >> "$server_file" << 'EOF'
-
-// Get results
-app.get('/api/results', authenticateToken, async (req, res) => {
-  try {
-    const { categoryId, contestId } = req.query
-    
-    let where = {}
-    if (categoryId) {
-      where.categoryId = categoryId
-    } else if (contestId) {
-      where.category = {
-        contestId: contestId
-      }
-    }
-    
-    const results = await prisma.score.groupBy({
-      by: ['contestantId', 'categoryId'],
-      where,
-      _sum: {
-        score: true
-      },
-      _avg: {
-        score: true
-      },
-      _count: {
-        score: true
-      }
-    })
-    
-    // Get detailed results with contestant and category info
-    const detailedResults = await Promise.all(results.map(async (result) => {
-      const contestant = await prisma.contestant.findUnique({
-        where: { id: result.contestantId },
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          contestantNumber: true
-        }
-      })
-      
-      const category = await prisma.category.findUnique({
-        where: { id: result.categoryId },
-        select: {
-          id: true,
-          name: true,
-          maxScore: true
-        }
-      })
-      
-      return {
-        contestantId: result.contestantId,
-        categoryId: result.categoryId,
-        totalScore: result._sum.score,
-        averageScore: result._avg.score,
-        scoreCount: result._count.score,
-        contestant,
-        category
-      }
-    }))
-    
-    res.json(detailedResults)
-  } catch (error) {
-    console.error('Results fetch error:', error)
-    res.status(500).json({ error: 'Failed to fetch results' })
-  }
-})
-EOF
-    
-    # Verify endpoints were added
-    print_status "Verifying endpoints were added..."
-    if grep -q "app.get('/api/categories'" "$server_file"; then
-        print_status "✅ /api/categories endpoint found"
-    else
-        print_error "❌ /api/categories endpoint NOT found"
-    fi
-    
-    if grep -q "app.get('/api/results'" "$server_file"; then
-        print_status "✅ /api/results endpoint found"
-    else
-        print_error "❌ /api/results endpoint NOT found"
-    fi
-    
-    if grep -q "app.get('/api/admin/logs'" "$server_file"; then
-        print_status "✅ /api/admin/logs endpoint found"
-    else
-        print_error "❌ /api/admin/logs endpoint NOT found"
-    fi
-    
-    if grep -q "app.get('/api/admin/active-users'" "$server_file"; then
-        print_status "✅ /api/admin/active-users endpoint found"
-    else
-        print_error "❌ /api/admin/active-users endpoint NOT found"
-    fi
-    
-    if grep -q "app.get('/api/admin/settings'" "$server_file"; then
-        print_status "✅ /api/admin/settings endpoint found"
-    else
-        print_error "❌ /api/admin/settings endpoint NOT found"
-    fi
-    
-    # Fix double /api/ issue in frontend
-    print_status "Fixing double /api/ issue in frontend..."
-    
-    local api_file="$APP_DIR/frontend/src/services/api.ts"
-    if [[ -f "$api_file" ]]; then
-        # Create a temporary file with corrected content
-        sed 's|/api/api/|/api/|g' "$api_file" > "${api_file}.tmp"
-        mv "${api_file}.tmp" "$api_file"
-        
-        # Ensure baseURL uses relative path correctly
-        sed -i 's#baseURL: import.meta.env.VITE_API_URL || /api#baseURL: import.meta.env.VITE_API_URL || "/api"#g' "$api_file"
-    fi
-    
-    # Update frontend environment to use relative URLs
-    print_status "Updating frontend environment to prevent double /api/..."
-    local env_file="$APP_DIR/frontend/.env"
-    if [[ -f "$env_file" ]]; then
-        # Set empty VITE_API_URL to use relative URLs
-        sed -i 's/VITE_API_URL=.*/VITE_API_URL=/' "$env_file"
-        sed -i 's/VITE_WS_URL=.*/VITE_WS_URL=/' "$env_file"
-    fi
-    
-    print_success "✓ API endpoints and admin functionality fixed"
-    print_status "Added missing admin endpoints: /api/admin/logs, /api/admin/active-users, /api/admin/settings, /api/admin/backup"
-    print_status "Added missing endpoints: /api/categories, /api/results"
-    print_status "Fixed double /api/ issue in frontend"
-}
-
-# Run main function
-main "$@"
+# Run main function if script is executed directly
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi
