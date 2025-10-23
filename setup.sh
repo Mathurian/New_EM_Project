@@ -6205,6 +6205,8 @@ module.exports = {
 }
 EOF
 
+    # Email Controller
+    cat > "$APP_DIR/src/controllers/emailController.js" << 'EOF'
 const { PrismaClient } = require('@prisma/client')
 
 const prisma = new PrismaClient()
