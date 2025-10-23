@@ -203,7 +203,7 @@ safe_npm_install() {
     local install_success=false
     
     # Strategy 1: Standard install with legacy peer deps
-    print_status "Attempting standard npm install..."
+    print_status "Attempting standard npm install, this may take a while..."
     if npm install --legacy-peer-deps --force --no-fund --no-audit; then
         install_success=true
         print_success "Standard installation successful"
@@ -17197,7 +17197,7 @@ model Category {
   criteria     Criterion[]
   scores       Score[]
   comments     JudgeComment[]
-  certifications TallyMasterCertification[]
+  tallyMasterCertifications TallyMasterCertification[] @relation("TallyMasterCertifications")
   auditorCertifications AuditorCertification[]
   judgeCertifications JudgeCertification[] @relation("CategoryJudgeCertifications")
   
@@ -17383,7 +17383,7 @@ model TallyMasterCertification {
   signatureName String
   certifiedAt   DateTime @default(now())
 
-  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  category Category @relation("TallyMasterCertifications", fields: [categoryId], references: [id], onDelete: Cascade)
 
   @@unique([categoryId])
   @@map("tally_master_certifications")
