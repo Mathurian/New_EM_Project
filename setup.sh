@@ -6047,23 +6047,7 @@ export const tallyMasterAPI = {
 // Export the api instance for direct use
 export { api }
 
-// API endpoints
-export const authAPI = {
-  login: (email: string, password: string) => api.post('/auth/login', { email, password }),
-  profile: () => api.get('/auth/profile'),
-  logout: () => api.post('/auth/logout'),
-}
-
-export const eventsAPI = {
-  getAll: () => api.get('/events'),
-  getByEvent: (eventId: string) => api.get(`/events/${eventId}`),
-  getById: (id: string) => api.get(`/events/${id}`),
-  create: (data: any) => api.post('/events', data),
-  update: (id: string, data: any) => api.put(`/events/${id}`, data),
-  delete: (id: string) => api.delete(`/events/${id}`),
-}
-
-export const contestsAPI = {
+APIEOF
   getAll: async (): Promise<{ data: any[] }> => {
     // Get all events first, then get contests for each event
     const events = await api.get('/events')
@@ -10549,7 +10533,7 @@ const Dashboard: React.FC = () => {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {recentEvents?.map((event: any) => (
+                    {events?.map((event: any) => (
                       <div key={event.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
                         <div>
                           <h4 className="text-sm font-medium text-gray-900 dark:text-white">{event.name}</h4>
