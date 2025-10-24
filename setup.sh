@@ -1083,48 +1083,87 @@ const getEventById = async (req, res) => {
 
 const createEvent = async (req, res) => {
   try {
-    const { name, description, startDate, endDate, location, maxContestants } = req.body
+    const { name, description, startDate, endDate } = req.body
+
+    // Validate required fields
+    if (!name || !startDate || !endDate) {
+      return res.status(400).json({ error: 'Name, start date, and end date are required' })
+    }
+
+    // Validate date format
+    const start = new Date(startDate)
+    const end = new Date(endDate)
+    
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      return res.status(400).json({ error: 'Invalid date format' })
+    }
+
+    if (start >= end) {
+      return res.status(400).json({ error: 'End date must be after start date' })
+    }
 
     const event = await prisma.event.create({
       data: {
         name,
-        description,
-        startDate: new Date(startDate),
-        endDate: new Date(endDate),
-        location,
-        maxContestants: maxContestants || null,
-        createdBy: req.user.id
+        description: description || null,
+        startDate: start,
+        endDate: end
       }
     })
 
     res.status(201).json(event)
   } catch (error) {
     console.error('Create event error:', error)
-    res.status(500).json({ error: 'Internal server error' })
+    if (error.code === 'P2002') {
+      res.status(400).json({ error: 'Event with this name already exists' })
+    } else {
+      res.status(500).json({ error: 'Internal server error' })
+    }
   }
 }
 
 const updateEvent = async (req, res) => {
   try {
     const { id } = req.params
-    const { name, description, startDate, endDate, location, maxContestants } = req.body
+    const { name, description, startDate, endDate } = req.body
+
+    // Validate required fields
+    if (!name || !startDate || !endDate) {
+      return res.status(400).json({ error: 'Name, start date, and end date are required' })
+    }
+
+    // Validate date format
+    const start = new Date(startDate)
+    const end = new Date(endDate)
+    
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      return res.status(400).json({ error: 'Invalid date format' })
+    }
+
+    if (start >= end) {
+      return res.status(400).json({ error: 'End date must be after start date' })
+    }
 
     const event = await prisma.event.update({
       where: { id },
       data: {
         name,
-        description,
-        startDate: new Date(startDate),
-        endDate: new Date(endDate),
-        location,
-        maxContestants: maxContestants || null
+        description: description || null,
+        startDate: start,
+        endDate: end
       }
     })
 
     res.json(event)
   } catch (error) {
     console.error('Update event error:', error)
-    res.status(500).json({ error: 'Internal server error' })
+    if (error.code === 'P2025') {
+      res.status(404).json({ error: 'Event not found' })
+    } else if (error.code === 'P2002') {
+      res.status(400).json({ error: 'Event with this name already exists' })
+    } else {
+      res.status(500).json({ error: 'Internal server error' })
+    }
   }
 }
 
@@ -1440,13 +1479,139 @@ const deleteCategory = async (req, res) => {
   }
 }
 
+// Get criteria for a category
+const getCategoryCriteria = async (req, res) => {
+  try {
+    const { categoryId } = req.params
+
+    const criteria = await prisma.criterion.findMany({
+      where: { categoryId },
+      orderBy: { createdAt: 'asc' }
+    })
+
+    res.json(criteria)
+  } catch (error) {
+    console.error('Get category criteria error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Create criterion for a category
+const createCriterion = async (req, res) => {
+  try {
+    const { categoryId } = req.params
+    const { name, maxScore } = req.body
+
+    if (!name || !maxScore) {
+      return res.status(400).json({ error: 'Name and maxScore are required' })
+    }
+
+    const criterion = await prisma.criterion.create({
+      data: {
+        categoryId,
+        name,
+        maxScore: parseInt(maxScore)
+      }
+    })
+
+    res.status(201).json(criterion)
+  } catch (error) {
+    console.error('Create criterion error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Update criterion
+const updateCriterion = async (req, res) => {
+  try {
+    const { criterionId } = req.params
+    const { name, maxScore } = req.body
+
+    if (!name || !maxScore) {
+      return res.status(400).json({ error: 'Name and maxScore are required' })
+    }
+
+    const criterion = await prisma.criterion.update({
+      where: { id: criterionId },
+      data: {
+        name,
+        maxScore: parseInt(maxScore)
+      }
+    })
+
+    res.json(criterion)
+  } catch (error) {
+    console.error('Update criterion error:', error)
+    if (error.code === 'P2025') {
+      res.status(404).json({ error: 'Criterion not found' })
+    } else {
+      res.status(500).json({ error: 'Internal server error' })
+    }
+  }
+}
+
+// Delete criterion
+const deleteCriterion = async (req, res) => {
+  try {
+    const { criterionId } = req.params
+
+    await prisma.criterion.delete({
+      where: { id: criterionId }
+    })
+
+    res.status(204).send()
+  } catch (error) {
+    console.error('Delete criterion error:', error)
+    if (error.code === 'P2025') {
+      res.status(404).json({ error: 'Criterion not found' })
+    } else {
+      res.status(500).json({ error: 'Internal server error' })
+    }
+  }
+}
+
+// Update category with optional timeLimit
+const updateCategoryWithTimeLimit = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { name, description, scoreCap, timeLimit, contestantMin, contestantMax } = req.body
+
+    const updateData = {}
+    if (name) updateData.name = name
+    if (description !== undefined) updateData.description = description
+    if (scoreCap !== undefined) updateData.scoreCap = scoreCap
+    if (timeLimit !== undefined) updateData.timeLimit = timeLimit
+    if (contestantMin !== undefined) updateData.contestantMin = contestantMin
+    if (contestantMax !== undefined) updateData.contestantMax = contestantMax
+
+    const category = await prisma.category.update({
+      where: { id },
+      data: updateData
+    })
+
+    res.json(category)
+  } catch (error) {
+    console.error('Update category with time limit error:', error)
+    if (error.code === 'P2025') {
+      res.status(404).json({ error: 'Category not found' })
+    } else {
+      res.status(500).json({ error: 'Internal server error' })
+    }
+  }
+}
+
 module.exports = {
   getAllCategories,
   getCategoryById,
   getCategoriesByContest,
   createCategory,
   updateCategory,
-  deleteCategory
+  deleteCategory,
+  getCategoryCriteria,
+  createCriterion,
+  updateCriterion,
+  deleteCriterion,
+  updateCategoryWithTimeLimit
 }
 EOF
 
@@ -1499,7 +1664,33 @@ const getUserById = async (req, res) => {
 
 const createUser = async (req, res) => {
   try {
-    const { name, email, password, role } = req.body
+    const { name, email, password, role, preferredName, gender, pronouns, smsPhone, smsEnabled } = req.body
+
+    // Validate required fields
+    if (!name || !email || !password || !role) {
+      return res.status(400).json({ error: 'Name, email, password, and role are required' })
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ error: 'Invalid email format' })
+    }
+
+    // Validate role
+    const validRoles = ['ORGANIZER', 'JUDGE', 'CONTESTANT', 'EMCEE', 'TALLY_MASTER', 'AUDITOR', 'BOARD']
+    if (!validRoles.includes(role)) {
+      return res.status(400).json({ error: 'Invalid role' })
+    }
+
+    // Check if email already exists
+    const existingUser = await prisma.user.findUnique({
+      where: { email }
+    })
+
+    if (existingUser) {
+      return res.status(400).json({ error: 'User with this email already exists' })
+    }
 
     const hashedPassword = await bcrypt.hash(password, 10)
 
@@ -1509,7 +1700,11 @@ const createUser = async (req, res) => {
         email,
         password: hashedPassword,
         role,
-        createdBy: req.user.id
+        preferredName: preferredName || null,
+        gender: gender || null,
+        pronouns: pronouns || null,
+        smsPhone: smsPhone || null,
+        smsEnabled: smsEnabled || false
       }
     })
 
@@ -1517,11 +1712,20 @@ const createUser = async (req, res) => {
       id: user.id,
       name: user.name,
       email: user.email,
-      role: user.role
+      role: user.role,
+      preferredName: user.preferredName,
+      gender: user.gender,
+      pronouns: user.pronouns,
+      smsPhone: user.smsPhone,
+      smsEnabled: user.smsEnabled
     })
   } catch (error) {
     console.error('Create user error:', error)
-    res.status(500).json({ error: 'Internal server error' })
+    if (error.code === 'P2002') {
+      res.status(400).json({ error: 'User with this email already exists' })
+    } else {
+      res.status(500).json({ error: 'Internal server error' })
+    }
   }
 }
 
@@ -1773,6 +1977,198 @@ const getCSVTemplate = async (req, res) => {
   }
 }
 
+// Update user last login
+const updateLastLogin = async (req, res) => {
+  try {
+    const { id } = req.params
+
+    const user = await prisma.user.update({
+      where: { id },
+      data: {
+        lastLoginAt: new Date()
+      }
+    })
+
+    res.json({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      lastLoginAt: user.lastLoginAt
+    })
+  } catch (error) {
+    console.error('Update last login error:', error)
+    if (error.code === 'P2025') {
+      res.status(404).json({ error: 'User not found' })
+    } else {
+      res.status(500).json({ error: 'Internal server error' })
+    }
+  }
+}
+
+// Bulk remove users
+const bulkRemoveUsers = async (req, res) => {
+  try {
+    const { userIds } = req.body
+
+    if (!userIds || !Array.isArray(userIds) || userIds.length === 0) {
+      return res.status(400).json({ error: 'User IDs array is required' })
+    }
+
+    // Prevent deletion of admin users
+    const adminUsers = await prisma.user.findMany({
+      where: {
+        id: { in: userIds },
+        role: 'ORGANIZER'
+      }
+    })
+
+    if (adminUsers.length > 0) {
+      return res.status(400).json({ 
+        error: 'Cannot delete admin users',
+        adminUsers: adminUsers.map(u => ({ id: u.id, name: u.name, email: u.email }))
+      })
+    }
+
+    const result = await prisma.user.deleteMany({
+      where: {
+        id: { in: userIds }
+      }
+    })
+
+    res.json({
+      message: `${result.count} users deleted successfully`,
+      deletedCount: result.count
+    })
+  } catch (error) {
+    console.error('Bulk remove users error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Get users by role
+const getUsersByRole = async (req, res) => {
+  try {
+    const { role } = req.params
+
+    const validRoles = ['ORGANIZER', 'JUDGE', 'CONTESTANT', 'EMCEE', 'TALLY_MASTER', 'AUDITOR', 'BOARD']
+    if (!validRoles.includes(role)) {
+      return res.status(400).json({ error: 'Invalid role' })
+    }
+
+    const users = await prisma.user.findMany({
+      where: { role },
+      include: {
+        judge: true,
+        contestant: true
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    res.json(users)
+  } catch (error) {
+    console.error('Get users by role error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Update user role-specific fields
+const updateUserRoleFields = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { role, roleSpecificData } = req.body
+
+    if (!role || !roleSpecificData) {
+      return res.status(400).json({ error: 'Role and role-specific data are required' })
+    }
+
+    let updateData = {}
+
+    switch (role) {
+      case 'JUDGE':
+        updateData = {
+          judgeBio: roleSpecificData.bio || null,
+          judgeSpecialties: roleSpecificData.specialties ? JSON.stringify(roleSpecificData.specialties) : null,
+          judgeCertifications: roleSpecificData.certifications ? JSON.stringify(roleSpecificData.certifications) : null,
+          isHeadJudge: roleSpecificData.isHeadJudge || false
+        }
+        break
+
+      case 'CONTESTANT':
+        updateData = {
+          contestantBio: roleSpecificData.bio || null,
+          contestantNumber: roleSpecificData.number || null,
+          contestantAge: roleSpecificData.age || null,
+          contestantSchool: roleSpecificData.school || null
+        }
+        break
+
+      case 'EMCEE':
+        updateData = {
+          bio: roleSpecificData.bio || null,
+          phone: roleSpecificData.phone || null
+        }
+        break
+
+      default:
+        updateData = {
+          bio: roleSpecificData.bio || null,
+          phone: roleSpecificData.phone || null
+        }
+    }
+
+    const user = await prisma.user.update({
+      where: { id },
+      data: updateData
+    })
+
+    res.json(user)
+  } catch (error) {
+    console.error('Update user role fields error:', error)
+    if (error.code === 'P2025') {
+      res.status(404).json({ error: 'User not found' })
+    } else {
+      res.status(500).json({ error: 'Internal server error' })
+    }
+  }
+}
+
+// Get user statistics
+const getUserStats = async (req, res) => {
+  try {
+    const [totalUsers, usersByRole, recentLogins] = await Promise.all([
+      prisma.user.count(),
+      prisma.user.groupBy({
+        by: ['role'],
+        _count: {
+          role: true
+        }
+      }),
+      prisma.user.count({
+        where: {
+          lastLoginAt: {
+            gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) // Last 7 days
+          }
+        }
+      })
+    ])
+
+    const roleStats = usersByRole.reduce((acc, item) => {
+      acc[item.role] = item._count.role
+      return acc
+    }, {})
+
+    res.json({
+      totalUsers,
+      usersByRole: roleStats,
+      recentLogins,
+      lastWeek: recentLogins
+    })
+  } catch (error) {
+    console.error('Get user stats error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
 module.exports = {
   getAllUsers,
   getUserById,
@@ -1781,7 +2177,12 @@ module.exports = {
   deleteUser,
   resetPassword,
   importUsersFromCSV,
-  getCSVTemplate
+  getCSVTemplate,
+  updateLastLogin,
+  bulkRemoveUsers,
+  getUsersByRole,
+  updateUserRoleFields,
+  getUserStats
 }
 EOF
 
@@ -2831,12 +3232,137 @@ const getDatabaseStats = async (req, res) => {
   }
 }
 
+// Insert new record into table
+const insertRecord = async (req, res) => {
+  try {
+    const { tableName, data } = req.body
+
+    if (!tableName || !data) {
+      return res.status(400).json({ error: 'Table name and data are required' })
+    }
+
+    // Basic security check - only allow certain tables
+    const allowedTables = ['users', 'events', 'contests', 'categories', 'contestants', 'judges']
+    if (!allowedTables.includes(tableName.toLowerCase())) {
+      return res.status(403).json({ error: 'Table not allowed for direct insertion' })
+    }
+
+    const result = await prisma.$executeRaw`
+      INSERT INTO ${tableName} (${Object.keys(data).join(', ')})
+      VALUES (${Object.values(data).map(val => typeof val === 'string' ? `'${val}'` : val).join(', ')})
+      RETURNING *
+    `
+
+    res.status(201).json({ message: 'Record inserted successfully', data: result })
+  } catch (error) {
+    console.error('Insert record error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Update record in table
+const updateRecord = async (req, res) => {
+  try {
+    const { tableName, id, data } = req.body
+
+    if (!tableName || !id || !data) {
+      return res.status(400).json({ error: 'Table name, ID, and data are required' })
+    }
+
+    // Basic security check
+    const allowedTables = ['users', 'events', 'contests', 'categories', 'contestants', 'judges']
+    if (!allowedTables.includes(tableName.toLowerCase())) {
+      return res.status(403).json({ error: 'Table not allowed for direct updates' })
+    }
+
+    const setClause = Object.entries(data)
+      .map(([key, value]) => `${key} = ${typeof value === 'string' ? `'${value}'` : value}`)
+      .join(', ')
+
+    const result = await prisma.$executeRaw`
+      UPDATE ${tableName} 
+      SET ${setClause}
+      WHERE id = '${id}'
+      RETURNING *
+    `
+
+    res.json({ message: 'Record updated successfully', data: result })
+  } catch (error) {
+    console.error('Update record error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Delete record from table
+const deleteRecord = async (req, res) => {
+  try {
+    const { tableName, id } = req.body
+
+    if (!tableName || !id) {
+      return res.status(400).json({ error: 'Table name and ID are required' })
+    }
+
+    // Basic security check
+    const allowedTables = ['users', 'events', 'contests', 'categories', 'contestants', 'judges']
+    if (!allowedTables.includes(tableName.toLowerCase())) {
+      return res.status(403).json({ error: 'Table not allowed for direct deletion' })
+    }
+
+    const result = await prisma.$executeRaw`
+      DELETE FROM ${tableName} 
+      WHERE id = '${id}'
+      RETURNING *
+    `
+
+    res.json({ message: 'Record deleted successfully', data: result })
+  } catch (error) {
+    console.error('Delete record error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Execute custom query (with security restrictions)
+const executeCustomQuery = async (req, res) => {
+  try {
+    const { query } = req.body
+
+    if (!query) {
+      return res.status(400).json({ error: 'Query is required' })
+    }
+
+    // Security checks
+    const dangerousKeywords = ['DROP', 'DELETE', 'UPDATE', 'INSERT', 'ALTER', 'CREATE', 'TRUNCATE']
+    const upperQuery = query.toUpperCase()
+    
+    for (const keyword of dangerousKeywords) {
+      if (upperQuery.includes(keyword)) {
+        return res.status(403).json({ error: `Operation '${keyword}' is not allowed` })
+      }
+    }
+
+    // Only allow SELECT queries
+    if (!upperQuery.trim().startsWith('SELECT')) {
+      return res.status(403).json({ error: 'Only SELECT queries are allowed' })
+    }
+
+    const result = await prisma.$queryRawUnsafe(query)
+    res.json({ data: result })
+  } catch (error) {
+    console.error('Execute custom query error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
 module.exports = {
   getDatabaseTables,
   getTableData,
   getTableSchema,
   executeQuery,
-  getDatabaseStats
+  getDatabaseStats,
+  insertRecord,
+  updateRecord,
+  deleteRecord,
+  executeCustomQuery
 }
 EOF
 
@@ -2992,17 +3518,22 @@ const getSettings = async (req, res) => {
 
 const updateSettings = async (req, res) => {
   try {
-    const { settings } = req.body
+    const settings = req.body
 
-    for (const setting of settings) {
+    for (const [key, value] of Object.entries(settings)) {
       await prisma.systemSetting.upsert({
-        where: { settingKey: setting.key },
-        update: { settingValue: setting.value },
+        where: { key: key },
+        update: { 
+          value: value,
+          updatedAt: new Date(),
+          updatedById: req.user?.id
+        },
         create: { 
-          settingKey: setting.key, 
-          settingValue: setting.value,
-          description: setting.description,
-          updatedById: req.user.id
+          key: key, 
+          value: value,
+          category: 'general',
+          description: `Setting for ${key}`,
+          updatedById: req.user?.id
         }
       })
     }
@@ -3114,7 +3645,7 @@ const getLoggingLevels = async (req, res) => {
   try {
     const settings = await prisma.systemSetting.findMany({
       where: {
-        settingKey: {
+        key: {
           in: ['LOG_LEVEL', 'LOG_RETENTION_DAYS', 'LOG_FILE_SIZE_MB']
         }
       }
@@ -3128,17 +3659,22 @@ const getLoggingLevels = async (req, res) => {
 
 const updateLoggingLevel = async (req, res) => {
   try {
-    const { settings } = req.body
+    const settings = req.body
 
-    for (const setting of settings) {
+    for (const [key, value] of Object.entries(settings)) {
       await prisma.systemSetting.upsert({
-        where: { settingKey: setting.key },
-        update: { settingValue: setting.value },
+        where: { key: key },
+        update: { 
+          value: value,
+          updatedAt: new Date(),
+          updatedById: req.user?.id
+        },
         create: { 
-          settingKey: setting.key, 
-          settingValue: setting.value,
-          description: setting.description,
-          updatedById: req.user.id
+          key: key, 
+          value: value,
+          category: 'logging',
+          description: `Logging setting for ${key}`,
+          updatedById: req.user?.id
         }
       })
     }
@@ -3154,7 +3690,7 @@ const getSecuritySettings = async (req, res) => {
   try {
     const settings = await prisma.systemSetting.findMany({
       where: {
-        settingKey: {
+        key: {
           in: ['PASSWORD_MIN_LENGTH', 'PASSWORD_REQUIRE_UPPERCASE', 'PASSWORD_REQUIRE_LOWERCASE', 'PASSWORD_REQUIRE_NUMBERS', 'PASSWORD_REQUIRE_SYMBOLS', 'LOGIN_ATTEMPTS_LIMIT', 'ACCOUNT_LOCKOUT_DURATION']
         }
       }
@@ -3168,17 +3704,22 @@ const getSecuritySettings = async (req, res) => {
 
 const updateSecuritySettings = async (req, res) => {
   try {
-    const { settings } = req.body
+    const settings = req.body
 
-    for (const setting of settings) {
+    for (const [key, value] of Object.entries(settings)) {
       await prisma.systemSetting.upsert({
-        where: { settingKey: setting.key },
-        update: { settingValue: setting.value },
+        where: { key: key },
+        update: { 
+          value: value,
+          updatedAt: new Date(),
+          updatedById: req.user?.id
+        },
         create: { 
-          settingKey: setting.key, 
-          settingValue: setting.value,
-          description: setting.description,
-          updatedById: req.user.id
+          key: key, 
+          value: value,
+          category: 'security',
+          description: `Security setting for ${key}`,
+          updatedById: req.user?.id
         }
       })
     }
@@ -3194,7 +3735,7 @@ const getBackupSettings = async (req, res) => {
   try {
     const settings = await prisma.systemSetting.findMany({
       where: {
-        settingKey: {
+        key: {
           in: ['BACKUP_FREQUENCY', 'BACKUP_RETENTION_DAYS', 'BACKUP_LOCATION', 'AUTO_BACKUP_ENABLED']
         }
       }
@@ -3208,17 +3749,22 @@ const getBackupSettings = async (req, res) => {
 
 const updateBackupSettings = async (req, res) => {
   try {
-    const { settings } = req.body
+    const settings = req.body
 
-    for (const setting of settings) {
+    for (const [key, value] of Object.entries(settings)) {
       await prisma.systemSetting.upsert({
-        where: { settingKey: setting.key },
-        update: { settingValue: setting.value },
+        where: { key: key },
+        update: { 
+          value: value,
+          updatedAt: new Date(),
+          updatedById: req.user?.id
+        },
         create: { 
-          settingKey: setting.key, 
-          settingValue: setting.value,
-          description: setting.description,
-          updatedById: req.user.id
+          key: key, 
+          value: value,
+          category: 'backup',
+          description: `Backup setting for ${key}`,
+          updatedById: req.user?.id
         }
       })
     }
@@ -3234,7 +3780,7 @@ const getEmailSettings = async (req, res) => {
   try {
     const settings = await prisma.systemSetting.findMany({
       where: {
-        settingKey: {
+        key: {
           in: ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS', 'SMTP_SECURE', 'EMAIL_FROM', 'EMAIL_FROM_NAME']
         }
       }
@@ -3248,17 +3794,22 @@ const getEmailSettings = async (req, res) => {
 
 const updateEmailSettings = async (req, res) => {
   try {
-    const { settings } = req.body
+    const settings = req.body
 
-    for (const setting of settings) {
+    for (const [key, value] of Object.entries(settings)) {
       await prisma.systemSetting.upsert({
-        where: { settingKey: setting.key },
-        update: { settingValue: setting.value },
+        where: { key: key },
+        update: { 
+          value: value,
+          updatedAt: new Date(),
+          updatedById: req.user?.id
+        },
         create: { 
-          settingKey: setting.key, 
-          settingValue: setting.value,
-          description: setting.description,
-          updatedById: req.user.id
+          key: key, 
+          value: value,
+          category: 'email',
+          description: `Email setting for ${key}`,
+          updatedById: req.user?.id
         }
       })
     }
@@ -3285,6 +3836,307 @@ module.exports = {
   updateBackupSettings,
   getEmailSettings,
   updateEmailSettings
+}
+EOF
+
+    # SMS Controller
+    cat > "$APP_DIR/src/controllers/smsController.js" << 'EOF'
+const twilio = require('twilio')
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+const getSMSSettings = async () => {
+  try {
+    const settings = await prisma.systemSetting.findMany({
+      where: {
+        key: {
+          in: ['SMS_ENABLED', 'SMS_API_KEY', 'SMS_API_SECRET', 'SMS_FROM_NUMBER', 'SMS_PROVIDER']
+        }
+      }
+    })
+
+    const config = {}
+    settings.forEach(setting => {
+      config[setting.key.toLowerCase()] = setting.value
+    })
+
+    return {
+      enabled: config.sms_enabled === 'true',
+      apiKey: config.sms_api_key,
+      apiSecret: config.sms_api_secret,
+      fromNumber: config.sms_from_number,
+      provider: config.sms_provider || 'twilio'
+    }
+  } catch (error) {
+    console.error('Error getting SMS settings:', error)
+    return {
+      enabled: false,
+      apiKey: '',
+      apiSecret: '',
+      fromNumber: '',
+      provider: 'twilio'
+    }
+  }
+}
+
+const sendSMS = async (req, res) => {
+  try {
+    const { to, message } = req.body
+
+    if (!to || !message) {
+      return res.status(400).json({ error: 'Phone number and message are required' })
+    }
+
+    const settings = await getSMSSettings()
+
+    if (!settings.enabled) {
+      return res.status(400).json({ error: 'SMS notifications are disabled' })
+    }
+
+    if (!settings.apiKey || !settings.apiSecret || !settings.fromNumber) {
+      return res.status(400).json({ error: 'SMS configuration is incomplete' })
+    }
+
+    let client
+    if (settings.provider === 'twilio') {
+      client = twilio(settings.apiKey, settings.apiSecret)
+    } else {
+      return res.status(400).json({ error: 'Unsupported SMS provider' })
+    }
+
+    const result = await client.messages.create({
+      body: message,
+      to: to,
+      from: settings.fromNumber
+    })
+
+    // Log the SMS send
+    await prisma.activityLog.create({
+      data: {
+        userId: req.user?.id,
+        userName: req.user?.name,
+        userRole: req.user?.role,
+        action: 'SEND_SMS',
+        resourceType: 'SMS',
+        details: `SMS sent to ${to}: ${message.substring(0, 50)}...`,
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent')
+      }
+    })
+
+    res.json({ 
+      success: true, 
+      message: 'SMS sent successfully',
+      messageId: result.sid 
+    })
+  } catch (error) {
+    console.error('Send SMS error:', error)
+    res.status(500).json({ error: 'Failed to send SMS' })
+  }
+}
+
+const sendBulkSMS = async (req, res) => {
+  try {
+    const { recipients, message } = req.body
+
+    if (!recipients || !Array.isArray(recipients) || recipients.length === 0) {
+      return res.status(400).json({ error: 'Recipients array is required' })
+    }
+
+    if (!message) {
+      return res.status(400).json({ error: 'Message is required' })
+    }
+
+    const settings = await getSMSSettings()
+
+    if (!settings.enabled) {
+      return res.status(400).json({ error: 'SMS notifications are disabled' })
+    }
+
+    const results = []
+    const errors = []
+
+    for (const recipient of recipients) {
+      try {
+        let client
+        if (settings.provider === 'twilio') {
+          client = twilio(settings.apiKey, settings.apiSecret)
+        }
+
+        const result = await client.messages.create({
+          body: message,
+          to: recipient.phone,
+          from: settings.fromNumber
+        })
+
+        results.push({
+          phone: recipient.phone,
+          name: recipient.name,
+          messageId: result.sid,
+          status: 'sent'
+        })
+      } catch (error) {
+        errors.push({
+          phone: recipient.phone,
+          name: recipient.name,
+          error: error.message
+        })
+      }
+    }
+
+    // Log the bulk SMS send
+    await prisma.activityLog.create({
+      data: {
+        userId: req.user?.id,
+        userName: req.user?.name,
+        userRole: req.user?.role,
+        action: 'SEND_BULK_SMS',
+        resourceType: 'SMS',
+        details: `Bulk SMS sent to ${recipients.length} recipients: ${message.substring(0, 50)}...`,
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent')
+      }
+    })
+
+    res.json({
+      success: true,
+      message: `SMS sent to ${results.length} recipients`,
+      results,
+      errors
+    })
+  } catch (error) {
+    console.error('Send bulk SMS error:', error)
+    res.status(500).json({ error: 'Failed to send bulk SMS' })
+  }
+}
+
+const sendNotificationSMS = async (req, res) => {
+  try {
+    const { userId, notificationType, data } = req.body
+
+    if (!userId || !notificationType) {
+      return res.status(400).json({ error: 'User ID and notification type are required' })
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { contestant: true, judge: true }
+    })
+
+    if (!user || !user.smsEnabled || !user.smsPhone) {
+      return res.status(400).json({ error: 'User does not have SMS notifications enabled' })
+    }
+
+    let message = ''
+    switch (notificationType) {
+      case 'SCORE_SUBMISSION_REMINDER':
+        message = `Reminder: Please submit your scores for ${data.categoryName || 'the category'}`
+        break
+      case 'CERTIFICATION_REQUEST':
+        message = `Certification request: Please review and certify scores for ${data.categoryName || 'the category'}`
+        break
+      case 'EVENT_UPDATE':
+        message = `Event update: ${data.message || 'There has been an update to your event'}`
+        break
+      case 'CONTEST_SCHEDULE_CHANGE':
+        message = `Schedule change: ${data.message || 'Your contest schedule has been updated'}`
+        break
+      default:
+        message = data.message || 'You have a new notification'
+    }
+
+    const settings = await getSMSSettings()
+
+    if (!settings.enabled) {
+      return res.status(400).json({ error: 'SMS notifications are disabled' })
+    }
+
+    let client
+    if (settings.provider === 'twilio') {
+      client = twilio(settings.apiKey, settings.apiSecret)
+    }
+
+    const result = await client.messages.create({
+      body: message,
+      to: user.smsPhone,
+      from: settings.fromNumber
+    })
+
+    // Log the notification SMS
+    await prisma.activityLog.create({
+      data: {
+        userId: req.user?.id,
+        userName: req.user?.name,
+        userRole: req.user?.role,
+        action: 'SEND_NOTIFICATION_SMS',
+        resourceType: 'SMS',
+        details: `Notification SMS sent to ${user.name} (${user.smsPhone}): ${notificationType}`,
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent')
+      }
+    })
+
+    res.json({
+      success: true,
+      message: 'Notification SMS sent successfully',
+      messageId: result.sid
+    })
+  } catch (error) {
+    console.error('Send notification SMS error:', error)
+    res.status(500).json({ error: 'Failed to send notification SMS' })
+  }
+}
+
+const getSMSHistory = async (req, res) => {
+  try {
+    const { page = 1, limit = 50 } = req.query
+    const offset = (page - 1) * limit
+
+    const logs = await prisma.activityLog.findMany({
+      where: {
+        action: {
+          in: ['SEND_SMS', 'SEND_BULK_SMS', 'SEND_NOTIFICATION_SMS']
+        }
+      },
+      orderBy: { createdAt: 'desc' },
+      skip: offset,
+      take: parseInt(limit),
+      include: {
+        user: {
+          select: { name: true, email: true }
+        }
+      }
+    })
+
+    const total = await prisma.activityLog.count({
+      where: {
+        action: {
+          in: ['SEND_SMS', 'SEND_BULK_SMS', 'SEND_NOTIFICATION_SMS']
+        }
+      }
+    })
+
+    res.json({
+      logs,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / limit)
+      }
+    })
+  } catch (error) {
+    console.error('Get SMS history error:', error)
+    res.status(500).json({ error: 'Failed to get SMS history' })
+  }
+}
+
+module.exports = {
+  sendSMS,
+  sendBulkSMS,
+  sendNotificationSMS,
+  getSMSHistory
 }
 EOF
 
@@ -7635,6 +8487,92 @@ const sendEmailByRole = async (req, res) => {
   }
 }
 
+// Helper function to create nodemailer transporter from database settings
+const createTransporter = async () => {
+  try {
+    const nodemailer = require('nodemailer')
+    
+    // Get SMTP settings from database
+    const smtpHost = await prisma.systemSetting.findUnique({ where: { key: 'smtp_host' } })
+    const smtpPort = await prisma.systemSetting.findUnique({ where: { key: 'smtp_port' } })
+    const smtpUser = await prisma.systemSetting.findUnique({ where: { key: 'smtp_user' } })
+    const smtpPassword = await prisma.systemSetting.findUnique({ where: { key: 'smtp_password' } })
+    const smtpSecure = await prisma.systemSetting.findUnique({ where: { key: 'smtp_secure' } })
+    const smtpFrom = await prisma.systemSetting.findUnique({ where: { key: 'smtp_from' } })
+    
+    if (!smtpHost || !smtpPort || !smtpUser || !smtpPassword) {
+      throw new Error('SMTP settings not configured')
+    }
+    
+    const transporter = nodemailer.createTransporter({
+      host: smtpHost.value,
+      port: parseInt(smtpPort.value),
+      secure: smtpSecure ? smtpSecure.value === 'true' : false,
+      auth: {
+        user: smtpUser.value,
+        pass: smtpPassword.value
+      }
+    })
+    
+    return { transporter, from: smtpFrom ? smtpFrom.value : smtpUser.value }
+  } catch (error) {
+    console.error('Failed to create email transporter:', error)
+    throw error
+  }
+}
+
+// Send report via email
+const sendReportEmail = async ({ to, subject, reportData, filename, contentType }) => {
+  try {
+    const { transporter, from } = await createTransporter()
+    
+    // Convert reportData to attachment
+    const attachment = {
+      filename,
+      content: reportData,
+      contentType
+    }
+    
+    // Send email
+    const info = await transporter.sendMail({
+      from,
+      to: Array.isArray(to) ? to.join(', ') : to,
+      subject,
+      text: `Please find the attached ${subject}`,
+      html: `<p>Please find the attached <strong>${subject}</strong></p>`,
+      attachments: [attachment]
+    })
+    
+    console.log('Report email sent:', info.messageId)
+    return { success: true, messageId: info.messageId }
+  } catch (error) {
+    console.error('Failed to send report email:', error)
+    throw error
+  }
+}
+
+// Send custom email
+const sendEmail = async ({ to, subject, text, html, attachments = [] }) => {
+  try {
+    const { transporter, from } = await createTransporter()
+    
+    const info = await transporter.sendMail({
+      from,
+      to: Array.isArray(to) ? to.join(', ') : to,
+      subject,
+      text,
+      html,
+      attachments
+    })
+    
+    console.log('Email sent:', info.messageId)
+    return { success: true, messageId: info.messageId }
+  } catch (error) {
+    console.error('Failed to send email:', error)
+    throw error
+  }
+}
+
 module.exports = {
   getTemplates,
   createTemplate,
@@ -7645,7 +8583,10 @@ module.exports = {
   sendCampaign,
   getLogs,
   sendMultipleEmails,
-  sendEmailByRole
+  sendEmailByRole,
+  sendReportEmail,
+  sendEmail,
+  createTransporter
 }
 EOF
 
@@ -9114,6 +10055,74 @@ const convertToXML = (report) => {
   return 'XML conversion not implemented yet'
 }
 
+// Email report to recipients
+const emailReport = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { recipients, subject, message } = req.body
+
+    if (!recipients || recipients.length === 0) {
+      return res.status(400).json({ error: 'Recipients are required' })
+    }
+
+    // Get the report instance
+    const reportInstance = await prisma.reportHistory.findUnique({
+      where: { id },
+      include: {
+        template: true,
+        user: {
+          select: {
+            name: true,
+            email: true
+          }
+        }
+      }
+    })
+
+    if (!reportInstance) {
+      return res.status(404).json({ error: 'Report not found' })
+    }
+
+    // Import email controller
+    const emailController = require('./emailController')
+    
+    // Create email content
+    const emailContent = \`
+      <h2>Report: \${reportInstance.name}</h2>
+      <p>\${message || 'Please find the attached report.'}</p>
+      <hr>
+      <p><strong>Report Details:</strong></p>
+      <ul>
+        <li><strong>Template:</strong> \${reportInstance.template.name}</li>
+        <li><strong>Generated By:</strong> \${reportInstance.user.name}</li>
+        <li><strong>Generated At:</strong> \${new Date(reportInstance.createdAt).toLocaleString()}</li>
+      </ul>
+      <p>This report was generated from the Event Manager system.</p>
+    \`
+
+    // Send email with report attachment
+    await emailController.sendReportEmail({
+      to: recipients,
+      subject: subject || \`Report: \${reportInstance.name}\`,
+      html: emailContent,
+      attachments: reportInstance.fileUrl ? [{
+        filename: \`\${reportInstance.name}.pdf\`,
+        path: reportInstance.fileUrl
+      }] : []
+    })
+
+    res.json({
+      message: 'Report emailed successfully',
+      recipients: recipients.length,
+      reportName: reportInstance.name
+    })
+
+  } catch (error) {
+    console.error('Email report error:', error)
+    res.status(500).json({ error: 'Failed to email report' })
+  }
+}
+
 module.exports = {
   getTemplates,
   createTemplate,
@@ -9128,7 +10137,8 @@ module.exports = {
   getAllReports,
   getReportById,
   deleteReport,
-  exportReport
+  exportReport,
+  emailReport
 }
 EOF
 
@@ -11287,6 +12297,250 @@ module.exports = {
 }
 EOF
 
+    # Event Template Controller
+    cat > "$APP_DIR/src/controllers/eventTemplateController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+const createTemplate = async (req, res) => {
+  try {
+    const { name, description, contests, categories } = req.body
+
+    if (!name || !contests || !categories) {
+      return res.status(400).json({ error: 'Name, contests, and categories are required' })
+    }
+
+    const template = await prisma.eventTemplate.create({
+      data: {
+        name,
+        description: description || null,
+        contests: JSON.stringify(contests),
+        categories: JSON.stringify(categories),
+        createdBy: req.user.id
+      }
+    })
+
+    res.status(201).json({
+      id: template.id,
+      name: template.name,
+      description: template.description,
+      contests: JSON.parse(template.contests),
+      categories: JSON.parse(template.categories),
+      createdAt: template.createdAt
+    })
+  } catch (error) {
+    console.error('Create template error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getTemplates = async (req, res) => {
+  try {
+    const templates = await prisma.eventTemplate.findMany({
+      include: {
+        creator: {
+          select: {
+            id: true,
+            name: true,
+            email: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    const formattedTemplates = templates.map(template => ({
+      id: template.id,
+      name: template.name,
+      description: template.description,
+      contests: JSON.parse(template.contests),
+      categories: JSON.parse(template.categories),
+      creator: template.creator,
+      createdAt: template.createdAt,
+      updatedAt: template.updatedAt
+    }))
+
+    res.json(formattedTemplates)
+  } catch (error) {
+    console.error('Get templates error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getTemplate = async (req, res) => {
+  try {
+    const { id } = req.params
+
+    const template = await prisma.eventTemplate.findUnique({
+      where: { id },
+      include: {
+        creator: {
+          select: {
+            id: true,
+            name: true,
+            email: true
+          }
+        }
+      }
+    })
+
+    if (!template) {
+      return res.status(404).json({ error: 'Template not found' })
+    }
+
+    res.json({
+      id: template.id,
+      name: template.name,
+      description: template.description,
+      contests: JSON.parse(template.contests),
+      categories: JSON.parse(template.categories),
+      creator: template.creator,
+      createdAt: template.createdAt,
+      updatedAt: template.updatedAt
+    })
+  } catch (error) {
+    console.error('Get template error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const updateTemplate = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { name, description, contests, categories } = req.body
+
+    if (!name || !contests || !categories) {
+      return res.status(400).json({ error: 'Name, contests, and categories are required' })
+    }
+
+    const template = await prisma.eventTemplate.update({
+      where: { id },
+      data: {
+        name,
+        description: description || null,
+        contests: JSON.stringify(contests),
+        categories: JSON.stringify(categories)
+      }
+    })
+
+    res.json({
+      id: template.id,
+      name: template.name,
+      description: template.description,
+      contests: JSON.parse(template.contests),
+      categories: JSON.parse(template.categories),
+      updatedAt: template.updatedAt
+    })
+  } catch (error) {
+    console.error('Update template error:', error)
+    if (error.code === 'P2025') {
+      res.status(404).json({ error: 'Template not found' })
+    } else {
+      res.status(500).json({ error: 'Internal server error' })
+    }
+  }
+}
+
+const deleteTemplate = async (req, res) => {
+  try {
+    const { id } = req.params
+
+    await prisma.eventTemplate.delete({
+      where: { id }
+    })
+
+    res.json({ message: 'Template deleted successfully' })
+  } catch (error) {
+    console.error('Delete template error:', error)
+    if (error.code === 'P2025') {
+      res.status(404).json({ error: 'Template not found' })
+    } else {
+      res.status(500).json({ error: 'Internal server error' })
+    }
+  }
+}
+
+const createEventFromTemplate = async (req, res) => {
+  try {
+    const { templateId, eventName, eventDescription, startDate, endDate } = req.body
+
+    if (!templateId || !eventName || !startDate || !endDate) {
+      return res.status(400).json({ error: 'Template ID, event name, start date, and end date are required' })
+    }
+
+    const template = await prisma.eventTemplate.findUnique({
+      where: { id: templateId }
+    })
+
+    if (!template) {
+      return res.status(404).json({ error: 'Template not found' })
+    }
+
+    const contests = JSON.parse(template.contests)
+    const categories = JSON.parse(template.categories)
+
+    // Create the event
+    const event = await prisma.event.create({
+      data: {
+        name: eventName,
+        description: eventDescription || null,
+        startDate: new Date(startDate),
+        endDate: new Date(endDate)
+      }
+    })
+
+    // Create contests from template
+    for (const contestTemplate of contests) {
+      const contest = await prisma.contest.create({
+        data: {
+          eventId: event.id,
+          name: contestTemplate.name,
+          description: contestTemplate.description || null
+        }
+      })
+
+      // Create categories for this contest
+      const contestCategories = categories.filter(cat => cat.contestId === contestTemplate.id)
+      for (const categoryTemplate of contestCategories) {
+        await prisma.category.create({
+          data: {
+            contestId: contest.id,
+            name: categoryTemplate.name,
+            description: categoryTemplate.description || null,
+            scoreCap: categoryTemplate.scoreCap || null,
+            timeLimit: categoryTemplate.timeLimit || null,
+            contestantMin: categoryTemplate.contestantMin || null,
+            contestantMax: categoryTemplate.contestantMax || null
+          }
+        })
+      }
+    }
+
+    res.status(201).json({
+      id: event.id,
+      name: event.name,
+      description: event.description,
+      startDate: event.startDate,
+      endDate: event.endDate,
+      createdAt: event.createdAt
+    })
+  } catch (error) {
+    console.error('Create event from template error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+module.exports = {
+  createTemplate,
+  getTemplates,
+  getTemplate,
+  updateTemplate,
+  deleteTemplate,
+  createEventFromTemplate
+}
+EOF
+
     # Notifications Controller
     cat > "$APP_DIR/src/controllers/notificationsController.js" << 'EOF'
 const { PrismaClient } = require('@prisma/client')
@@ -13189,11 +14443,353 @@ const getSignatureStatus = async (req, res) => {
   }
 }
 
+// Get certification progress for all roles
+const getCertificationProgress = async (req, res) => {
+  try {
+    const { categoryId } = req.params
+
+    // Get all certifications for this category
+    const [judgeCertifications, tallyCertifications, auditorCertifications, boardCertifications] = await Promise.all([
+      prisma.judgeCertification.findMany({
+        where: { categoryId },
+        include: { judge: { include: { user: true } } }
+      }),
+      prisma.tallyMasterCertification.findMany({
+        where: { categoryId }
+      }),
+      prisma.auditorCertification.findMany({
+        where: { categoryId }
+      }),
+      prisma.winnerSignature.findMany({
+        where: { categoryId, userRole: 'BOARD' },
+        include: { user: true }
+      })
+    ])
+
+    // Get all judges assigned to this category
+    const categoryJudges = await prisma.categoryJudge.findMany({
+      where: { categoryId },
+      include: { judge: { include: { user: true } } }
+    })
+
+    const progress = {
+      judges: {
+        total: categoryJudges.length,
+        certified: judgeCertifications.length,
+        certifications: judgeCertifications.map(cert => ({
+          judgeId: cert.judgeId,
+          judgeName: cert.judge.user.name,
+          signatureName: cert.signatureName,
+          certifiedAt: cert.certifiedAt
+        }))
+      },
+      tallyMaster: {
+        certified: tallyCertifications.length > 0,
+        certification: tallyCertifications[0] || null
+      },
+      auditor: {
+        certified: auditorCertifications.length > 0,
+        certification: auditorCertifications[0] || null
+      },
+      board: {
+        certified: boardCertifications.length > 0,
+        certification: boardCertifications[0] || null
+      }
+    }
+
+    res.json(progress)
+  } catch (error) {
+    console.error('Get certification progress error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Get certification status for specific role
+const getRoleCertificationStatus = async (req, res) => {
+  try {
+    const { categoryId, role } = req.params
+    const userId = req.user.id
+
+    let certification = null
+    let canCertify = false
+
+    switch (role.toUpperCase()) {
+      case 'JUDGE':
+        certification = await prisma.judgeCertification.findFirst({
+          where: { categoryId, judgeId: req.user.judgeId }
+        })
+        canCertify = !certification && req.user.role === 'JUDGE'
+        break
+
+      case 'TALLY_MASTER':
+        certification = await prisma.tallyMasterCertification.findFirst({
+          where: { categoryId }
+        })
+        canCertify = !certification && req.user.role === 'TALLY_MASTER'
+        break
+
+      case 'AUDITOR':
+        certification = await prisma.auditorCertification.findFirst({
+          where: { categoryId }
+        })
+        canCertify = !certification && req.user.role === 'AUDITOR'
+        break
+
+      case 'BOARD':
+        certification = await prisma.winnerSignature.findFirst({
+          where: { categoryId, userId, userRole: 'BOARD' }
+        })
+        canCertify = !certification && req.user.role === 'BOARD'
+        break
+
+      default:
+        return res.status(400).json({ error: 'Invalid role' })
+    }
+
+    res.json({
+      role: role.toUpperCase(),
+      certified: !!certification,
+      certification,
+      canCertify,
+      userId
+    })
+  } catch (error) {
+    console.error('Get role certification status error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Certify scores for specific role
+const certifyScores = async (req, res) => {
+  try {
+    const { categoryId } = req.params
+    const { signatureName, comments } = req.body
+    const userId = req.user.id
+    const userRole = req.user.role
+
+    if (!signatureName) {
+      return res.status(400).json({ error: 'Signature name is required' })
+    }
+
+    let certification = null
+
+    switch (userRole) {
+      case 'JUDGE':
+        if (!req.user.judgeId) {
+          return res.status(400).json({ error: 'User must be linked to a judge' })
+        }
+        certification = await prisma.judgeCertification.create({
+          data: {
+            categoryId,
+            judgeId: req.user.judgeId,
+            signatureName,
+            certifiedAt: new Date()
+          }
+        })
+        break
+
+      case 'TALLY_MASTER':
+        certification = await prisma.tallyMasterCertification.create({
+          data: {
+            categoryId,
+            signatureName,
+            certifiedAt: new Date()
+          }
+        })
+        break
+
+      case 'AUDITOR':
+        certification = await prisma.auditorCertification.create({
+          data: {
+            categoryId,
+            signatureName,
+            certifiedAt: new Date()
+          }
+        })
+        break
+
+      case 'BOARD':
+        certification = await prisma.winnerSignature.create({
+          data: {
+            categoryId,
+            userId,
+            userRole: 'BOARD',
+            signatureName,
+            signatureHash: generateSignature(userId, categoryId, 'BOARD', req.ip, req.get('User-Agent')),
+            signedAt: new Date(),
+            comments: comments || null
+          }
+        })
+        break
+
+      default:
+        return res.status(403).json({ error: 'Role not authorized to certify' })
+    }
+
+    res.status(201).json({
+      message: 'Scores certified successfully',
+      certification,
+      role: userRole
+    })
+  } catch (error) {
+    console.error('Certify scores error:', error)
+    if (error.code === 'P2002') {
+      res.status(400).json({ error: 'Scores already certified by this role' })
+    } else {
+      res.status(500).json({ error: 'Internal server error' })
+    }
+  }
+}
+
 module.exports = {
   getWinnersByCategory,
   getWinnersByContest,
   signWinners,
-  getSignatureStatus
+  getSignatureStatus,
+  getCertificationProgress,
+  getRoleCertificationStatus,
+  certifyScores
+}
+EOF
+
+    # Password Validation Middleware
+    cat > "$APP_DIR/src/middleware/passwordValidation.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+const validatePassword = async (req, res, next) => {
+  try {
+    const { password } = req.body
+
+    if (!password) {
+      return res.status(400).json({ error: 'Password is required' })
+    }
+
+    // Get active password policy
+    const policy = await prisma.passwordPolicy.findFirst({
+      where: { isActive: true }
+    })
+
+    if (!policy) {
+      // No policy set, allow any password
+      return next()
+    }
+
+    const errors = []
+
+    // Check minimum length
+    if (password.length < policy.minLength) {
+      errors.push(`Password must be at least ${policy.minLength} characters long`)
+    }
+
+    // Check for uppercase letters
+    if (policy.requireUppercase && !/[A-Z]/.test(password)) {
+      errors.push('Password must contain at least one uppercase letter')
+    }
+
+    // Check for lowercase letters
+    if (policy.requireLowercase && !/[a-z]/.test(password)) {
+      errors.push('Password must contain at least one lowercase letter')
+    }
+
+    // Check for numbers
+    if (policy.requireNumbers && !/\d/.test(password)) {
+      errors.push('Password must contain at least one number')
+    }
+
+    // Check for special characters
+    if (policy.requireSpecialChars && !/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
+      errors.push('Password must contain at least one special character')
+    }
+
+    if (errors.length > 0) {
+      return res.status(400).json({ 
+        error: 'Password does not meet requirements',
+        details: errors
+      })
+    }
+
+    next()
+  } catch (error) {
+    console.error('Password validation error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getPasswordPolicy = async (req, res) => {
+  try {
+    const policy = await prisma.passwordPolicy.findFirst({
+      where: { isActive: true }
+    })
+
+    if (!policy) {
+      return res.json({
+        minLength: 8,
+        requireUppercase: true,
+        requireLowercase: true,
+        requireNumbers: true,
+        requireSpecialChars: true,
+        isActive: false
+      })
+    }
+
+    res.json({
+      minLength: policy.minLength,
+      requireUppercase: policy.requireUppercase,
+      requireLowercase: policy.requireLowercase,
+      requireNumbers: policy.requireNumbers,
+      requireSpecialChars: policy.requireSpecialChars,
+      isActive: policy.isActive
+    })
+  } catch (error) {
+    console.error('Get password policy error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const updatePasswordPolicy = async (req, res) => {
+  try {
+    const { minLength, requireUppercase, requireLowercase, requireNumbers, requireSpecialChars, isActive } = req.body
+
+    // Deactivate all existing policies
+    await prisma.passwordPolicy.updateMany({
+      where: { isActive: true },
+      data: { isActive: false }
+    })
+
+    // Create new policy
+    const policy = await prisma.passwordPolicy.create({
+      data: {
+        minLength: minLength || 8,
+        requireUppercase: requireUppercase !== false,
+        requireLowercase: requireLowercase !== false,
+        requireNumbers: requireNumbers !== false,
+        requireSpecialChars: requireSpecialChars !== false,
+        isActive: isActive !== false
+      }
+    })
+
+    res.json({
+      id: policy.id,
+      minLength: policy.minLength,
+      requireUppercase: policy.requireUppercase,
+      requireLowercase: policy.requireLowercase,
+      requireNumbers: policy.requireNumbers,
+      requireSpecialChars: policy.requireSpecialChars,
+      isActive: policy.isActive,
+      createdAt: policy.createdAt
+    })
+  } catch (error) {
+    console.error('Update password policy error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+module.exports = {
+  validatePassword,
+  getPasswordPolicy,
+  updatePasswordPolicy
 }
 EOF
 
@@ -13272,7 +14868,7 @@ EOF
     # Categories Routes
     cat > "$APP_DIR/src/routes/categoriesRoutes.js" << 'EOF'
 const express = require('express')
-const { getAllCategories, getCategoryById, getCategoriesByContest, createCategory, updateCategory, deleteCategory } = require('../controllers/categoriesController')
+const { getAllCategories, getCategoryById, getCategoriesByContest, createCategory, updateCategory, deleteCategory, getCategoryCriteria, createCriterion, updateCriterion, deleteCriterion, updateCategoryWithTimeLimit } = require('../controllers/categoriesController')
 const { authenticateToken } = require('../middleware/auth')
 const { validateCategory } = require('../middleware/validation')
 const { logActivity } = require('../middleware/errorHandler')
@@ -13288,7 +14884,14 @@ router.get('/contest/:contestId', getCategoriesByContest)
 router.get('/:id', getCategoryById)
 router.post('/', validateCategory, logActivity('CREATE_CATEGORY', 'CATEGORY'), createCategory)
 router.put('/:id', validateCategory, logActivity('UPDATE_CATEGORY', 'CATEGORY'), updateCategory)
+router.put('/:id/time-limit', logActivity('UPDATE_CATEGORY_TIME_LIMIT', 'CATEGORY'), updateCategoryWithTimeLimit)
 router.delete('/:id', logActivity('DELETE_CATEGORY', 'CATEGORY'), deleteCategory)
+
+// Criteria endpoints
+router.get('/:categoryId/criteria', getCategoryCriteria)
+router.post('/:categoryId/criteria', logActivity('CREATE_CRITERION', 'CRITERION'), createCriterion)
+router.put('/criteria/:criterionId', logActivity('UPDATE_CRITERION', 'CRITERION'), updateCriterion)
+router.delete('/criteria/:criterionId', logActivity('DELETE_CRITERION', 'CRITERION'), deleteCriterion)
 
 module.exports = router
 EOF
@@ -13296,7 +14899,7 @@ EOF
     # Users Routes
     cat > "$APP_DIR/src/routes/usersRoutes.js" << 'EOF'
 const express = require('express')
-const { getAllUsers, getUserById, createUser, updateUser, deleteUser, resetPassword, importUsersFromCSV, getCSVTemplate } = require('../controllers/usersController')
+const { getAllUsers, getUserById, createUser, updateUser, deleteUser, resetPassword, importUsersFromCSV, getCSVTemplate, updateLastLogin, bulkRemoveUsers, getUsersByRole, updateUserRoleFields, getUserStats } = require('../controllers/usersController')
 const { authenticateToken, requireRole } = require('../middleware/auth')
 const { validateUser, validateUserUpdate } = require('../middleware/validation')
 const { logActivity } = require('../middleware/errorHandler')
@@ -13318,6 +14921,13 @@ router.post('/:id/reset-password', requireRole(['ORGANIZER', 'BOARD']), resetPas
 // CSV Import routes
 router.post('/import-csv', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), logActivity('IMPORT_USERS_CSV', 'USER'), importUsersFromCSV)
 router.get('/csv-template', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), getCSVTemplate)
+
+// User management routes
+router.put('/:id/last-login', updateLastLogin)
+router.post('/bulk-remove', requireRole(['ORGANIZER', 'BOARD']), logActivity('BULK_REMOVE_USERS', 'USER'), bulkRemoveUsers)
+router.get('/role/:role', requireRole(['ORGANIZER', 'BOARD']), getUsersByRole)
+router.put('/:id/role-fields', requireRole(['ORGANIZER', 'BOARD']), logActivity('UPDATE_USER_ROLE_FIELDS', 'USER'), updateUserRoleFields)
+router.get('/stats', requireRole(['ORGANIZER', 'BOARD']), getUserStats)
 
 module.exports = router
 EOF
@@ -13379,7 +14989,7 @@ EOF
     cat > "$APP_DIR/src/routes/adminRoutes.js" << 'EOF'
 const express = require('express')
 const { getStats, getLogs, getActiveUsers, getUsers, getEvents, getContests, getCategories, getScores, getActivityLogs, getAuditLogs, exportAuditLogs, testConnection } = require('../controllers/adminController')                             
-const { getDatabaseTables, getTableData, getTableSchema, executeQuery, getDatabaseStats } = require('../controllers/databaseBrowserController')                 
+const { getDatabaseTables, getTableData, getTableSchema, executeQuery, getDatabaseStats, insertRecord, updateRecord, deleteRecord, executeCustomQuery } = require('../controllers/databaseBrowserController')                 
 const { getSettings, updateSettings, testSettings, updateJWTConfig, getJWTConfig, getLoggingLevels, updateLoggingLevel, getSecuritySettings, updateSecuritySettings, getBackupSettings, updateBackupSettings, getEmailSettings, updateEmailSettings } = require('../controllers/settingsController')
 const { authenticateToken, requireRole } = require('../middleware/auth')
 
@@ -13420,6 +15030,12 @@ router.get('/database/tables/:tableName', requireRole(['ORGANIZER', 'BOARD', 'AD
 router.get('/database/tables/:tableName/schema', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), getTableSchema)
 router.post('/database/query', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), executeQuery)
 router.get('/database/stats', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), getDatabaseStats)
+
+// Database CRUD operations
+router.post('/database/insert', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), insertRecord)
+router.put('/database/update', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), updateRecord)
+router.delete('/database/delete', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), deleteRecord)
+router.post('/database/custom-query', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), executeCustomQuery)
 
 module.exports = router
 EOF
@@ -13514,6 +15130,27 @@ router.put('/email', requireRole(['ORGANIZER', 'BOARD']), logActivity('UPDATE_EM
 // JWT configuration routes
 router.get('/jwt-config', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), getJWTConfig)
 router.put('/jwt-config', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), logActivity('UPDATE_JWT_CONFIG', 'SETTINGS'), updateJWTConfig)
+
+module.exports = router
+EOF
+
+    # SMS Routes
+    cat > "$APP_DIR/src/routes/smsRoutes.js" << 'EOF'
+const express = require('express')
+const { sendSMS, sendBulkSMS, sendNotificationSMS, getSMSHistory } = require('../controllers/smsController')
+const { authenticateToken, requireRole } = require('../middleware/auth')
+const { logActivity } = require('../middleware/errorHandler')
+
+const router = express.Router()
+
+// Apply authentication to all routes
+router.use(authenticateToken)
+
+// SMS endpoints
+router.post('/send', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), logActivity('SEND_SMS', 'SMS'), sendSMS)
+router.post('/send-bulk', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), logActivity('SEND_BULK_SMS', 'SMS'), sendBulkSMS)
+router.post('/send-notification', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), logActivity('SEND_NOTIFICATION_SMS', 'SMS'), sendNotificationSMS)
+router.get('/history', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), getSMSHistory)
 
 module.exports = router
 EOF
@@ -13819,7 +15456,8 @@ const {
   getAllReports,
   getReportById,
   deleteReport,
-  exportReport
+  exportReport,
+  emailReport
 } = require('../controllers/reportsController')
 const { authenticateToken, requireRole } = require('../middleware/auth')
 const { logActivity } = require('../middleware/errorHandler')
@@ -13845,6 +15483,7 @@ router.get('/', getAllReports)
 router.get('/:id', getReportById)
 router.delete('/:id', requireRole(['ORGANIZER', 'BOARD']), logActivity('DELETE_REPORT', 'REPORT'), deleteReport)
 router.post('/:id/export', requireRole(['ORGANIZER', 'BOARD', 'AUDITOR']), logActivity('EXPORT_REPORT', 'REPORT'), exportReport)
+router.post('/:id/email', requireRole(['ORGANIZER', 'BOARD', 'AUDITOR']), logActivity('EMAIL_REPORT', 'REPORT'), emailReport)
 
 module.exports = router
 EOF
@@ -15479,7 +17118,7 @@ const generatePDFReport = async (res, event, stats, includeDetails) => {
       <html>
       <head>
         <meta charset="utf-8">
-        <title>Event Report - ${event.name}</title>
+        <title>Event Report - ' + event.name + '</title>
         <style>
           body { font-family: Arial, sans-serif; margin: 20px; }
           .header { text-align: center; margin-bottom: 30px; }
@@ -15498,45 +17137,45 @@ const generatePDFReport = async (res, event, stats, includeDetails) => {
       <body>
         <div class="header">
           <h1>Event Report</h1>
-          <h2>${event.name}</h2>
-          <p>Generated on: ${new Date().toLocaleDateString()}</p>
+          <h2>' + event.name + '</h2>
+          <p>Generated on: ' + new Date().toLocaleDateString() + '</p>
         </div>
 
         <div class="stats">
           <div class="stat-card">
-            <div class="stat-value">${stats.totalContests}</div>
+            <div class="stat-value">' + stats.totalContests + '</div>
             <div class="stat-label">Total Contests</div>
           </div>
           <div class="stat-card">
-            <div class="stat-value">${stats.totalCategories}</div>
+            <div class="stat-value">' + stats.totalCategories + '</div>
             <div class="stat-label">Total Categories</div>
           </div>
           <div class="stat-card">
-            <div class="stat-value">${stats.totalContestants}</div>
+            <div class="stat-value">' + stats.totalContestants + '</div>
             <div class="stat-label">Total Contestants</div>
           </div>
           <div class="stat-card">
-            <div class="stat-value">${stats.totalJudges}</div>
+            <div class="stat-value">' + stats.totalJudges + '</div>
             <div class="stat-label">Total Judges</div>
           </div>
           <div class="stat-card">
-            <div class="stat-value">${stats.totalScores}</div>
+            <div class="stat-value">' + stats.totalScores + '</div>
             <div class="stat-label">Scores Submitted</div>
           </div>
           <div class="stat-card">
-            <div class="stat-value">${stats.averageScore.toFixed(2)}</div>
+            <div class="stat-value">' + stats.averageScore.toFixed(2) + '</div>
             <div class="stat-label">Average Score</div>
           </div>
         </div>
 
-        ${includeDetails ? `
+        ' + (includeDetails ? `
         <div class="section">
           <h2>Event Details</h2>
-          <p><strong>Description:</strong> ${event.description || 'N/A'}</p>
-          <p><strong>Start Date:</strong> ${new Date(event.startDate).toLocaleDateString()}</p>
-          <p><strong>End Date:</strong> ${new Date(event.endDate).toLocaleDateString()}</p>
-          <p><strong>Location:</strong> ${event.location || 'N/A'}</p>
-          <p><strong>Organizer:</strong> ${event.organizer?.user?.firstName} ${event.organizer?.user?.lastName}</p>
+          <p><strong>Description:</strong> ' + (event.description || 'N/A') + '</p>
+          <p><strong>Start Date:</strong> ' + new Date(event.startDate).toLocaleDateString() + '</p>
+          <p><strong>End Date:</strong> ' + new Date(event.endDate).toLocaleDateString() + '</p>
+          <p><strong>Location:</strong> ' + (event.location || 'N/A') + '</p>
+          <p><strong>Organizer:</strong> ' + (event.organizer?.user?.firstName || '') + ' ' + (event.organizer?.user?.lastName || '') + '</p>
         </div>
 
         <div class="section">
@@ -15551,18 +17190,18 @@ const generatePDFReport = async (res, event, stats, includeDetails) => {
               </tr>
             </thead>
             <tbody>
-              ${event.contests.map(contest => `
+              ' + event.contests.map(contest => `
                 <tr>
-                  <td>${contest.name}</td>
-                  <td>${contest.categories.length}</td>
-                  <td>${contest.categories.reduce((sum, cat) => sum + cat.contestants.length, 0)}</td>
-                  <td>${contest.categories.reduce((sum, cat) => sum + cat.scores.length, 0)}</td>
+                  <td>' + contest.name + '</td>
+                  <td>' + contest.categories.length + '</td>
+                  <td>' + contest.categories.reduce((sum, cat) => sum + cat.contestants.length, 0) + '</td>
+                  <td>' + contest.categories.reduce((sum, cat) => sum + cat.scores.length, 0) + '</td>
                 </tr>
-              `).join('')}
+              `).join('') + `
             </tbody>
           </table>
         </div>
-        ` : ''}
+        ` : '') + `
 
         <div class="footer">
           <p>Report generated by Event Manager System</p>
@@ -15611,7 +17250,7 @@ const generateExcelReport = async (res, event, stats, includeDetails) => {
       ['Total Judges', stats.totalJudges],
       ['Scores Submitted', stats.totalScores],
       ['Average Score', stats.averageScore.toFixed(2)],
-      ['Completion Rate', `${stats.completionRate.toFixed(1)}%`]
+      ['Completion Rate', stats.completionRate.toFixed(1) + '%']
     ]
 
     const summarySheet = XLSX.utils.aoa_to_sheet(summaryData)
@@ -15972,32 +17611,32 @@ const generateJudgePDFReport = async (res, judgeStats) => {
       <body>
         <div class="header">
           <h1>Judge Performance Report</h1>
-          <p>Generated on: ${new Date().toLocaleDateString()}</p>
+          <p>Generated on: ' + new Date().toLocaleDateString() + '</p>
         </div>
 
-        ${Object.values(judgeStats).map(stat => `
+        ' + Object.values(judgeStats).map(stat => `
           <div class="judge-card">
-            <h2>${stat.judge.user.firstName} ${stat.judge.user.lastName}</h2>
+            <h2>' + stat.judge.user.firstName + ' ' + stat.judge.user.lastName + '</h2>
             <div class="stats">
               <div class="stat-item">
-                <div class="stat-value">${stat.totalScores}</div>
+                <div class="stat-value">' + stat.totalScores + '</div>
                 <div class="stat-label">Total Scores</div>
               </div>
               <div class="stat-item">
-                <div class="stat-value">${stat.averageScore.toFixed(2)}</div>
+                <div class="stat-value">' + stat.averageScore.toFixed(2) + '</div>
                 <div class="stat-label">Average Score</div>
               </div>
               <div class="stat-item">
-                <div class="stat-value">${stat.categoriesCount}</div>
+                <div class="stat-value">' + stat.categoriesCount + '</div>
                 <div class="stat-label">Categories</div>
               </div>
               <div class="stat-item">
-                <div class="stat-value">${stat.eventsCount}</div>
+                <div class="stat-value">' + stat.eventsCount + '</div>
                 <div class="stat-label">Events</div>
               </div>
             </div>
           </div>
-        `).join('')}
+        `).join('') + `
       </body>
       </html>
     `
@@ -16219,25 +17858,25 @@ const generateAnalyticsPDFReport = async (res, analyticsData) => {
       <body>
         <div class="header">
           <h1>System Analytics Report</h1>
-          <p>Period: Last ${analyticsData.period} days</p>
-          <p>Generated on: ${new Date().toLocaleDateString()}</p>
+          <p>Period: Last ' + analyticsData.period + ' days</p>
+          <p>Generated on: ' + new Date().toLocaleDateString() + '</p>
         </div>
 
         <div class="stats">
           <div class="stat-card">
-            <div class="stat-value">${analyticsData.stats.totalUsers}</div>
+            <div class="stat-value">' + analyticsData.stats.totalUsers + '</div>
             <div class="stat-label">Total Users</div>
           </div>
           <div class="stat-card">
-            <div class="stat-value">${analyticsData.stats.totalEvents}</div>
+            <div class="stat-value">' + analyticsData.stats.totalEvents + '</div>
             <div class="stat-label">Total Events</div>
           </div>
           <div class="stat-card">
-            <div class="stat-value">${analyticsData.stats.totalContests}</div>
+            <div class="stat-value">' + analyticsData.stats.totalContests + '</div>
             <div class="stat-label">Total Contests</div>
           </div>
           <div class="stat-card">
-            <div class="stat-value">${analyticsData.stats.totalScores}</div>
+            <div class="stat-value">' + analyticsData.stats.totalScores + '</div>
             <div class="stat-label">Total Scores</div>
           </div>
         </div>
@@ -16253,19 +17892,19 @@ const generateAnalyticsPDFReport = async (res, analyticsData) => {
               </tr>
             </thead>
             <tbody>
-              ${analyticsData.userRoles.map(role => `
+              ' + analyticsData.userRoles.map(role => `
                 <tr>
-                  <td>${role.role}</td>
-                  <td>${role._count.role}</td>
-                  <td>${((role._count.role / analyticsData.stats.totalUsers) * 100).toFixed(1)}%</td>
+                  <td>' + role.role + '</td>
+                  <td>' + role._count.role + '</td>
+                  <td>' + ((role._count.role / analyticsData.stats.totalUsers) * 100).toFixed(1) + '%</td>
                 </tr>
-              `).join('')}
+              `).join('') + `
             </tbody>
           </table>
         </div>
 
         <div class="section">
-          <h2>Recent Activity (Last ${analyticsData.period} days)</h2>
+          <h2>Recent Activity (Last ' + analyticsData.period + ' days)</h2>
           <table>
             <thead>
               <tr>
@@ -16276,14 +17915,14 @@ const generateAnalyticsPDFReport = async (res, analyticsData) => {
               </tr>
             </thead>
             <tbody>
-              ${analyticsData.recentActivity.slice(0, 20).map(activity => `
+              ' + analyticsData.recentActivity.slice(0, 20).map(activity => `
                 <tr>
-                  <td>${new Date(activity.createdAt).toLocaleDateString()}</td>
-                  <td>${(activity.user?.user?.firstName || '')} ${(activity.user?.user?.lastName || '')}</td>
-                  <td>${activity.action}</td>
-                  <td>${activity.entityType}</td>
+                  <td>' + new Date(activity.createdAt).toLocaleDateString() + '</td>
+                  <td>' + (activity.user?.user?.firstName || '') + ' ' + (activity.user?.user?.lastName || '') + '</td>
+                  <td>' + activity.action + '</td>
+                  <td>' + activity.entityType + '</td>
                 </tr>
-              `).join('')}
+              `).join('') + `
             </tbody>
           </table>
         </div>
@@ -16407,10 +18046,567 @@ const generateAnalyticsJSONReport = async (res, analyticsData) => {
   }
 }
 
+// Generate contest results report with email integration
+const generateContestResultsReport = async (req, res) => {
+  try {
+    const { contestId, format = 'pdf', emailTo = null, includeDetails = true } = req.query
+
+    if (!contestId) {
+      return res.status(400).json({ error: 'Contest ID is required' })
+    }
+
+    // Get contest data with all related information
+    const contest = await prisma.contest.findUnique({
+      where: { id: contestId },
+      include: {
+        event: true,
+        categories: {
+          include: {
+            contestants: {
+              include: {
+                contestant: {
+                  include: {
+                    user: true
+                  }
+                }
+              }
+            },
+            scores: {
+              include: {
+                judge: {
+                  include: {
+                    user: true
+                  }
+                },
+                contestant: {
+                  include: {
+                    user: true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    })
+
+    if (!contest) {
+      return res.status(404).json({ error: 'Contest not found' })
+    }
+
+    // Generate report data
+    const reportData = {
+      contest: {
+        id: contest.id,
+        name: contest.name,
+        description: contest.description,
+        startDate: contest.startDate,
+        endDate: contest.endDate,
+        event: contest.event
+      },
+      categories: contest.categories.map(category => {
+        const contestants = category.contestants.map(cc => {
+          const scores = category.scores.filter(s => s.contestantId === cc.contestantId)
+          const totalScore = scores.reduce((sum, score) => sum + score.score, 0)
+          const averageScore = scores.length > 0 ? totalScore / scores.length : 0
+
+          return {
+            contestant: cc.contestant.user,
+            totalScore,
+            averageScore,
+            scores: scores.map(s => ({
+              judge: s.judge.user.name,
+              score: s.score,
+              comment: s.comment,
+              createdAt: s.createdAt
+            }))
+          }
+        }).sort((a, b) => b.totalScore - a.totalScore)
+
+        return {
+          id: category.id,
+          name: category.name,
+          description: category.description,
+          maxScore: category.maxScore,
+          contestants
+        }
+      }),
+      generatedAt: new Date().toISOString(),
+      generatedBy: req.user.name
+    }
+
+    // Generate file based on format
+    let filename, contentType, fileData
+
+    if (format === 'pdf') {
+      filename = `contest-results-${contest.id}.pdf`
+      contentType = 'application/pdf'
+      fileData = await generatePDFReport(reportData, 'contest-results')
+    } else if (format === 'excel') {
+      filename = `contest-results-${contest.id}.xlsx`
+      contentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      fileData = await generateExcelReport(reportData, 'contest-results')
+    } else if (format === 'csv') {
+      filename = `contest-results-${contest.id}.csv`
+      contentType = 'text/csv'
+      fileData = await generateCSVReport(reportData, 'contest-results')
+    } else {
+      filename = `contest-results-${contest.id}.json`
+      contentType = 'application/json'
+      fileData = JSON.stringify(reportData, null, 2)
+    }
+
+    // Send email if requested
+    if (emailTo) {
+      try {
+        const emailService = require('./emailController')
+        await emailService.sendReportEmail({
+          to: emailTo,
+          subject: `Contest Results Report - ${contest.name}`,
+          reportData: fileData,
+          filename,
+          contentType
+        })
+        
+        res.json({
+          message: 'Report generated and sent via email',
+          emailSent: true,
+          recipient: emailTo,
+          filename
+        })
+        return
+      } catch (emailError) {
+        console.error('Email sending error:', emailError)
+        // Continue with file download if email fails
+      }
+    }
+
+    // Send file as download
+    res.setHeader('Content-Type', contentType)
+    res.setHeader('Content-Disposition', 'attachment; filename="' + filename + '"')
+    res.send(fileData)
+
+  } catch (error) {
+    console.error('Contest results report generation error:', error)
+    res.status(500).json({ error: 'Failed to generate contest results report' })
+  }
+}
+
+// Generate audit report with email integration
+const generateAuditReport = async (req, res) => {
+  try {
+    const { eventId, startDate, endDate, format = 'pdf', emailTo = null } = req.query
+
+    // Get audit logs
+    const whereClause = {}
+    if (eventId) whereClause.eventId = eventId
+    if (startDate && endDate) {
+      whereClause.createdAt = {
+        gte: new Date(startDate),
+        lte: new Date(endDate)
+      }
+    }
+
+    const auditLogs = await prisma.activityLog.findMany({
+      where: whereClause,
+      include: {
+        user: true
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    // Generate report data
+    const reportData = {
+      filters: {
+        eventId,
+        startDate,
+        endDate
+      },
+      summary: {
+        totalLogs: auditLogs.length,
+        uniqueUsers: [...new Set(auditLogs.map(log => log.userId))].length,
+        dateRange: {
+          start: auditLogs.length > 0 ? auditLogs[auditLogs.length - 1].createdAt : null,
+          end: auditLogs.length > 0 ? auditLogs[0].createdAt : null
+        }
+      },
+      logs: auditLogs.map(log => ({
+        id: log.id,
+        action: log.action,
+        resourceType: log.resourceType,
+        resourceId: log.resourceId,
+        userId: log.userId,
+        userName: log.user.name,
+        userRole: log.user.role,
+        ipAddress: log.ipAddress,
+        userAgent: log.userAgent,
+        createdAt: log.createdAt,
+        details: log.details
+      })),
+      generatedAt: new Date().toISOString(),
+      generatedBy: req.user.name
+    }
+
+    // Generate file based on format
+    let filename, contentType, fileData
+
+    if (format === 'pdf') {
+      filename = `audit-report-${Date.now()}.pdf`
+      contentType = 'application/pdf'
+      fileData = await generatePDFReport(reportData, 'audit')
+    } else if (format === 'excel') {
+      filename = `audit-report-${Date.now()}.xlsx`
+      contentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      fileData = await generateExcelReport(reportData, 'audit')
+    } else {
+      filename = `audit-report-${Date.now()}.json`
+      contentType = 'application/json'
+      fileData = JSON.stringify(reportData, null, 2)
+    }
+
+    // Send email if requested
+    if (emailTo) {
+      try {
+        const emailService = require('./emailController')
+        await emailService.sendReportEmail({
+          to: emailTo,
+          subject: 'Audit Report',
+          reportData: fileData,
+          filename,
+          contentType
+        })
+        
+        res.json({
+          message: 'Audit report generated and sent via email',
+          emailSent: true,
+          recipient: emailTo,
+          filename
+        })
+        return
+      } catch (emailError) {
+        console.error('Email sending error:', emailError)
+      }
+    }
+
+    // Send file as download
+    res.setHeader('Content-Type', contentType)
+    res.setHeader('Content-Disposition', 'attachment; filename="' + filename + '"')
+    res.send(fileData)
+
+  } catch (error) {
+    console.error('Audit report generation error:', error)
+    res.status(500).json({ error: 'Failed to generate audit report' })
+  }
+}
+
+// Generate performance report with email integration
+const generatePerformanceReport = async (req, res) => {
+  try {
+    const { judgeId, categoryId, format = 'pdf', emailTo = null } = req.query
+
+    // Get performance data
+    const whereClause = {}
+    if (judgeId) whereClause.judgeId = judgeId
+    if (categoryId) whereClause.categoryId = categoryId
+
+    const scores = await prisma.score.findMany({
+      where: whereClause,
+      include: {
+        judge: {
+          include: {
+            user: true
+          }
+        },
+        contestant: {
+          include: {
+            user: true
+          }
+        },
+        category: true
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    // Calculate performance metrics
+    const performanceData = {
+      filters: {
+        judgeId,
+        categoryId
+      },
+      summary: {
+        totalScores: scores.length,
+        averageScore: scores.length > 0 ? scores.reduce((sum, s) => sum + s.score, 0) / scores.length : 0,
+        uniqueContestants: [...new Set(scores.map(s => s.contestantId))].length,
+        uniqueCategories: [...new Set(scores.map(s => s.categoryId))].length
+      },
+      scores: scores.map(score => ({
+        id: score.id,
+        score: score.score,
+        comment: score.comment,
+        judge: score.judge.user.name,
+        contestant: score.contestant.user.name,
+        category: score.category.name,
+        createdAt: score.createdAt
+      })),
+      generatedAt: new Date().toISOString(),
+      generatedBy: req.user.name
+    }
+
+    // Generate file based on format
+    let filename, contentType, fileData
+
+    if (format === 'pdf') {
+      filename = `performance-report-${Date.now()}.pdf`
+      contentType = 'application/pdf'
+      fileData = await generatePDFReport(performanceData, 'performance')
+    } else if (format === 'excel') {
+      filename = `performance-report-${Date.now()}.xlsx`
+      contentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      fileData = await generateExcelReport(performanceData, 'performance')
+    } else {
+      filename = `performance-report-${Date.now()}.json`
+      contentType = 'application/json'
+      fileData = JSON.stringify(performanceData, null, 2)
+    }
+
+    // Send email if requested
+    if (emailTo) {
+      try {
+        const emailService = require('./emailController')
+        await emailService.sendReportEmail({
+          to: emailTo,
+          subject: 'Performance Report',
+          reportData: fileData,
+          filename,
+          contentType
+        })
+        
+        res.json({
+          message: 'Performance report generated and sent via email',
+          emailSent: true,
+          recipient: emailTo,
+          filename
+        })
+        return
+      } catch (emailError) {
+        console.error('Email sending error:', emailError)
+      }
+    }
+
+    // Send file as download
+    res.setHeader('Content-Type', contentType)
+    res.setHeader('Content-Disposition', 'attachment; filename="' + filename + '"')
+    res.send(fileData)
+
+  } catch (error) {
+    console.error('Performance report generation error:', error)
+    res.status(500).json({ error: 'Failed to generate performance report' })
+  }
+}
+
+// Helper function to generate PDF reports
+const generatePDFReport = async (data, reportType) => {
+  const browser = await puppeteer.launch({ headless: true })
+  const page = await browser.newPage()
+  
+  // Generate HTML content based on report type
+  let htmlContent = ''
+  
+  if (reportType === 'contest-results') {
+    htmlContent = generateContestResultsHTML(data)
+  } else if (reportType === 'audit') {
+    htmlContent = generateAuditHTML(data)
+  } else if (reportType === 'performance') {
+    htmlContent = generatePerformanceHTML(data)
+  }
+  
+  await page.setContent(htmlContent)
+  const pdf = await page.pdf({ format: 'A4' })
+  
+  await browser.close()
+  return pdf
+}
+
+// Helper function to generate Excel reports
+const generateExcelReport = async (data, reportType) => {
+  const workbook = XLSX.utils.book_new()
+  
+  if (reportType === 'contest-results') {
+    const worksheet = XLSX.utils.json_to_sheet(data.categories.flatMap(cat => 
+      cat.contestants.map(contestant => ({
+        Category: cat.name,
+        Contestant: contestant.contestant.name,
+        TotalScore: contestant.totalScore,
+        AverageScore: contestant.averageScore
+      }))
+    ))
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Contest Results')
+  } else if (reportType === 'audit') {
+    const worksheet = XLSX.utils.json_to_sheet(data.logs)
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Audit Logs')
+  } else if (reportType === 'performance') {
+    const worksheet = XLSX.utils.json_to_sheet(data.scores)
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Performance Data')
+  }
+  
+  return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' })
+}
+
+// Helper function to generate CSV reports
+const generateCSVReport = async (data, reportType) => {
+  let csvData = []
+  
+  if (reportType === 'contest-results') {
+    csvData = data.categories.flatMap(cat => 
+      cat.contestants.map(contestant => ({
+        Category: cat.name,
+        Contestant: contestant.contestant.name,
+        TotalScore: contestant.totalScore,
+        AverageScore: contestant.averageScore
+      }))
+    )
+  } else if (reportType === 'audit') {
+    csvData = data.logs
+  } else if (reportType === 'performance') {
+    csvData = data.scores
+  }
+  
+  const csv = XLSX.utils.sheet_to_csv(XLSX.utils.json_to_sheet(csvData))
+  return csv
+}
+
+// Helper functions to generate HTML content
+const generateContestResultsHTML = (data) => {
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Contest Results Report</title>
+      <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .header { text-align: center; margin-bottom: 30px; }
+        .category { margin-bottom: 30px; }
+        .contestant { margin-bottom: 10px; padding: 10px; border: 1px solid #ddd; }
+        .score { font-weight: bold; color: #2c5aa0; }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <h1>Contest Results Report</h1>
+        <h2>' + data.contest.name + '</h2>
+        <p>Generated on: ' + new Date(data.generatedAt).toLocaleDateString() + '</p>
+      </div>
+      ' + data.categories.map(cat => `
+        <div class="category">
+          <h3>' + cat.name + '</h3>
+          ' + cat.contestants.map(contestant => `
+            <div class="contestant">
+              <strong>' + contestant.contestant.name + '</strong>
+              <span class="score">Total: ' + contestant.totalScore + ' | Average: ' + contestant.averageScore.toFixed(2) + '</span>
+            </div>
+          `).join('') + `
+        </div>
+      `).join('') + `
+    </body>
+    </html>
+  `
+}
+
+const generateAuditHTML = (data) => {
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Audit Report</title>
+      <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .header { text-align: center; margin-bottom: 30px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <h1>Audit Report</h1>
+        <p>Generated on: ${new Date(data.generatedAt).toLocaleDateString()}</p>
+        <p>Total Logs: ${data.summary.totalLogs}</p>
+      </div>
+      <table>
+        <tr>
+          <th>Date</th>
+          <th>User</th>
+          <th>Action</th>
+          <th>Resource</th>
+          <th>IP Address</th>
+        </tr>
+        ${data.logs.map(log => `
+          <tr>
+            <td>${new Date(log.createdAt).toLocaleString()}</td>
+            <td>${log.userName} (${log.userRole})</td>
+            <td>${log.action}</td>
+            <td>${log.resourceType} - ${log.resourceId}</td>
+            <td>${log.ipAddress}</td>
+          </tr>
+        `).join('')}
+      </table>
+    </body>
+    </html>
+  `
+}
+
+const generatePerformanceHTML = (data) => {
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Performance Report</title>
+      <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .header { text-align: center; margin-bottom: 30px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <h1>Performance Report</h1>
+        <p>Generated on: ${new Date(data.generatedAt).toLocaleDateString()}</p>
+        <p>Total Scores: ${data.summary.totalScores} | Average Score: ${data.summary.averageScore.toFixed(2)}</p>
+      </div>
+      <table>
+        <tr>
+          <th>Date</th>
+          <th>Judge</th>
+          <th>Contestant</th>
+          <th>Category</th>
+          <th>Score</th>
+          <th>Comment</th>
+        </tr>
+        ${data.scores.map(score => `
+          <tr>
+            <td>${new Date(score.createdAt).toLocaleString()}</td>
+            <td>${score.judge}</td>
+            <td>${score.contestant}</td>
+            <td>${score.category}</td>
+            <td>${score.score}</td>
+            <td>${score.comment || ''}</td>
+          </tr>
+        `).join('')}
+      </table>
+    </body>
+    </html>
+  `
+}
+
 module.exports = {
   generateEventReport,
   generateJudgePerformanceReport,
-  generateSystemAnalyticsReport
+  generateSystemAnalyticsReport,
+  generateContestResultsReport,
+  generateAuditReport,
+  generatePerformanceReport
 }
 EOF
 
@@ -16420,7 +18616,10 @@ const express = require('express')
 const { 
   generateEventReport,
   generateJudgePerformanceReport,
-  generateSystemAnalyticsReport
+  generateSystemAnalyticsReport,
+  generateContestResultsReport,
+  generateAuditReport,
+  generatePerformanceReport
 } = require('../controllers/advancedReportingController')
 const { authenticateToken, requireRole } = require('../middleware/auth')
 const { logActivity } = require('../middleware/errorHandler')
@@ -16434,6 +18633,9 @@ router.use(authenticateToken)
 router.get('/event/:eventId', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), logActivity('GENERATE_EVENT_REPORT', 'REPORT'), generateEventReport)
 router.get('/judge-performance', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), logActivity('GENERATE_JUDGE_REPORT', 'REPORT'), generateJudgePerformanceReport)
 router.get('/system-analytics', requireRole(['ADMIN']), logActivity('GENERATE_SYSTEM_REPORT', 'REPORT'), generateSystemAnalyticsReport)
+router.get('/contest-results', requireRole(['ADMIN', 'BOARD', 'EMCEE']), logActivity('GENERATE_CONTEST_RESULTS_REPORT', 'REPORT'), generateContestResultsReport)
+router.get('/audit', requireRole(['ADMIN']), logActivity('GENERATE_AUDIT_REPORT', 'REPORT'), generateAuditReport)
+router.get('/performance', requireRole(['ADMIN', 'BOARD']), logActivity('GENERATE_PERFORMANCE_REPORT', 'REPORT'), generatePerformanceReport)
 
 module.exports = router
 EOF
@@ -16515,6 +18717,29 @@ router.get('/', getAllTemplates)
 router.post('/', requireRole(['ORGANIZER', 'BOARD']), logActivity('CREATE_TEMPLATE', 'TEMPLATE'), createTemplate)
 router.put('/:id', requireRole(['ORGANIZER', 'BOARD']), logActivity('UPDATE_TEMPLATE', 'TEMPLATE'), updateTemplate)
 router.delete('/:id', requireRole(['ORGANIZER', 'BOARD']), logActivity('DELETE_TEMPLATE', 'TEMPLATE'), deleteTemplate)
+
+module.exports = router
+EOF
+
+    # Event Template Routes
+    cat > "$APP_DIR/src/routes/eventTemplateRoutes.js" << 'EOF'
+const express = require('express')
+const { createTemplate, getTemplates, getTemplate, updateTemplate, deleteTemplate, createEventFromTemplate } = require('../controllers/eventTemplateController')
+const { authenticateToken, requireRole } = require('../middleware/auth')
+const { logActivity } = require('../middleware/errorHandler')
+
+const router = express.Router()
+
+// Apply authentication to all routes
+router.use(authenticateToken)
+
+// Event template endpoints
+router.get('/', getTemplates)
+router.get('/:id', getTemplate)
+router.post('/', requireRole(['ORGANIZER', 'BOARD']), logActivity('CREATE_EVENT_TEMPLATE', 'EVENT_TEMPLATE'), createTemplate)
+router.put('/:id', requireRole(['ORGANIZER', 'BOARD']), logActivity('UPDATE_EVENT_TEMPLATE', 'EVENT_TEMPLATE'), updateTemplate)
+router.delete('/:id', requireRole(['ORGANIZER', 'BOARD']), logActivity('DELETE_EVENT_TEMPLATE', 'EVENT_TEMPLATE'), deleteTemplate)
+router.post('/:id/create-event', requireRole(['ORGANIZER', 'BOARD']), logActivity('CREATE_EVENT_FROM_TEMPLATE', 'EVENT'), createEventFromTemplate)
 
 module.exports = router
 EOF
@@ -16679,7 +18904,10 @@ const {
   getWinnersByCategory, 
   getWinnersByContest, 
   signWinners, 
-  getSignatureStatus 
+  getSignatureStatus,
+  getCertificationProgress,
+  getRoleCertificationStatus,
+  certifyScores
 } = require('../controllers/winnersController')
 const { authenticateToken, requireRole } = require('../middleware/auth')
 const { logActivity } = require('../middleware/errorHandler')
@@ -16694,6 +18922,11 @@ router.get('/category/:categoryId', requireRole(['ADMIN', 'BOARD', 'EMCEE']), ge
 router.get('/contest/:contestId', requireRole(['ADMIN', 'BOARD', 'EMCEE']), getWinnersByContest)
 router.post('/category/:categoryId/sign', requireRole(['JUDGE', 'TALLY_MASTER', 'AUDITOR', 'BOARD']), logActivity('SIGN_WINNERS', 'WINNER'), signWinners)
 router.get('/category/:categoryId/signatures', requireRole(['ADMIN', 'BOARD', 'TALLY_MASTER', 'AUDITOR']), getSignatureStatus)
+
+// Certification endpoints
+router.get('/category/:categoryId/certification-progress', requireRole(['ADMIN', 'BOARD', 'TALLY_MASTER', 'AUDITOR', 'JUDGE']), getCertificationProgress)
+router.get('/category/:categoryId/certification-status/:role', requireRole(['ADMIN', 'BOARD', 'TALLY_MASTER', 'AUDITOR', 'JUDGE']), getRoleCertificationStatus)
+router.post('/category/:categoryId/certify', requireRole(['JUDGE', 'TALLY_MASTER', 'AUDITOR', 'BOARD']), logActivity('CERTIFY_SCORES', 'CERTIFICATION'), certifyScores)
 
 module.exports = router
 EOF
@@ -16733,6 +18966,7 @@ const resultsRoutes = require('./routes/resultsRoutes')
 const adminRoutes = require('./routes/adminRoutes')
 const uploadRoutes = require('./routes/uploadRoutes')
 const settingsRoutes = require('./routes/settingsRoutes')
+const smsRoutes = require('./routes/smsRoutes')
 const archiveRoutes = require('./routes/archiveRoutes')
 const backupRoutes = require('./routes/backupRoutes')
 const assignmentsRoutes = require('./routes/assignmentsRoutes')
@@ -16751,6 +18985,7 @@ const fileManagementRoutes = require('./routes/fileManagementRoutes')
 const fileBackupRoutes = require('./routes/fileBackupRoutes')
 const errorHandlingRoutes = require('./routes/errorHandlingRoutes')
 const templatesRoutes = require('./routes/templatesRoutes')
+const eventTemplateRoutes = require('./routes/eventTemplateRoutes')
 const notificationsRoutes = require('./routes/notificationsRoutes')
 const emceeRoutes = require('./routes/emceeRoutes')
 const navigationRoutes = require('./routes/navigationRoutes')
@@ -16832,6 +19067,7 @@ app.use('/api/results', resultsRoutes)
 app.use('/api/admin', adminRoutes)
 app.use('/api/upload', uploadRoutes)
 app.use('/api/settings', settingsRoutes)
+app.use('/api/sms', smsRoutes)
 app.use('/api/archive', archiveRoutes)
 app.use('/api/backup', backupRoutes)
 app.use('/api/assignments', assignmentsRoutes)
@@ -16850,6 +19086,7 @@ app.use('/api/file-management', fileManagementRoutes)
 app.use('/api/file-backup', fileBackupRoutes)
 app.use('/api/errors', errorHandlingRoutes)
 app.use('/api/templates', templatesRoutes)
+app.use('/api/event-templates', eventTemplateRoutes)
 app.use('/api/notifications', notificationsRoutes)
 app.use('/api/emcee', emceeRoutes)
 app.use('/api/navigation', navigationRoutes)
@@ -16972,6 +19209,9 @@ model Category {
   name        String
   description String?
   scoreCap    Int?
+  timeLimit   Int?
+  contestantMin Int?
+  contestantMax Int?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -17107,6 +19347,8 @@ model User {
   
   // Notification preferences
   notifications      String? // JSON object
+  smsPhone           String?
+  smsEnabled         Boolean  @default(false)
   
   // Privacy settings
   privacy            String? // JSON object
@@ -17118,6 +19360,7 @@ model User {
   contestant Contestant? @relation(fields: [contestantId], references: [id])
   logs       ActivityLog[]
   updatedSettings SystemSetting[] @relation("UserUpdatedSettings")
+  eventTemplates EventTemplate[]
   
   // New relations
   assignments     Assignment[]
@@ -17230,6 +19473,20 @@ model SystemSetting {
   @@map("system_settings")
 }
 
+model PasswordPolicy {
+  id                  String   @id @default(cuid())
+  minLength           Int      @default(8)
+  requireUppercase    Boolean  @default(true)
+  requireLowercase    Boolean  @default(true)
+  requireNumbers      Boolean  @default(true)
+  requireSpecialChars Boolean  @default(true)
+  isActive            Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  
+  @@map("password_policies")
+}
+
 model LoggingSetting {
   id          String   @id @default(cuid())
   level       LogLevel @default(INFO)
@@ -17295,6 +19552,20 @@ model EmailSetting {
   updatedAt       DateTime @updatedAt
 
   @@map("email_settings")
+}
+
+model EventTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  contests    Json
+  categories  Json
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  creator     User     @relation(fields: [createdBy], references: [id])
+  @@map("event_templates")
 }
 
 model EmceeScript {
@@ -18213,6 +20484,7 @@ EOF
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.0.0",
     "nodemailer": "^6.9.7",
+    "twilio": "^4.19.0",
     "socket.io": "^4.7.4",
     "prisma": "^5.22.0",
     "@prisma/client": "^5.22.0",
@@ -18225,6 +20497,7 @@ EOF
     "handlebars": "^4.7.8",
     "xlsx": "^0.18.5",
     "csv-writer": "^1.6.0",
+    "csv-parser": "^3.0.0",
     "xml2js": "^0.6.2",
     "pdfkit": "^0.14.0",
     "jspdf": "^2.5.1",
@@ -19089,6 +21362,15 @@ export const emailAPI = {
   getLogs: () => api.get('/email/logs'),
   sendMultiple: (data: { recipients: string[], subject: string, content: string }) => api.post('/email/send-multiple', data),
   sendByRole: (data: { roles: string[], subject: string, content: string }) => api.post('/email/send-by-role', data),
+}
+
+export const bulkImportAPI = {
+  importUsers: (formData: FormData) => api.post('/bulk-import/users', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  }),
+  downloadSample: () => api.get('/bulk-import/sample', { responseType: 'blob' }),
 }
 
 // Export the api instance for direct use
@@ -23440,6 +25722,308 @@ const SettingsForm: React.FC<SettingsFormProps> = ({ onClose }) => {
 }
 
 export default SettingsForm
+EOF
+
+    # Bulk Import Component
+    cat > "$APP_DIR/frontend/src/components/BulkImport.tsx" << 'EOF'
+import React, { useState, useRef } from 'react'
+import { useMutation, useQueryClient } from 'react-query'
+import { bulkImportAPI } from '../services/api'
+import { useAuth } from '../contexts/AuthContext'
+import { 
+  ArrowUpTrayIcon, 
+  DocumentArrowDownIcon, 
+  CheckCircleIcon, 
+  ExclamationTriangleIcon,
+  XCircleIcon,
+  InformationCircleIcon
+} from '@heroicons/react/24/outline'
+
+interface ImportResult {
+  success: boolean
+  message: string
+  totalProcessed: number
+  successful: number
+  failed: number
+  errors: string[]
+  createdUsers: Array<{
+    id: string
+    name: string
+    email: string
+    role: string
+  }>
+}
+
+const BulkImport: React.FC = () => {
+  const { user } = useAuth()
+  const queryClient = useQueryClient()
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  
+  const [file, setFile] = useState<File | null>(null)
+  const [isUploading, setIsUploading] = useState(false)
+  const [importResult, setImportResult] = useState<ImportResult | null>(null)
+  const [showSample, setShowSample] = useState(false)
+
+  const importMutation = useMutation(bulkImportAPI.importUsers, {
+    onSuccess: (data) => {
+      setImportResult(data)
+      setIsUploading(false)
+      queryClient.invalidateQueries(['users'])
+    },
+    onError: (error: any) => {
+      setImportResult({
+        success: false,
+        message: error.response?.data?.error || 'Import failed',
+        totalProcessed: 0,
+        successful: 0,
+        failed: 0,
+        errors: [error.response?.data?.error || 'Unknown error'],
+        createdUsers: []
+      })
+      setIsUploading(false)
+    }
+  })
+
+  const downloadSampleMutation = useMutation(bulkImportAPI.downloadSample, {
+    onSuccess: (data) => {
+      const blob = new Blob([data], { type: 'text/csv' })
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = 'user_import_sample.csv'
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+    }
+  })
+
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = event.target.files?.[0]
+    if (selectedFile) {
+      if (selectedFile.type === 'text/csv' || selectedFile.name.endsWith('.csv')) {
+        setFile(selectedFile)
+        setImportResult(null)
+      } else {
+        alert('Please select a CSV file')
+      }
+    }
+  }
+
+  const handleImport = async () => {
+    if (!file) return
+    
+    setIsUploading(true)
+    const formData = new FormData()
+    formData.append('file', file)
+    
+    importMutation.mutate(formData)
+  }
+
+  const handleDownloadSample = () => {
+    downloadSampleMutation.mutate()
+  }
+
+  const resetImport = () => {
+    setFile(null)
+    setImportResult(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
+  if (!user || !['ADMIN', 'BOARD'].includes(user.role)) {
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+        <div className="flex">
+          <ExclamationTriangleIcon className="h-5 w-5 text-red-400" />
+          <div className="ml-3">
+            <h3 className="text-sm font-medium text-red-800">
+              Access Denied
+            </h3>
+            <div className="mt-2 text-sm text-red-700">
+              You don't have permission to access bulk import functionality.
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white shadow rounded-lg">
+        <div className="px-4 py-5 sm:p-6">
+          <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">
+            Bulk User Import
+          </h3>
+          
+          <div className="space-y-4">
+            {/* File Upload Area */}
+            <div className="border-2 border-dashed border-gray-300 rounded-lg p-6">
+              <div className="text-center">
+                <ArrowUpTrayIcon className="mx-auto h-12 w-12 text-gray-400" />
+                <div className="mt-4">
+                  <label htmlFor="file-upload" className="cursor-pointer">
+                    <span className="mt-2 block text-sm font-medium text-gray-900">
+                      Upload CSV file
+                    </span>
+                    <span className="mt-1 block text-sm text-gray-500">
+                      or drag and drop
+                    </span>
+                  </label>
+                  <input
+                    ref={fileInputRef}
+                    id="file-upload"
+                    name="file-upload"
+                    type="file"
+                    className="sr-only"
+                    accept=".csv"
+                    onChange={handleFileSelect}
+                  />
+                </div>
+              </div>
+              
+              {file && (
+                <div className="mt-4 p-3 bg-blue-50 rounded-md">
+                  <div className="flex items-center">
+                    <DocumentArrowDownIcon className="h-5 w-5 text-blue-400" />
+                    <span className="ml-2 text-sm text-blue-700">
+                      Selected: {file.name} ({(file.size / 1024).toFixed(1)} KB)
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Sample Download */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <InformationCircleIcon className="h-5 w-5 text-gray-400 mr-2" />
+                <span className="text-sm text-gray-600">
+                  Need a sample CSV file?
+                </span>
+              </div>
+              <button
+                onClick={handleDownloadSample}
+                disabled={downloadSampleMutation.isLoading}
+                className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+              >
+                <DocumentArrowDownIcon className="h-4 w-4 mr-2" />
+                Download Sample
+              </button>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex justify-end space-x-3">
+              {file && (
+                <button
+                  onClick={resetImport}
+                  className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                >
+                  Clear
+                </button>
+              )}
+              <button
+                onClick={handleImport}
+                disabled={!file || isUploading}
+                className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+              >
+                {isUploading ? 'Importing...' : 'Import Users'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Import Results */}
+      {importResult && (
+        <div className="bg-white shadow rounded-lg">
+          <div className="px-4 py-5 sm:p-6">
+            <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">
+              Import Results
+            </h3>
+            
+            <div className="space-y-4">
+              {/* Summary */}
+              <div className={`p-4 rounded-md ${
+                importResult.success ? 'bg-green-50' : 'bg-red-50'
+              }`}>
+                <div className="flex">
+                  {importResult.success ? (
+                    <CheckCircleIcon className="h-5 w-5 text-green-400" />
+                  ) : (
+                    <XCircleIcon className="h-5 w-5 text-red-400" />
+                  )}
+                  <div className="ml-3">
+                    <h3 className={`text-sm font-medium ${
+                      importResult.success ? 'text-green-800' : 'text-red-800'
+                    }`}>
+                      {importResult.message}
+                    </h3>
+                    <div className={`mt-2 text-sm ${
+                      importResult.success ? 'text-green-700' : 'text-red-700'
+                    }`}>
+                      <p>Total processed: {importResult.totalProcessed}</p>
+                      <p>Successful: {importResult.successful}</p>
+                      <p>Failed: {importResult.failed}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Errors */}
+              {importResult.errors.length > 0 && (
+                <div className="bg-red-50 border border-red-200 rounded-md p-4">
+                  <h4 className="text-sm font-medium text-red-800 mb-2">
+                    Errors:
+                  </h4>
+                  <ul className="text-sm text-red-700 space-y-1">
+                    {importResult.errors.map((error, index) => (
+                      <li key={index}>• {error}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Created Users */}
+              {importResult.createdUsers.length > 0 && (
+                <div className="bg-green-50 border border-green-200 rounded-md p-4">
+                  <h4 className="text-sm font-medium text-green-800 mb-2">
+                    Successfully Created Users:
+                  </h4>
+                  <div className="space-y-2">
+                    {importResult.createdUsers.map((user) => (
+                      <div key={user.id} className="text-sm text-green-700">
+                        <span className="font-medium">{user.name}</span> ({user.email}) - {user.role}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CSV Format Information */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <h4 className="text-sm font-medium text-blue-800 mb-2">
+          CSV Format Requirements:
+        </h4>
+        <div className="text-sm text-blue-700 space-y-1">
+          <p>• Required columns: name, email, role</p>
+          <p>• Optional columns: phone, bio, pronouns, preferredName</p>
+          <p>• Role must be one of: ADMIN, BOARD, JUDGE, CONTESTANT, AUDITOR, TALLY_MASTER, EMCEE</p>
+          <p>• Email addresses must be unique</p>
+          <p>• First row should contain column headers</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default BulkImport
 EOF
 
     # Force overwrite ContestsPage to fix create method signature
@@ -31176,7 +33760,9 @@ import {
   CheckCircleIcon,
   ClockIcon,
   XCircleIcon,
-  InformationCircleIcon
+  InformationCircleIcon,
+  EnvelopeIcon,
+  XMarkIcon
 } from '@heroicons/react/24/outline'
 import { format } from 'date-fns'
 
@@ -31253,6 +33839,8 @@ const ReportsPage: React.FC = () => {
   const [selectedTemplate, setSelectedTemplate] = useState<ReportTemplate | null>(null)
   const [showGenerateModal, setShowGenerateModal] = useState(false)
   const [reportParameters, setReportParameters] = useState<any>({})
+  const [showEmailModal, setShowEmailModal] = useState(false)
+  const [selectedReportInstance, setSelectedReportInstance] = useState<ReportInstance | null>(null)
   const [filters, setFilters] = useState({
     search: '',
     type: '',
@@ -31338,6 +33926,11 @@ const ReportsPage: React.FC = () => {
     setShowGenerateModal(false)
     setSelectedTemplate(null)
     setReportParameters({})
+  }
+
+  const handleEmailReport = (instance: ReportInstance) => {
+    setSelectedReportInstance(instance)
+    setShowEmailModal(true)
   }
 
   const getStatusIcon = (status: string) => {
@@ -31592,6 +34185,12 @@ const ReportsPage: React.FC = () => {
                                 <button className="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-300">
                                   <PrinterIcon className="h-4 w-4" />
                                 </button>
+                                <button 
+                                  onClick={() => handleEmailReport(instance)}
+                                  className="text-purple-600 hover:text-purple-900 dark:text-purple-400 dark:hover:text-purple-300"
+                                >
+                                  <EnvelopeIcon className="h-4 w-4" />
+                                </button>
                               </div>
                             )}
                             {instance.status === 'FAILED' && (
@@ -31749,19 +34348,3847 @@ const ReportsPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Email Report Modal */}
+      {showEmailModal && selectedReportInstance && (
+        <div className="modal">
+          <div className="modal-overlay" onClick={() => setShowEmailModal(false)}></div>
+          <div className="modal-content max-w-2xl">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Email Report: {selectedReportInstance.name}
+              </h3>
+              <button
+                onClick={() => setShowEmailModal(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+            </div>
+
+            <EmailReportModal
+              reportInstance={selectedReportInstance}
+              onClose={() => setShowEmailModal(false)}
+            />
+          </div>
+        </div>
+      )}
     </div>
+  )
+}
+
+interface EmailReportModalProps {
+  reportInstance: ReportInstance
+  onClose: () => void
+}
+
+const EmailReportModal: React.FC<EmailReportModalProps> = ({ reportInstance, onClose }) => {
+  const [recipients, setRecipients] = useState<string[]>([])
+  const [subject, setSubject] = useState(`Report: ${reportInstance.name}`)
+  const [message, setMessage] = useState('')
+  const [isSending, setIsSending] = useState(false)
+  const [emailInput, setEmailInput] = useState('')
+
+  const { data: users } = useQuery('users', () => api.get('/users').then((res: any) => res.data))
+
+  const addRecipient = (email: string) => {
+    if (email && !recipients.includes(email)) {
+      setRecipients([...recipients, email])
+      setEmailInput('')
+    }
+  }
+
+  const removeRecipient = (email: string) => {
+    setRecipients(recipients.filter(r => r !== email))
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (recipients.length === 0) return
+
+    setIsSending(true)
+    try {
+      await api.post(`/reports/${reportInstance.id}/email`, {
+        recipients,
+        subject,
+        message,
+      })
+      onClose()
+    } catch (error) {
+      console.error('Error sending email:', error)
+    } finally {
+      setIsSending(false)
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-6">
+      {/* Recipients */}
+      <div>
+        <label className="label">Recipients</label>
+        <div className="space-y-3">
+          <div className="flex space-x-2">
+            <input
+              type="email"
+              placeholder="Enter email address"
+              value={emailInput}
+              onChange={(e) => setEmailInput(e.target.value)}
+              className="input flex-1"
+            />
+            <button
+              type="button"
+              onClick={() => addRecipient(emailInput)}
+              className="btn-secondary"
+            >
+              Add
+            </button>
+          </div>
+          
+          {recipients.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {recipients.map((email) => (
+                <span
+                  key={email}
+                  className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+                >
+                  {email}
+                  <button
+                    type="button"
+                    onClick={() => removeRecipient(email)}
+                    className="ml-2 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200"
+                  >
+                    <XMarkIcon className="h-4 w-4" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Quick add users */}
+          {users && (
+            <div className="mt-2">
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">Quick add users:</p>
+              <div className="flex flex-wrap gap-2">
+                {users.slice(0, 5).map((user: any) => (
+                  <button
+                    key={user.id}
+                    type="button"
+                    onClick={() => addRecipient(user.email)}
+                    className="text-sm px-2 py-1 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 rounded"
+                  >
+                    {user.name} ({user.email})
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Subject */}
+      <div>
+        <label className="label">Subject</label>
+        <input
+          type="text"
+          value={subject}
+          onChange={(e) => setSubject(e.target.value)}
+          className="input"
+          required
+        />
+      </div>
+
+      {/* Message */}
+      <div>
+        <label className="label">Message</label>
+        <textarea
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          rows={4}
+          className="input"
+          placeholder="Add a message to accompany the report..."
+        />
+      </div>
+
+      {/* Actions */}
+      <div className="flex justify-end space-x-3">
+        <button
+          type="button"
+          onClick={onClose}
+          className="btn-secondary"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          disabled={recipients.length === 0 || isSending}
+          className="btn-primary"
+        >
+          {isSending ? (
+            <>
+              <div className="loading-spinner h-4 w-4 mr-2"></div>
+              Sending...
+            </>
+          ) : (
+            <>
+              <EnvelopeIcon className="h-4 w-4 mr-2" />
+              Send Email
+            </>
+          )}
+        </button>
+      </div>
+    </form>
   )
 }
 
 export default ReportsPage
 EOF
-    # Add AssignmentsPage
-    cat > "$APP_DIR/frontend/src/pages/AssignmentsPage.tsx" << 'EOF'
+    # Add DatabaseBrowser component
+    cat > "$APP_DIR/frontend/src/components/DatabaseBrowser.tsx" << 'EOF'
+import React, { useState, useEffect } from 'react'
+import { useQuery, useMutation, useQueryClient } from 'react-query'
+import { databaseBrowserAPI } from '../services/api'
+import { useAuth } from '../contexts/AuthContext'
+import {
+  TableCellsIcon,
+  PencilIcon,
+  PlusIcon,
+  TrashIcon,
+  MagnifyingGlassIcon,
+  CodeBracketIcon,
+  EyeIcon,
+  ArrowPathIcon,
+  ExclamationTriangleIcon,
+  CheckCircleIcon,
+  XCircleIcon,
+  InformationCircleIcon,
+  DocumentTextIcon,
+  ChartBarIcon,
+  ServerIcon,
+  DatabaseIcon,
+  Cog6ToothIcon,
+  PlayIcon,
+  StopIcon,
+  ArrowUpTrayIcon,
+  ArrowDownTrayIcon,
+  PrinterIcon,
+  DocumentArrowDownIcon,
+  DocumentArrowUpIcon,
+  ClipboardDocumentIcon,
+  ClipboardDocumentCheckIcon,
+  ClipboardDocumentListIcon,
+  ClipboardDocumentIcon as ClipboardIcon,
+  XMarkIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  FunnelIcon,
+  AdjustmentsHorizontalIcon,
+  Squares2X2Icon,
+  ListBulletIcon,
+  TableCellsIcon as TableIcon,
+  CommandLineIcon,
+  TerminalIcon,
+  CpuChipIcon,
+  CircleStackIcon,
+  KeyIcon,
+  LinkIcon,
+  TagIcon,
+  CalendarIcon,
+  ClockIcon,
+  UserIcon,
+  UsersIcon,
+  BuildingOfficeIcon,
+  HomeIcon,
+  GlobeAltIcon,
+  CloudIcon,
+  ShieldCheckIcon,
+  LockClosedIcon,
+  EyeSlashIcon,
+  EyeIcon as ViewIcon,
+  PencilSquareIcon,
+  DocumentDuplicateIcon,
+  DocumentPlusIcon,
+  DocumentMinusIcon,
+  DocumentXMarkIcon,
+  DocumentCheckIcon,
+  DocumentIcon,
+  FolderIcon,
+  FolderOpenIcon,
+  FolderPlusIcon,
+  FolderMinusIcon,
+  ArchiveBoxIcon,
+  ArchiveBoxXMarkIcon,
+  ArchiveBoxArrowDownIcon,
+  InboxIcon,
+  InboxArrowDownIcon,
+  InboxStackIcon,
+  QueueListIcon,
+  Bars3Icon,
+  Bars3BottomLeftIcon,
+  Bars3BottomRightIcon,
+  Bars4Icon,
+  BarsArrowUpIcon,
+  BarsArrowDownIcon,
+  BarsArrowLeftIcon,
+  BarsArrowRightIcon,
+  Bars3CenterLeftIcon,
+  Bars3CenterRightIcon,
+  Bars3LeftIcon,
+  Bars3RightIcon,
+  Bars3TopLeftIcon,
+  Bars3TopRightIcon,
+  Bars3BottomLeftIcon as Bars3BottomLeft,
+  Bars3BottomRightIcon as Bars3BottomRight,
+  Bars3CenterLeftIcon as Bars3CenterLeft,
+  Bars3CenterRightIcon as Bars3CenterRight,
+  Bars3LeftIcon as Bars3Left,
+  Bars3RightIcon as Bars3Right,
+  Bars3TopLeftIcon as Bars3TopLeft,
+  Bars3TopRightIcon as Bars3TopRight,
+  Bars4Icon as Bars4,
+  BarsArrowUpIcon as BarsArrowUp,
+  BarsArrowDownIcon as BarsArrowDown,
+  BarsArrowLeftIcon as BarsArrowLeft,
+  BarsArrowRightIcon as BarsArrowRight,
+  QueueListIcon as QueueList,
+  InboxStackIcon as InboxStack,
+  InboxArrowDownIcon as InboxArrowDown,
+  InboxIcon as Inbox,
+  ArchiveBoxArrowDownIcon as ArchiveBoxArrowDown,
+  ArchiveBoxXMarkIcon as ArchiveBoxXMark,
+  ArchiveBoxIcon as ArchiveBox,
+  FolderMinusIcon as FolderMinus,
+  FolderPlusIcon as FolderPlus,
+  FolderOpenIcon as FolderOpen,
+  FolderIcon as Folder,
+  DocumentCheckIcon as DocumentCheck,
+  DocumentXMarkIcon as DocumentXMark,
+  DocumentMinusIcon as DocumentMinus,
+  DocumentPlusIcon as DocumentPlus,
+  DocumentDuplicateIcon as DocumentDuplicate,
+  PencilSquareIcon as PencilSquare,
+  ViewIcon as View,
+  EyeSlashIcon as EyeSlash,
+  LockClosedIcon as LockClosed,
+  ShieldCheckIcon as ShieldCheck,
+  CloudIcon as Cloud,
+  GlobeAltIcon as GlobeAlt,
+  HomeIcon as Home,
+  BuildingOfficeIcon as BuildingOffice,
+  UsersIcon as Users,
+  UserIcon as User,
+  ClockIcon as Clock,
+  CalendarIcon as Calendar,
+  TagIcon as Tag,
+  LinkIcon as Link,
+  KeyIcon as Key,
+  CircleStackIcon as CircleStack,
+  CpuChipIcon as CpuChip,
+  TerminalIcon as Terminal,
+  CommandLineIcon as CommandLine,
+  TableIcon as Table,
+  ListBulletIcon as ListBullet,
+  Squares2X2Icon as Squares2X2,
+  AdjustmentsHorizontalIcon as AdjustmentsHorizontal,
+  FunnelIcon as Funnel,
+  ChevronRightIcon as ChevronRight,
+  ChevronDownIcon as ChevronDown,
+  XMarkIcon as XMark,
+  ClipboardIcon as Clipboard,
+  ClipboardDocumentListIcon as ClipboardDocumentList,
+  ClipboardDocumentCheckIcon as ClipboardDocumentCheck,
+  ClipboardDocumentIcon as ClipboardDocument,
+  DocumentArrowUpIcon as DocumentArrowUp,
+  DocumentArrowDownIcon as DocumentArrowDown,
+  PrinterIcon as Printer,
+  ArrowDownTrayIcon as ArrowDownTray,
+  ArrowUpTrayIcon as ArrowUpTray,
+  StopIcon as Stop,
+  PlayIcon as Play,
+  Cog6ToothIcon as Cog6Tooth,
+  DatabaseIcon as Database,
+  ServerIcon as Server,
+  ChartBarIcon as ChartBar,
+  DocumentTextIcon as DocumentText,
+  InformationCircleIcon as InformationCircle,
+  XCircleIcon as XCircle,
+  CheckCircleIcon as CheckCircle,
+  ExclamationTriangleIcon as ExclamationTriangle,
+  ArrowPathIcon as ArrowPath,
+  EyeIcon as Eye,
+  CodeBracketIcon as CodeBracket,
+  MagnifyingGlassIcon as MagnifyingGlass,
+  TrashIcon as Trash,
+  PlusIcon as Plus,
+  PencilIcon as Pencil,
+  TableCellsIcon as TableCells,
+  TrophyIcon
+} from '@heroicons/react/24/outline'
+
+interface DatabaseTable {
+  name: string
+  type: string
+  schema: string
+  rowCount: number
+  size: string
+  lastModified: string
+  columns: TableColumn[]
+}
+
+interface TableColumn {
+  name: string
+  type: string
+  nullable: boolean
+  defaultValue?: any
+  isPrimaryKey: boolean
+  isForeignKey: boolean
+  foreignKeyTable?: string
+  foreignKeyColumn?: string
+  maxLength?: number
+  precision?: number
+  scale?: number
+}
+
+interface TableData {
+  data: any[]
+  totalCount: number
+  page: number
+  limit: number
+  totalPages: number
+  columns: TableColumn[]
+}
+
+interface QueryResult {
+  data: any[]
+  columns: string[]
+  rowCount: number
+  executionTime: number
+  error?: string
+}
+
+const DatabaseBrowser: React.FC = () => {
+  const { user } = useAuth()
+  const queryClient = useQueryClient()
+  
+  const [activeTab, setActiveTab] = useState<'browse' | 'query' | 'schema'>('browse')
+  const [selectedTable, setSelectedTable] = useState<string>('')
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(50)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [customQuery, setCustomQuery] = useState('')
+  const [showInsertModal, setShowInsertModal] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [showQueryModal, setShowQueryModal] = useState(false)
+  const [selectedRecord, setSelectedRecord] = useState<any>(null)
+  const [editingRecord, setEditingRecord] = useState<any>({})
+  const [queryResult, setQueryResult] = useState<QueryResult | null>(null)
+  const [isExecutingQuery, setIsExecutingQuery] = useState(false)
+
+  // Fetch tables
+  const { data: tables, isLoading: tablesLoading } = useQuery(
+    'database-tables',
+    () => databaseBrowserAPI.getTables().then(res => res.data),
+    {
+      enabled: user?.role === 'ADMIN' || user?.role === 'ORGANIZER',
+    }
+  )
+
+  // Fetch table data
+  const { data: tableData, isLoading: dataLoading } = useQuery(
+    ['table-data', selectedTable, currentPage, pageSize, searchTerm],
+    () => databaseBrowserAPI.getTableData(selectedTable, currentPage, pageSize, searchTerm).then(res => res.data),
+    {
+      enabled: !!selectedTable,
+    }
+  )
+
+  // Fetch table schema
+  const { data: tableSchema, isLoading: schemaLoading } = useQuery(
+    ['table-schema', selectedTable],
+    () => databaseBrowserAPI.getTableSchema(selectedTable).then(res => res.data),
+    {
+      enabled: !!selectedTable,
+    }
+  )
+
+  // Mutations
+  const insertMutation = useMutation(
+    (data: any) => databaseBrowserAPI.insertRecord(selectedTable, data),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries(['table-data', selectedTable])
+        setShowInsertModal(false)
+        setEditingRecord({})
+      },
+    }
+  )
+
+  const updateMutation = useMutation(
+    ({ id, data }: { id: string; data: any }) => databaseBrowserAPI.updateRecord(selectedTable, id, data),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries(['table-data', selectedTable])
+        setShowEditModal(false)
+        setEditingRecord({})
+        setSelectedRecord(null)
+      },
+    }
+  )
+
+  const deleteMutation = useMutation(
+    (id: string) => databaseBrowserAPI.deleteRecord(selectedTable, id),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries(['table-data', selectedTable])
+        setShowDeleteModal(false)
+        setSelectedRecord(null)
+      },
+    }
+  )
+
+  const executeQueryMutation = useMutation(
+    (query: string) => databaseBrowserAPI.executeQuery(query),
+    {
+      onSuccess: (result) => {
+        setQueryResult(result.data)
+        setIsExecutingQuery(false)
+      },
+      onError: (error: any) => {
+        setQueryResult({
+          data: [],
+          columns: [],
+          rowCount: 0,
+          executionTime: 0,
+          error: error.response?.data?.error || 'Query execution failed'
+        })
+        setIsExecutingQuery(false)
+      },
+    }
+  )
+
+  const handleTableSelect = (tableName: string) => {
+    setSelectedTable(tableName)
+    setCurrentPage(1)
+    setSearchTerm('')
+  }
+
+  const handleInsert = () => {
+    setEditingRecord({})
+    setShowInsertModal(true)
+  }
+
+  const handleEdit = (record: any) => {
+    setSelectedRecord(record)
+    setEditingRecord({ ...record })
+    setShowEditModal(true)
+  }
+
+  const handleDelete = (record: any) => {
+    setSelectedRecord(record)
+    setShowDeleteModal(true)
+  }
+
+  const handleExecuteQuery = () => {
+    if (!customQuery.trim()) return
+    
+    setIsExecutingQuery(true)
+    executeQueryMutation.mutate(customQuery)
+  }
+
+  const handleInsertSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    insertMutation.mutate(editingRecord)
+  }
+
+  const handleEditSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (selectedRecord) {
+      updateMutation.mutate({ id: selectedRecord.id, data: editingRecord })
+    }
+  }
+
+  const handleDeleteConfirm = () => {
+    if (selectedRecord) {
+      deleteMutation.mutate(selectedRecord.id)
+    }
+  }
+
+  const getColumnType = (type: string) => {
+    const typeMap: { [key: string]: string } = {
+      'varchar': 'text',
+      'text': 'textarea',
+      'int': 'number',
+      'bigint': 'number',
+      'decimal': 'number',
+      'float': 'number',
+      'double': 'number',
+      'boolean': 'checkbox',
+      'date': 'date',
+      'datetime': 'datetime-local',
+      'timestamp': 'datetime-local',
+      'time': 'time',
+      'json': 'textarea',
+      'uuid': 'text',
+      'char': 'text',
+      'tinyint': 'number',
+      'smallint': 'number',
+      'mediumint': 'number',
+      'real': 'number',
+      'numeric': 'number',
+      'bit': 'checkbox',
+      'year': 'number',
+      'binary': 'text',
+      'varbinary': 'text',
+      'blob': 'textarea',
+      'longblob': 'textarea',
+      'mediumblob': 'textarea',
+      'tinyblob': 'textarea',
+      'enum': 'select',
+      'set': 'text',
+      'geometry': 'text',
+      'point': 'text',
+      'linestring': 'text',
+      'polygon': 'text',
+      'multipoint': 'text',
+      'multilinestring': 'text',
+      'multipolygon': 'text',
+      'geometrycollection': 'text'
+    }
+    return typeMap[type.toLowerCase()] || 'text'
+  }
+
+  const formatValue = (value: any, type: string) => {
+    if (value === null || value === undefined) return 'NULL'
+    if (type.toLowerCase().includes('date') || type.toLowerCase().includes('time')) {
+      return new Date(value).toLocaleString()
+    }
+    if (type.toLowerCase() === 'json') {
+      return JSON.stringify(value, null, 2)
+    }
+    if (typeof value === 'boolean') {
+      return value ? 'true' : 'false'
+    }
+    return String(value)
+  }
+
+  const getTableIcon = (tableName: string) => {
+    if (tableName.includes('user')) return <UserIcon className="h-5 w-5" />
+    if (tableName.includes('event')) return <CalendarIcon className="h-5 w-5" />
+    if (tableName.includes('contest')) return <TrophyIcon className="h-5 w-5" />
+    if (tableName.includes('score')) return <ChartBarIcon className="h-5 w-5" />
+    if (tableName.includes('log')) return <DocumentTextIcon className="h-5 w-5" />
+    if (tableName.includes('setting')) return <Cog6ToothIcon className="h-5 w-5" />
+    return <TableCellsIcon className="h-5 w-5" />
+  }
+
+  const getTableColor = (tableName: string) => {
+    if (tableName.includes('user')) return 'text-blue-600'
+    if (tableName.includes('event')) return 'text-green-600'
+    if (tableName.includes('contest')) return 'text-purple-600'
+    if (tableName.includes('score')) return 'text-orange-600'
+    if (tableName.includes('log')) return 'text-gray-600'
+    if (tableName.includes('setting')) return 'text-indigo-600'
+    return 'text-gray-600'
+  }
+
+  if (!user || (user.role !== 'ADMIN' && user.role !== 'ORGANIZER')) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <ExclamationTriangleIcon className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+            Access Denied
+          </h3>
+          <p className="text-gray-600 dark:text-gray-400">
+            You don't have permission to access the database browser.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+            Database Browser
+          </h1>
+          <p className="text-gray-600 dark:text-gray-400">
+            Browse, edit, and manage database tables and records
+          </p>
+        </div>
+        <div className="flex items-center space-x-3">
+          <button
+            onClick={() => setShowQueryModal(true)}
+            className="btn-primary"
+          >
+            <CodeBracketIcon className="h-4 w-4 mr-2" />
+            Custom Query
+          </button>
+          {selectedTable && (
+            <button
+              onClick={handleInsert}
+              className="btn-primary"
+            >
+              <PlusIcon className="h-4 w-4 mr-2" />
+              Insert Record
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="border-b border-gray-200 dark:border-gray-700">
+        <nav className="-mb-px flex space-x-8">
+          <button
+            onClick={() => setActiveTab('browse')}
+            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'browse'
+                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+            }`}
+          >
+            <TableCellsIcon className="h-4 w-4 mr-2 inline" />
+            Browse Data
+          </button>
+          <button
+            onClick={() => setActiveTab('schema')}
+            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'schema'
+                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+            }`}
+          >
+            <DatabaseIcon className="h-4 w-4 mr-2 inline" />
+            Schema
+          </button>
+          <button
+            onClick={() => setActiveTab('query')}
+            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'query'
+                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+            }`}
+          >
+            <CodeBracketIcon className="h-4 w-4 mr-2 inline" />
+            Query Editor
+          </button>
+        </nav>
+      </div>
+
+      {/* Content */}
+      {activeTab === 'browse' && (
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          {/* Tables List */}
+          <div className="lg:col-span-1">
+            <div className="card">
+              <div className="card-header">
+                <h3 className="card-title">Tables</h3>
+              </div>
+              <div className="card-content">
+                {tablesLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="loading-spinner h-8 w-8"></div>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {tables?.map((table: DatabaseTable) => (
+                      <button
+                        key={table.name}
+                        onClick={() => handleTableSelect(table.name)}
+                        className={`w-full text-left p-3 rounded-lg border transition-colors ${
+                          selectedTable === table.name
+                            ? 'bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800'
+                            : 'bg-white border-gray-200 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-700 dark:hover:bg-gray-700'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-3">
+                            <div className={getTableColor(table.name)}>
+                              {getTableIcon(table.name)}
+                            </div>
+                            <div>
+                              <div className="font-medium text-gray-900 dark:text-white">
+                                {table.name}
+                              </div>
+                              <div className="text-sm text-gray-500 dark:text-gray-400">
+                                {table.rowCount.toLocaleString()} rows
+                              </div>
+                            </div>
+                          </div>
+                          <div className="text-xs text-gray-400">
+                            {table.size}
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Table Data */}
+          <div className="lg:col-span-3">
+            {selectedTable ? (
+              <div className="card">
+                <div className="card-header">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="card-title">{selectedTable}</h3>
+                      <p className="card-description">
+                        {tableData?.totalCount.toLocaleString()} total records
+                      </p>
+                    </div>
+                    <div className="flex items-center space-x-3">
+                      <div className="relative">
+                        <MagnifyingGlassIcon className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                        <input
+                          type="text"
+                          placeholder="Search records..."
+                          value={searchTerm}
+                          onChange={(e) => setSearchTerm(e.target.value)}
+                          className="input pl-10 w-64"
+                        />
+                      </div>
+                      <select
+                        value={pageSize}
+                        onChange={(e) => setPageSize(Number(e.target.value))}
+                        className="input w-20"
+                      >
+                        <option value={25}>25</option>
+                        <option value={50}>50</option>
+                        <option value={100}>100</option>
+                        <option value={200}>200</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+                <div className="card-content">
+                  {dataLoading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="loading-spinner h-8 w-8"></div>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="table">
+                        <thead className="table-header">
+                          <tr className="table-row">
+                            {tableData?.columns.map((column) => (
+                              <th key={column.name} className="table-head">
+                                <div className="flex items-center space-x-2">
+                                  <span>{column.name}</span>
+                                  {column.isPrimaryKey && (
+                                    <KeyIcon className="h-3 w-3 text-yellow-500" />
+                                  )}
+                                  {column.isForeignKey && (
+                                    <LinkIcon className="h-3 w-3 text-blue-500" />
+                                  )}
+                                </div>
+                              </th>
+                            ))}
+                            <th className="table-head">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="table-body">
+                          {tableData?.data.map((record, index) => (
+                            <tr key={index} className="table-row">
+                              {tableData.columns.map((column) => (
+                                <td key={column.name} className="table-cell">
+                                  <div className="max-w-xs truncate" title={formatValue(record[column.name], column.type)}>
+                                    {formatValue(record[column.name], column.type)}
+                                  </div>
+                                </td>
+                              ))}
+                              <td className="table-cell">
+                                <div className="flex items-center space-x-2">
+                                  <button
+                                    onClick={() => handleEdit(record)}
+                                    className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
+                                  >
+                                    <PencilIcon className="h-4 w-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDelete(record)}
+                                    className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+                                  >
+                                    <TrashIcon className="h-4 w-4" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+                {tableData && tableData.totalPages > 1 && (
+                  <div className="card-footer">
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm text-gray-500 dark:text-gray-400">
+                        Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, tableData.totalCount)} of {tableData.totalCount} records
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                          disabled={currentPage === 1}
+                          className="btn-secondary btn-sm"
+                        >
+                          Previous
+                        </button>
+                        <span className="text-sm text-gray-500 dark:text-gray-400">
+                          Page {currentPage} of {tableData.totalPages}
+                        </span>
+                        <button
+                          onClick={() => setCurrentPage(Math.min(tableData.totalPages, currentPage + 1))}
+                          disabled={currentPage === tableData.totalPages}
+                          className="btn-secondary btn-sm"
+                        >
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="card">
+                <div className="card-content">
+                  <div className="text-center py-12">
+                    <TableCellsIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                      Select a Table
+                    </h3>
+                    <p className="text-gray-600 dark:text-gray-400">
+                      Choose a table from the list to view and edit its data.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'schema' && selectedTable && (
+        <div className="card">
+          <div className="card-header">
+            <h3 className="card-title">Schema: {selectedTable}</h3>
+          </div>
+          <div className="card-content">
+            {schemaLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="loading-spinner h-8 w-8"></div>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="table">
+                  <thead className="table-header">
+                    <tr className="table-row">
+                      <th className="table-head">Column</th>
+                      <th className="table-head">Type</th>
+                      <th className="table-head">Nullable</th>
+                      <th className="table-head">Default</th>
+                      <th className="table-head">Primary Key</th>
+                      <th className="table-head">Foreign Key</th>
+                      <th className="table-head">Max Length</th>
+                    </tr>
+                  </thead>
+                  <tbody className="table-body">
+                    {tableSchema?.columns.map((column) => (
+                      <tr key={column.name} className="table-row">
+                        <td className="table-cell font-medium">{column.name}</td>
+                        <td className="table-cell">
+                          <code className="bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded text-sm">
+                            {column.type}
+                          </code>
+                        </td>
+                        <td className="table-cell">
+                          {column.nullable ? (
+                            <span className="text-green-600 dark:text-green-400">Yes</span>
+                          ) : (
+                            <span className="text-red-600 dark:text-red-400">No</span>
+                          )}
+                        </td>
+                        <td className="table-cell">
+                          {column.defaultValue !== null ? (
+                            <code className="bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded text-sm">
+                              {String(column.defaultValue)}
+                            </code>
+                          ) : (
+                            <span className="text-gray-400">NULL</span>
+                          )}
+                        </td>
+                        <td className="table-cell">
+                          {column.isPrimaryKey ? (
+                            <KeyIcon className="h-4 w-4 text-yellow-500" />
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </td>
+                        <td className="table-cell">
+                          {column.isForeignKey ? (
+                            <div className="flex items-center space-x-1">
+                              <LinkIcon className="h-4 w-4 text-blue-500" />
+                              <span className="text-sm">
+                                {column.foreignKeyTable}.{column.foreignKeyColumn}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </td>
+                        <td className="table-cell">
+                          {column.maxLength ? (
+                            <span className="text-sm">{column.maxLength}</span>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'query' && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Query Editor */}
+          <div className="card">
+            <div className="card-header">
+              <h3 className="card-title">Query Editor</h3>
+            </div>
+            <div className="card-content">
+              <textarea
+                value={customQuery}
+                onChange={(e) => setCustomQuery(e.target.value)}
+                placeholder="Enter your SQL query here..."
+                className="input h-64 font-mono text-sm"
+              />
+              <div className="mt-4 flex items-center justify-between">
+                <div className="text-sm text-gray-500 dark:text-gray-400">
+                  {customQuery.length} characters
+                </div>
+                <button
+                  onClick={handleExecuteQuery}
+                  disabled={!customQuery.trim() || isExecutingQuery}
+                  className="btn-primary"
+                >
+                  {isExecutingQuery ? (
+                    <>
+                      <div className="loading-spinner h-4 w-4 mr-2"></div>
+                      Executing...
+                    </>
+                  ) : (
+                    <>
+                      <PlayIcon className="h-4 w-4 mr-2" />
+                      Execute Query
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Query Results */}
+          <div className="card">
+            <div className="card-header">
+              <h3 className="card-title">Query Results</h3>
+            </div>
+            <div className="card-content">
+              {queryResult ? (
+                <div className="space-y-4">
+                  {queryResult.error ? (
+                    <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+                      <div className="flex items-center space-x-2">
+                        <ExclamationTriangleIcon className="h-5 w-5 text-red-500" />
+                        <span className="text-red-700 dark:text-red-400 font-medium">
+                          Query Error
+                        </span>
+                      </div>
+                      <p className="text-red-600 dark:text-red-300 mt-2">
+                        {queryResult.error}
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <div className="text-sm text-gray-500 dark:text-gray-400">
+                          {queryResult.rowCount} rows returned in {queryResult.executionTime}ms
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <button className="btn-secondary btn-sm">
+                            <ArrowDownTrayIcon className="h-4 w-4 mr-1" />
+                            Export
+                          </button>
+                          <button className="btn-secondary btn-sm">
+                            <PrinterIcon className="h-4 w-4 mr-1" />
+                            Print
+                          </button>
+                        </div>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="table">
+                          <thead className="table-header">
+                            <tr className="table-row">
+                              {queryResult.columns.map((column) => (
+                                <th key={column} className="table-head">
+                                  {column}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody className="table-body">
+                            {queryResult.data.map((row, index) => (
+                              <tr key={index} className="table-row">
+                                {queryResult.columns.map((column) => (
+                                  <td key={column} className="table-cell">
+                                    <div className="max-w-xs truncate">
+                                      {formatValue(row[column], 'text')}
+                                    </div>
+                                  </td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <CodeBracketIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                    No Query Executed
+                  </h3>
+                  <p className="text-gray-600 dark:text-gray-400">
+                    Enter a SQL query and click "Execute Query" to see results.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Insert Modal */}
+      {showInsertModal && (
+        <div className="modal">
+          <div className="modal-overlay" onClick={() => setShowInsertModal(false)}></div>
+          <div className="modal-content max-w-4xl">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Insert New Record: {selectedTable}
+              </h3>
+              <button
+                onClick={() => setShowInsertModal(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+            </div>
+            <form onSubmit={handleInsertSubmit} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {tableSchema?.columns.map((column) => (
+                  <div key={column.name}>
+                    <label className="label">
+                      {column.name}
+                      {column.isPrimaryKey && (
+                        <span className="text-yellow-500 ml-1">*</span>
+                      )}
+                      {!column.nullable && !column.isPrimaryKey && (
+                        <span className="text-red-500 ml-1">*</span>
+                      )}
+                    </label>
+                    {getColumnType(column.type) === 'textarea' ? (
+                      <textarea
+                        value={editingRecord[column.name] || ''}
+                        onChange={(e) => setEditingRecord({
+                          ...editingRecord,
+                          [column.name]: e.target.value
+                        })}
+                        className="input"
+                        rows={3}
+                        placeholder={column.defaultValue ? String(column.defaultValue) : ''}
+                      />
+                    ) : getColumnType(column.type) === 'checkbox' ? (
+                      <input
+                        type="checkbox"
+                        checked={editingRecord[column.name] || false}
+                        onChange={(e) => setEditingRecord({
+                          ...editingRecord,
+                          [column.name]: e.target.checked
+                        })}
+                        className="input"
+                      />
+                    ) : (
+                      <input
+                        type={getColumnType(column.type)}
+                        value={editingRecord[column.name] || ''}
+                        onChange={(e) => setEditingRecord({
+                          ...editingRecord,
+                          [column.name]: e.target.value
+                        })}
+                        className="input"
+                        placeholder={column.defaultValue ? String(column.defaultValue) : ''}
+                      />
+                    )}
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      Type: {column.type}
+                      {column.maxLength && ` (max: ${column.maxLength})`}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={() => setShowInsertModal(false)}
+                  className="btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={insertMutation.isLoading}
+                  className="btn-primary"
+                >
+                  {insertMutation.isLoading ? (
+                    <>
+                      <div className="loading-spinner h-4 w-4 mr-2"></div>
+                      Inserting...
+                    </>
+                  ) : (
+                    <>
+                      <PlusIcon className="h-4 w-4 mr-2" />
+                      Insert Record
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {showEditModal && selectedRecord && (
+        <div className="modal">
+          <div className="modal-overlay" onClick={() => setShowEditModal(false)}></div>
+          <div className="modal-content max-w-4xl">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Edit Record: {selectedTable}
+              </h3>
+              <button
+                onClick={() => setShowEditModal(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+            </div>
+            <form onSubmit={handleEditSubmit} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {tableSchema?.columns.map((column) => (
+                  <div key={column.name}>
+                    <label className="label">
+                      {column.name}
+                      {column.isPrimaryKey && (
+                        <span className="text-yellow-500 ml-1">*</span>
+                      )}
+                      {!column.nullable && !column.isPrimaryKey && (
+                        <span className="text-red-500 ml-1">*</span>
+                      )}
+                    </label>
+                    {getColumnType(column.type) === 'textarea' ? (
+                      <textarea
+                        value={editingRecord[column.name] || ''}
+                        onChange={(e) => setEditingRecord({
+                          ...editingRecord,
+                          [column.name]: e.target.value
+                        })}
+                        className="input"
+                        rows={3}
+                      />
+                    ) : getColumnType(column.type) === 'checkbox' ? (
+                      <input
+                        type="checkbox"
+                        checked={editingRecord[column.name] || false}
+                        onChange={(e) => setEditingRecord({
+                          ...editingRecord,
+                          [column.name]: e.target.checked
+                        })}
+                        className="input"
+                      />
+                    ) : (
+                      <input
+                        type={getColumnType(column.type)}
+                        value={editingRecord[column.name] || ''}
+                        onChange={(e) => setEditingRecord({
+                          ...editingRecord,
+                          [column.name]: e.target.value
+                        })}
+                        className="input"
+                      />
+                    )}
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      Type: {column.type}
+                      {column.maxLength && ` (max: ${column.maxLength})`}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={() => setShowEditModal(false)}
+                  className="btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={updateMutation.isLoading}
+                  className="btn-primary"
+                >
+                  {updateMutation.isLoading ? (
+                    <>
+                      <div className="loading-spinner h-4 w-4 mr-2"></div>
+                      Updating...
+                    </>
+                  ) : (
+                    <>
+                      <PencilIcon className="h-4 w-4 mr-2" />
+                      Update Record
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Modal */}
+      {showDeleteModal && selectedRecord && (
+        <div className="modal">
+          <div className="modal-overlay" onClick={() => setShowDeleteModal(false)}></div>
+          <div className="modal-content">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Delete Record
+              </h3>
+              <button
+                onClick={() => setShowDeleteModal(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+                <div className="flex items-center space-x-2">
+                  <ExclamationTriangleIcon className="h-5 w-5 text-red-500" />
+                  <span className="text-red-700 dark:text-red-400 font-medium">
+                    Warning
+                  </span>
+                </div>
+                <p className="text-red-600 dark:text-red-300 mt-2">
+                  This action cannot be undone. The record will be permanently deleted from the database.
+                </p>
+              </div>
+              <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                <h4 className="font-medium text-gray-900 dark:text-white mb-2">
+                  Record Details:
+                </h4>
+                <div className="space-y-1">
+                  {Object.entries(selectedRecord).map(([key, value]) => (
+                    <div key={key} className="flex justify-between text-sm">
+                      <span className="font-medium text-gray-600 dark:text-gray-400">
+                        {key}:
+                      </span>
+                      <span className="text-gray-900 dark:text-white">
+                        {formatValue(value, 'text')}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="flex justify-end space-x-3">
+                <button
+                  onClick={() => setShowDeleteModal(false)}
+                  className="btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeleteConfirm}
+                  disabled={deleteMutation.isLoading}
+                  className="btn-destructive"
+                >
+                  {deleteMutation.isLoading ? (
+                    <>
+                      <div className="loading-spinner h-4 w-4 mr-2"></div>
+                      Deleting...
+                    </>
+                  ) : (
+                    <>
+                      <TrashIcon className="h-4 w-4 mr-2" />
+                      Delete Record
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default DatabaseBrowser
+EOF
+
+    # Add EmceeScripts component to admin and board pages
+    # Update AdminPage to include EmceeScripts
+    sed -i '/import.*EmceeScripts/d' "$APP_DIR/frontend/src/pages/AdminPage.tsx" 2>/dev/null || true
+    sed -i '/import.*components/a import EmceeScripts from "../components/EmceeScripts"' "$APP_DIR/frontend/src/pages/AdminPage.tsx" 2>/dev/null || true
+    
+    # Add EmceeScripts tab to AdminPage
+    if ! grep -q "Emcee Scripts" "$APP_DIR/frontend/src/pages/AdminPage.tsx" 2>/dev/null; then
+        sed -i '/const tabs = \[/a\    { id: "emcee-scripts", name: "Emcee Scripts", icon: DocumentTextIcon, component: EmceeScripts },' "$APP_DIR/frontend/src/pages/AdminPage.tsx" 2>/dev/null || true
+    fi
+    
+    # Update BoardPage to include EmceeScripts
+    sed -i '/import.*EmceeScripts/d' "$APP_DIR/frontend/src/pages/BoardPage.tsx" 2>/dev/null || true
+    sed -i '/import.*components/a import EmceeScripts from "../components/EmceeScripts"' "$APP_DIR/frontend/src/pages/BoardPage.tsx" 2>/dev/null || true
+    
+    # Add EmceeScripts tab to BoardPage
+    if ! grep -q "Emcee Scripts" "$APP_DIR/frontend/src/pages/BoardPage.tsx" 2>/dev/null; then
+        sed -i '/const tabs = \[/a\    { id: "emcee-scripts", name: "Emcee Scripts", icon: DocumentTextIcon, component: EmceeScripts },' "$APP_DIR/frontend/src/pages/BoardPage.tsx" 2>/dev/null || true
+    fi
+
+    # Update WinnersPage with certification progress and role-based visibility
+    cat > "$APP_DIR/frontend/src/pages/WinnersPage.tsx" << 'EOF'
+import React, { useState } from 'react'
+import { useQuery } from 'react-query'
+import { useAuth } from '../contexts/AuthContext'
+import { winnersAPI } from '../services/api'
+import {
+  TrophyIcon,
+  CheckCircleIcon,
+  XCircleIcon,
+  ClockIcon,
+  ExclamationTriangleIcon,
+  EyeIcon,
+  PrinterIcon,
+  DocumentTextIcon,
+  UserGroupIcon,
+  StarIcon,
+  MedalIcon,
+  AwardIcon,
+  ShieldCheckIcon,
+  LockClosedIcon,
+  MagnifyingGlassIcon,
+  FunnelIcon,
+  ArrowDownTrayIcon,
+  ShareIcon,
+  CalendarIcon,
+  ChartBarIcon,
+  InformationCircleIcon,
+  XMarkIcon,
+  ChevronDownIcon,
+  ChevronRightIcon
+} from '@heroicons/react/24/outline'
+
+interface Winner {
+  id: string
+  contestantId: string
+  contestantName: string
+  contestantNumber?: string
+  categoryId: string
+  categoryName: string
+  contestId: string
+  contestName: string
+  eventId: string
+  eventName: string
+  rank: number
+  totalScore: number
+  averageScore: number
+  isCertified: boolean
+  certificationStatus: 'PENDING' | 'IN_PROGRESS' | 'CERTIFIED' | 'REJECTED'
+  certificationProgress: {
+    judge: boolean
+    tallyMaster: boolean
+    auditor: boolean
+    board: boolean
+  }
+  certifiedAt?: string
+  certifiedBy?: string
+  rejectionReason?: string
+  createdAt: string
+  updatedAt: string
+}
+
+interface CertificationProgress {
+  totalSteps: number
+  completedSteps: number
+  currentStep: string
+  canDisplay: boolean
+  requiredSignatures: string[]
+  completedSignatures: string[]
+}
+
+const WinnersPage: React.FC = () => {
+  const { user } = useAuth()
+  const [selectedEvent, setSelectedEvent] = useState<string>('')
+  const [selectedContest, setSelectedContest] = useState<string>('')
+  const [selectedCategory, setSelectedCategory] = useState<string>('')
+  const [showDetails, setShowDetails] = useState<boolean>(false)
+  const [selectedWinner, setSelectedWinner] = useState<Winner | null>(null)
+
+  // Fetch events
+  const { data: events } = useQuery('events', () => 
+    fetch('/api/events').then(res => res.json())
+  )
+
+  // Fetch contests
+  const { data: contests } = useQuery(['contests', selectedEvent], () => 
+    fetch(`/api/contests?eventId=${selectedEvent}`).then(res => res.json()),
+    { enabled: !!selectedEvent }
+  )
+
+  // Fetch categories
+  const { data: categories } = useQuery(['categories', selectedContest], () => 
+    fetch(`/api/categories?contestId=${selectedContest}`).then(res => res.json()),
+    { enabled: !!selectedContest }
+  )
+
+  // Fetch winners
+  const { data: winners, isLoading } = useQuery(
+    ['winners', selectedEvent, selectedContest, selectedCategory],
+    () => winnersAPI.getWinners({
+      eventId: selectedEvent,
+      contestId: selectedContest,
+      categoryId: selectedCategory
+    }).then(res => res.data),
+    { enabled: !!(selectedEvent && selectedContest && selectedCategory) }
+  )
+
+  const getCertificationProgress = (winner: Winner): CertificationProgress => {
+    const progress = winner.certificationProgress
+    const totalSteps = 4 // judge, tallyMaster, auditor, board
+    const completedSteps = Object.values(progress).filter(Boolean).length
+    
+    const requiredSignatures = ['Judge', 'Tally Master', 'Auditor', 'Board']
+    const completedSignatures = Object.entries(progress)
+      .filter(([_, completed]) => completed)
+      .map(([key, _]) => {
+        switch (key) {
+          case 'judge': return 'Judge'
+          case 'tallyMaster': return 'Tally Master'
+          case 'auditor': return 'Auditor'
+          case 'board': return 'Board'
+          default: return key
+        }
+      })
+
+    const canDisplay = user?.role === 'ADMIN' || user?.role === 'BOARD' || 
+                      (user?.role === 'EMCEE' && progress.board)
+
+    return {
+      totalSteps,
+      completedSteps,
+      currentStep: completedSteps === totalSteps ? 'COMPLETED' : 'IN_PROGRESS',
+      canDisplay,
+      requiredSignatures,
+      completedSignatures
+    }
+  }
+
+  const getRankIcon = (rank: number) => {
+    switch (rank) {
+      case 1: return <TrophyIcon className="h-6 w-6 text-yellow-500" />
+      case 2: return <MedalIcon className="h-6 w-6 text-gray-400" />
+      case 3: return <AwardIcon className="h-6 w-6 text-amber-600" />
+      default: return <StarIcon className="h-6 w-6 text-blue-500" />
+    }
+  }
+
+  const getRankColor = (rank: number) => {
+    switch (rank) {
+      case 1: return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+      case 2: return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
+      case 3: return 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'
+      default: return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+    }
+  }
+
+  const getCertificationStatus = (progress: CertificationProgress) => {
+    if (progress.completedSteps === progress.totalSteps) {
+      return {
+        icon: <CheckCircleIcon className="h-5 w-5 text-green-500" />,
+        text: 'Fully Certified',
+        color: 'text-green-600 dark:text-green-400'
+      }
+    } else if (progress.completedSteps > 0) {
+      return {
+        icon: <ClockIcon className="h-5 w-5 text-yellow-500" />,
+        text: `${progress.completedSteps}/${progress.totalSteps} Certified`,
+        color: 'text-yellow-600 dark:text-yellow-400'
+      }
+    } else {
+      return {
+        icon: <ExclamationTriangleIcon className="h-5 w-5 text-red-500" />,
+        text: 'Not Certified',
+        color: 'text-red-600 dark:text-red-400'
+      }
+    }
+  }
+
+  const canViewWinners = () => {
+    if (!user) return false
+    if (user.role === 'ADMIN' || user.role === 'BOARD') return true
+    if (user.role === 'EMCEE') {
+      // Emcee can only see winners after board certification
+      return winners?.some((winner: Winner) => 
+        winner.certificationProgress.board
+      ) || false
+    }
+    return false
+  }
+
+  const handlePrintWinners = () => {
+    window.print()
+  }
+
+  const handleExportWinners = () => {
+    if (!winners) return
+    
+    const csvContent = [
+      ['Rank', 'Contestant', 'Category', 'Total Score', 'Average Score', 'Certification Status'],
+      ...winners.map((winner: Winner) => {
+        const progress = getCertificationProgress(winner)
+        const status = getCertificationStatus(progress)
+        return [
+          winner.rank,
+          winner.contestantName,
+          winner.categoryName,
+          winner.totalScore.toFixed(2),
+          winner.averageScore.toFixed(2),
+          status.text
+        ]
+      })
+    ].map(row => row.join(',')).join('\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv' })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `winners-${selectedEvent}-${selectedContest}-${selectedCategory}.csv`
+    a.click()
+    window.URL.revokeObjectURL(url)
+  }
+
+  if (!canViewWinners()) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <LockClosedIcon className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+            Winners Not Available
+          </h3>
+          <p className="text-gray-600 dark:text-gray-400">
+            {user?.role === 'EMCEE' 
+              ? 'Winners will be displayed after board certification is complete.'
+              : 'You don\'t have permission to view winners.'}
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+            Winners
+          </h1>
+          <p className="text-gray-600 dark:text-gray-400">
+            View contest winners and certification status
+          </p>
+        </div>
+        <div className="flex items-center space-x-3">
+          <button
+            onClick={handleExportWinners}
+            disabled={!winners || winners.length === 0}
+            className="btn-secondary"
+          >
+            <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
+            Export
+          </button>
+          <button
+            onClick={handlePrintWinners}
+            disabled={!winners || winners.length === 0}
+            className="btn-primary"
+          >
+            <PrinterIcon className="h-4 w-4 mr-2" />
+            Print
+          </button>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="card">
+        <div className="card-header">
+          <h3 className="card-title">Filter Winners</h3>
+        </div>
+        <div className="card-content">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="label">Event</label>
+              <select
+                value={selectedEvent}
+                onChange={(e) => {
+                  setSelectedEvent(e.target.value)
+                  setSelectedContest('')
+                  setSelectedCategory('')
+                }}
+                className="input"
+              >
+                <option value="">Select Event</option>
+                {events?.map((event: any) => (
+                  <option key={event.id} value={event.id}>
+                    {event.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="label">Contest</label>
+              <select
+                value={selectedContest}
+                onChange={(e) => {
+                  setSelectedContest(e.target.value)
+                  setSelectedCategory('')
+                }}
+                className="input"
+                disabled={!selectedEvent}
+              >
+                <option value="">Select Contest</option>
+                {contests?.map((contest: any) => (
+                  <option key={contest.id} value={contest.id}>
+                    {contest.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="label">Category</label>
+              <select
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="input"
+                disabled={!selectedContest}
+              >
+                <option value="">Select Category</option>
+                {categories?.map((category: any) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Winners List */}
+      {selectedEvent && selectedContest && selectedCategory && (
+        <div className="card">
+          <div className="card-header">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="card-title">Winners</h3>
+                <p className="card-description">
+                  {winners?.length || 0} winners found
+                </p>
+              </div>
+              <div className="flex items-center space-x-2">
+                <div className="text-sm text-gray-500 dark:text-gray-400">
+                  Certification Status:
+                </div>
+                <div className="flex items-center space-x-4">
+                  <div className="flex items-center space-x-1">
+                    <CheckCircleIcon className="h-4 w-4 text-green-500" />
+                    <span className="text-sm">Certified</span>
+                  </div>
+                  <div className="flex items-center space-x-1">
+                    <ClockIcon className="h-4 w-4 text-yellow-500" />
+                    <span className="text-sm">Partial</span>
+                  </div>
+                  <div className="flex items-center space-x-1">
+                    <ExclamationTriangleIcon className="h-4 w-4 text-red-500" />
+                    <span className="text-sm">Pending</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="card-content">
+            {isLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="loading-spinner h-8 w-8"></div>
+              </div>
+            ) : winners && winners.length > 0 ? (
+              <div className="space-y-4">
+                {winners.map((winner: Winner) => {
+                  const progress = getCertificationProgress(winner)
+                  const status = getCertificationStatus(progress)
+                  
+                  return (
+                    <div
+                      key={winner.id}
+                      className={`border rounded-lg p-4 transition-colors ${
+                        progress.canDisplay 
+                          ? 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700' 
+                          : 'bg-gray-50 dark:bg-gray-900 border-gray-300 dark:border-gray-600 opacity-75'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-4">
+                          <div className="flex items-center space-x-2">
+                            {getRankIcon(winner.rank)}
+                            <span className={`px-3 py-1 rounded-full text-sm font-medium ${getRankColor(winner.rank)}`}>
+                              #{winner.rank}
+                            </span>
+                          </div>
+                          <div>
+                            <h4 className="font-medium text-gray-900 dark:text-white">
+                              {winner.contestantName}
+                              {winner.contestantNumber && (
+                                <span className="text-sm text-gray-500 dark:text-gray-400 ml-2">
+                                  (#{winner.contestantNumber})
+                                </span>
+                              )}
+                            </h4>
+                            <p className="text-sm text-gray-600 dark:text-gray-400">
+                              {winner.categoryName} - {winner.contestName}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-6">
+                          <div className="text-right">
+                            <div className="text-lg font-semibold text-gray-900 dark:text-white">
+                              {winner.totalScore.toFixed(2)}
+                            </div>
+                            <div className="text-sm text-gray-500 dark:text-gray-400">
+                              Avg: {winner.averageScore.toFixed(2)}
+                            </div>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            {status.icon}
+                            <span className={`text-sm font-medium ${status.color}`}>
+                              {status.text}
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => {
+                              setSelectedWinner(winner)
+                              setShowDetails(true)
+                            }}
+                            className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
+                          >
+                            <EyeIcon className="h-5 w-5" />
+                          </button>
+                        </div>
+                      </div>
+                      
+                      {/* Certification Progress */}
+                      <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                            Certification Progress
+                          </span>
+                          <span className="text-sm text-gray-500 dark:text-gray-400">
+                            {progress.completedSteps}/{progress.totalSteps} signatures
+                          </span>
+                        </div>
+                        <div className="flex items-center space-x-4">
+                          {progress.requiredSignatures.map((signature) => {
+                            const isCompleted = progress.completedSignatures.includes(signature)
+                            return (
+                              <div
+                                key={signature}
+                                className={`flex items-center space-x-1 ${
+                                  isCompleted ? 'text-green-600 dark:text-green-400' : 'text-gray-400'
+                                }`}
+                              >
+                                {isCompleted ? (
+                                  <CheckCircleIcon className="h-4 w-4" />
+                                ) : (
+                                  <ClockIcon className="h-4 w-4" />
+                                )}
+                                <span className="text-sm">{signature}</span>
+                              </div>
+                            )
+                          })}
+                        </div>
+                        {!progress.canDisplay && user?.role === 'EMCEE' && (
+                          <div className="mt-2 p-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded">
+                            <div className="flex items-center space-x-2">
+                              <InformationCircleIcon className="h-4 w-4 text-yellow-600" />
+                              <span className="text-sm text-yellow-700 dark:text-yellow-300">
+                                Winner will be displayed after board certification
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <TrophyIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                  No Winners Found
+                </h3>
+                <p className="text-gray-600 dark:text-gray-400">
+                  Select an event, contest, and category to view winners.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Winner Details Modal */}
+      {showDetails && selectedWinner && (
+        <div className="modal">
+          <div className="modal-overlay" onClick={() => setShowDetails(false)}></div>
+          <div className="modal-content max-w-2xl">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Winner Details
+              </h3>
+              <button
+                onClick={() => setShowDetails(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+            </div>
+            
+            <div className="space-y-6">
+              {/* Winner Info */}
+              <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                <div className="flex items-center space-x-4">
+                  {getRankIcon(selectedWinner.rank)}
+                  <div>
+                    <h4 className="text-lg font-semibold text-gray-900 dark:text-white">
+                      {selectedWinner.contestantName}
+                    </h4>
+                    <p className="text-gray-600 dark:text-gray-400">
+                      {selectedWinner.categoryName} - {selectedWinner.contestName}
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-4 grid grid-cols-2 gap-4">
+                  <div>
+                    <span className="text-sm text-gray-500 dark:text-gray-400">Rank:</span>
+                    <div className="font-semibold">#{selectedWinner.rank}</div>
+                  </div>
+                  <div>
+                    <span className="text-sm text-gray-500 dark:text-gray-400">Total Score:</span>
+                    <div className="font-semibold">{selectedWinner.totalScore.toFixed(2)}</div>
+                  </div>
+                  <div>
+                    <span className="text-sm text-gray-500 dark:text-gray-400">Average Score:</span>
+                    <div className="font-semibold">{selectedWinner.averageScore.toFixed(2)}</div>
+                  </div>
+                  <div>
+                    <span className="text-sm text-gray-500 dark:text-gray-400">Contestant Number:</span>
+                    <div className="font-semibold">{selectedWinner.contestantNumber || 'N/A'}</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Certification Details */}
+              <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                <h5 className="font-semibold text-gray-900 dark:text-white mb-3">
+                  Certification Status
+                </h5>
+                {(() => {
+                  const progress = getCertificationProgress(selectedWinner)
+                  const status = getCertificationStatus(progress)
+                  
+                  return (
+                    <div className="space-y-3">
+                      <div className="flex items-center space-x-2">
+                        {status.icon}
+                        <span className={`font-medium ${status.color}`}>
+                          {status.text}
+                        </span>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        {progress.requiredSignatures.map((signature) => {
+                          const isCompleted = progress.completedSignatures.includes(signature)
+                          return (
+                            <div
+                              key={signature}
+                              className={`flex items-center justify-between p-2 rounded ${
+                                isCompleted 
+                                  ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800' 
+                                  : 'bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600'
+                              }`}
+                            >
+                              <span className="text-sm font-medium">{signature}</span>
+                              {isCompleted ? (
+                                <CheckCircleIcon className="h-4 w-4 text-green-500" />
+                              ) : (
+                                <ClockIcon className="h-4 w-4 text-gray-400" />
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                      
+                      {selectedWinner.certifiedAt && (
+                        <div className="text-sm text-gray-500 dark:text-gray-400">
+                          Certified on: {new Date(selectedWinner.certifiedAt).toLocaleString()}
+                          {selectedWinner.certifiedBy && (
+                            <span> by {selectedWinner.certifiedBy}</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default WinnersPage
+EOF
+
+    # Add CategoryEditor component
+    cat > "$APP_DIR/frontend/src/components/CategoryEditor.tsx" << 'EOF'
 import React, { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from 'react-query'
 import { useAuth } from '../contexts/AuthContext'
-import { assignmentsAPI } from '../services/api'
+import { categoriesAPI } from '../services/api'
 import {
+  PlusIcon,
+  PencilIcon,
+  TrashIcon,
+  CheckCircleIcon,
+  XCircleIcon,
+  ClockIcon,
+  ExclamationTriangleIcon,
+  MagnifyingGlassIcon,
+  EyeIcon,
+  XMarkIcon,
+  DocumentTextIcon,
+  StarIcon,
+  AdjustmentsHorizontalIcon,
+  InformationCircleIcon,
+  CheckIcon,
+  XMarkIcon as XIcon
+} from '@heroicons/react/24/outline'
+
+interface Category {
+  id: string
+  name: string
+  description?: string
+  contestId: string
+  contestName: string
+  eventId: string
+  eventName: string
+  criteria: Criterion[]
+  createdAt: string
+  updatedAt: string
+}
+
+interface Criterion {
+  id: string
+  name: string
+  description?: string
+  maxScore: number
+  minScore?: number
+  timeLimit?: number
+  isRequired: boolean
+  order: number
+  categoryId: string
+  createdAt: string
+  updatedAt: string
+}
+
+interface CreateCategoryData {
+  name: string
+  description?: string
+  contestId: string
+}
+
+interface CreateCriterionData {
+  name: string
+  description?: string
+  maxScore: number
+  minScore?: number
+  timeLimit?: number
+  isRequired: boolean
+  order: number
+  categoryId: string
+}
+
+const CategoryEditor: React.FC = () => {
+  const { user } = useAuth()
+  const queryClient = useQueryClient()
+  const [selectedEvent, setSelectedEvent] = useState<string>('')
+  const [selectedContest, setSelectedContest] = useState<string>('')
+  const [showCreateCategoryModal, setShowCreateCategoryModal] = useState<boolean>(false)
+  const [showEditCategoryModal, setShowEditCategoryModal] = useState<boolean>(false)
+  const [showCreateCriterionModal, setShowCreateCriterionModal] = useState<boolean>(false)
+  const [showEditCriterionModal, setShowEditCriterionModal] = useState<boolean>(false)
+  const [selectedCategory, setSelectedCategory] = useState<Category | null>(null)
+  const [selectedCriterion, setSelectedCriterion] = useState<Criterion | null>(null)
+  const [searchTerm, setSearchTerm] = useState<string>('')
+
+  // Fetch events
+  const { data: events } = useQuery('events', () => 
+    fetch('/api/events').then(res => res.json())
+  )
+
+  // Fetch contests
+  const { data: contests } = useQuery(['contests', selectedEvent], () => 
+    fetch(`/api/contests?eventId=${selectedEvent}`).then(res => res.json()),
+    { enabled: !!selectedEvent }
+  )
+
+  // Fetch categories
+  const { data: categories, isLoading } = useQuery(
+    ['categories', selectedContest, searchTerm],
+    () => categoriesAPI.getCategories({
+      contestId: selectedContest,
+      search: searchTerm
+    }).then(res => res.data),
+    { enabled: !!selectedContest }
+  )
+
+  // Create category mutation
+  const createCategoryMutation = useMutation(
+    (data: CreateCategoryData) => categoriesAPI.createCategory(data),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('categories')
+        setShowCreateCategoryModal(false)
+      }
+    }
+  )
+
+  // Update category mutation
+  const updateCategoryMutation = useMutation(
+    ({ id, data }: { id: string; data: Partial<Category> }) => 
+      categoriesAPI.updateCategory(id, data),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('categories')
+        setShowEditCategoryModal(false)
+        setSelectedCategory(null)
+      }
+    }
+  )
+
+  // Delete category mutation
+  const deleteCategoryMutation = useMutation(
+    (id: string) => categoriesAPI.deleteCategory(id),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('categories')
+      }
+    }
+  )
+
+  // Create criterion mutation
+  const createCriterionMutation = useMutation(
+    (data: CreateCriterionData) => categoriesAPI.createCriterion(data),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('categories')
+        setShowCreateCriterionModal(false)
+      }
+    }
+  )
+
+  // Update criterion mutation
+  const updateCriterionMutation = useMutation(
+    ({ id, data }: { id: string; data: Partial<Criterion> }) => 
+      categoriesAPI.updateCriterion(id, data),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('categories')
+        setShowEditCriterionModal(false)
+        setSelectedCriterion(null)
+      }
+    }
+  )
+
+  // Delete criterion mutation
+  const deleteCriterionMutation = useMutation(
+    (id: string) => categoriesAPI.deleteCriterion(id),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('categories')
+      }
+    }
+  )
+
+  const canManageCategories = () => {
+    return user?.role === 'ADMIN' || user?.role === 'BOARD' || user?.role === 'ORGANIZER'
+  }
+
+  const handleCreateCategory = (data: CreateCategoryData) => {
+    createCategoryMutation.mutate(data)
+  }
+
+  const handleUpdateCategory = (id: string, data: Partial<Category>) => {
+    updateCategoryMutation.mutate({ id, data })
+  }
+
+  const handleDeleteCategory = (id: string) => {
+    if (window.confirm('Are you sure you want to delete this category? This will also delete all criteria.')) {
+      deleteCategoryMutation.mutate(id)
+    }
+  }
+
+  const handleCreateCriterion = (data: CreateCriterionData) => {
+    createCriterionMutation.mutate(data)
+  }
+
+  const handleUpdateCriterion = (id: string, data: Partial<Criterion>) => {
+    updateCriterionMutation.mutate({ id, data })
+  }
+
+  const handleDeleteCriterion = (id: string) => {
+    if (window.confirm('Are you sure you want to delete this criterion?')) {
+      deleteCriterionMutation.mutate(id)
+    }
+  }
+
+  const filteredCategories = categories?.filter((category: Category) => {
+    const matchesSearch = category.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         category.description?.toLowerCase().includes(searchTerm.toLowerCase())
+    return matchesSearch
+  }) || []
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+            Category Editor
+          </h1>
+          <p className="text-gray-600 dark:text-gray-400">
+            Manage contest categories and scoring criteria
+          </p>
+        </div>
+        {canManageCategories() && (
+          <button
+            onClick={() => setShowCreateCategoryModal(true)}
+            className="btn-primary"
+            disabled={!selectedContest}
+          >
+            <PlusIcon className="h-4 w-4 mr-2" />
+            New Category
+          </button>
+        )}
+      </div>
+
+      {/* Filters */}
+      <div className="card">
+        <div className="card-header">
+          <h3 className="card-title">Filter Categories</h3>
+        </div>
+        <div className="card-content">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="label">Event</label>
+              <select
+                value={selectedEvent}
+                onChange={(e) => {
+                  setSelectedEvent(e.target.value)
+                  setSelectedContest('')
+                }}
+                className="input"
+              >
+                <option value="">Select Event</option>
+                {events?.map((event: any) => (
+                  <option key={event.id} value={event.id}>
+                    {event.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="label">Contest</label>
+              <select
+                value={selectedContest}
+                onChange={(e) => setSelectedContest(e.target.value)}
+                className="input"
+                disabled={!selectedEvent}
+              >
+                <option value="">Select Contest</option>
+                {contests?.map((contest: any) => (
+                  <option key={contest.id} value={contest.id}>
+                    {contest.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="mt-4">
+            <div className="relative">
+              <MagnifyingGlassIcon className="h-5 w-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search categories..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="input pl-10"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Categories List */}
+      {selectedEvent && selectedContest && (
+        <div className="card">
+          <div className="card-header">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="card-title">Categories</h3>
+                <p className="card-description">
+                  {filteredCategories.length} categories found
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="card-content">
+            {isLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="loading-spinner h-8 w-8"></div>
+              </div>
+            ) : filteredCategories.length > 0 ? (
+              <div className="space-y-4">
+                {filteredCategories.map((category: Category) => (
+                  <div
+                    key={category.id}
+                    className="border rounded-lg p-4 bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-3">
+                          <h4 className="font-medium text-gray-900 dark:text-white">
+                            {category.name}
+                          </h4>
+                          <span className="text-sm text-gray-500 dark:text-gray-400">
+                            ({category.criteria.length} criteria)
+                          </span>
+                        </div>
+                        {category.description && (
+                          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                            {category.description}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={() => {
+                            setSelectedCategory(category)
+                            setShowEditCategoryModal(true)
+                          }}
+                          className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
+                        >
+                          <EyeIcon className="h-5 w-5" />
+                        </button>
+                        {canManageCategories() && (
+                          <>
+                            <button
+                              onClick={() => {
+                                setSelectedCategory(category)
+                                setShowEditCategoryModal(true)
+                              }}
+                              className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
+                            >
+                              <PencilIcon className="h-5 w-5" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteCategory(category.id)}
+                              className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+                            >
+                              <TrashIcon className="h-5 w-5" />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {/* Criteria List */}
+                    <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                      <div className="flex items-center justify-between mb-3">
+                        <h5 className="font-medium text-gray-700 dark:text-gray-300">
+                          Criteria
+                        </h5>
+                        {canManageCategories() && (
+                          <button
+                            onClick={() => {
+                              setSelectedCategory(category)
+                              setShowCreateCriterionModal(true)
+                            }}
+                            className="text-sm text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
+                          >
+                            <PlusIcon className="h-4 w-4 mr-1" />
+                            Add Criterion
+                          </button>
+                        )}
+                      </div>
+                      {category.criteria.length > 0 ? (
+                        <div className="space-y-2">
+                          {category.criteria
+                            .sort((a, b) => a.order - b.order)
+                            .map((criterion: Criterion) => (
+                            <div
+                              key={criterion.id}
+                              className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg"
+                            >
+                              <div className="flex-1">
+                                <div className="flex items-center space-x-3">
+                                  <span className="text-sm font-medium text-gray-900 dark:text-white">
+                                    {criterion.name}
+                                  </span>
+                                  <span className="text-xs text-gray-500 dark:text-gray-400">
+                                    Max: {criterion.maxScore}
+                                    {criterion.minScore && `, Min: ${criterion.minScore}`}
+                                    {criterion.timeLimit && `, Time: ${criterion.timeLimit}s`}
+                                  </span>
+                                  {criterion.isRequired && (
+                                    <span className="text-xs bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200 px-2 py-1 rounded">
+                                      Required
+                                    </span>
+                                  )}
+                                </div>
+                                {criterion.description && (
+                                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                                    {criterion.description}
+                                  </p>
+                                )}
+                              </div>
+                              {canManageCategories() && (
+                                <div className="flex items-center space-x-1">
+                                  <button
+                                    onClick={() => {
+                                      setSelectedCriterion(criterion)
+                                      setShowEditCriterionModal(true)
+                                    }}
+                                    className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
+                                  >
+                                    <PencilIcon className="h-4 w-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteCriterion(criterion.id)}
+                                    className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+                                  >
+                                    <TrashIcon className="h-4 w-4" />
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-center py-4 text-gray-500 dark:text-gray-400">
+                          <DocumentTextIcon className="h-8 w-8 mx-auto mb-2" />
+                          <p className="text-sm">No criteria defined</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <DocumentTextIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                  No Categories Found
+                </h3>
+                <p className="text-gray-600 dark:text-gray-400">
+                  Select an event and contest to view categories.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Create Category Modal */}
+      {showCreateCategoryModal && (
+        <div className="modal">
+          <div className="modal-overlay" onClick={() => setShowCreateCategoryModal(false)}></div>
+          <div className="modal-content">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Create Category
+              </h3>
+              <button
+                onClick={() => setShowCreateCategoryModal(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+            </div>
+            
+            <form onSubmit={(e) => {
+              e.preventDefault()
+              const formData = new FormData(e.target as HTMLFormElement)
+              handleCreateCategory({
+                name: formData.get('name') as string,
+                description: formData.get('description') as string,
+                contestId: selectedContest
+              })
+            }}>
+              <div className="space-y-4">
+                <div>
+                  <label className="label">Name</label>
+                  <input
+                    name="name"
+                    type="text"
+                    className="input"
+                    required
+                    placeholder="Category name"
+                  />
+                </div>
+                <div>
+                  <label className="label">Description</label>
+                  <textarea
+                    name="description"
+                    rows={3}
+                    className="input"
+                    placeholder="Optional description"
+                  />
+                </div>
+              </div>
+              
+              <div className="flex items-center justify-end space-x-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateCategoryModal(false)}
+                  className="btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={createCategoryMutation.isLoading}
+                  className="btn-primary"
+                >
+                  {createCategoryMutation.isLoading ? 'Creating...' : 'Create Category'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Category Modal */}
+      {showEditCategoryModal && selectedCategory && (
+        <div className="modal">
+          <div className="modal-overlay" onClick={() => setShowEditCategoryModal(false)}></div>
+          <div className="modal-content">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Edit Category
+              </h3>
+              <button
+                onClick={() => setShowEditCategoryModal(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+            </div>
+            
+            <form onSubmit={(e) => {
+              e.preventDefault()
+              const formData = new FormData(e.target as HTMLFormElement)
+              handleUpdateCategory(selectedCategory.id, {
+                name: formData.get('name') as string,
+                description: formData.get('description') as string
+              })
+            }}>
+              <div className="space-y-4">
+                <div>
+                  <label className="label">Name</label>
+                  <input
+                    name="name"
+                    type="text"
+                    className="input"
+                    defaultValue={selectedCategory.name}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="label">Description</label>
+                  <textarea
+                    name="description"
+                    rows={3}
+                    className="input"
+                    defaultValue={selectedCategory.description}
+                  />
+                </div>
+              </div>
+              
+              <div className="flex items-center justify-end space-x-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setShowEditCategoryModal(false)}
+                  className="btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={updateCategoryMutation.isLoading}
+                  className="btn-primary"
+                >
+                  {updateCategoryMutation.isLoading ? 'Updating...' : 'Update Category'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Create Criterion Modal */}
+      {showCreateCriterionModal && selectedCategory && (
+        <div className="modal">
+          <div className="modal-overlay" onClick={() => setShowCreateCriterionModal(false)}></div>
+          <div className="modal-content">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Create Criterion
+              </h3>
+              <button
+                onClick={() => setShowCreateCriterionModal(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+            </div>
+            
+            <form onSubmit={(e) => {
+              e.preventDefault()
+              const formData = new FormData(e.target as HTMLFormElement)
+              handleCreateCriterion({
+                name: formData.get('name') as string,
+                description: formData.get('description') as string,
+                maxScore: Number(formData.get('maxScore')),
+                minScore: formData.get('minScore') ? Number(formData.get('minScore')) : undefined,
+                timeLimit: formData.get('timeLimit') ? Number(formData.get('timeLimit')) : undefined,
+                isRequired: formData.get('isRequired') === 'on',
+                order: selectedCategory.criteria.length + 1,
+                categoryId: selectedCategory.id
+              })
+            }}>
+              <div className="space-y-4">
+                <div>
+                  <label className="label">Name</label>
+                  <input
+                    name="name"
+                    type="text"
+                    className="input"
+                    required
+                    placeholder="Criterion name"
+                  />
+                </div>
+                <div>
+                  <label className="label">Description</label>
+                  <textarea
+                    name="description"
+                    rows={3}
+                    className="input"
+                    placeholder="Optional description"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="label">Max Score</label>
+                    <input
+                      name="maxScore"
+                      type="number"
+                      className="input"
+                      required
+                      min="1"
+                      placeholder="100"
+                    />
+                  </div>
+                  <div>
+                    <label className="label">Min Score (Optional)</label>
+                    <input
+                      name="minScore"
+                      type="number"
+                      className="input"
+                      min="0"
+                      placeholder="0"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="label">Time Limit (Optional)</label>
+                  <input
+                    name="timeLimit"
+                    type="number"
+                    className="input"
+                    min="1"
+                    placeholder="Seconds"
+                  />
+                </div>
+                <div className="flex items-center">
+                  <input
+                    name="isRequired"
+                    type="checkbox"
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <label className="ml-2 text-sm text-gray-700 dark:text-gray-300">
+                    Required criterion
+                  </label>
+                </div>
+              </div>
+              
+              <div className="flex items-center justify-end space-x-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateCriterionModal(false)}
+                  className="btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={createCriterionMutation.isLoading}
+                  className="btn-primary"
+                >
+                  {createCriterionMutation.isLoading ? 'Creating...' : 'Create Criterion'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Criterion Modal */}
+      {showEditCriterionModal && selectedCriterion && (
+        <div className="modal">
+          <div className="modal-overlay" onClick={() => setShowEditCriterionModal(false)}></div>
+          <div className="modal-content">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Edit Criterion
+              </h3>
+              <button
+                onClick={() => setShowEditCriterionModal(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+            </div>
+            
+            <form onSubmit={(e) => {
+              e.preventDefault()
+              const formData = new FormData(e.target as HTMLFormElement)
+              handleUpdateCriterion(selectedCriterion.id, {
+                name: formData.get('name') as string,
+                description: formData.get('description') as string,
+                maxScore: Number(formData.get('maxScore')),
+                minScore: formData.get('minScore') ? Number(formData.get('minScore')) : undefined,
+                timeLimit: formData.get('timeLimit') ? Number(formData.get('timeLimit')) : undefined,
+                isRequired: formData.get('isRequired') === 'on'
+              })
+            }}>
+              <div className="space-y-4">
+                <div>
+                  <label className="label">Name</label>
+                  <input
+                    name="name"
+                    type="text"
+                    className="input"
+                    defaultValue={selectedCriterion.name}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="label">Description</label>
+                  <textarea
+                    name="description"
+                    rows={3}
+                    className="input"
+                    defaultValue={selectedCriterion.description}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="label">Max Score</label>
+                    <input
+                      name="maxScore"
+                      type="number"
+                      className="input"
+                      defaultValue={selectedCriterion.maxScore}
+                      required
+                      min="1"
+                    />
+                  </div>
+                  <div>
+                    <label className="label">Min Score (Optional)</label>
+                    <input
+                      name="minScore"
+                      type="number"
+                      className="input"
+                      defaultValue={selectedCriterion.minScore}
+                      min="0"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="label">Time Limit (Optional)</label>
+                  <input
+                    name="timeLimit"
+                    type="number"
+                    className="input"
+                    defaultValue={selectedCriterion.timeLimit}
+                    min="1"
+                  />
+                </div>
+                <div className="flex items-center">
+                  <input
+                    name="isRequired"
+                    type="checkbox"
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    defaultChecked={selectedCriterion.isRequired}
+                  />
+                  <label className="ml-2 text-sm text-gray-700 dark:text-gray-300">
+                    Required criterion
+                  </label>
+                </div>
+              </div>
+              
+              <div className="flex items-center justify-end space-x-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setShowEditCriterionModal(false)}
+                  className="btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={updateCriterionMutation.isLoading}
+                  className="btn-primary"
+                >
+                  {updateCriterionMutation.isLoading ? 'Updating...' : 'Update Criterion'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default CategoryEditor
+EOF
+
+    # Add EventTemplatePage
+    cat > "$APP_DIR/frontend/src/pages/EventTemplatePage.tsx" << 'EOF'
+import React, { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from 'react-query'
+import { useAuth } from '../contexts/AuthContext'
+import { eventTemplatesAPI } from '../services/api'
+import {
+  PlusIcon,
+  PencilIcon,
+  TrashIcon,
+  DocumentDuplicateIcon,
+  DocumentTextIcon,
+  CalendarIcon,
+  ClockIcon,
+  UserGroupIcon,
+  MagnifyingGlassIcon,
+  EyeIcon,
+  XMarkIcon,
+  CheckCircleIcon,
+  ExclamationTriangleIcon,
+  InformationCircleIcon,
+  ArrowDownTrayIcon,
+  ArrowUpTrayIcon
+} from '@heroicons/react/24/outline'
+
+interface EventTemplate {
+  id: string
+  name: string
+  description?: string
+  eventData: {
+    name: string
+    startDate: string
+    endDate: string
+    description?: string
+    contests: Array<{
+      name: string
+      description?: string
+      categories: Array<{
+        name: string
+        description?: string
+        criteria: Array<{
+          name: string
+          description?: string
+          maxScore: number
+          minScore?: number
+          timeLimit?: number
+          isRequired: boolean
+          order: number
+        }>
+      }>
+    }>
+  }
+  isPublic: boolean
+  createdBy: string
+  createdByName: string
+  createdAt: string
+  updatedAt: string
+}
+
+interface CreateEventTemplateData {
+  name: string
+  description?: string
+  eventData: any
+  isPublic: boolean
+}
+
+const EventTemplatePage: React.FC = () => {
+  const { user } = useAuth()
+  const queryClient = useQueryClient()
+  const [showCreateModal, setShowCreateModal] = useState<boolean>(false)
+  const [showEditModal, setShowEditModal] = useState<boolean>(false)
+  const [showCreateFromTemplateModal, setShowCreateFromTemplateModal] = useState<boolean>(false)
+  const [selectedTemplate, setSelectedTemplate] = useState<EventTemplate | null>(null)
+  const [searchTerm, setSearchTerm] = useState<string>('')
+  const [filterPublic, setFilterPublic] = useState<boolean>(false)
+
+  // Fetch templates
+  const { data: templates, isLoading } = useQuery(
+    ['eventTemplates', searchTerm, filterPublic],
+    () => eventTemplatesAPI.getTemplates({
+      search: searchTerm,
+      isPublic: filterPublic
+    }).then(res => res.data)
+  )
+
+  // Create template mutation
+  const createTemplateMutation = useMutation(
+    (data: CreateEventTemplateData) => eventTemplatesAPI.createTemplate(data),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('eventTemplates')
+        setShowCreateModal(false)
+      }
+    }
+  )
+
+  // Update template mutation
+  const updateTemplateMutation = useMutation(
+    ({ id, data }: { id: string; data: Partial<EventTemplate> }) => 
+      eventTemplatesAPI.updateTemplate(id, data),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('eventTemplates')
+        setShowEditModal(false)
+        setSelectedTemplate(null)
+      }
+    }
+  )
+
+  // Delete template mutation
+  const deleteTemplateMutation = useMutation(
+    (id: string) => eventTemplatesAPI.deleteTemplate(id),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('eventTemplates')
+      }
+    }
+  )
+
+  // Create event from template mutation
+  const createEventFromTemplateMutation = useMutation(
+    ({ templateId, eventData }: { templateId: string; eventData: any }) => 
+      eventTemplatesAPI.createEventFromTemplate(templateId, eventData),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('events')
+        setShowCreateFromTemplateModal(false)
+        setSelectedTemplate(null)
+      }
+    }
+  )
+
+  const canManageTemplates = () => {
+    return user?.role === 'ADMIN' || user?.role === 'BOARD' || user?.role === 'ORGANIZER'
+  }
+
+  const handleCreateTemplate = (data: CreateEventTemplateData) => {
+    createTemplateMutation.mutate(data)
+  }
+
+  const handleUpdateTemplate = (id: string, data: Partial<EventTemplate>) => {
+    updateTemplateMutation.mutate({ id, data })
+  }
+
+  const handleDeleteTemplate = (id: string) => {
+    if (window.confirm('Are you sure you want to delete this template?')) {
+      deleteTemplateMutation.mutate(id)
+    }
+  }
+
+  const handleCreateEventFromTemplate = (templateId: string, eventData: any) => {
+    createEventFromTemplateMutation.mutate({ templateId, eventData })
+  }
+
+  const filteredTemplates = templates?.filter((template: EventTemplate) => {
+    const matchesSearch = template.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         template.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         template.eventData.name.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesPublic = !filterPublic || template.isPublic
+    return matchesSearch && matchesPublic
+  }) || []
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+            Event Templates
+          </h1>
+          <p className="text-gray-600 dark:text-gray-400">
+            Manage event templates for quick event creation
+          </p>
+        </div>
+        {canManageTemplates() && (
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="btn-primary"
+          >
+            <PlusIcon className="h-4 w-4 mr-2" />
+            New Template
+          </button>
+        )}
+      </div>
+
+      {/* Filters */}
+      <div className="card">
+        <div className="card-header">
+          <h3 className="card-title">Filter Templates</h3>
+        </div>
+        <div className="card-content">
+          <div className="flex items-center space-x-4">
+            <div className="flex-1">
+              <div className="relative">
+                <MagnifyingGlassIcon className="h-5 w-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search templates..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="input pl-10"
+                />
+              </div>
+            </div>
+            <div className="flex items-center">
+              <input
+                type="checkbox"
+                id="filterPublic"
+                checked={filterPublic}
+                onChange={(e) => setFilterPublic(e.target.checked)}
+                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              <label htmlFor="filterPublic" className="ml-2 text-sm text-gray-700 dark:text-gray-300">
+                Public templates only
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Templates List */}
+      <div className="card">
+        <div className="card-header">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="card-title">Templates</h3>
+              <p className="card-description">
+                {filteredTemplates.length} templates found
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="card-content">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="loading-spinner h-8 w-8"></div>
+            </div>
+          ) : filteredTemplates.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredTemplates.map((template: EventTemplate) => (
+                <div
+                  key={template.id}
+                  className="border rounded-lg p-4 bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow"
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1">
+                      <h4 className="font-medium text-gray-900 dark:text-white mb-1">
+                        {template.name}
+                      </h4>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        {template.eventData.name}
+                      </p>
+                    </div>
+                    <div className="flex items-center space-x-1">
+                      {template.isPublic ? (
+                        <span className="text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 px-2 py-1 rounded">
+                          Public
+                        </span>
+                      ) : (
+                        <span className="text-xs bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200 px-2 py-1 rounded">
+                          Private
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {template.description && (
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                      {template.description}
+                    </p>
+                  )}
+                  
+                  <div className="space-y-2 mb-4">
+                    <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
+                      <CalendarIcon className="h-4 w-4 mr-2" />
+                      <span>
+                        {new Date(template.eventData.startDate).toLocaleDateString()} - 
+                        {new Date(template.eventData.endDate).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
+                      <UserGroupIcon className="h-4 w-4 mr-2" />
+                      <span>{template.eventData.contests.length} contests</span>
+                    </div>
+                    <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
+                      <DocumentTextIcon className="h-4 w-4 mr-2" />
+                      <span>
+                        {template.eventData.contests.reduce((total: number, contest: any) => 
+                          total + contest.categories.length, 0
+                        )} categories
+                      </span>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center justify-between pt-3 border-t border-gray-200 dark:border-gray-700">
+                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                      Created by {template.createdByName}
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={() => {
+                          setSelectedTemplate(template)
+                          setShowCreateFromTemplateModal(true)
+                        }}
+                        className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
+                        title="Create Event from Template"
+                      >
+                        <DocumentDuplicateIcon className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => {
+                          setSelectedTemplate(template)
+                          setShowEditModal(true)
+                        }}
+                        className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
+                        title="View Details"
+                      >
+                        <EyeIcon className="h-4 w-4" />
+                      </button>
+                      {canManageTemplates() && (
+                        <>
+                          <button
+                            onClick={() => {
+                              setSelectedTemplate(template)
+                              setShowEditModal(true)
+                            }}
+                            className="text-yellow-600 hover:text-yellow-900 dark:text-yellow-400 dark:hover:text-yellow-300"
+                            title="Edit Template"
+                          >
+                            <PencilIcon className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteTemplate(template.id)}
+                            className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+                            title="Delete Template"
+                          >
+                            <TrashIcon className="h-4 w-4" />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-12">
+              <DocumentTextIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                No Templates Found
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400">
+                {canManageTemplates() 
+                  ? 'Create your first event template to get started.'
+                  : 'No templates are available.'}
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Create Template Modal */}
+      {showCreateModal && (
+        <div className="modal">
+          <div className="modal-overlay" onClick={() => setShowCreateModal(false)}></div>
+          <div className="modal-content max-w-4xl">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Create Event Template
+              </h3>
+              <button
+                onClick={() => setShowCreateModal(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+            </div>
+            
+            <form onSubmit={(e) => {
+              e.preventDefault()
+              const formData = new FormData(e.target as HTMLFormElement)
+              handleCreateTemplate({
+                name: formData.get('name') as string,
+                description: formData.get('description') as string,
+                eventData: JSON.parse(formData.get('eventData') as string),
+                isPublic: formData.get('isPublic') === 'on'
+              })
+            }}>
+              <div className="space-y-4">
+                <div>
+                  <label className="label">Template Name</label>
+                  <input
+                    name="name"
+                    type="text"
+                    className="input"
+                    required
+                    placeholder="Template name"
+                  />
+                </div>
+                <div>
+                  <label className="label">Description</label>
+                  <textarea
+                    name="description"
+                    rows={3}
+                    className="input"
+                    placeholder="Optional description"
+                  />
+                </div>
+                <div>
+                  <label className="label">Event Data (JSON)</label>
+                  <textarea
+                    name="eventData"
+                    rows={10}
+                    className="input font-mono text-sm"
+                    required
+                    placeholder="Paste event data JSON here..."
+                  />
+                </div>
+                <div className="flex items-center">
+                  <input
+                    name="isPublic"
+                    type="checkbox"
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <label className="ml-2 text-sm text-gray-700 dark:text-gray-300">
+                    Make this template public
+                  </label>
+                </div>
+              </div>
+              
+              <div className="flex items-center justify-end space-x-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateModal(false)}
+                  className="btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={createTemplateMutation.isLoading}
+                  className="btn-primary"
+                >
+                  {createTemplateMutation.isLoading ? 'Creating...' : 'Create Template'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Template Modal */}
+      {showEditModal && selectedTemplate && (
+        <div className="modal">
+          <div className="modal-overlay" onClick={() => setShowEditModal(false)}></div>
+          <div className="modal-content max-w-4xl">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Template Details
+              </h3>
+              <button
+                onClick={() => setShowEditModal(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+            </div>
+            
+            <div className="space-y-6">
+              {/* Template Info */}
+              <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                <h4 className="font-semibold text-gray-900 dark:text-white mb-2">
+                  {selectedTemplate.name}
+                </h4>
+                {selectedTemplate.description && (
+                  <p className="text-gray-600 dark:text-gray-400 mb-3">
+                    {selectedTemplate.description}
+                  </p>
+                )}
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-gray-500 dark:text-gray-400">Event:</span>
+                    <div className="font-medium">{selectedTemplate.eventData.name}</div>
+                  </div>
+                  <div>
+                    <span className="text-gray-500 dark:text-gray-400">Visibility:</span>
+                    <div className="font-medium">
+                      {selectedTemplate.isPublic ? 'Public' : 'Private'}
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-gray-500 dark:text-gray-400">Created:</span>
+                    <div className="font-medium">
+                      {new Date(selectedTemplate.createdAt).toLocaleDateString()}
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-gray-500 dark:text-gray-400">Created by:</span>
+                    <div className="font-medium">{selectedTemplate.createdByName}</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Event Details */}
+              <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                <h5 className="font-semibold text-gray-900 dark:text-white mb-3">
+                  Event Details
+                </h5>
+                <div className="space-y-3">
+                  <div>
+                    <span className="text-sm text-gray-500 dark:text-gray-400">Name:</span>
+                    <div className="font-medium">{selectedTemplate.eventData.name}</div>
+                  </div>
+                  <div>
+                    <span className="text-sm text-gray-500 dark:text-gray-400">Dates:</span>
+                    <div className="font-medium">
+                      {new Date(selectedTemplate.eventData.startDate).toLocaleDateString()} - 
+                      {new Date(selectedTemplate.eventData.endDate).toLocaleDateString()}
+                    </div>
+                  </div>
+                  {selectedTemplate.eventData.description && (
+                    <div>
+                      <span className="text-sm text-gray-500 dark:text-gray-400">Description:</span>
+                      <div className="font-medium">{selectedTemplate.eventData.description}</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Contests */}
+              <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                <h5 className="font-semibold text-gray-900 dark:text-white mb-3">
+                  Contests ({selectedTemplate.eventData.contests.length})
+                </h5>
+                <div className="space-y-3">
+                  {selectedTemplate.eventData.contests.map((contest: any, index: number) => (
+                    <div key={index} className="border-l-4 border-blue-500 pl-3">
+                      <div className="font-medium">{contest.name}</div>
+                      {contest.description && (
+                        <div className="text-sm text-gray-600 dark:text-gray-400">
+                          {contest.description}
+                        </div>
+                      )}
+                      <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                        {contest.categories.length} categories
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Event from Template Modal */}
+      {showCreateFromTemplateModal && selectedTemplate && (
+        <div className="modal">
+          <div className="modal-overlay" onClick={() => setShowCreateFromTemplateModal(false)}></div>
+          <div className="modal-content">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Create Event from Template
+              </h3>
+              <button
+                onClick={() => setShowCreateFromTemplateModal(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+            </div>
+            
+            <form onSubmit={(e) => {
+              e.preventDefault()
+              const formData = new FormData(e.target as HTMLFormElement)
+              handleCreateEventFromTemplate(selectedTemplate.id, {
+                name: formData.get('name') as string,
+                startDate: formData.get('startDate') as string,
+                endDate: formData.get('endDate') as string,
+                description: formData.get('description') as string
+              })
+            }}>
+              <div className="space-y-4">
+                <div>
+                  <label className="label">Event Name</label>
+                  <input
+                    name="name"
+                    type="text"
+                    className="input"
+                    defaultValue={selectedTemplate.eventData.name}
+                    required
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="label">Start Date</label>
+                    <input
+                      name="startDate"
+                      type="date"
+                      className="input"
+                      defaultValue={selectedTemplate.eventData.startDate.split('T')[0]}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="label">End Date</label>
+                    <input
+                      name="endDate"
+                      type="date"
+                      className="input"
+                      defaultValue={selectedTemplate.eventData.endDate.split('T')[0]}
+                      required
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="label">Description</label>
+                  <textarea
+                    name="description"
+                    rows={3}
+                    className="input"
+                    defaultValue={selectedTemplate.eventData.description}
+                  />
+                </div>
+              </div>
+              
+              <div className="flex items-center justify-end space-x-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateFromTemplateModal(false)}
+                  className="btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={createEventFromTemplateMutation.isLoading}
+                  className="btn-primary"
+                >
+                  {createEventFromTemplateMutation.isLoading ? 'Creating...' : 'Create Event'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+    # Add PasswordStrengthMeter component
+    cat > "$APP_DIR/frontend/src/components/PasswordStrengthMeter.tsx" << 'EOF'
+import React, { useState, useEffect } from 'react'
+import { useQuery } from 'react-query'
+import {
+  CheckCircleIcon,
+  XCircleIcon,
+  ExclamationTriangleIcon,
+  EyeIcon,
+  EyeSlashIcon,
+  LockClosedIcon,
+  ShieldCheckIcon,
+  InformationCircleIcon
+} from '@heroicons/react/24/outline'
+
+interface PasswordPolicy {
+  minLength: number
+  requireUppercase: boolean
+  requireLowercase: boolean
+  requireNumbers: boolean
+  requireSpecialChars: boolean
+  maxLength?: number
+  preventCommonPasswords: boolean
+  preventUserInfo: boolean
+}
+
+interface PasswordStrengthMeterProps {
+  password: string
+  onPasswordChange: (password: string) => void
+  showPolicy?: boolean
+  className?: string
+  disabled?: boolean
+  placeholder?: string
+  name?: string
+  id?: string
+}
+
+const PasswordStrengthMeter: React.FC<PasswordStrengthMeterProps> = ({
+  password,
+  onPasswordChange,
+  showPolicy = true,
+  className = '',
+  disabled = false,
+  placeholder = 'Enter password',
+  name = 'password',
+  id = 'password'
+}) => {
+  const [showPassword, setShowPassword] = useState<boolean>(false)
+  const [policy, setPolicy] = useState<PasswordPolicy>({
+    minLength: 8,
+    requireUppercase: true,
+    requireLowercase: true,
+    requireNumbers: true,
+    requireSpecialChars: true,
+    maxLength: 128,
+    preventCommonPasswords: true,
+    preventUserInfo: true
+  })
+
+  // Fetch password policy from API
+  const { data: passwordPolicy } = useQuery('passwordPolicy', () => 
+    fetch('/api/settings/password-policy').then(res => res.json()).catch(() => null)
+  )
+
+  useEffect(() => {
+    if (passwordPolicy) {
+      setPolicy(passwordPolicy)
+    }
+  }, [passwordPolicy])
+
+  const checkPasswordStrength = (pwd: string) => {
+    const checks = {
+      length: pwd.length >= policy.minLength && (!policy.maxLength || pwd.length <= policy.maxLength),
+      uppercase: !policy.requireUppercase || /[A-Z]/.test(pwd),
+      lowercase: !policy.requireLowercase || /[a-z]/.test(pwd),
+      numbers: !policy.requireNumbers || /\d/.test(pwd),
+      specialChars: !policy.requireSpecialChars || /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(pwd),
+      notCommon: !policy.preventCommonPasswords || !isCommonPassword(pwd),
+      notUserInfo: !policy.preventUserInfo || !containsUserInfo(pwd)
+    }
+
+    const passedChecks = Object.values(checks).filter(Boolean).length
+    const totalChecks = Object.keys(checks).length
+
+    return {
+      checks,
+      score: Math.round((passedChecks / totalChecks) * 100),
+      strength: getStrengthLevel(passedChecks, totalChecks)
+    }
+  }
+
+  const isCommonPassword = (pwd: string) => {
+    const commonPasswords = [
+      'password', '123456', '123456789', 'qwerty', 'abc123', 'password123',
+      'admin', 'letmein', 'welcome', 'monkey', '1234567890', 'dragon',
+      'master', 'hello', 'freedom', 'whatever', 'qazwsx', 'trustno1'
+    ]
+    return commonPasswords.includes(pwd.toLowerCase())
+  }
+
+  const containsUserInfo = (pwd: string) => {
+    // This would typically check against user's name, email, etc.
+    // For now, we'll just check for common patterns
+    return false
+  }
+
+  const getStrengthLevel = (passed: number, total: number) => {
+    const percentage = (passed / total) * 100
+    if (percentage < 40) return 'weak'
+    if (percentage < 70) return 'medium'
+    if (percentage < 90) return 'strong'
+    return 'very-strong'
+  }
+
+  const getStrengthColor = (strength: string) => {
+    switch (strength) {
+      case 'weak': return 'text-red-600 dark:text-red-400'
+      case 'medium': return 'text-yellow-600 dark:text-yellow-400'
+      case 'strong': return 'text-blue-600 dark:text-blue-400'
+      case 'very-strong': return 'text-green-600 dark:text-green-400'
+      default: return 'text-gray-600 dark:text-gray-400'
+    }
+  }
+
+  const getStrengthBgColor = (strength: string) => {
+    switch (strength) {
+      case 'weak': return 'bg-red-500'
+      case 'medium': return 'bg-yellow-500'
+      case 'strong': return 'bg-blue-500'
+      case 'very-strong': return 'bg-green-500'
+      default: return 'bg-gray-500'
+    }
+  }
+
+  const strength = checkPasswordStrength(password)
+
+  return (
+    <div className={`space-y-3 ${className}`}>
+      {/* Password Input */}
+      <div className="relative">
+        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+          <LockClosedIcon className="h-5 w-5 text-gray-400" />
+        </div>
+        <input
+          type={showPassword ? 'text' : 'password'}
+          id={id}
+          name={name}
+          value={password}
+          onChange={(e) => onPasswordChange(e.target.value)}
+          className={`input pl-10 pr-10 ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+          placeholder={placeholder}
+          disabled={disabled}
+        />
+        <button
+          type="button"
+          className="absolute inset-y-0 right-0 pr-3 flex items-center"
+          onClick={() => setShowPassword(!showPassword)}
+          disabled={disabled}
+        >
+          {showPassword ? (
+            <EyeSlashIcon className="h-5 w-5 text-gray-400 hover:text-gray-600" />
+          ) : (
+            <EyeIcon className="h-5 w-5 text-gray-400 hover:text-gray-600" />
+          )}
+        </button>
+      </div>
+
+      {/* Strength Meter */}
+      {password && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              Password Strength
+            </span>
+            <span className={`text-sm font-medium ${getStrengthColor(strength.strength)}`}>
+              {strength.strength.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+            </span>
+          </div>
+          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+            <div
+              className={`h-2 rounded-full transition-all duration-300 ${getStrengthBgColor(strength.strength)}`}
+              style={{ width: `${strength.score}%` }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Policy Requirements */}
+      {showPolicy && password && (
+        <div className="space-y-2">
+          <div className="flex items-center space-x-2">
+            <ShieldCheckIcon className="h-4 w-4 text-gray-500" />
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              Password Requirements
+            </span>
+          </div>
+          <div className="space-y-1">
+            <div className="flex items-center space-x-2">
+              {strength.checks.length ? (
+                <CheckCircleIcon className="h-4 w-4 text-green-500" />
+              ) : (
+                <XCircleIcon className="h-4 w-4 text-red-500" />
+              )}
+              <span className={`text-sm ${strength.checks.length ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                At least {policy.minLength} characters
+                {policy.maxLength && ` (max ${policy.maxLength})`}
+              </span>
+            </div>
+            
+            {policy.requireUppercase && (
+              <div className="flex items-center space-x-2">
+                {strength.checks.uppercase ? (
+                  <CheckCircleIcon className="h-4 w-4 text-green-500" />
+                ) : (
+                  <XCircleIcon className="h-4 w-4 text-red-500" />
+                )}
+                <span className={`text-sm ${strength.checks.uppercase ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                  Contains uppercase letter
+                </span>
+              </div>
+            )}
+            
+            {policy.requireLowercase && (
+              <div className="flex items-center space-x-2">
+                {strength.checks.lowercase ? (
+                  <CheckCircleIcon className="h-4 w-4 text-green-500" />
+                ) : (
+                  <XCircleIcon className="h-4 w-4 text-red-500" />
+                )}
+                <span className={`text-sm ${strength.checks.lowercase ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                  Contains lowercase letter
+                </span>
+              </div>
+            )}
+            
+            {policy.requireNumbers && (
+              <div className="flex items-center space-x-2">
+                {strength.checks.numbers ? (
+                  <CheckCircleIcon className="h-4 w-4 text-green-500" />
+                ) : (
+                  <XCircleIcon className="h-4 w-4 text-red-500" />
+                )}
+                <span className={`text-sm ${strength.checks.numbers ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                  Contains number
+                </span>
+              </div>
+            )}
+            
+            {policy.requireSpecialChars && (
+              <div className="flex items-center space-x-2">
+                {strength.checks.specialChars ? (
+                  <CheckCircleIcon className="h-4 w-4 text-green-500" />
+                ) : (
+                  <XCircleIcon className="h-4 w-4 text-red-500" />
+                )}
+                <span className={`text-sm ${strength.checks.specialChars ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                  Contains special character
+                </span>
+              </div>
+            )}
+            
+            {policy.preventCommonPasswords && (
+              <div className="flex items-center space-x-2">
+                {strength.checks.notCommon ? (
+                  <CheckCircleIcon className="h-4 w-4 text-green-500" />
+                ) : (
+                  <ExclamationTriangleIcon className="h-4 w-4 text-yellow-500" />
+                )}
+                <span className={`text-sm ${strength.checks.notCommon ? 'text-green-600 dark:text-green-400' : 'text-yellow-600 dark:text-yellow-400'}`}>
+                  Not a common password
+                </span>
+              </div>
+            )}
+            
+            {policy.preventUserInfo && (
+              <div className="flex items-center space-x-2">
+                {strength.checks.notUserInfo ? (
+                  <CheckCircleIcon className="h-4 w-4 text-green-500" />
+                ) : (
+                  <ExclamationTriangleIcon className="h-4 w-4 text-yellow-500" />
+                )}
+                <span className={`text-sm ${strength.checks.notUserInfo ? 'text-green-600 dark:text-green-400' : 'text-yellow-600 dark:text-yellow-400'}`}>
+                  Doesn't contain personal information
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Security Tips */}
+      {password && strength.score < 70 && (
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+          <div className="flex items-start space-x-2">
+            <InformationCircleIcon className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5" />
+            <div className="text-sm text-blue-700 dark:text-blue-300">
+              <p className="font-medium mb-1">Security Tips:</p>
+              <ul className="list-disc list-inside space-y-1">
+                <li>Use a combination of letters, numbers, and symbols</li>
+                <li>Avoid using personal information like names or birthdays</li>
+                <li>Consider using a passphrase instead of a single word</li>
+                <li>Don't reuse passwords across different accounts</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default PasswordStrengthMeter
+EOF
   PlusIcon,
   PencilIcon,
   TrashIcon,
