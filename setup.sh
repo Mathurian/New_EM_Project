@@ -41882,6 +41882,30 @@ export default SettingsPage
 EOF
 
     print_success "Frontend files created successfully"
+    
+    # Install frontend dependencies
+    print_status "Installing frontend dependencies..."
+    if ! safe_npm_install "$APP_DIR/frontend" "frontend"; then
+        print_error "Failed to install frontend dependencies"
+        return 1
+    fi
+    
+    # Build frontend for production
+    print_status "Building frontend for production..."
+    if npm run build; then
+        print_success "Frontend build completed successfully"
+    else
+        print_error "Frontend build failed"
+        return 1
+    fi
+    
+    # Verify build output exists
+    if [[ -d "dist" && -f "dist/index.html" ]]; then
+        print_success "Frontend build verified - dist directory and index.html found"
+    else
+        print_error "Frontend build verification failed - dist directory or index.html missing"
+        return 1
+    fi
 }
 
 # Main installation function
