@@ -16082,7 +16082,7 @@ const generateCSVReport = async (res, event, stats, includeDetails) => {
       })
     }
 
-    const csvContent = csvData.map(row => row.map(cell => `"${cell}"`).join(',')).join('\n')
+    const csvContent = csvData.map(row => row.map(cell => '"' + cell + '"').join(',')).join('\n')
     
     res.setHeader('Content-Type', 'text/csv')
     res.setHeader('Content-Disposition', `attachment; filename="event-report-${event.id}.csv"`)
