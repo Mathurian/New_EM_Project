@@ -13378,8 +13378,9 @@ EOF
     # Admin Routes
     cat > "$APP_DIR/src/routes/adminRoutes.js" << 'EOF'
 const express = require('express')
-const { getStats, getLogs, getActiveUsers, getUsers, getEvents, getContests, getCategories, getScores, getActivityLogs, getAuditLogs, exportAuditLogs, testConnection } = require('../controllers/adminController')
-const { getDatabaseTables, getTableData, getTableSchema, executeQuery, getDatabaseStats } = require('../controllers/databaseBrowserController')
+const { getStats, getLogs, getActiveUsers, getUsers, getEvents, getContests, getCategories, getScores, getActivityLogs, getAuditLogs, exportAuditLogs, testConnection } = require('../controllers/adminController')                             
+const { getDatabaseTables, getTableData, getTableSchema, executeQuery, getDatabaseStats } = require('../controllers/databaseBrowserController')                 
+const { getAllSettings, getLoggingSettings, updateLoggingSettings, getSecuritySettings, updateSecuritySettings, getBackupSettings, updateBackupSettings, getEmailSettings, updateEmailSettings } = require('../controllers/settingsController')
 const { authenticateToken, requireRole } = require('../middleware/auth')
 
 const router = express.Router()
@@ -13401,6 +13402,17 @@ router.get('/scores', getScores)
 router.get('/audit-logs', getAuditLogs)
 router.post('/export-audit-logs', exportAuditLogs)
 router.post('/test/:type', testConnection)
+
+// Admin settings endpoints
+router.get('/settings', getAllSettings)
+router.get('/settings/logging', getLoggingSettings)
+router.put('/settings/logging', updateLoggingSettings)
+router.get('/settings/security', getSecuritySettings)
+router.put('/settings/security', updateSecuritySettings)
+router.get('/settings/backup', getBackupSettings)
+router.put('/settings/backup', updateBackupSettings)
+router.get('/settings/email', getEmailSettings)
+router.put('/settings/email', updateEmailSettings)
 
 // Database browser routes
 router.get('/database/tables', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), getDatabaseTables)
@@ -13544,6 +13556,7 @@ router.use(authenticateToken)
 
 // Backup endpoints
 router.get('/', listBackups)
+router.post('/', requireRole(['ORGANIZER', 'BOARD']), logActivity('CREATE_BACKUP', 'BACKUP'), createBackup)
 router.post('/create', requireRole(['ORGANIZER', 'BOARD']), logActivity('CREATE_BACKUP', 'BACKUP'), createBackup)
 router.post('/restore', requireRole(['ORGANIZER', 'BOARD']), upload.single('backup'), logActivity('RESTORE_BACKUP', 'BACKUP'), restoreBackup)
 router.get('/download/:filename', requireRole(['ORGANIZER', 'BOARD']), downloadBackup)
