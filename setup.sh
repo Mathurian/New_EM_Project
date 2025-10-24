@@ -13380,7 +13380,7 @@ EOF
 const express = require('express')
 const { getStats, getLogs, getActiveUsers, getUsers, getEvents, getContests, getCategories, getScores, getActivityLogs, getAuditLogs, exportAuditLogs, testConnection } = require('../controllers/adminController')                             
 const { getDatabaseTables, getTableData, getTableSchema, executeQuery, getDatabaseStats } = require('../controllers/databaseBrowserController')                 
-const { getAllSettings, getLoggingSettings, updateLoggingSettings, getSecuritySettings, updateSecuritySettings, getBackupSettings, updateBackupSettings, getEmailSettings, updateEmailSettings } = require('../controllers/settingsController')
+const { getSettings, updateSettings, testSettings, updateJWTConfig, getJWTConfig, getLoggingLevels, updateLoggingLevel, getSecuritySettings, updateSecuritySettings, getBackupSettings, updateBackupSettings, getEmailSettings, updateEmailSettings } = require('../controllers/settingsController')
 const { authenticateToken, requireRole } = require('../middleware/auth')
 
 const router = express.Router()
@@ -13404,9 +13404,9 @@ router.post('/export-audit-logs', exportAuditLogs)
 router.post('/test/:type', testConnection)
 
 // Admin settings endpoints
-router.get('/settings', getAllSettings)
-router.get('/settings/logging', getLoggingSettings)
-router.put('/settings/logging', updateLoggingSettings)
+router.get('/settings', getSettings)
+router.get('/settings/logging', getLoggingLevels)
+router.put('/settings/logging', updateLoggingLevel)
 router.get('/settings/security', getSecuritySettings)
 router.put('/settings/security', updateSecuritySettings)
 router.get('/settings/backup', getBackupSettings)
