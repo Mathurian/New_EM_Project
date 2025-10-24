@@ -106,6 +106,10 @@ export const scoringAPI = {
   finalCertification: (categoryId: string) => api.post(`/scoring/category/${categoryId}/final-certification`),
   getCategories: () => api.get('/scoring/categories'),
   getCriteria: (categoryId: string) => api.get(`/scoring/category/${categoryId}/criteria`),
+  requestDeduction: (data: any) => api.post('/scoring/deductions', data),
+  getDeductions: (categoryId?: string) => api.get(`/scoring/deductions${categoryId ? `?categoryId=${categoryId}` : ''}`),
+  approveDeduction: (deductionId: string, signature: string) => api.post(`/scoring/deductions/${deductionId}/approve`, { signature }),
+  rejectDeduction: (deductionId: string, reason: string) => api.post(`/scoring/deductions/${deductionId}/reject`, { reason }),
 }
 
 export const resultsAPI = {
@@ -122,8 +126,11 @@ export const usersAPI = {
   getById: (id: string) => api.get(`/users/${id}`),
   create: (data: any) => api.post('/users', data),
   update: (id: string, data: any) => api.put(`/users/${id}`, data),
+  updateProfile: (id: string, data: any) => api.put(`/users/profile/${id}`, data),
   delete: (id: string) => api.delete(`/users/${id}`),
   resetPassword: (id: string, data: any) => api.post(`/users/${id}/reset-password`, data),
+  importCSV: (data: { csvData: any[], userType: string }) => api.post('/users/import-csv', data),
+  getCSVTemplate: (userType: string) => api.get(`/users/csv-template?userType=${userType}`),
 }
 
 export const adminAPI = {
@@ -240,6 +247,21 @@ export const settingsAPI = {
   update: (data: Record<string, any>) => api.put('/settings', data),
   updateSettings: (data: any) => api.put('/settings', data),
   test: (type: 'email' | 'database' | 'backup') => api.post(`/settings/test/${type}`),
+  // Logging settings
+  getLoggingLevels: () => api.get('/settings/logging-levels'),
+  updateLoggingLevel: (settings: any) => api.put('/settings/logging-levels', settings),
+  // Security settings
+  getSecuritySettings: () => api.get('/settings/security'),
+  updateSecuritySettings: (settings: any) => api.put('/settings/security', settings),
+  // Backup settings
+  getBackupSettings: () => api.get('/settings/backup'),
+  updateBackupSettings: (settings: any) => api.put('/settings/backup', settings),
+  // Email settings
+  getEmailSettings: () => api.get('/settings/email'),
+  updateEmailSettings: (settings: any) => api.put('/settings/email', settings),
+  // JWT configuration
+  getJWTConfig: () => api.get('/settings/jwt-config'),
+  updateJWTConfig: (config: any) => api.put('/settings/jwt-config', config),
 }
 
 export const assignmentsAPI = {
@@ -299,12 +321,16 @@ export const tallyMasterAPI = {
 export const emailAPI = {
   getAll: () => api.get('/email'),
   getTemplates: () => api.get('/email/templates'),
-  getCampaigns: () => api.get('/email/campaigns'),
-  getLogs: () => api.get('/email/logs'),
-  sendEmail: (data: any) => api.post('/email/send', data),
   createTemplate: (data: any) => api.post('/email/templates', data),
   updateTemplate: (id: string, data: any) => api.put(`/email/templates/${id}`, data),
   deleteTemplate: (id: string) => api.delete(`/email/templates/${id}`),
+  getCampaigns: () => api.get('/email/campaigns'),
+  createCampaign: (data: any) => api.post('/email/campaigns', data),
+  sendCampaign: (id: string) => api.post(`/email/campaigns/${id}/send`),
+  getLogs: () => api.get('/email/logs'),
+  sendEmail: (data: any) => api.post('/email/send', data),
+  sendMultiple: (data: { recipients: string[], subject: string, content: string }) => api.post('/email/send-multiple', data),
+  sendByRole: (data: { roles: string[], subject: string, content: string }) => api.post('/email/send-by-role', data),
 }
 
 export const reportsAPI = {
