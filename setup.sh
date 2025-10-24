@@ -11424,21 +11424,81 @@ module.exports = {
 }
 EOF
 
-    # Emcee Controller
-    cat > "$APP_DIR/src/controllers/emceeController.js" << 'EOF'
+    # File Controller
+    cat > "$APP_DIR/src/controllers/fileController.js" << 'EOF'
 const { PrismaClient } = require('@prisma/client')
+const multer = require('multer')
+const path = require('path')
+const crypto = require('crypto')
+const fs = require('fs').promises
+const sharp = require('sharp')
+const { exec } = require('child_process')
+const { promisify } = require('util')
 
+const execAsync = promisify(exec)
 const prisma = new PrismaClient()
 
-const getScripts = async (req, res) => {
+const uploadFiles = async (req, res) => {
   try {
-    const scripts = await prisma.emceeScript.findMany({
-      orderBy: { createdAt: 'desc' }
-    })
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ error: 'No files uploaded' })
+    }
 
-    res.json(scripts)
+    const uploadedFiles = []
+    
+    for (const file of req.files) {
+      // Check if file already exists
+      const existingFile = await prisma.file.findFirst({
+        where: { filename: file.filename }
+      })
+      
+      if (existingFile) {
+        uploadedFiles.push({
+          filename: file.filename,
+          status: 'error',
+          errors: ['File already exists']
+        })
+        continue
+      }
+      
+      // Process images with sharp for optimization
+      if (file.mimetype.startsWith('image/')) {
+        const optimizedPath = file.path.replace(path.extname(file.path), '_optimized.jpg')
+        await sharp(file.path)
+          .resize(1920, 1080, { fit: 'inside', withoutEnlargement: true })
+          .jpeg({ quality: 85 })
+          .toFile(optimizedPath)
+        
+        // Replace original with optimized version
+        await fs.unlink(file.path)
+        await fs.rename(optimizedPath, file.path)
+      }
+      
+      // Create file record in database
+      const fileRecord = await prisma.file.create({
+        data: {
+          filename: file.filename,
+          originalName: file.originalname,
+          mimetype: file.mimetype,
+          size: file.size,
+          path: file.path,
+          uploadedBy: req.user.id
+        }
+      })
+      
+      uploadedFiles.push({
+        id: fileRecord.id,
+        filename: file.filename,
+        originalName: file.originalname,
+        mimetype: file.mimetype,
+        size: file.size,
+        status: 'success'
+      })
+    }
+    
+    res.json({ files: uploadedFiles })
   } catch (error) {
-    console.error('Get emcee scripts error:', error)
+    console.error('Upload files error:', error)
     res.status(500).json({ error: 'Internal server error' })
   }
 }
