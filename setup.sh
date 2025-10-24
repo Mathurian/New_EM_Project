@@ -15912,14 +15912,14 @@ const generatePDFReport = async (res, event, stats, includeDetails) => {
               </tr>
             </thead>
             <tbody>
-              ${event.contests.map(contest => 
+              ' + event.contests.map(contest => 
                 '<tr>' +
                   '<td>' + contest.name + '</td>' +
                   '<td>' + contest.categories.length + '</td>' +
                   '<td>' + contest.categories.reduce((sum, cat) => sum + cat.contestants.length, 0) + '</td>' +
                   '<td>' + contest.categories.reduce((sum, cat) => sum + cat.scores.length, 0) + '</td>' +
                 '</tr>'
-              ).join('')}
+              ).join('') + '
             </tbody>
           </table>
         </div>
@@ -16336,7 +16336,7 @@ const generateJudgePDFReport = async (res, judgeStats) => {
           <p>Generated on: ${new Date().toLocaleDateString()}</p>
         </div>
 
-        ${Object.values(judgeStats).map(stat => 
+        ' + Object.values(judgeStats).map(stat => 
           '<div class="judge-card">' +
             '<h2>' + stat.judge.user.firstName + ' ' + stat.judge.user.lastName + '</h2>' +
             '<div class="stats">' +
@@ -16358,7 +16358,7 @@ const generateJudgePDFReport = async (res, judgeStats) => {
               '</div>' +
             '</div>' +
           '</div>'
-        ).join('')}
+        ).join('') + '
       </body>
       </html>
     `
@@ -16614,13 +16614,13 @@ const generateAnalyticsPDFReport = async (res, analyticsData) => {
               </tr>
             </thead>
             <tbody>
-              ${analyticsData.userRoles.map(role => 
+              ' + analyticsData.userRoles.map(role => 
                 '<tr>' +
                   '<td>' + role.role + '</td>' +
                   '<td>' + role._count.role + '</td>' +
                   '<td>' + ((role._count.role / analyticsData.stats.totalUsers) * 100).toFixed(1) + '%</td>' +
                 '</tr>'
-              ).join('')}
+              ).join('') + '
             </tbody>
           </table>
         </div>
@@ -16637,14 +16637,14 @@ const generateAnalyticsPDFReport = async (res, analyticsData) => {
               </tr>
             </thead>
             <tbody>
-              ${analyticsData.recentActivity.slice(0, 20).map(activity => 
+              ' + analyticsData.recentActivity.slice(0, 20).map(activity => 
                 '<tr>' +
                   '<td>' + new Date(activity.createdAt).toLocaleDateString() + '</td>' +
                   '<td>' + (activity.user?.user?.firstName || '') + ' ' + (activity.user?.user?.lastName || '') + '</td>' +
                   '<td>' + activity.action + '</td>' +
                   '<td>' + activity.entityType + '</td>' +
                 '</tr>'
-              ).join('')}
+              ).join('') + '
             </tbody>
           </table>
         </div>
