@@ -18497,12 +18497,57 @@ EOF
         print_status "Fixed Prisma engine binary permissions"
     fi
     
-    # Validate Prisma schema first
+    # Generate Prisma Client
+    print_status "Generating Prisma Client..."
+    cd "$APP_DIR"
+    if ! npx prisma generate; then
+        print_error "Failed to generate Prisma Client"
+        print_status "Trying alternative Prisma generation method..."
+        if ! ./node_modules/.bin/prisma generate; then
+            print_error "Alternative Prisma generation also failed"
+            return 1
+        fi
+    fi
+    print_success "Prisma Client generated successfully"
+    
+    # Validate Prisma schema
     print_status "Validating Prisma schema..."
     if ! npx prisma validate; then
         print_error "Prisma schema validation failed. Please check the schema file."
-        exit 1
+        return 1
     fi
+    print_success "Prisma schema validation passed"
+    
+    # Verify Prisma Client is accessible
+    print_status "Verifying Prisma Client accessibility..."
+    if ! node -e "const { PrismaClient } = require('@prisma/client'); console.log('Prisma Client loaded successfully');"; then
+        print_error "Prisma Client is not accessible"
+        print_status "Attempting to regenerate Prisma Client..."
+        rm -rf node_modules/@prisma/client
+        if ! npx prisma generate; then
+            print_error "Failed to regenerate Prisma Client"
+            return 1
+        fi
+        print_success "Prisma Client regenerated successfully"
+    else
+        print_success "Prisma Client is accessible"
+    fi
+    
+    # Test server startup with Prisma Client
+    print_status "Testing server startup with Prisma Client..."
+    if ! node -e "
+        const express = require('express');
+        const { PrismaClient } = require('@prisma/client');
+        const app = express();
+        const prisma = new PrismaClient();
+        console.log('Server components loaded successfully');
+        prisma.\$disconnect();
+    "; then
+        print_error "Server startup test failed"
+        print_status "This may indicate Prisma Client issues"
+        return 1
+    fi
+    print_success "Server startup test passed"
     
     # Run migrations
     print_status "Running database migrations..."
