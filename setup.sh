@@ -18541,7 +18541,8 @@ EOF
     "csv-writer": "^1.6.0",
     "xml2js": "^0.6.2",
     "pdfkit": "^0.14.0",
-    "jspdf": "^2.5.1"
+    "jspdf": "^2.5.1",
+    "sharp": "^0.33.0"
   },
   "overrides": {
     "glob": "^10.3.10",
