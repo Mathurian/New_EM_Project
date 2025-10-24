@@ -2654,8 +2654,6 @@ module.exports = {
   getStats,
   getLogs,
   getActiveUsers,
-  getSettings,
-  updateSettings,
   getUsers,
   getEvents,
   getContests,
@@ -13333,7 +13331,7 @@ EOF
     # Admin Routes
     cat > "$APP_DIR/src/routes/adminRoutes.js" << 'EOF'
 const express = require('express')
-const { getStats, getLogs, getActiveUsers, getSettings, updateSettings, getUsers, getEvents, getContests, getCategories, getScores, getActivityLogs, getAuditLogs, exportAuditLogs, testConnection } = require('../controllers/adminController')
+const { getStats, getLogs, getActiveUsers, getUsers, getEvents, getContests, getCategories, getScores, getActivityLogs, getAuditLogs, exportAuditLogs, testConnection } = require('../controllers/adminController')
 const { getDatabaseTables, getTableData, getTableSchema, executeQuery, getDatabaseStats } = require('../controllers/databaseBrowserController')
 const { authenticateToken, requireRole } = require('../middleware/auth')
 
