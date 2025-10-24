@@ -21373,6 +21373,49 @@ export const bulkImportAPI = {
   downloadSample: () => api.get('/bulk-import/sample', { responseType: 'blob' }),
 }
 
+export const databaseBrowserAPI = {
+  getTables: () => api.get('/database/tables'),
+  getTableData: (tableName: string, page = 1, limit = 50, search = '') =>
+    api.get(`/database/tables/${tableName}`, { params: { page, limit, search } }),
+  getTableSchema: (tableName: string) => api.get(`/database/tables/${tableName}/schema`),
+  insertRecord: (tableName: string, data: any) => api.post(`/database/tables/${tableName}`, data),
+  updateRecord: (tableName: string, id: string, data: any) =>
+    api.put(`/database/tables/${tableName}/${id}`, data),
+  deleteRecord: (tableName: string, id: string) =>
+    api.delete(`/database/tables/${tableName}/${id}`),
+  executeQuery: (query: string) => api.post('/database/query', { query }),
+  getTableStats: (tableName: string) => api.get(`/database/tables/${tableName}/stats`),
+}
+
+export const eventTemplatesAPI = {
+  getTemplates: (params?: { search?: string; isPublic?: boolean }) => 
+    api.get('/event-templates', { params }),
+  getTemplate: (id: string) => api.get(`/event-templates/${id}`),
+  createTemplate: (data: any) => api.post('/event-templates', data),
+  updateTemplate: (id: string, data: any) => api.put(`/event-templates/${id}`, data),
+  deleteTemplate: (id: string) => api.delete(`/event-templates/${id}`),
+  createEventFromTemplate: (templateId: string, eventData: any) => 
+    api.post(`/event-templates/${templateId}/create-event`, eventData),
+}
+
+export const reportsAPI = {
+  getReports: (params?: { search?: string; type?: string; status?: string }) => 
+    api.get('/reports', { params }),
+  getTemplates: () => api.get('/reports/templates'),
+  createReport: (data: any) => api.post('/reports', data),
+  generateReport: (id: string) => api.post(`/reports/${id}/generate`),
+  deleteReport: (id: string) => api.delete(`/reports/${id}`),
+  emailReport: (reportId: string, data: { recipients: string; subject: string; message: string }) => 
+    api.post(`/reports/${reportId}/email`, data),
+}
+
+export const winnersAPI = {
+  getWinners: (params?: { eventId?: string; contestId?: string; categoryId?: string }) => 
+    api.get('/winners', { params }),
+  certifyWinner: (winnerId: string, signature: string) => 
+    api.post(`/winners/${winnerId}/certify`, { signature }),
+}
+
 // Export the api instance for direct use
 export { api }
 export default api
@@ -33044,19 +33087,44 @@ const TemplatesPage: React.FC = () => {
     setShowEditModal(true)
   }
 
-  const handleSaveTemplate = () => {
-    // Mock save operation
-    console.log('Saving template:', formData)
-    setShowCreateModal(false)
-    setShowEditModal(false)
-    setFormData({})
-    setSelectedTemplate(null)
+  const handleSaveTemplate = async () => {
+    try {
+      if (showCreateModal) {
+        await createTemplateMutation.mutateAsync({
+          name: formData.name,
+          description: formData.description,
+          eventData: formData.eventData,
+          isPublic: formData.isPublic || false
+        })
+      } else if (showEditModal && selectedTemplate) {
+        await updateTemplateMutation.mutateAsync({
+          id: selectedTemplate.id,
+          data: {
+            name: formData.name,
+            description: formData.description,
+            eventData: formData.eventData,
+            isPublic: formData.isPublic || false
+          }
+        })
+      }
+      
+      setShowCreateModal(false)
+      setShowEditModal(false)
+      setFormData({})
+      setSelectedTemplate(null)
+    } catch (error) {
+      console.error('Error saving template:', error)
+    }
   }
 
-  const handleDeleteTemplate = (templateId: string) => {
+  const handleDeleteTemplate = async (templateId: string) => {
     if (confirm('Are you sure you want to delete this template?')) {
-      // Mock delete operation
-      console.log('Deleting template:', templateId)
+      try {
+        await deleteTemplateMutation.mutateAsync(templateId)
+      } catch (error) {
+        console.error('Error deleting template:', error)
+        alert('Failed to delete template. Please try again.')
+      }
     }
   }
 
@@ -33907,10 +33975,41 @@ const ReportsPage: React.FC = () => {
     return matchesSearch && matchesStatus && matchesType
   })
 
-  const handleGenerateReport = (template: ReportTemplate) => {
-    setSelectedTemplate(template)
-    setReportParameters({})
-    setShowGenerateModal(true)
+  const handleGenerateReport = async (template: ReportTemplate) => {
+    try {
+      setSelectedTemplate(template)
+      setReportParameters({})
+      setShowGenerateModal(true)
+      
+      // Generate the report with parameters
+      const response = await fetch('/api/reports/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          templateId: template.id,
+          parameters: reportParameters,
+          format: 'pdf'
+        })
+      })
+      
+      if (response.ok) {
+        const blob = await response.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `${template.name}-report.pdf`
+        a.click()
+        window.URL.revokeObjectURL(url)
+      } else {
+        throw new Error('Failed to generate report')
+      }
+    } catch (error) {
+      console.error('Error generating report:', error)
+      alert('Failed to generate report. Please try again.')
+    }
   }
 
   const handleParameterChange = (paramName: string, value: any) => {
@@ -38189,3062 +38288,1038 @@ const PasswordStrengthMeter: React.FC<PasswordStrengthMeterProps> = ({
 
 export default PasswordStrengthMeter
 EOF
+
+    # Update UsersPage with enhanced user management
+    cat > "$APP_DIR/frontend/src/pages/UsersPage.tsx" << 'EOF'
+import React, { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from 'react-query'
+import { useAuth } from '../contexts/AuthContext'
+import { usersAPI } from '../services/api'
+import PasswordStrengthMeter from '../components/PasswordStrengthMeter'
+import {
   PlusIcon,
   PencilIcon,
   TrashIcon,
   EyeIcon,
-  CheckCircleIcon,
-  ClockIcon,
-  UserGroupIcon,
-  TrophyIcon,
-} from '@heroicons/react/24/outline'
-
-const AssignmentsPage: React.FC = () => {
-  const { user } = useAuth()
-  const queryClient = useQueryClient()
-  const [selectedAssignment, setSelectedAssignment] = useState<any>(null)
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
-
-  const { data: assignments, isLoading } = useQuery(
-    'assignments',
-    () => assignmentsAPI.getAll().then(res => res.data),
-    {
-      refetchInterval: 300000, // Refresh every 5 minutes (reduced from 30 seconds)
-      refetchOnWindowFocus: false, // Don't refetch on window focus
-      staleTime: 120000, // Consider data stale after 2 minutes
-    }
-  )
-
-  const deleteAssignmentMutation = useMutation(
-    (id: string) => assignmentsAPI.delete(id),
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries('assignments')
-      },
-    }
-  )
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'ACTIVE':
-        return <span className="badge badge-success">Active</span>
-      case 'PENDING':
-        return <span className="badge badge-warning">Pending</span>
-      case 'COMPLETED':
-        return <span className="badge badge-info">Completed</span>
-      default:
-        return <span className="badge badge-secondary">{status}</span>
-    }
-  }
-
-  const getRoleSpecificContent = () => {
-    switch (user?.role) {
-      case 'ORGANIZER':
-      case 'BOARD':
-        return (
-          <div className="space-y-6">
-            <div className="flex justify-between items-center">
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Judge Assignments</h1>
-                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                  Manage judge assignments to categories
-                </p>
-              </div>
-              <button
-                onClick={() => setIsCreateModalOpen(true)}
-                className="btn btn-primary"
-              >
-                <PlusIcon className="h-4 w-4 mr-2" />
-                New Assignment
-              </button>
-            </div>
-
-            <div className="card">
-              <div className="card-content">
-                {isLoading ? (
-                  <div className="flex items-center justify-center py-8">
-                    <div className="loading-spinner"></div>
-                  </div>
-                ) : assignments && assignments.length > 0 ? (
-                  <div className="overflow-x-auto">
-                    <table className="table">
-                      <thead>
-                        <tr>
-                          <th>Judge</th>
-                          <th>Category</th>
-                          <th>Contest</th>
-                          <th>Status</th>
-                          <th>Assigned Date</th>
-                          <th>Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {assignments.map((assignment: any) => (
-                          <tr key={assignment.id}>
-                            <td>
-                              <div className="flex items-center space-x-3">
-                                <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
-                                  <span className="text-white text-xs font-medium">
-                                    {assignment.judge?.name?.charAt(0).toUpperCase()}
-                                  </span>
-                                </div>
-                                <div>
-                                  <div className="font-medium text-gray-900 dark:text-white">
-                                    {assignment.judge?.name}
-                                  </div>
-                                  <div className="text-sm text-gray-500 dark:text-gray-400">
-                                    {assignment.judge?.email}
-                                  </div>
-                                </div>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="font-medium text-gray-900 dark:text-white">
-                                {assignment.category?.name}
-                              </div>
-                              <div className="text-sm text-gray-500 dark:text-gray-400">
-                                {assignment.category?.description}
-                              </div>
-                            </td>
-                            <td>
-                              <div className="font-medium text-gray-900 dark:text-white">
-                                {assignment.contest?.name}
-                              </div>
-                              <div className="text-sm text-gray-500 dark:text-gray-400">
-                                {assignment.event?.name}
-                              </div>
-                            </td>
-                            <td>{getStatusBadge(assignment.status)}</td>
-                            <td>
-                              {new Date(assignment.assignedAt).toLocaleDateString()}
-                            </td>
-                            <td>
-                              <div className="flex items-center space-x-2">
-                                <button
-                                  onClick={() => {
-                                    setSelectedAssignment(assignment)
-                                    setIsEditModalOpen(true)
-                                  }}
-                                  className="btn btn-ghost btn-sm"
-                                >
-                                  <PencilIcon className="h-4 w-4" />
-                                </button>
-                                <button
-                                  onClick={() => deleteAssignmentMutation.mutate(assignment.id)}
-                                  className="btn btn-ghost btn-sm text-red-600 hover:text-red-700"
-                                >
-                                  <TrashIcon className="h-4 w-4" />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                    <UserGroupIcon className="h-12 w-12 mx-auto mb-4 text-gray-300 dark:text-gray-600" />
-                    <p>No assignments found</p>
-                    <button
-                      onClick={() => setIsCreateModalOpen(true)}
-                      className="btn btn-primary btn-sm mt-2"
-                    >
-                      <PlusIcon className="h-4 w-4 mr-1" />
-                      Create First Assignment
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )
-
-      case 'JUDGE':
-        return (
-          <div className="space-y-6">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">My Assignments</h1>
-              <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                View your assigned categories and scoring tasks
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {assignments?.filter((a: any) => a.judge?.id === user?.id).map((assignment: any) => (
-                <div key={assignment.id} className="card">
-                  <div className="card-content">
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="w-10 h-10 bg-green-500 rounded-lg flex items-center justify-center">
-                        <TrophyIcon className="h-6 w-6 text-white" />
-                      </div>
-                      {getStatusBadge(assignment.status)}
-                    </div>
-                    <h3 className="font-semibold text-gray-900 dark:text-white mb-2">
-                      {assignment.category?.name}
-                    </h3>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                      {assignment.category?.description}
-                    </p>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-gray-500 dark:text-gray-400">Contest:</span>
-                        <span className="text-gray-900 dark:text-white">{assignment.contest?.name}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-500 dark:text-gray-400">Event:</span>
-                        <span className="text-gray-900 dark:text-white">{assignment.event?.name}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-500 dark:text-gray-400">Assigned:</span>
-                        <span className="text-gray-900 dark:text-white">
-                          {new Date(assignment.assignedAt).toLocaleDateString()}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                      <button className="btn btn-primary w-full">
-                        <EyeIcon className="h-4 w-4 mr-2" />
-                        View Details
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )
-
-      default:
-        return (
-          <div className="card">
-            <div className="card-content text-center py-12">
-              <UserGroupIcon className="h-12 w-12 mx-auto mb-4 text-gray-300 dark:text-gray-600" />
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                Access Restricted
-              </h3>
-              <p className="text-gray-600 dark:text-gray-400">
-                You don't have permission to view assignments.
-              </p>
-            </div>
-          </div>
-        )
-    }
-  }
-
-  return (
-    <div className="space-y-6">
-      {getRoleSpecificContent()}
-    </div>
-  )
-}
-
-export default AssignmentsPage
-EOF
-
-    # Add AuditorPage
-    cat > "$APP_DIR/frontend/src/pages/AuditorPage.tsx" << 'EOF'
-import React, { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from 'react-query'
-import { useAuth } from '../contexts/AuthContext'
-import { eventsAPI, contestsAPI, categoriesAPI, resultsAPI, scoringAPI, adminAPI } from '../services/api'
-import {
-  CheckCircleIcon,
-  ExclamationTriangleIcon,
-  DocumentTextIcon,
-  ShieldCheckIcon,
-  ClockIcon,
-  EyeIcon,
-  PrinterIcon,
-  ChartBarIcon,
-  MagnifyingGlassIcon,
-  CalendarIcon,
-  UserIcon,
-  TrophyIcon,
-  StarIcon,
-  ArrowDownTrayIcon,
-  ArrowUpTrayIcon,
-  CogIcon,
-  BellIcon,
-  InformationCircleIcon,
-  XCircleIcon,
-  CheckIcon,
   XMarkIcon,
-  PlusIcon,
-  TrashIcon,
-  DocumentDuplicateIcon,
-  PresentationChartLineIcon,
-  TableCellsIcon,
-  ClipboardDocumentCheckIcon,
-  AcademicCapIcon,
+  CheckCircleIcon,
+  XCircleIcon,
+  ClockIcon,
+  ExclamationTriangleIcon,
+  MagnifyingGlassIcon,
+  FunnelIcon,
   UserGroupIcon,
-  ChartPieIcon,
-  ArrowTrendingUpIcon,
-  ArrowTrendingDownIcon,
+  UserIcon,
+  CalendarIcon,
+  ShieldCheckIcon,
   LockClosedIcon,
-  KeyIcon,
-  ExclamationCircleIcon,
-  CalculatorIcon,
-  PencilSquareIcon
-} from '@heroicons/react/24/outline'
-import { format } from 'date-fns'
-
-interface AuditLog {
-  id: string
-  eventId: string
-  contestId: string
-  categoryId: string
-  contestantId: string
-  judgeId: string
-  action: 'SCORE_SUBMITTED' | 'SCORE_MODIFIED' | 'CERTIFICATION_REQUESTED' | 'CERTIFICATION_APPROVED' | 'CERTIFICATION_REJECTED' | 'RESULT_CALCULATED' | 'RESULT_MODIFIED'
-  details: string
-  oldValue?: any
-  newValue?: any
-  timestamp: string
-  ipAddress: string
-  userAgent: string
-  status: 'PENDING' | 'VERIFIED' | 'FLAGGED' | 'RESOLVED'
-  verifiedBy?: string
-  verifiedAt?: string
-  notes?: string
-}
-
-interface ScoreAudit {
-  id: string
-  contestId: string
-  categoryId: string
-  contestantId: string
-  contestantName: string
-  judgeId: string
-  judgeName: string
-  scores: {
-    criteriaId: string
-    criteriaName: string
-    score: number
-    maxScore: number
-    weight: number
-  }[]
-  totalScore: number
-  submittedAt: string
-  modifiedAt?: string
-  status: 'VERIFIED' | 'FLAGGED' | 'PENDING'
-  flags: string[]
-  auditNotes?: string
-}
-
-interface CertificationAudit {
-  id: string
-  contestantId: string
-  contestantName: string
-  currentLevel: string
-  requestedLevel: string
-  status: 'PENDING' | 'APPROVED' | 'REJECTED'
-  submittedAt: string
-  reviewedAt?: string
-  reviewedBy?: string
-  auditStatus: 'VERIFIED' | 'FLAGGED' | 'PENDING'
-  flags: string[]
-  auditNotes?: string
-}
-
-const AuditorPage: React.FC = () => {
-  const { user } = useAuth()
-  const [activeTab, setActiveTab] = useState('audit-logs')
-  const [showDetailsModal, setShowDetailsModal] = useState(false)
-  const [showVerifyModal, setShowVerifyModal] = useState(false)
-  const [selectedAudit, setSelectedAudit] = useState<AuditLog | null>(null)
-  const [selectedScore, setSelectedScore] = useState<ScoreAudit | null>(null)
-  const [selectedCertification, setSelectedCertification] = useState<CertificationAudit | null>(null)
-  const [filters, setFilters] = useState({
-    search: '',
-    eventId: '',
-    contestId: '',
-    categoryId: '',
-    status: '',
-    action: '',
-    dateRange: ''
-  })
-  const [verificationNotes, setVerificationNotes] = useState('')
-  const queryClient = useQueryClient()
-
-  // Fetch data for audit operations
-  const { data: events } = useQuery('events', () => eventsAPI.getAll().then((res: any) => res.data))
-  const { data: contests } = useQuery('contests', () => contestsAPI.getAll().then((res: any) => res.data))
-  const { data: categories } = useQuery('categories', () => categoriesAPI.getAll().then((res: any) => res.data))
-  const { data: results } = useQuery('results', () => resultsAPI.getAll().then((res: any) => res.data))
-
-  // Mock data for audit logs
-  const auditLogs: AuditLog[] = [
-    {
-      id: '1',
-      eventId: '1',
-      contestId: '1',
-      categoryId: '1',
-      contestantId: '1',
-      judgeId: '1',
-      action: 'SCORE_SUBMITTED',
-      details: 'Score submitted for Sarah Johnson in Vocal Solo category',
-      newValue: { totalScore: 94, scores: [{ criteriaId: '1', score: 23 }, { criteriaId: '2', score: 24 }] },
-      timestamp: '2024-01-15T10:25:00Z',
-      ipAddress: '192.168.1.100',
-      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-      status: 'VERIFIED',
-      verifiedBy: 'auditor@eventmanager.com',
-      verifiedAt: '2024-01-15T10:30:00Z',
-      notes: 'Score verified as accurate'
-    },
-    {
-      id: '2',
-      eventId: '1',
-      contestId: '1',
-      categoryId: '1',
-      contestantId: '2',
-      judgeId: '2',
-      action: 'SCORE_MODIFIED',
-      details: 'Score modified for Michael Chen in Vocal Solo category',
-      oldValue: { totalScore: 85, scores: [{ criteriaId: '1', score: 20 }, { criteriaId: '2', score: 21 }] },
-      newValue: { totalScore: 89, scores: [{ criteriaId: '1', score: 22 }, { criteriaId: '2', score: 23 }] },
-      timestamp: '2024-01-15T10:28:00Z',
-      ipAddress: '192.168.1.101',
-      userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-      status: 'FLAGGED',
-      notes: 'Score modification requires review - significant change detected'
-    },
-    {
-      id: '3',
-      eventId: '1',
-      contestId: '1',
-      categoryId: '1',
-      contestantId: '1',
-      judgeId: '1',
-      action: 'CERTIFICATION_REQUESTED',
-      details: 'Certification requested for Sarah Johnson - Advanced level',
-      newValue: { level: 'Advanced', score: 92.5 },
-      timestamp: '2024-01-15T10:30:00Z',
-      ipAddress: '192.168.1.100',
-      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-      status: 'PENDING',
-      notes: 'Certification request pending review'
-    }
-  ]
-
-  const scoreAudits: ScoreAudit[] = [
-    {
-      id: '1',
-      contestId: '1',
-      categoryId: '1',
-      contestantId: '1',
-      contestantName: 'Sarah Johnson',
-      judgeId: '1',
-      judgeName: 'Dr. Smith',
-      scores: [
-        { criteriaId: '1', criteriaName: 'Technique', score: 23, maxScore: 25, weight: 1.0 },
-        { criteriaId: '2', criteriaName: 'Musicality', score: 24, maxScore: 25, weight: 1.0 },
-        { criteriaId: '3', criteriaName: 'Stage Presence', score: 19, maxScore: 20, weight: 0.8 },
-        { criteriaId: '4', criteriaName: 'Song Choice', score: 14, maxScore: 15, weight: 0.6 },
-        { criteriaId: '5', criteriaName: 'Overall Impact', score: 14, maxScore: 15, weight: 0.6 }
-      ],
-      totalScore: 94,
-      submittedAt: '2024-01-15T10:25:00Z',
-      status: 'VERIFIED',
-      flags: [],
-      auditNotes: 'Score verified as accurate and consistent with performance'
-    },
-    {
-      id: '2',
-      contestId: '1',
-      categoryId: '1',
-      contestantId: '2',
-      contestantName: 'Michael Chen',
-      judgeId: '2',
-      judgeName: 'Prof. Brown',
-      scores: [
-        { criteriaId: '1', criteriaName: 'Technique', score: 22, maxScore: 25, weight: 1.0 },
-        { criteriaId: '2', criteriaName: 'Musicality', score: 23, maxScore: 25, weight: 1.0 },
-        { criteriaId: '3', criteriaName: 'Stage Presence', score: 18, maxScore: 20, weight: 0.8 },
-        { criteriaId: '4', criteriaName: 'Song Choice', score: 13, maxScore: 15, weight: 0.6 },
-        { criteriaId: '5', criteriaName: 'Overall Impact', score: 13, maxScore: 15, weight: 0.6 }
-      ],
-      totalScore: 89,
-      submittedAt: '2024-01-15T10:28:00Z',
-      modifiedAt: '2024-01-15T10:30:00Z',
-      status: 'FLAGGED',
-      flags: ['Score modification detected', 'Significant change in technique score'],
-      auditNotes: 'Score modification requires review - technique score increased from 20 to 22'
-    }
-  ]
-
-  const certificationAudits: CertificationAudit[] = [
-    {
-      id: '1',
-      contestantId: '1',
-      contestantName: 'Sarah Johnson',
-      currentLevel: 'Intermediate',
-      requestedLevel: 'Advanced',
-      status: 'APPROVED',
-      submittedAt: '2024-01-15T10:30:00Z',
-      reviewedAt: '2024-01-15T11:00:00Z',
-      reviewedBy: 'tallymaster@eventmanager.com',
-      auditStatus: 'VERIFIED',
-      flags: [],
-      auditNotes: 'Certification approved based on score of 92.5 and performance quality'
-    },
-    {
-      id: '2',
-      contestantId: '2',
-      contestantName: 'Michael Chen',
-      currentLevel: 'Beginner',
-      requestedLevel: 'Intermediate',
-      status: 'PENDING',
-      submittedAt: '2024-01-15T10:35:00Z',
-      auditStatus: 'FLAGGED',
-      flags: ['Score modification pending review', 'Inconsistent scoring pattern'],
-      auditNotes: 'Certification request flagged due to pending score audit'
-    }
-  ]
-
-  const filteredAuditLogs = auditLogs.filter(log => {
-    const matchesSearch = log.details.toLowerCase().includes(filters.search.toLowerCase()) ||
-                         log.action.toLowerCase().includes(filters.search.toLowerCase())
-    const matchesEvent = !filters.eventId || log.eventId === filters.eventId
-    const matchesContest = !filters.contestId || log.contestId === filters.contestId
-    const matchesCategory = !filters.categoryId || log.categoryId === filters.categoryId
-    const matchesStatus = !filters.status || log.status === filters.status
-    const matchesAction = !filters.action || log.action === filters.action
-
-    return matchesSearch && matchesEvent && matchesContest && matchesCategory && matchesStatus && matchesAction
-  })
-
-  const filteredScoreAudits = scoreAudits.filter(audit => {
-    const matchesSearch = audit.contestantName.toLowerCase().includes(filters.search.toLowerCase()) ||
-                         audit.judgeName.toLowerCase().includes(filters.search.toLowerCase())
-    const matchesContest = !filters.contestId || audit.contestId === filters.contestId
-    const matchesCategory = !filters.categoryId || audit.categoryId === filters.categoryId
-    const matchesStatus = !filters.status || audit.status === filters.status
-
-    return matchesSearch && matchesContest && matchesCategory && matchesStatus
-  })
-
-  const filteredCertificationAudits = certificationAudits.filter(audit => {
-    const matchesSearch = audit.contestantName.toLowerCase().includes(filters.search.toLowerCase())
-    const matchesStatus = !filters.status || audit.status === filters.status
-    const matchesAuditStatus = !filters.status || audit.auditStatus === filters.status
-
-    return matchesSearch && (matchesStatus || matchesAuditStatus)
-  })
-
-  const handleViewDetails = (audit: AuditLog) => {
-    setSelectedAudit(audit)
-    setShowDetailsModal(true)
-  }
-
-  const handleVerifyAudit = (audit: AuditLog) => {
-    setSelectedAudit(audit)
-    setVerificationNotes('')
-    setShowVerifyModal(true)
-  }
-
-  const handleVerifyScore = (score: ScoreAudit) => {
-    setSelectedScore(score)
-    setVerificationNotes('')
-    setShowVerifyModal(true)
-  }
-
-  const handleVerifyCertification = (certification: CertificationAudit) => {
-    setSelectedCertification(certification)
-    setVerificationNotes('')
-    setShowVerifyModal(true)
-  }
-
-  const handleSubmitVerification = () => {
-    // Mock verification submission
-    console.log('Submitting verification:', verificationNotes)
-    setShowVerifyModal(false)
-    setSelectedAudit(null)
-    setSelectedScore(null)
-    setSelectedCertification(null)
-    setVerificationNotes('')
-  }
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'PENDING':
-        return <ClockIcon className="h-5 w-5 text-yellow-500" />
-      case 'VERIFIED':
-        return <CheckCircleIcon className="h-5 w-5 text-green-500" />
-      case 'FLAGGED':
-        return <ExclamationTriangleIcon className="h-5 w-5 text-red-500" />
-      case 'RESOLVED':
-        return <CheckIcon className="h-5 w-5 text-blue-500" />
-      default:
-        return <InformationCircleIcon className="h-5 w-5 text-gray-500" />
-    }
-  }
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'PENDING':
-        return 'text-yellow-600 bg-yellow-100 dark:text-yellow-400 dark:bg-yellow-900'
-      case 'VERIFIED':
-        return 'text-green-600 bg-green-100 dark:text-green-400 dark:bg-green-900'
-      case 'FLAGGED':
-        return 'text-red-600 bg-red-100 dark:text-red-400 dark:bg-red-900'
-      case 'RESOLVED':
-        return 'text-blue-600 bg-blue-100 dark:text-blue-400 dark:bg-blue-900'
-      default:
-        return 'text-gray-600 bg-gray-100 dark:text-gray-400 dark:bg-gray-900'
-    }
-  }
-
-  const getActionIcon = (action: string) => {
-    switch (action) {
-      case 'SCORE_SUBMITTED':
-        return <DocumentTextIcon className="h-5 w-5 text-blue-500" />
-      case 'SCORE_MODIFIED':
-        return <PencilSquareIcon className="h-5 w-5 text-orange-500" />
-      case 'CERTIFICATION_REQUESTED':
-        return <AcademicCapIcon className="h-5 w-5 text-purple-500" />
-      case 'CERTIFICATION_APPROVED':
-        return <CheckCircleIcon className="h-5 w-5 text-green-500" />
-      case 'CERTIFICATION_REJECTED':
-        return <XCircleIcon className="h-5 w-5 text-red-500" />
-      case 'RESULT_CALCULATED':
-        return <CalculatorIcon className="h-5 w-5 text-indigo-500" />
-      case 'RESULT_MODIFIED':
-        return <CogIcon className="h-5 w-5 text-yellow-500" />
-      default:
-        return <InformationCircleIcon className="h-5 w-5 text-gray-500" />
-    }
-  }
-
-  const tabs = [
-    { id: 'audit-logs', name: 'Audit Logs', icon: DocumentTextIcon },
-    { id: 'score-audits', name: 'Score Audits', icon: ChartBarIcon },
-    { id: 'certification-audits', name: 'Certification Audits', icon: ShieldCheckIcon },
-    { id: 'analytics', name: 'Analytics', icon: ChartPieIcon },
-  ]
-
-  const canAudit = user?.role === 'AUDITOR' || user?.role === 'ORGANIZER' || user?.role === 'BOARD'
-
-  return (
-    <div className="space-y-6">
-      <div className="card">
-        <div className="card-header">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Auditor Dashboard</h1>
-          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-            Review and verify all scores, certifications, and system activities
-          </p>
-        </div>
-        <div className="card-body">
-          <div className="border-b border-gray-200 dark:border-gray-700">
-            <nav className="-mb-px flex space-x-8">
-              {tabs.map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`${
-                    activeTab === tab.id
-                      ? 'border-blue-500 text-blue-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  } whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm flex items-center`}
-                >
-                  <tab.icon className="h-5 w-5 mr-2" />
-                  {tab.name}
-                </button>
-              ))}
-            </nav>
-          </div>
-
-          {activeTab === 'audit-logs' && (
-            <div className="mt-6">
-              <div className="flex flex-col sm:flex-row gap-4 mb-6">
-                <div className="flex-1">
-                  <div className="relative">
-                    <MagnifyingGlassIcon className="h-5 w-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                    <input
-                      type="text"
-                      placeholder="Search audit logs..."
-                      value={filters.search}
-                      onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
-                      className="input pl-10"
-                    />
-                  </div>
-                </div>
-                <select
-                  value={filters.action}
-                  onChange={(e) => setFilters(prev => ({ ...prev, action: e.target.value }))}
-                  className="input"
-                >
-                  <option value="">All Actions</option>
-                  <option value="SCORE_SUBMITTED">Score Submitted</option>
-                  <option value="SCORE_MODIFIED">Score Modified</option>
-                  <option value="CERTIFICATION_REQUESTED">Certification Requested</option>
-                  <option value="CERTIFICATION_APPROVED">Certification Approved</option>
-                  <option value="CERTIFICATION_REJECTED">Certification Rejected</option>
-                  <option value="RESULT_CALCULATED">Result Calculated</option>
-                  <option value="RESULT_MODIFIED">Result Modified</option>
-                </select>
-                <select
-                  value={filters.status}
-                  onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
-                  className="input"
-                >
-                  <option value="">All Status</option>
-                  <option value="PENDING">Pending</option>
-                  <option value="VERIFIED">Verified</option>
-                  <option value="FLAGGED">Flagged</option>
-                  <option value="RESOLVED">Resolved</option>
-                </select>
-              </div>
-
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                  <thead className="bg-gray-50 dark:bg-gray-800">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Action
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Details
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Status
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Timestamp
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        IP Address
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
-                    {filteredAuditLogs.map((log) => (
-                      <tr key={log.id}>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            {getActionIcon(log.action)}
-                            <span className="ml-2 text-sm font-medium text-gray-900 dark:text-white">
-                              {log.action.replace(/_/g, ' ')}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="text-sm text-gray-900 dark:text-white">
-                            {log.details}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            {getStatusIcon(log.status)}
-                            <span className={`ml-2 px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(log.status)}`}>
-                              {log.status}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
-                          {format(new Date(log.timestamp), 'MMM dd, HH:mm')}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
-                          {log.ipAddress}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                          <div className="flex space-x-2">
-                            <button
-                              onClick={() => handleViewDetails(log)}
-                              className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
-                              title="View Details"
-                            >
-                              <EyeIcon className="h-4 w-4" />
-                            </button>
-                            {canAudit && log.status === 'PENDING' && (
-                              <button
-                                onClick={() => handleVerifyAudit(log)}
-                                className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
-                                title="Verify"
-                              >
-                                <CheckIcon className="h-4 w-4" />
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'score-audits' && (
-            <div className="mt-6">
-              <div className="flex flex-col sm:flex-row gap-4 mb-6">
-                <div className="flex-1">
-                  <div className="relative">
-                    <MagnifyingGlassIcon className="h-5 w-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                    <input
-                      type="text"
-                      placeholder="Search score audits..."
-                      value={filters.search}
-                      onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
-                      className="input pl-10"
-                    />
-                  </div>
-                </div>
-                <select
-                  value={filters.status}
-                  onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
-                  className="input"
-                >
-                  <option value="">All Status</option>
-                  <option value="VERIFIED">Verified</option>
-                  <option value="FLAGGED">Flagged</option>
-                  <option value="PENDING">Pending</option>
-                </select>
-              </div>
-
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                  <thead className="bg-gray-50 dark:bg-gray-800">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Contestant
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Judge
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Total Score
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Status
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Flags
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Submitted
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
-                    {filteredScoreAudits.map((audit) => (
-                      <tr key={audit.id}>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-gray-900 dark:text-white">
-                            {audit.contestantName}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-600 dark:text-gray-400">
-                            {audit.judgeName}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-gray-900 dark:text-white">
-                            {audit.totalScore}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            {getStatusIcon(audit.status)}
-                            <span className={`ml-2 px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(audit.status)}`}>
-                              {audit.status}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-600 dark:text-gray-400">
-                            {audit.flags.length > 0 ? (
-                              <span className="text-red-600 dark:text-red-400">
-                                {audit.flags.length} flag{audit.flags.length > 1 ? 's' : ''}
-                              </span>
-                            ) : (
-                              <span className="text-green-600 dark:text-green-400">None</span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
-                          {format(new Date(audit.submittedAt), 'MMM dd, HH:mm')}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                          <div className="flex space-x-2">
-                            <button
-                              onClick={() => handleVerifyScore(audit)}
-                              className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
-                              title="View Details"
-                            >
-                              <EyeIcon className="h-4 w-4" />
-                            </button>
-                            {canAudit && audit.status === 'PENDING' && (
-                              <button
-                                onClick={() => handleVerifyScore(audit)}
-                                className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
-                                title="Verify"
-                              >
-                                <CheckIcon className="h-4 w-4" />
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'certification-audits' && (
-            <div className="mt-6">
-              <div className="flex flex-col sm:flex-row gap-4 mb-6">
-                <div className="flex-1">
-                  <div className="relative">
-                    <MagnifyingGlassIcon className="h-5 w-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                    <input
-                      type="text"
-                      placeholder="Search certification audits..."
-                      value={filters.search}
-                      onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
-                      className="input pl-10"
-                    />
-                  </div>
-                </div>
-                <select
-                  value={filters.status}
-                  onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
-                  className="input"
-                >
-                  <option value="">All Status</option>
-                  <option value="PENDING">Pending</option>
-                  <option value="APPROVED">Approved</option>
-                  <option value="REJECTED">Rejected</option>
-                </select>
-              </div>
-
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                  <thead className="bg-gray-50 dark:bg-gray-800">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Contestant
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Current Level
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Requested Level
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Status
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Audit Status
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Flags
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Submitted
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
-                    {filteredCertificationAudits.map((audit) => (
-                      <tr key={audit.id}>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-gray-900 dark:text-white">
-                            {audit.contestantName}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-600 dark:text-gray-400">
-                            {audit.currentLevel}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-600 dark:text-gray-400">
-                            {audit.requestedLevel}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            {getStatusIcon(audit.status)}
-                            <span className={`ml-2 px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(audit.status)}`}>
-                              {audit.status}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            {getStatusIcon(audit.auditStatus)}
-                            <span className={`ml-2 px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(audit.auditStatus)}`}>
-                              {audit.auditStatus}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-600 dark:text-gray-400">
-                            {audit.flags.length > 0 ? (
-                              <span className="text-red-600 dark:text-red-400">
-                                {audit.flags.length} flag{audit.flags.length > 1 ? 's' : ''}
-                              </span>
-                            ) : (
-                              <span className="text-green-600 dark:text-green-400">None</span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
-                          {format(new Date(audit.submittedAt), 'MMM dd, HH:mm')}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                          <div className="flex space-x-2">
-                            <button
-                              onClick={() => handleVerifyCertification(audit)}
-                              className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
-                              title="View Details"
-                            >
-                              <EyeIcon className="h-4 w-4" />
-                            </button>
-                            {canAudit && audit.auditStatus === 'PENDING' && (
-                              <button
-                                onClick={() => handleVerifyCertification(audit)}
-                                className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
-                                title="Verify"
-                              >
-                                <CheckIcon className="h-4 w-4" />
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'analytics' && (
-            <div className="mt-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                <div className="card">
-                  <div className="card-body">
-                    <div className="flex items-center">
-                      <DocumentTextIcon className="h-8 w-8 text-blue-500" />
-                      <div className="ml-4">
-                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Audits</p>
-                        <p className="text-2xl font-semibold text-gray-900 dark:text-white">{auditLogs.length}</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="card">
-                  <div className="card-body">
-                    <div className="flex items-center">
-                      <CheckCircleIcon className="h-8 w-8 text-green-500" />
-                      <div className="ml-4">
-                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Verified</p>
-                        <p className="text-2xl font-semibold text-gray-900 dark:text-white">
-                          {auditLogs.filter(l => l.status === 'VERIFIED').length}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="card">
-                  <div className="card-body">
-                    <div className="flex items-center">
-                      <ExclamationTriangleIcon className="h-8 w-8 text-red-500" />
-                      <div className="ml-4">
-                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Flagged</p>
-                        <p className="text-2xl font-semibold text-gray-900 dark:text-white">
-                          {auditLogs.filter(l => l.status === 'FLAGGED').length}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="card">
-                  <div className="card-body">
-                    <div className="flex items-center">
-                      <ClockIcon className="h-8 w-8 text-yellow-500" />
-                      <div className="ml-4">
-                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Pending</p>
-                        <p className="text-2xl font-semibold text-gray-900 dark:text-white">
-                          {auditLogs.filter(l => l.status === 'PENDING').length}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="card">
-                  <div className="card-header">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Action Types</h3>
-                  </div>
-                  <div className="card-body">
-                    <div className="space-y-4">
-                      {['SCORE_SUBMITTED', 'SCORE_MODIFIED', 'CERTIFICATION_REQUESTED', 'CERTIFICATION_APPROVED', 'CERTIFICATION_REJECTED', 'RESULT_CALCULATED', 'RESULT_MODIFIED'].map((action) => {
-                        const count = auditLogs.filter(l => l.action === action).length
-                        return (
-                          <div key={action} className="flex items-center justify-between">
-                            <span className="text-sm text-gray-600 dark:text-gray-400">{action.replace(/_/g, ' ')}</span>
-                            <div className="flex items-center">
-                              <div className="w-32 bg-gray-200 dark:bg-gray-700 rounded-full h-2 mr-3">
-                                <div
-                                  className="bg-blue-500 h-2 rounded-full"
-                                  style={{ width: `${(count / auditLogs.length) * 100}%` }}
-                                ></div>
-                              </div>
-                              <span className="text-sm font-medium text-gray-900 dark:text-white">{count}</span>
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="card">
-                  <div className="card-header">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Recent Activity</h3>
-                  </div>
-                  <div className="card-body">
-                    <div className="space-y-3">
-                      {auditLogs.slice(0, 5).map((log) => (
-                        <div key={log.id} className="flex items-center justify-between">
-                          <div className="flex items-center">
-                            {getActionIcon(log.action)}
-                            <div className="ml-3">
-                              <p className="text-sm font-medium text-gray-900 dark:text-white">{log.details}</p>
-                              <p className="text-xs text-gray-500 dark:text-gray-400">
-                                {format(new Date(log.timestamp), 'MMM dd, HH:mm')}
-                              </p>
-                            </div>
-                          </div>
-                          <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(log.status)}`}>
-                            {log.status}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Audit Details Modal */}
-      {showDetailsModal && selectedAudit && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-full max-w-4xl shadow-lg rounded-md bg-white dark:bg-gray-800">
-            <div className="mt-3">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-medium text-gray-900 dark:text-white">
-                  Audit Details: {selectedAudit.action.replace(/_/g, ' ')}
-                </h3>
-                <button
-                  onClick={() => setShowDetailsModal(false)}
-                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                >
-                  <XMarkIcon className="h-6 w-6" />
-                </button>
-              </div>
-              
-              <div className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="card">
-                    <div className="card-header">
-                      <h4 className="text-lg font-semibold text-gray-900 dark:text-white">Basic Information</h4>
-                    </div>
-                    <div className="card-body">
-                      <div className="space-y-3">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Action</label>
-                          <div className="text-sm text-gray-900 dark:text-white">{selectedAudit.action.replace(/_/g, ' ')}</div>
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Details</label>
-                          <div className="text-sm text-gray-900 dark:text-white">{selectedAudit.details}</div>
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Status</label>
-                          <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(selectedAudit.status)}`}>
-                            {selectedAudit.status}
-                          </span>
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Timestamp</label>
-                          <div className="text-sm text-gray-900 dark:text-white">
-                            {format(new Date(selectedAudit.timestamp), 'MMM dd, yyyy HH:mm:ss')}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="card">
-                    <div className="card-header">
-                      <h4 className="text-lg font-semibold text-gray-900 dark:text-white">Technical Details</h4>
-                    </div>
-                    <div className="card-body">
-                      <div className="space-y-3">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">IP Address</label>
-                          <div className="text-sm text-gray-900 dark:text-white">{selectedAudit.ipAddress}</div>
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">User Agent</label>
-                          <div className="text-sm text-gray-900 dark:text-white break-all">{selectedAudit.userAgent}</div>
-                        </div>
-                        {selectedAudit.verifiedBy && (
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Verified By</label>
-                            <div className="text-sm text-gray-900 dark:text-white">{selectedAudit.verifiedBy}</div>
-                          </div>
-                        )}
-                        {selectedAudit.verifiedAt && (
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Verified At</label>
-                            <div className="text-sm text-gray-900 dark:text-white">
-                              {format(new Date(selectedAudit.verifiedAt), 'MMM dd, yyyy HH:mm:ss')}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {(selectedAudit.oldValue || selectedAudit.newValue) && (
-                  <div className="card">
-                    <div className="card-header">
-                      <h4 className="text-lg font-semibold text-gray-900 dark:text-white">Value Changes</h4>
-                    </div>
-                    <div className="card-body">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {selectedAudit.oldValue && (
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Old Value</label>
-                            <div className="bg-gray-100 dark:bg-gray-700 p-3 rounded-lg">
-                              <pre className="text-sm text-gray-900 dark:text-white whitespace-pre-wrap">
-                                {JSON.stringify(selectedAudit.oldValue, null, 2)}
-                              </pre>
-                            </div>
-                          </div>
-                        )}
-                        {selectedAudit.newValue && (
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">New Value</label>
-                            <div className="bg-gray-100 dark:bg-gray-700 p-3 rounded-lg">
-                              <pre className="text-sm text-gray-900 dark:text-white whitespace-pre-wrap">
-                                {JSON.stringify(selectedAudit.newValue, null, 2)}
-                              </pre>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {selectedAudit.notes && (
-                  <div className="card">
-                    <div className="card-header">
-                      <h4 className="text-lg font-semibold text-gray-900 dark:text-white">Notes</h4>
-                    </div>
-                    <div className="card-body">
-                      <div className="text-sm text-gray-900 dark:text-white">{selectedAudit.notes}</div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Verification Modal */}
-      {showVerifyModal && (selectedAudit || selectedScore || selectedCertification) && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white dark:bg-gray-800">
-            <div className="mt-3">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-medium text-gray-900 dark:text-white">
-                  Verify {selectedAudit ? 'Audit' : selectedScore ? 'Score' : 'Certification'}
-                </h3>
-                <button
-                  onClick={() => setShowVerifyModal(false)}
-                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                >
-                  <XMarkIcon className="h-6 w-6" />
-                </button>
-              </div>
-              
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Verification Notes
-                  </label>
-                  <textarea
-                    value={verificationNotes}
-                    onChange={(e) => setVerificationNotes(e.target.value)}
-                    className="input"
-                    rows={4}
-                    placeholder="Add verification notes..."
-                  />
-                </div>
-                
-                <div className="flex items-center">
-                  <input
-                    type="checkbox"
-                    id="verified"
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                  />
-                  <label htmlFor="verified" className="ml-2 block text-sm text-gray-700 dark:text-gray-300">
-                    Mark as verified
-                  </label>
-                </div>
-              </div>
-              
-              <div className="flex justify-end space-x-3 mt-6">
-                <button
-                  onClick={() => setShowVerifyModal(false)}
-                  className="btn-secondary"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSubmitVerification}
-                  className="btn-primary"
-                >
-                  Submit Verification
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-export default AuditorPage
-EOF
-
-    # Add BoardPage
-    cat > "$APP_DIR/frontend/src/pages/BoardPage.tsx" << 'EOF'
-import React, { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from 'react-query'
-import { useAuth } from '../contexts/AuthContext'
-import { boardAPI } from '../services/api'
-import {
-  ShieldCheckIcon,
-  DocumentTextIcon,
-  PrinterIcon,
-  ChartBarIcon,
-  ClockIcon,
-  CheckCircleIcon,
-  ExclamationTriangleIcon,
-  EyeIcon,
-  CogIcon,
-} from '@heroicons/react/24/outline'
-
-const BoardPage: React.FC = () => {
-  const { user } = useAuth()
-  const queryClient = useQueryClient()
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'certifications' | 'scripts' | 'reports' | 'scores'>('dashboard')
-
-  const { data: boardStats, isLoading: statsLoading } = useQuery(
-    'board-stats',
-    () => boardAPI.getStats().then(res => res.data),
-    {
-      refetchInterval: 300000, // Refresh every 5 minutes (reduced from 30 seconds)
-      refetchOnWindowFocus: false, // Don't refetch on window focus
-      staleTime: 120000, // Consider data stale after 2 minutes
-    }
-  )
-
-  const tabs = [
-    { id: 'dashboard', label: 'Dashboard', icon: ChartBarIcon },
-    { id: 'certifications', label: 'Certifications', icon: ShieldCheckIcon },
-    { id: 'scripts', label: 'Emcee Scripts', icon: DocumentTextIcon },
-    { id: 'reports', label: 'Print Reports', icon: PrinterIcon },
-    { id: 'scores', label: 'Score Management', icon: CogIcon },
-  ]
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Board Dashboard</h1>
-        <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-          Administrative oversight and final certification management
-        </p>
-      </div>
-
-      <div className="border-b border-gray-200 dark:border-gray-700">
-        <nav className="-mb-px flex space-x-8">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
-              className={`flex items-center space-x-2 py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === tab.id
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
-              }`}
-            >
-              <tab.icon className="h-4 w-4" />
-              <span>{tab.label}</span>
-            </button>
-          ))}
-        </nav>
-      </div>
-
-      {activeTab === 'dashboard' && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <div className="card">
-              <div className="card-content">
-                <div className="flex items-center">
-                  <ChartBarIcon className="h-8 w-8 text-blue-500" />
-                  <div className="ml-3">
-                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Contests</p>
-                    <p className="text-2xl font-semibold text-gray-900 dark:text-white">
-                      {statsLoading ? '--' : boardStats?.contests || 0}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="card">
-              <div className="card-content">
-                <div className="flex items-center">
-                  <ShieldCheckIcon className="h-8 w-8 text-green-500" />
-                  <div className="ml-3">
-                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Categories</p>
-                    <p className="text-2xl font-semibold text-gray-900 dark:text-white">
-                      {statsLoading ? '--' : boardStats?.categories || 0}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="card">
-              <div className="card-content">
-                <div className="flex items-center">
-                  <CheckCircleIcon className="h-8 w-8 text-green-500" />
-                  <div className="ml-3">
-                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Certified</p>
-                    <p className="text-2xl font-semibold text-gray-900 dark:text-white">
-                      {statsLoading ? '--' : boardStats?.certified || 0}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="card">
-              <div className="card-content">
-                <div className="flex items-center">
-                  <ClockIcon className="h-8 w-8 text-yellow-500" />
-                  <div className="ml-3">
-                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Pending</p>
-                    <p className="text-2xl font-semibold text-gray-900 dark:text-white">
-                      {statsLoading ? '--' : boardStats?.pending || 0}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {activeTab === 'certifications' && (
-        <div className="card">
-          <div className="card-content">
-            <div className="text-center py-12">
-              <ShieldCheckIcon className="h-12 w-12 mx-auto mb-4 text-gray-300 dark:text-gray-600" />
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Certification Status</h3>
-              <p className="text-gray-600 dark:text-gray-400">This page will contain detailed certification status monitoring</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {activeTab === 'scripts' && (
-        <div className="card">
-          <div className="card-content">
-            <div className="text-center py-12">
-              <DocumentTextIcon className="h-12 w-12 mx-auto mb-4 text-gray-300 dark:text-gray-600" />
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Emcee Scripts</h3>
-              <p className="text-gray-600 dark:text-gray-400">This page will contain emcee script management functionality</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {activeTab === 'reports' && (
-        <div className="card">
-          <div className="card-content">
-            <div className="text-center py-12">
-              <PrinterIcon className="h-12 w-12 mx-auto mb-4 text-gray-300 dark:text-gray-600" />
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Print Reports</h3>
-              <p className="text-gray-600 dark:text-gray-400">This page will contain print report generation functionality</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {activeTab === 'scores' && (
-        <div className="card">
-          <div className="card-content">
-            <div className="text-center py-12">
-              <CogIcon className="h-12 w-12 mx-auto mb-4 text-gray-300 dark:text-gray-600" />
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Score Management</h3>
-              <p className="text-gray-600 dark:text-gray-400">This page will contain score management functionality</p>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-export default BoardPage
-EOF
-
-    # Add TallyMasterPage
-    cat > "$APP_DIR/frontend/src/pages/TallyMasterPage.tsx" << 'EOF'
-import React, { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from 'react-query'
-import { useAuth } from '../contexts/AuthContext'
-import { eventsAPI, contestsAPI, categoriesAPI, resultsAPI, scoringAPI } from '../services/api'
-import {
-  CalculatorIcon,
-  ChartBarIcon,
+  EnvelopeIcon,
+  PhoneIcon,
+  MapPinIcon,
+  IdentificationIcon,
+  AcademicCapIcon,
+  BriefcaseIcon,
   ClipboardDocumentListIcon,
-  MagnifyingGlassIcon,
-  EyeIcon,
-  PencilIcon,
-  CheckCircleIcon,
-  ExclamationTriangleIcon,
-  ClockIcon,
-  CalendarIcon,
-  UserIcon,
-  TrophyIcon,
-  StarIcon,
   DocumentTextIcon,
+  Cog6ToothIcon,
   ArrowDownTrayIcon,
   ArrowUpTrayIcon,
-  CogIcon,
-  BellIcon,
-  InformationCircleIcon,
-  XCircleIcon,
   CheckIcon,
-  XMarkIcon,
-  PlusIcon,
-  TrashIcon,
-  DocumentDuplicateIcon,
-  PresentationChartLineIcon,
-  TableCellsIcon,
-  ClipboardDocumentCheckIcon,
-  AcademicCapIcon,
-  UserGroupIcon,
-  ChartPieIcon,
-  ArrowTrendingUpIcon,
-  ArrowTrendingDownIcon
-} from '@heroicons/react/24/outline'
-import { format } from 'date-fns'
-
-interface TallyResult {
-  id: string
-  contestId: string
-  categoryId: string
-  contestantId: string
-  contestantName: string
-  totalScore: number
-  averageScore: number
-  rank: number
-  judgeScores: {
-    judgeId: string
-    judgeName: string
-    scores: {
-      criteriaId: string
-      criteriaName: string
-      score: number
-      maxScore: number
-    }[]
-    totalScore: number
-  }[]
-  isCertified: boolean
-  certificationLevel?: string
-  calculatedAt: string
-  calculatedBy: string
-}
-
-interface ScoreSubmission {
-  id: string
-  contestId: string
-  categoryId: string
-  contestantId: string
-  judgeId: string
-  scores: {
-    criteriaId: string
-    score: number
-    maxScore: number
-  }[]
-  totalScore: number
-  submittedAt: string
-  status: 'PENDING' | 'APPROVED' | 'REJECTED'
-}
-
-interface CertificationRequest {
-  id: string
-  contestId: string
-  categoryId: string
-  contestantId: string
-  contestantName: string
-  currentLevel: string
-  requestedLevel: string
-  status: 'PENDING' | 'APPROVED' | 'REJECTED'
-  submittedAt: string
-  reviewedAt?: string
-  reviewedBy?: string
-  notes?: string
-}
-
-const TallyMasterPage: React.FC = () => {
-  const { user } = useAuth()
-  const [activeTab, setActiveTab] = useState('tally')
-  const [showCertificationModal, setShowCertificationModal] = useState(false)
-  const [showScoreModal, setShowScoreModal] = useState(false)
-  const [selectedResult, setSelectedResult] = useState<TallyResult | null>(null)
-  const [selectedSubmission, setSelectedSubmission] = useState<ScoreSubmission | null>(null)
-  const [filters, setFilters] = useState({
-    search: '',
-    contestId: '',
-    categoryId: '',
-    status: ''
-  })
-  const queryClient = useQueryClient()
-
-  // Fetch data for tally operations
-  const { data: events } = useQuery('events', () => eventsAPI.getAll().then((res: any) => res.data))
-  const { data: contests } = useQuery('contests', () => contestsAPI.getAll().then((res: any) => res.data))
-  const { data: categories } = useQuery('categories', () => categoriesAPI.getAll().then((res: any) => res.data))
-  const { data: results } = useQuery('results', () => resultsAPI.getAll().then((res: any) => res.data))
-
-  // Mock data for tally results
-  const tallyResults: TallyResult[] = [
-    {
-      id: '1',
-      contestId: '1',
-      categoryId: '1',
-      contestantId: '1',
-      contestantName: 'Sarah Johnson',
-      totalScore: 92.5,
-      averageScore: 92.5,
-      rank: 1,
-      judgeScores: [
-        {
-          judgeId: '1',
-          judgeName: 'Dr. Smith',
-          scores: [
-            { criteriaId: '1', criteriaName: 'Technique', score: 23, maxScore: 25 },
-            { criteriaId: '2', criteriaName: 'Musicality', score: 24, maxScore: 25 },
-            { criteriaId: '3', criteriaName: 'Stage Presence', score: 19, maxScore: 20 },
-            { criteriaId: '4', criteriaName: 'Song Choice', score: 14, maxScore: 15 },
-            { criteriaId: '5', criteriaName: 'Overall Impact', score: 14, maxScore: 15 }
-          ],
-          totalScore: 94
-        },
-        {
-          judgeId: '2',
-          judgeName: 'Prof. Brown',
-          scores: [
-            { criteriaId: '1', criteriaName: 'Technique', score: 22, maxScore: 25 },
-            { criteriaId: '2', criteriaName: 'Musicality', score: 23, maxScore: 25 },
-            { criteriaId: '3', criteriaName: 'Stage Presence', score: 18, maxScore: 20 },
-            { criteriaId: '4', criteriaName: 'Song Choice', score: 13, maxScore: 15 },
-            { criteriaId: '5', criteriaName: 'Overall Impact', score: 13, maxScore: 15 }
-          ],
-          totalScore: 89
-        }
-      ],
-      isCertified: true,
-      certificationLevel: 'Advanced',
-      calculatedAt: '2024-01-15T10:30:00Z',
-      calculatedBy: 'tallymaster@eventmanager.com'
-    },
-    {
-      id: '2',
-      contestId: '1',
-      categoryId: '1',
-      contestantId: '2',
-      contestantName: 'Michael Chen',
-      totalScore: 87.2,
-      averageScore: 87.2,
-      rank: 2,
-      judgeScores: [
-        {
-          judgeId: '1',
-          judgeName: 'Dr. Smith',
-          scores: [
-            { criteriaId: '1', criteriaName: 'Technique', score: 21, maxScore: 25 },
-            { criteriaId: '2', criteriaName: 'Musicality', score: 22, maxScore: 25 },
-            { criteriaId: '3', criteriaName: 'Stage Presence', score: 17, maxScore: 20 },
-            { criteriaId: '4', criteriaName: 'Song Choice', score: 12, maxScore: 15 },
-            { criteriaId: '5', criteriaName: 'Overall Impact', score: 12, maxScore: 15 }
-          ],
-          totalScore: 84
-        },
-        {
-          judgeId: '2',
-          judgeName: 'Prof. Brown',
-          scores: [
-            { criteriaId: '1', criteriaName: 'Technique', score: 22, maxScore: 25 },
-            { criteriaId: '2', criteriaName: 'Musicality', score: 23, maxScore: 25 },
-            { criteriaId: '3', criteriaName: 'Stage Presence', score: 18, maxScore: 20 },
-            { criteriaId: '4', criteriaName: 'Song Choice', score: 13, maxScore: 15 },
-            { criteriaId: '5', criteriaName: 'Overall Impact', score: 13, maxScore: 15 }
-          ],
-          totalScore: 89
-        }
-      ],
-      isCertified: false,
-      calculatedAt: '2024-01-15T10:30:00Z',
-      calculatedBy: 'tallymaster@eventmanager.com'
-    }
-  ]
-
-  const scoreSubmissions: ScoreSubmission[] = [
-    {
-      id: '1',
-      contestId: '1',
-      categoryId: '1',
-      contestantId: '1',
-      judgeId: '1',
-      scores: [
-        { criteriaId: '1', score: 23, maxScore: 25 },
-        { criteriaId: '2', score: 24, maxScore: 25 },
-        { criteriaId: '3', score: 19, maxScore: 20 },
-        { criteriaId: '4', score: 14, maxScore: 15 },
-        { criteriaId: '5', score: 14, maxScore: 15 }
-      ],
-      totalScore: 94,
-      submittedAt: '2024-01-15T10:25:00Z',
-      status: 'APPROVED'
-    },
-    {
-      id: '2',
-      contestId: '1',
-      categoryId: '1',
-      contestantId: '2',
-      judgeId: '2',
-      scores: [
-        { criteriaId: '1', score: 22, maxScore: 25 },
-        { criteriaId: '2', score: 23, maxScore: 25 },
-        { criteriaId: '3', score: 18, maxScore: 20 },
-        { criteriaId: '4', score: 13, maxScore: 15 },
-        { criteriaId: '5', score: 13, maxScore: 15 }
-      ],
-      totalScore: 89,
-      submittedAt: '2024-01-15T10:28:00Z',
-      status: 'PENDING'
-    }
-  ]
-
-  const certificationRequests: CertificationRequest[] = [
-    {
-      id: '1',
-      contestId: '1',
-      categoryId: '1',
-      contestantId: '1',
-      contestantName: 'Sarah Johnson',
-      currentLevel: 'Intermediate',
-      requestedLevel: 'Advanced',
-      status: 'APPROVED',
-      submittedAt: '2024-01-15T10:30:00Z',
-      reviewedAt: '2024-01-15T11:00:00Z',
-      reviewedBy: 'tallymaster@eventmanager.com',
-      notes: 'Excellent performance, meets all criteria for advanced level'
-    },
-    {
-      id: '2',
-      contestId: '1',
-      categoryId: '1',
-      contestantId: '2',
-      contestantName: 'Michael Chen',
-      currentLevel: 'Beginner',
-      requestedLevel: 'Intermediate',
-      status: 'PENDING',
-      submittedAt: '2024-01-15T10:35:00Z'
-    }
-  ]
-
-  const filteredResults = tallyResults.filter(result => {
-    const matchesSearch = result.contestantName.toLowerCase().includes(filters.search.toLowerCase())
-    const matchesContest = !filters.contestId || result.contestId === filters.contestId
-    const matchesCategory = !filters.categoryId || result.categoryId === filters.categoryId
-    const matchesStatus = !filters.status || 
-      (filters.status === 'certified' && result.isCertified) ||
-      (filters.status === 'uncertified' && !result.isCertified)
-
-    return matchesSearch && matchesContest && matchesCategory && matchesStatus
-  })
-
-  const filteredSubmissions = scoreSubmissions.filter(submission => {
-    const matchesSearch = submission.id.toLowerCase().includes(filters.search.toLowerCase())
-    const matchesContest = !filters.contestId || submission.contestId === filters.contestId
-    const matchesCategory = !filters.categoryId || submission.categoryId === filters.categoryId
-    const matchesStatus = !filters.status || submission.status === filters.status
-
-    return matchesSearch && matchesContest && matchesCategory && matchesStatus
-  })
-
-  const handleViewDetails = (result: TallyResult) => {
-    setSelectedResult(result)
-    setShowScoreModal(true)
-  }
-
-  const handleApproveSubmission = (submissionId: string) => {
-    // Mock approval operation
-    console.log('Approving submission:', submissionId)
-  }
-
-  const handleRejectSubmission = (submissionId: string) => {
-    // Mock rejection operation
-    console.log('Rejecting submission:', submissionId)
-  }
-
-  const handleCertificationRequest = (result: TallyResult) => {
-    setSelectedResult(result)
-    setShowCertificationModal(true)
-  }
-
-  const handleApproveCertification = (requestId: string) => {
-    // Mock certification approval
-    console.log('Approving certification:', requestId)
-  }
-
-  const handleRejectCertification = (requestId: string) => {
-    // Mock certification rejection
-    console.log('Rejecting certification:', requestId)
-  }
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'PENDING':
-        return <ClockIcon className="h-5 w-5 text-yellow-500" />
-      case 'APPROVED':
-        return <CheckCircleIcon className="h-5 w-5 text-green-500" />
-      case 'REJECTED':
-        return <XCircleIcon className="h-5 w-5 text-red-500" />
-      default:
-        return <InformationCircleIcon className="h-5 w-5 text-gray-500" />
-    }
-  }
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'PENDING':
-        return 'text-yellow-600 bg-yellow-100 dark:text-yellow-400 dark:bg-yellow-900'
-      case 'APPROVED':
-        return 'text-green-600 bg-green-100 dark:text-green-400 dark:bg-green-900'
-      case 'REJECTED':
-        return 'text-red-600 bg-red-100 dark:text-red-400 dark:bg-red-900'
-      default:
-        return 'text-gray-600 bg-gray-100 dark:text-gray-400 dark:bg-gray-900'
-    }
-  }
-
-  const tabs = [
-    { id: 'tally', name: 'Tally Results', icon: CalculatorIcon },
-    { id: 'submissions', name: 'Score Submissions', icon: ClipboardDocumentListIcon },
-    { id: 'certifications', name: 'Certifications', icon: AcademicCapIcon },
-    { id: 'analytics', name: 'Analytics', icon: ChartBarIcon },
-  ]
-
-  const canManageTally = user?.role === 'TALLY_MASTER' || user?.role === 'ORGANIZER' || user?.role === 'BOARD'
-
-  return (
-    <div className="space-y-6">
-      <div className="card">
-        <div className="card-header">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Tally Master</h1>
-          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-            Manage score calculations, certifications, and result tallies
-          </p>
-        </div>
-        <div className="card-body">
-          <div className="border-b border-gray-200 dark:border-gray-700">
-            <nav className="-mb-px flex space-x-8">
-              {tabs.map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`${
-                    activeTab === tab.id
-                      ? 'border-blue-500 text-blue-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  } whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm flex items-center`}
-                >
-                  <tab.icon className="h-5 w-5 mr-2" />
-                  {tab.name}
-                </button>
-              ))}
-            </nav>
-          </div>
-
-          {activeTab === 'tally' && (
-            <div className="mt-6">
-              <div className="flex flex-col sm:flex-row gap-4 mb-6">
-                <div className="flex-1">
-                  <div className="relative">
-                    <MagnifyingGlassIcon className="h-5 w-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                    <input
-                      type="text"
-                      placeholder="Search contestants..."
-                      value={filters.search}
-                      onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
-                      className="input pl-10"
-                    />
-                  </div>
-                </div>
-                <select
-                  value={filters.contestId}
-                  onChange={(e) => setFilters(prev => ({ ...prev, contestId: e.target.value }))}
-                  className="input"
-                >
-                  <option value="">All Contests</option>
-                  {contests?.map((contest: any) => (
-                    <option key={contest.id} value={contest.id}>{contest.name}</option>
-                  ))}
-                </select>
-                <select
-                  value={filters.categoryId}
-                  onChange={(e) => setFilters(prev => ({ ...prev, categoryId: e.target.value }))}
-                  className="input"
-                >
-                  <option value="">All Categories</option>
-                  {categories?.map((category: any) => (
-                    <option key={category.id} value={category.id}>{category.name}</option>
-                  ))}
-                </select>
-                <select
-                  value={filters.status}
-                  onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
-                  className="input"
-                >
-                  <option value="">All Status</option>
-                  <option value="certified">Certified</option>
-                  <option value="uncertified">Uncertified</option>
-                </select>
-              </div>
-
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                  <thead className="bg-gray-50 dark:bg-gray-800">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Contestant
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Total Score
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Average
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Rank
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Certification
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Calculated
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
-                    {filteredResults.map((result) => (
-                      <tr key={result.id}>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-gray-900 dark:text-white">
-                            {result.contestantName}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-gray-900 dark:text-white">
-                            {result.totalScore.toFixed(1)}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-600 dark:text-gray-400">
-                            {result.averageScore.toFixed(1)}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            <TrophyIcon className={`h-5 w-5 mr-2 ${
-                              result.rank === 1 ? 'text-yellow-500' :
-                              result.rank === 2 ? 'text-gray-400' :
-                              result.rank === 3 ? 'text-orange-500' : 'text-gray-300'
-                            }`} />
-                            <span className="text-sm font-medium text-gray-900 dark:text-white">
-                              #{result.rank}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                            result.isCertified
-                              ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                              : 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
-                          }`}>
-                            {result.isCertified ? result.certificationLevel : 'Not Certified'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
-                          {format(new Date(result.calculatedAt), 'MMM dd, HH:mm')}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                          <div className="flex space-x-2">
-                            <button
-                              onClick={() => handleViewDetails(result)}
-                              className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
-                              title="View Details"
-                            >
-                              <EyeIcon className="h-4 w-4" />
-                            </button>
-                            {canManageTally && !result.isCertified && (
-                              <button
-                                onClick={() => handleCertificationRequest(result)}
-                                className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
-                                title="Request Certification"
-                              >
-                                <AcademicCapIcon className="h-4 w-4" />
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'submissions' && (
-            <div className="mt-6">
-              <div className="flex flex-col sm:flex-row gap-4 mb-6">
-                <div className="flex-1">
-                  <div className="relative">
-                    <MagnifyingGlassIcon className="h-5 w-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                    <input
-                      type="text"
-                      placeholder="Search submissions..."
-                      value={filters.search}
-                      onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
-                      className="input pl-10"
-                    />
-                  </div>
-                </div>
-                <select
-                  value={filters.status}
-                  onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
-                  className="input"
-                >
-                  <option value="">All Status</option>
-                  <option value="PENDING">Pending</option>
-                  <option value="APPROVED">Approved</option>
-                  <option value="REJECTED">Rejected</option>
-                </select>
-              </div>
-
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                  <thead className="bg-gray-50 dark:bg-gray-800">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Submission ID
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Contestant
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Judge
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Total Score
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Status
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Submitted
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
-                    {filteredSubmissions.map((submission) => (
-                      <tr key={submission.id}>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-gray-900 dark:text-white">
-                            #{submission.id}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-600 dark:text-gray-400">
-                            Contestant {submission.contestantId}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-600 dark:text-gray-400">
-                            Judge {submission.judgeId}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-gray-900 dark:text-white">
-                            {submission.totalScore}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            {getStatusIcon(submission.status)}
-                            <span className={`ml-2 px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(submission.status)}`}>
-                              {submission.status}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
-                          {format(new Date(submission.submittedAt), 'MMM dd, HH:mm')}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                          {submission.status === 'PENDING' && canManageTally && (
-                            <div className="flex space-x-2">
-                              <button
-                                onClick={() => handleApproveSubmission(submission.id)}
-                                className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
-                                title="Approve"
-                              >
-                                <CheckIcon className="h-4 w-4" />
-                              </button>
-                              <button
-                                onClick={() => handleRejectSubmission(submission.id)}
-                                className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
-                                title="Reject"
-                              >
-                                <XMarkIcon className="h-4 w-4" />
-                              </button>
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'certifications' && (
-            <div className="mt-6">
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                  <thead className="bg-gray-50 dark:bg-gray-800">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Contestant
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Current Level
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Requested Level
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Status
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Submitted
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Reviewed By
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
-                    {certificationRequests.map((request) => (
-                      <tr key={request.id}>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-gray-900 dark:text-white">
-                            {request.contestantName}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-600 dark:text-gray-400">
-                            {request.currentLevel}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-600 dark:text-gray-400">
-                            {request.requestedLevel}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            {getStatusIcon(request.status)}
-                            <span className={`ml-2 px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(request.status)}`}>
-                              {request.status}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
-                          {format(new Date(request.submittedAt), 'MMM dd, HH:mm')}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
-                          {request.reviewedBy || '-'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                          {request.status === 'PENDING' && canManageTally && (
-                            <div className="flex space-x-2">
-                              <button
-                                onClick={() => handleApproveCertification(request.id)}
-                                className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
-                                title="Approve"
-                              >
-                                <CheckIcon className="h-4 w-4" />
-                              </button>
-                              <button
-                                onClick={() => handleRejectCertification(request.id)}
-                                className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
-                                title="Reject"
-                              >
-                                <XMarkIcon className="h-4 w-4" />
-                              </button>
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'analytics' && (
-            <div className="mt-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                <div className="card">
-                  <div className="card-body">
-                    <div className="flex items-center">
-                      <CalculatorIcon className="h-8 w-8 text-blue-500" />
-                      <div className="ml-4">
-                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Results</p>
-                        <p className="text-2xl font-semibold text-gray-900 dark:text-white">{tallyResults.length}</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="card">
-                  <div className="card-body">
-                    <div className="flex items-center">
-                      <CheckCircleIcon className="h-8 w-8 text-green-500" />
-                      <div className="ml-4">
-                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Certified</p>
-                        <p className="text-2xl font-semibold text-gray-900 dark:text-white">
-                          {tallyResults.filter(r => r.isCertified).length}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="card">
-                  <div className="card-body">
-                    <div className="flex items-center">
-                      <ClockIcon className="h-8 w-8 text-yellow-500" />
-                      <div className="ml-4">
-                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Pending</p>
-                        <p className="text-2xl font-semibold text-gray-900 dark:text-white">
-                          {scoreSubmissions.filter(s => s.status === 'PENDING').length}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="card">
-                  <div className="card-body">
-                    <div className="flex items-center">
-                      <ChartBarIcon className="h-8 w-8 text-purple-500" />
-                      <div className="ml-4">
-                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Avg Score</p>
-                        <p className="text-2xl font-semibold text-gray-900 dark:text-white">
-                          {(tallyResults.reduce((sum, r) => sum + r.averageScore, 0) / tallyResults.length).toFixed(1)}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="card">
-                  <div className="card-header">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Score Distribution</h3>
-                  </div>
-                  <div className="card-body">
-                    <div className="space-y-4">
-                      {['90-100', '80-89', '70-79', '60-69', 'Below 60'].map((range) => {
-                        const [min, max] = range === 'Below 60' ? [0, 59] : range.split('-').map(Number)
-                        const count = tallyResults.filter(r => r.averageScore >= min && r.averageScore <= max).length
-                        return (
-                          <div key={range} className="flex items-center justify-between">
-                            <span className="text-sm text-gray-600 dark:text-gray-400">{range}</span>
-                            <div className="flex items-center">
-                              <div className="w-32 bg-gray-200 dark:bg-gray-700 rounded-full h-2 mr-3">
-                                <div
-                                  className="bg-blue-500 h-2 rounded-full"
-                                  style={{ width: `${(count / tallyResults.length) * 100}%` }}
-                                ></div>
-                              </div>
-                              <span className="text-sm font-medium text-gray-900 dark:text-white">{count}</span>
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="card">
-                  <div className="card-header">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Recent Activity</h3>
-                  </div>
-                  <div className="card-body">
-                    <div className="space-y-3">
-                      {tallyResults.slice(0, 5).map((result) => (
-                        <div key={result.id} className="flex items-center justify-between">
-                          <div className="flex items-center">
-                            <CalculatorIcon className="h-5 w-5 text-gray-400 mr-3" />
-                            <div>
-                              <p className="text-sm font-medium text-gray-900 dark:text-white">{result.contestantName}</p>
-                              <p className="text-xs text-gray-500 dark:text-gray-400">
-                                {format(new Date(result.calculatedAt), 'MMM dd, HH:mm')}
-                              </p>
-                            </div>
-                          </div>
-                          <span className="text-sm font-medium text-gray-900 dark:text-white">
-                            {result.averageScore.toFixed(1)}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Score Details Modal */}
-      {showScoreModal && selectedResult && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-full max-w-4xl shadow-lg rounded-md bg-white dark:bg-gray-800">
-            <div className="mt-3">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-medium text-gray-900 dark:text-white">
-                  Score Details: {selectedResult.contestantName}
-                </h3>
-                <button
-                  onClick={() => setShowScoreModal(false)}
-                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                >
-                  <XMarkIcon className="h-6 w-6" />
-                </button>
-              </div>
-              
-              <div className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div className="card">
-                    <div className="card-body text-center">
-                      <div className="text-3xl font-bold text-blue-600 dark:text-blue-400">
-                        {selectedResult.totalScore.toFixed(1)}
-                      </div>
-                      <div className="text-sm text-gray-600 dark:text-gray-400">Total Score</div>
-                    </div>
-                  </div>
-                  <div className="card">
-                    <div className="card-body text-center">
-                      <div className="text-3xl font-bold text-green-600 dark:text-green-400">
-                        {selectedResult.averageScore.toFixed(1)}
-                      </div>
-                      <div className="text-sm text-gray-600 dark:text-gray-400">Average Score</div>
-                    </div>
-                  </div>
-                  <div className="card">
-                    <div className="card-body text-center">
-                      <div className="text-3xl font-bold text-purple-600 dark:text-purple-400">
-                        #{selectedResult.rank}
-                      </div>
-                      <div className="text-sm text-gray-600 dark:text-gray-400">Rank</div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  {selectedResult.judgeScores.map((judgeScore, index) => (
-                    <div key={judgeScore.judgeId} className="card">
-                      <div className="card-header">
-                        <h4 className="text-lg font-semibold text-gray-900 dark:text-white">
-                          {judgeScore.judgeName}
-                        </h4>
-                        <span className="text-sm text-gray-600 dark:text-gray-400">
-                          Total: {judgeScore.totalScore}
-                        </span>
-                      </div>
-                      <div className="card-body">
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                          {judgeScore.scores.map((score) => (
-                            <div key={score.criteriaId} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                              <div>
-                                <div className="text-sm font-medium text-gray-900 dark:text-white">
-                                  {score.criteriaName}
-                                </div>
-                                <div className="text-xs text-gray-600 dark:text-gray-400">
-                                  Max: {score.maxScore}
-                                </div>
-                              </div>
-                              <div className="text-lg font-semibold text-gray-900 dark:text-white">
-                                {score.score}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Certification Request Modal */}
-      {showCertificationModal && selectedResult && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white dark:bg-gray-800">
-            <div className="mt-3">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-medium text-gray-900 dark:text-white">
-                  Request Certification
-                </h3>
-                <button
-                  onClick={() => setShowCertificationModal(false)}
-                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                >
-                  <XMarkIcon className="h-6 w-6" />
-                </button>
-              </div>
-              
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Contestant
-                  </label>
-                  <div className="text-sm text-gray-900 dark:text-white">
-                    {selectedResult.contestantName}
-                  </div>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Current Score
-                  </label>
-                  <div className="text-lg font-semibold text-gray-900 dark:text-white">
-                    {selectedResult.averageScore.toFixed(1)}
-                  </div>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Certification Level
-                  </label>
-                  <select className="input">
-                    <option value="Beginner">Beginner</option>
-                    <option value="Intermediate">Intermediate</option>
-                    <option value="Advanced">Advanced</option>
-                    <option value="Expert">Expert</option>
-                  </select>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Notes
-                  </label>
-                  <textarea
-                    className="input"
-                    rows={3}
-                    placeholder="Add certification notes..."
-                  />
-                </div>
-              </div>
-              
-              <div className="flex justify-end space-x-3 mt-6">
-                <button
-                  onClick={() => setShowCertificationModal(false)}
-                  className="btn-secondary"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => setShowCertificationModal(false)}
-                  className="btn-primary"
-                >
-                  Request Certification
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-export default TallyMasterPage
-EOF
-
-    # Add WinnersPage
-    cat > "$APP_DIR/frontend/src/pages/WinnersPage.tsx" << 'EOF'
-import React, { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from 'react-query'
-import { useAuth } from '../contexts/AuthContext'
-import { eventsAPI, contestsAPI, categoriesAPI } from '../services/api'
-import {
-  TrophyIcon,
-  CheckCircleIcon,
-  XCircleIcon,
-  ClockIcon,
-  DocumentTextIcon,
-  PrinterIcon,
-  ArrowDownTrayIcon,
-  EyeIcon,
-  PencilIcon
+  XMarkIcon as XIcon
 } from '@heroicons/react/24/outline'
 
-interface Winner {
-  contestant: {
-    id: string
-    name: string
-    email: string
-    contestantNumber?: string
-  }
-  totalScore: number
-  averageScore: number
-  scores: Array<{
-    id: string
-    score: number
-    comment?: string
-    judge: {
-      id: string
-      name: string
-    }
-    criterion: {
-      id: string
-      name: string
-      maxScore: number
-    }
-  }>
-}
-
-interface Signature {
+interface User {
   id: string
-  userId: string
-  userRole: string
-  signature: string
-  signedAt: string
-  user: {
-    id: string
-    name: string
-    role: string
-  }
+  name: string
+  email: string
+  role: 'ADMIN' | 'BOARD' | 'ORGANIZER' | 'JUDGE' | 'TALLY_MASTER' | 'AUDITOR' | 'EMCEE' | 'CONTESTANT'
+  isActive: boolean
+  lastLogin?: string
+  createdAt: string
+  updatedAt: string
+  // Role-specific fields
+  phone?: string
+  address?: string
+  emergencyContact?: string
+  emergencyPhone?: string
+  bio?: string
+  experience?: string
+  specialties?: string[]
+  certifications?: string[]
+  preferredName?: string
+  pronouns?: string
+  // Judge-specific fields
+  judgeNumber?: string
+  judgeLevel?: string
+  judgeExperience?: number
+  // Contestant-specific fields
+  contestantNumber?: string
+  age?: number
+  parentGuardian?: string
+  parentPhone?: string
+  school?: string
+  grade?: string
 }
 
-interface WinnersData {
-  category?: {
-    id: string
-    name: string
-    description: string
-    contest: {
-      id: string
-      name: string
-      event: {
-        id: string
-        name: string
-      }
-    }
-  }
-  contest?: {
-    id: string
-    name: string
-    description: string
-    event: {
-      id: string
-      name: string
-    }
-    categories: Array<{
-      category: {
-        id: string
-        name: string
-        description: string
-      }
-      contestants: Winner[]
-      signatures: Signature[]
-      allSigned: boolean
-      boardSigned: boolean
-      canShowWinners: boolean
-    }>
-  }
-  contestants: Winner[]
-  signatures: Signature[]
-  allSigned: boolean
-  boardSigned: boolean
-  canShowWinners: boolean
-  requiredRoles: string[]
-  message: string
+interface CreateUserData {
+  name: string
+  email: string
+  password: string
+  role: string
+  phone?: string
+  address?: string
+  emergencyContact?: string
+  emergencyPhone?: string
+  bio?: string
+  experience?: string
+  specialties?: string[]
+  certifications?: string[]
+  preferredName?: string
+  pronouns?: string
+  judgeNumber?: string
+  judgeLevel?: string
+  judgeExperience?: number
+  contestantNumber?: string
+  age?: number
+  parentGuardian?: string
+  parentPhone?: string
+  school?: string
+  grade?: string
 }
 
-const WinnersPage: React.FC = () => {
+const UsersPage: React.FC = () => {
   const { user } = useAuth()
   const queryClient = useQueryClient()
-  const [selectedEvent, setSelectedEvent] = useState('')
-  const [selectedContest, setSelectedContest] = useState('')
-  const [selectedCategory, setSelectedCategory] = useState('')
-  const [viewMode, setViewMode] = useState<'category' | 'contest'>('category')
-  const [showSignatureModal, setShowSignatureModal] = useState(false)
+  const [showCreateModal, setShowCreateModal] = useState<boolean>(false)
+  const [showEditModal, setShowEditModal] = useState<boolean>(false)
+  const [showBulkModal, setShowBulkModal] = useState<boolean>(false)
+  const [selectedUser, setSelectedUser] = useState<User | null>(null)
+  const [searchTerm, setSearchTerm] = useState<string>('')
+  const [roleFilter, setRoleFilter] = useState<string>('')
+  const [statusFilter, setStatusFilter] = useState<string>('')
+  const [selectedUsers, setSelectedUsers] = useState<string[]>([])
+  const [password, setPassword] = useState<string>('')
 
-  // Fetch events
-  const { data: events = [] } = useQuery('events', eventsAPI.getAll)
-
-  // Fetch contests for selected event
-  const { data: contests = [] } = useQuery(
-    ['contests', selectedEvent],
-    () => contestsAPI.getByEvent(selectedEvent),
-    { enabled: !!selectedEvent }
+  // Fetch users
+  const { data: users, isLoading } = useQuery(
+    ['users', searchTerm, roleFilter, statusFilter],
+    () => usersAPI.getUsers({
+      search: searchTerm,
+      role: roleFilter,
+      isActive: statusFilter === 'active' ? true : statusFilter === 'inactive' ? false : undefined
+    }).then(res => res.data)
   )
 
-  // Fetch categories for selected contest
-  const { data: categories = [] } = useQuery(
-    ['categories', selectedContest],
-    () => categoriesAPI.getByContest(selectedContest),
-    { enabled: !!selectedContest }
-  )
-
-  // Fetch winners data
-  const { data: winnersData, isLoading: winnersLoading } = useQuery(
-    ['winners', viewMode, selectedCategory, selectedContest],
-    () => {
-      if (viewMode === 'category' && selectedCategory) {
-        return fetch(`/api/winners/category/${selectedCategory}`).then(res => res.json())
-      } else if (viewMode === 'contest' && selectedContest) {
-        return fetch(`/api/winners/contest/${selectedContest}`).then(res => res.json())
-      }
-      return null
-    },
-    { enabled: (viewMode === 'category' && !!selectedCategory) || (viewMode === 'contest' && !!selectedContest) }
-  )
-
-  // Sign winners mutation
-  const signMutation = useMutation(
-    (data: { categoryId: string; contestId: string; eventId: string }) =>
-      fetch(`/api/winners/category/${data.categoryId}/sign`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contestId: data.contestId, eventId: data.eventId })
-      }).then(res => res.json()),
+  // Create user mutation
+  const createUserMutation = useMutation(
+    (data: CreateUserData) => usersAPI.createUser(data),
     {
       onSuccess: () => {
-        queryClient.invalidateQueries(['winners'])
-        setShowSignatureModal(false)
+        queryClient.invalidateQueries('users')
+        setShowCreateModal(false)
+        setPassword('')
       }
     }
   )
 
-  const handleSignWinners = () => {
-    if (selectedCategory && winnersData?.category) {
-      signMutation.mutate({
-        categoryId: selectedCategory,
-        contestId: winnersData.category.contest.id,
-        eventId: winnersData.category.contest.event.id
-      })
+  // Update user mutation
+  const updateUserMutation = useMutation(
+    ({ id, data }: { id: string; data: Partial<User> }) => 
+      usersAPI.updateUser(id, data),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('users')
+        setShowEditModal(false)
+        setSelectedUser(null)
+      }
+    }
+  )
+
+  // Delete user mutation
+  const deleteUserMutation = useMutation(
+    (id: string) => usersAPI.deleteUser(id),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('users')
+      }
+    }
+  )
+
+  // Bulk delete mutation
+  const bulkDeleteMutation = useMutation(
+    (ids: string[]) => usersAPI.bulkDeleteUsers(ids),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('users')
+        setSelectedUsers([])
+        setShowBulkModal(false)
+      }
+    }
+  )
+
+  const canManageUsers = () => {
+    return user?.role === 'ADMIN' || user?.role === 'BOARD' || user?.role === 'ORGANIZER'
+  }
+
+  const handleCreateUser = (data: CreateUserData) => {
+    createUserMutation.mutate({ ...data, password })
+  }
+
+  const handleUpdateUser = (id: string, data: Partial<User>) => {
+    updateUserMutation.mutate({ id, data })
+  }
+
+  const handleDeleteUser = (id: string) => {
+    if (window.confirm('Are you sure you want to delete this user?')) {
+      deleteUserMutation.mutate(id)
     }
   }
 
-  const getSignatureIcon = (role: string) => {
-    switch (role) {
-      case 'JUDGE': return <PencilIcon className="w-5 h-5 text-blue-500" />
-      case 'TALLY_MASTER': return <DocumentTextIcon className="w-5 h-5 text-green-500" />
-      case 'AUDITOR': return <EyeIcon className="w-5 h-5 text-purple-500" />
-      case 'BOARD': return <TrophyIcon className="w-5 h-5 text-yellow-500" />
-      default: return <ClockIcon className="w-5 h-5 text-gray-500" />
+  const handleBulkDelete = () => {
+    if (window.confirm(`Are you sure you want to delete ${selectedUsers.length} users?`)) {
+      bulkDeleteMutation.mutate(selectedUsers)
     }
   }
 
-  const getSignatureStatus = (role: string, signatures: Signature[]) => {
-    const signature = signatures.find(sig => sig.userRole === role)
-    if (signature) {
-      return { signed: true, signature }
-    }
-    return { signed: false, signature: null }
-  }
-
-  const renderCategoryWinners = () => {
-    if (!winnersData?.category) return null
-
-    const { category, contestants, signatures, allSigned, boardSigned, canShowWinners, requiredRoles } = winnersData
-
-    return (
-      <div className="space-y-6">
-        {/* Category Header */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900">{category.name}</h2>
-              <p className="text-gray-600">{category.description}</p>
-              <p className="text-sm text-gray-500">
-                {category.contest.name} - {category.contest.event.name}
-              </p>
-            </div>
-            <div className="flex items-center space-x-2">
-              {canShowWinners ? (
-                <CheckCircleIcon className="w-8 h-8 text-green-500" />
-              ) : (
-                <ClockIcon className="w-8 h-8 text-yellow-500" />
-              )}
-              <span className={`font-semibold ${canShowWinners ? 'text-green-600' : 'text-yellow-600'}`}>
-                {canShowWinners ? 'Winners Available' : 'Waiting for Signatures'}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Signature Status */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <h3 className="text-lg font-semibold mb-4">Signature Status</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {requiredRoles.map(role => {
-              const { signed, signature } = getSignatureStatus(role, signatures)
-              return (
-                <div key={role} className={`p-4 rounded-lg border ${signed ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}>
-                  <div className="flex items-center space-x-2">
-                    {getSignatureIcon(role)}
-                    <span className="font-medium">{role.replace('_', ' ')}</span>
-                  </div>
-                  {signed ? (
-                    <div className="mt-2 text-sm text-green-600">
-                      <div>✓ Signed by {signature?.user.name}</div>
-                      <div>{new Date(signature?.signedAt || '').toLocaleDateString()}</div>
-                    </div>
-                  ) : (
-                    <div className="mt-2 text-sm text-gray-500">Pending</div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-          
-          {!canShowWinners && (user?.role === 'JUDGE' || user?.role === 'TALLY_MASTER' || user?.role === 'AUDITOR' || user?.role === 'BOARD') && (
-            <div className="mt-4">
-              <button
-                onClick={() => setShowSignatureModal(true)}
-                className="btn btn-primary"
-                disabled={signMutation.isLoading}
-              >
-                {signMutation.isLoading ? 'Signing...' : 'Sign Winners'}
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Winners List */}
-        {canShowWinners && (
-          <div className="bg-white rounded-lg shadow">
-            <div className="p-6 border-b">
-              <h3 className="text-lg font-semibold">Winners</h3>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rank</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contestant</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Score</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Average Score</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {contestants.map((winner, index) => (
-                    <tr key={winner.contestant.id} className={index < 3 ? 'bg-yellow-50' : ''}>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          {index === 0 && <TrophyIcon className="w-5 h-5 text-yellow-500 mr-2" />}
-                          {index === 1 && <TrophyIcon className="w-5 h-5 text-gray-400 mr-2" />}
-                          {index === 2 && <TrophyIcon className="w-5 h-5 text-orange-500 mr-2" />}
-                          <span className="font-semibold">{index + 1}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div>
-                          <div className="text-sm font-medium text-gray-900">{winner.contestant.name}</div>
-                          {winner.contestant.contestantNumber && (
-                            <div className="text-sm text-gray-500">#{winner.contestant.contestantNumber}</div>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
-                        {winner.totalScore.toFixed(2)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {winner.averageScore.toFixed(2)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <button className="text-indigo-600 hover:text-indigo-900 mr-3">
-                          <EyeIcon className="w-4 h-4" />
-                        </button>
-                        <button className="text-green-600 hover:text-green-900">
-                          <PrinterIcon className="w-4 h-4" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-      </div>
+  const handleSelectUser = (userId: string) => {
+    setSelectedUsers(prev => 
+      prev.includes(userId) 
+        ? prev.filter(id => id !== userId)
+        : [...prev, userId]
     )
   }
 
-  const renderContestWinners = () => {
-    if (!winnersData?.contest) return null
+  const handleSelectAll = () => {
+    if (selectedUsers.length === filteredUsers.length) {
+      setSelectedUsers([])
+    } else {
+      setSelectedUsers(filteredUsers.map((user: User) => user.id))
+    }
+  }
 
-    const { contest, categories } = winnersData
+  const getRoleIcon = (role: string) => {
+    switch (role) {
+      case 'ADMIN': return <Cog6ToothIcon className="h-5 w-5 text-red-500" />
+      case 'BOARD': return <ShieldCheckIcon className="h-5 w-5 text-blue-500" />
+      case 'ORGANIZER': return <BriefcaseIcon className="h-5 w-5 text-green-500" />
+      case 'JUDGE': return <AcademicCapIcon className="h-5 w-5 text-purple-500" />
+      case 'TALLY_MASTER': return <ClipboardDocumentListIcon className="h-5 w-5 text-orange-500" />
+      case 'AUDITOR': return <DocumentTextIcon className="h-5 w-5 text-indigo-500" />
+      case 'EMCEE': return <UserIcon className="h-5 w-5 text-pink-500" />
+      case 'CONTESTANT': return <UserGroupIcon className="h-5 w-5 text-teal-500" />
+      default: return <UserIcon className="h-5 w-5 text-gray-500" />
+    }
+  }
 
-    return (
-      <div className="space-y-6">
-        {/* Contest Header */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-2xl font-bold text-gray-900">{contest.name}</h2>
-          <p className="text-gray-600">{contest.description}</p>
-          <p className="text-sm text-gray-500">{contest.event.name}</p>
+  const getRoleColor = (role: string) => {
+    switch (role) {
+      case 'ADMIN': return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+      case 'BOARD': return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+      case 'ORGANIZER': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+      case 'JUDGE': return 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
+      case 'TALLY_MASTER': return 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200'
+      case 'AUDITOR': return 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200'
+      case 'EMCEE': return 'bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-200'
+      case 'CONTESTANT': return 'bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200'
+      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
+    }
+  }
+
+  const filteredUsers = users?.filter((user: User) => {
+    const matchesSearch = user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         user.preferredName?.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesRole = !roleFilter || user.role === roleFilter
+    const matchesStatus = !statusFilter || 
+                         (statusFilter === 'active' && user.isActive) ||
+                         (statusFilter === 'inactive' && !user.isActive)
+    return matchesSearch && matchesRole && matchesStatus
+  }) || []
+
+  const getRoleSpecificFields = (role: string) => {
+    switch (role) {
+      case 'JUDGE':
+        return (
+          <>
+            <div>
+              <label className="label">Judge Number</label>
+              <input name="judgeNumber" type="text" className="input" placeholder="J001" />
+            </div>
+            <div>
+              <label className="label">Judge Level</label>
+              <select name="judgeLevel" className="input">
+                <option value="">Select Level</option>
+                <option value="NOVICE">Novice</option>
+                <option value="INTERMEDIATE">Intermediate</option>
+                <option value="ADVANCED">Advanced</option>
+                <option value="EXPERT">Expert</option>
+              </select>
+            </div>
+            <div>
+              <label className="label">Years of Experience</label>
+              <input name="judgeExperience" type="number" className="input" min="0" />
+            </div>
+          </>
+        )
+      case 'CONTESTANT':
+        return (
+          <>
+            <div>
+              <label className="label">Contestant Number</label>
+              <input name="contestantNumber" type="text" className="input" placeholder="C001" />
+            </div>
+            <div>
+              <label className="label">Age</label>
+              <input name="age" type="number" className="input" min="1" max="100" />
+            </div>
+            <div>
+              <label className="label">Parent/Guardian</label>
+              <input name="parentGuardian" type="text" className="input" />
+            </div>
+            <div>
+              <label className="label">Parent Phone</label>
+              <input name="parentPhone" type="tel" className="input" />
+            </div>
+            <div>
+              <label className="label">School</label>
+              <input name="school" type="text" className="input" />
+            </div>
+            <div>
+              <label className="label">Grade</label>
+              <input name="grade" type="text" className="input" />
+            </div>
+          </>
+        )
+      default:
+        return null
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+            User Management
+          </h1>
+          <p className="text-gray-600 dark:text-gray-400">
+            Manage users, roles, and permissions
+          </p>
         </div>
+        <div className="flex items-center space-x-3">
+          {canManageUsers() && selectedUsers.length > 0 && (
+            <button
+              onClick={() => setShowBulkModal(true)}
+              className="btn-secondary"
+            >
+              <TrashIcon className="h-4 w-4 mr-2" />
+              Delete Selected ({selectedUsers.length})
+            </button>
+          {canManageUsers() && (
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="btn-primary"
+            >
+              <PlusIcon className="h-4 w-4 mr-2" />
+              New User
+            </button>
+          )}
+        </div>
+      </div>
 
-        {/* Categories */}
-        {categories.map((categoryData, index) => (
-          <div key={categoryData.category.id} className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">{categoryData.category.name}</h3>
-              <div className="flex items-center space-x-2">
-                {categoryData.canShowWinners ? (
-                  <CheckCircleIcon className="w-6 h-6 text-green-500" />
-                ) : (
-                  <ClockIcon className="w-6 h-6 text-yellow-500" />
-                )}
-                <span className={`text-sm font-medium ${categoryData.canShowWinners ? 'text-green-600' : 'text-yellow-600'}`}>
-                  {categoryData.canShowWinners ? 'Complete' : 'Pending'}
-                </span>
+      {/* Filters */}
+      <div className="card">
+        <div className="card-header">
+          <h3 className="card-title">Filter Users</h3>
+        </div>
+        <div className="card-content">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+              <label className="label">Search</label>
+              <div className="relative">
+                <MagnifyingGlassIcon className="h-5 w-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search users..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="input pl-10"
+                />
               </div>
             </div>
+            <div>
+              <label className="label">Role</label>
+              <select
+                value={roleFilter}
+                onChange={(e) => setRoleFilter(e.target.value)}
+                className="input"
+              >
+                <option value="">All Roles</option>
+                <option value="ADMIN">Admin</option>
+                <option value="BOARD">Board</option>
+                <option value="ORGANIZER">Organizer</option>
+                <option value="JUDGE">Judge</option>
+                <option value="TALLY_MASTER">Tally Master</option>
+                <option value="AUDITOR">Auditor</option>
+                <option value="EMCEE">Emcee</option>
+                <option value="CONTESTANT">Contestant</option>
+              </select>
+            </div>
+            <div>
+              <label className="label">Status</label>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="input"
+              >
+                <option value="">All Status</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+            </div>
+            <div className="flex items-end">
+              <button
+                onClick={() => {
+                  setSearchTerm('')
+                  setRoleFilter('')
+                  setStatusFilter('')
+                }}
+                className="btn-secondary w-full"
+              >
+                Clear Filters
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
 
-            {categoryData.canShowWinners && categoryData.contestants.length > 0 && (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Rank</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Contestant</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Score</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {categoryData.contestants.slice(0, 3).map((winner, winnerIndex) => (
-                      <tr key={winner.contestant.id} className={winnerIndex < 3 ? 'bg-yellow-50' : ''}>
-                        <td className="px-4 py-2 whitespace-nowrap">
-                          <div className="flex items-center">
-                            {winnerIndex === 0 && <TrophyIcon className="w-4 h-4 text-yellow-500 mr-1" />}
-                            <span className="font-semibold">{winnerIndex + 1}</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {winner.contestant.name}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
-                          {winner.totalScore.toFixed(2)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+      {/* Users List */}
+      <div className="card">
+        <div className="card-header">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="card-title">Users</h3>
+              <p className="card-description">
+                {filteredUsers.length} users found
+              </p>
+            </div>
+            {canManageUsers() && filteredUsers.length > 0 && (
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  checked={selectedUsers.length === filteredUsers.length}
+                  onChange={handleSelectAll}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="text-sm text-gray-600 dark:text-gray-400">
+                  Select All
+                </span>
               </div>
             )}
           </div>
-        ))}
-      </div>
-    )
-  }
-
-  return (
-    <div className="p-6">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Winners</h1>
-        <p className="text-gray-600">View contest and category winners with signature verification</p>
-      </div>
-
-      {/* Controls */}
-      <div className="bg-white rounded-lg shadow p-6 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">View Mode</label>
-            <select
-              value={viewMode}
-              onChange={(e) => setViewMode(e.target.value as 'category' | 'contest')}
-              className="input"
-            >
-              <option value="category">By Category</option>
-              <option value="contest">By Contest</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Event</label>
-            <select
-              value={selectedEvent}
-              onChange={(e) => {
-                setSelectedEvent(e.target.value)
-                setSelectedContest('')
-                setSelectedCategory('')
-              }}
-              className="input"
-            >
-              <option value="">Select Event</option>
-              {Array.isArray(events) ? events.map((event: any) => (
-                <option key={event.id} value={event.id}>{event.name}</option>
-              )) : events?.data?.map((event: any) => (
-                <option key={event.id} value={event.id}>{event.name}</option>
+        </div>
+        <div className="card-content">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="loading-spinner h-8 w-8"></div>
+            </div>
+          ) : filteredUsers.length > 0 ? (
+            <div className="space-y-4">
+              {filteredUsers.map((user: User) => (
+                <div
+                  key={user.id}
+                  className={`border rounded-lg p-4 transition-colors ${
+                    selectedUsers.includes(user.id)
+                      ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
+                      : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-4">
+                      {canManageUsers() && (
+                        <input
+                          type="checkbox"
+                          checked={selectedUsers.includes(user.id)}
+                          onChange={() => handleSelectUser(user.id)}
+                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                      )}
+                      <div className="flex items-center space-x-3">
+                        {getRoleIcon(user.role)}
+                        <div>
+                          <h4 className="font-medium text-gray-900 dark:text-white">
+                            {user.preferredName || user.name}
+                            {user.preferredName && user.preferredName !== user.name && (
+                              <span className="text-sm text-gray-500 dark:text-gray-400 ml-2">
+                                ({user.name})
+                              </span>
+                            )}
+                          </h4>
+                          <p className="text-sm text-gray-600 dark:text-gray-400">
+                            {user.email}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-4">
+                      <div className="text-right">
+                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${getRoleColor(user.role)}`}>
+                          {user.role.replace('_', ' ')}
+                        </span>
+                        <div className="flex items-center space-x-2 mt-1">
+                          {user.isActive ? (
+                            <CheckCircleIcon className="h-4 w-4 text-green-500" />
+                          ) : (
+                            <XCircleIcon className="h-4 w-4 text-red-500" />
+                          )}
+                          <span className="text-xs text-gray-500 dark:text-gray-400">
+                            {user.isActive ? 'Active' : 'Inactive'}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        {user.lastLogin ? (
+                          <div className="text-sm text-gray-500 dark:text-gray-400">
+                            Last login: {new Date(user.lastLogin).toLocaleDateString()}
+                          </div>
+                        ) : (
+                          <div className="text-sm text-gray-500 dark:text-gray-400">
+                            Never logged in
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={() => {
+                            setSelectedUser(user)
+                            setShowEditModal(true)
+                          }}
+                          className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
+                        >
+                          <EyeIcon className="h-5 w-5" />
+                        </button>
+                        {canManageUsers() && (
+                          <>
+                            <button
+                              onClick={() => {
+                                setSelectedUser(user)
+                                setShowEditModal(true)
+                              }}
+                              className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
+                            >
+                              <PencilIcon className="h-5 w-5" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteUser(user.id)}
+                              className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+                            >
+                              <TrashIcon className="h-5 w-5" />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Role-specific information */}
+                  {(user.role === 'JUDGE' || user.role === 'CONTESTANT') && (
+                    <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        {user.role === 'JUDGE' && (
+                          <>
+                            {user.judgeNumber && (
+                              <div>
+                                <span className="text-gray-500 dark:text-gray-400">Judge #:</span>
+                                <div className="font-medium">{user.judgeNumber}</div>
+                              </div>
+                            )}
+                            {user.judgeLevel && (
+                              <div>
+                                <span className="text-gray-500 dark:text-gray-400">Level:</span>
+                                <div className="font-medium">{user.judgeLevel}</div>
+                              </div>
+                            )}
+                            {user.judgeExperience && (
+                              <div>
+                                <span className="text-gray-500 dark:text-gray-400">Experience:</span>
+                                <div className="font-medium">{user.judgeExperience} years</div>
+                              </div>
+                            )}
+                          </>
+                        )}
+                        {user.role === 'CONTESTANT' && (
+                          <>
+                            {user.contestantNumber && (
+                              <div>
+                                <span className="text-gray-500 dark:text-gray-400">Contestant #:</span>
+                                <div className="font-medium">{user.contestantNumber}</div>
+                              </div>
+                            )}
+                            {user.age && (
+                              <div>
+                                <span className="text-gray-500 dark:text-gray-400">Age:</span>
+                                <div className="font-medium">{user.age}</div>
+                              </div>
+                            )}
+                            {user.school && (
+                              <div>
+                                <span className="text-gray-500 dark:text-gray-400">School:</span>
+                                <div className="font-medium">{user.school}</div>
+                              </div>
+                            )}
+                            {user.grade && (
+                              <div>
+                                <span className="text-gray-500 dark:text-gray-400">Grade:</span>
+                                <div className="font-medium">{user.grade}</div>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
               ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Contest</label>
-            <select
-              value={selectedContest}
-              onChange={(e) => {
-                setSelectedContest(e.target.value)
-                setSelectedCategory('')
-              }}
-              className="input"
-              disabled={!selectedEvent}
-            >
-              <option value="">Select Contest</option>
-              {Array.isArray(contests) ? contests.map((contest: any) => (
-                <option key={contest.id} value={contest.id}>{contest.name}</option>
-              )) : contests?.data?.map((contest: any) => (
-                <option key={contest.id} value={contest.id}>{contest.name}</option>
-              ))}
-            </select>
-          </div>
-
-          {viewMode === 'category' && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
-              <select
-                value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value)}
-                className="input"
-                disabled={!selectedContest}
-              >
-                <option value="">Select Category</option>
-                {Array.isArray(categories) ? categories.map((category: any) => (
-                  <option key={category.id} value={category.id}>{category.name}</option>
-                )) : categories?.data?.map((category: any) => (
-                  <option key={category.id} value={category.id}>{category.name}</option>
-                ))}
-              </select>
+            </div>
+          ) : (
+            <div className="text-center py-12">
+              <UserGroupIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                No Users Found
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400">
+                Try adjusting your search criteria.
+              </p>
             </div>
           )}
         </div>
       </div>
 
-      {/* Winners Display */}
-      {winnersLoading ? (
-        <div className="flex justify-center items-center h-64">
-          <div className="loading-spinner"></div>
+      {/* Create User Modal */}
+      {showCreateModal && (
+        <div className="modal">
+          <div className="modal-overlay" onClick={() => setShowCreateModal(false)}></div>
+          <div className="modal-content max-w-4xl">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Create User
+              </h3>
+              <button
+                onClick={() => setShowCreateModal(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+            </div>
+            
+            <form onSubmit={(e) => {
+              e.preventDefault()
+              const formData = new FormData(e.target as HTMLFormElement)
+              const role = formData.get('role') as string
+              
+              const userData: CreateUserData = {
+                name: formData.get('name') as string,
+                email: formData.get('email') as string,
+                password: password,
+                role: role,
+                phone: formData.get('phone') as string,
+                address: formData.get('address') as string,
+                emergencyContact: formData.get('emergencyContact') as string,
+                emergencyPhone: formData.get('emergencyPhone') as string,
+                bio: formData.get('bio') as string,
+                experience: formData.get('experience') as string,
+                preferredName: formData.get('preferredName') as string,
+                pronouns: formData.get('pronouns') as string,
+                judgeNumber: formData.get('judgeNumber') as string,
+                judgeLevel: formData.get('judgeLevel') as string,
+                judgeExperience: formData.get('judgeExperience') ? Number(formData.get('judgeExperience')) : undefined,
+                contestantNumber: formData.get('contestantNumber') as string,
+                age: formData.get('age') ? Number(formData.get('age')) : undefined,
+                parentGuardian: formData.get('parentGuardian') as string,
+                parentPhone: formData.get('parentPhone') as string,
+                school: formData.get('school') as string,
+                grade: formData.get('grade') as string
+              }
+              
+              handleCreateUser(userData)
+            }}>
+              <div className="space-y-6">
+                {/* Basic Information */}
+                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                  <h4 className="font-semibold text-gray-900 dark:text-white mb-4">Basic Information</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="label">Name</label>
+                      <input name="name" type="text" className="input" required />
+                    </div>
+                    <div>
+                      <label className="label">Preferred Name</label>
+                      <input name="preferredName" type="text" className="input" />
+                    </div>
+                    <div>
+                      <label className="label">Email</label>
+                      <input name="email" type="email" className="input" required />
+                    </div>
+                    <div>
+                      <label className="label">Pronouns</label>
+                      <input name="pronouns" type="text" className="input" placeholder="they/them" />
+                    </div>
+                    <div>
+                      <label className="label">Role</label>
+                      <select name="role" className="input" required>
+                        <option value="">Select Role</option>
+                        <option value="ADMIN">Admin</option>
+                        <option value="BOARD">Board</option>
+                        <option value="ORGANIZER">Organizer</option>
+                        <option value="JUDGE">Judge</option>
+                        <option value="TALLY_MASTER">Tally Master</option>
+                        <option value="AUDITOR">Auditor</option>
+                        <option value="EMCEE">Emcee</option>
+                        <option value="CONTESTANT">Contestant</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="label">Phone</label>
+                      <input name="phone" type="tel" className="input" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Password */}
+                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                  <h4 className="font-semibold text-gray-900 dark:text-white mb-4">Password</h4>
+                  <PasswordStrengthMeter
+                    password={password}
+                    onPasswordChange={setPassword}
+                    showPolicy={true}
+                  />
+                </div>
+
+                {/* Contact Information */}
+                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                  <h4 className="font-semibold text-gray-900 dark:text-white mb-4">Contact Information</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="label">Address</label>
+                      <textarea name="address" rows={3} className="input" />
+                    </div>
+                    <div>
+                      <label className="label">Emergency Contact</label>
+                      <input name="emergencyContact" type="text" className="input" />
+                    </div>
+                    <div>
+                      <label className="label">Emergency Phone</label>
+                      <input name="emergencyPhone" type="tel" className="input" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Role-specific fields will be added dynamically based on selected role */}
+                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                  <h4 className="font-semibold text-gray-900 dark:text-white mb-4">Additional Information</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="label">Bio</label>
+                      <textarea name="bio" rows={3} className="input" />
+                    </div>
+                    <div>
+                      <label className="label">Experience</label>
+                      <textarea name="experience" rows={3} className="input" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex items-center justify-end space-x-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateModal(false)}
+                  className="btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={createUserMutation.isLoading || !password}
+                  className="btn-primary"
+                >
+                  {createUserMutation.isLoading ? 'Creating...' : 'Create User'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
-      ) : (
-        <>
-          {viewMode === 'category' && renderCategoryWinners()}
-          {viewMode === 'contest' && renderContestWinners()}
-        </>
       )}
 
-      {/* Signature Modal */}
-      {showSignatureModal && (
+      {/* Edit User Modal */}
+      {showEditModal && selectedUser && (
         <div className="modal">
-          <div className="modal-overlay" onClick={() => setShowSignatureModal(false)}></div>
-          <div className="modal-content">
-            <h3 className="text-lg font-semibold mb-4">Sign Winners</h3>
-            <p className="text-gray-600 mb-6">
-              By signing, you confirm that you have reviewed and verified the winners for this category.
-            </p>
-            <div className="flex justify-end space-x-3">
+          <div className="modal-overlay" onClick={() => setShowEditModal(false)}></div>
+          <div className="modal-content max-w-4xl">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Edit User
+              </h3>
               <button
-                onClick={() => setShowSignatureModal(false)}
-                className="btn btn-secondary"
+                onClick={() => setShowEditModal(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+            </div>
+            
+            <form onSubmit={(e) => {
+              e.preventDefault()
+              const formData = new FormData(e.target as HTMLFormElement)
+              handleUpdateUser(selectedUser.id, {
+                name: formData.get('name') as string,
+                email: formData.get('email') as string,
+                role: formData.get('role') as string,
+                isActive: formData.get('isActive') === 'on',
+                phone: formData.get('phone') as string,
+                address: formData.get('address') as string,
+                emergencyContact: formData.get('emergencyContact') as string,
+                emergencyPhone: formData.get('emergencyPhone') as string,
+                bio: formData.get('bio') as string,
+                experience: formData.get('experience') as string,
+                preferredName: formData.get('preferredName') as string,
+                pronouns: formData.get('pronouns') as string,
+                judgeNumber: formData.get('judgeNumber') as string,
+                judgeLevel: formData.get('judgeLevel') as string,
+                judgeExperience: formData.get('judgeExperience') ? Number(formData.get('judgeExperience')) : undefined,
+                contestantNumber: formData.get('contestantNumber') as string,
+                age: formData.get('age') ? Number(formData.get('age')) : undefined,
+                parentGuardian: formData.get('parentGuardian') as string,
+                parentPhone: formData.get('parentPhone') as string,
+                school: formData.get('school') as string,
+                grade: formData.get('grade') as string
+              })
+            }}>
+              <div className="space-y-6">
+                {/* Basic Information */}
+                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                  <h4 className="font-semibold text-gray-900 dark:text-white mb-4">Basic Information</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="label">Name</label>
+                      <input name="name" type="text" className="input" defaultValue={selectedUser.name} required />
+                    </div>
+                    <div>
+                      <label className="label">Preferred Name</label>
+                      <input name="preferredName" type="text" className="input" defaultValue={selectedUser.preferredName} />
+                    </div>
+                    <div>
+                      <label className="label">Email</label>
+                      <input name="email" type="email" className="input" defaultValue={selectedUser.email} required />
+                    </div>
+                    <div>
+                      <label className="label">Pronouns</label>
+                      <input name="pronouns" type="text" className="input" defaultValue={selectedUser.pronouns} />
+                    </div>
+                    <div>
+                      <label className="label">Role</label>
+                      <select name="role" className="input" defaultValue={selectedUser.role} required>
+                        <option value="ADMIN">Admin</option>
+                        <option value="BOARD">Board</option>
+                        <option value="ORGANIZER">Organizer</option>
+                        <option value="JUDGE">Judge</option>
+                        <option value="TALLY_MASTER">Tally Master</option>
+                        <option value="AUDITOR">Auditor</option>
+                        <option value="EMCEE">Emcee</option>
+                        <option value="CONTESTANT">Contestant</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="label">Phone</label>
+                      <input name="phone" type="tel" className="input" defaultValue={selectedUser.phone} />
+                    </div>
+                    <div className="flex items-center">
+                      <input
+                        name="isActive"
+                        type="checkbox"
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        defaultChecked={selectedUser.isActive}
+                      />
+                      <label className="ml-2 text-sm text-gray-700 dark:text-gray-300">
+                        Active
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Contact Information */}
+                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                  <h4 className="font-semibold text-gray-900 dark:text-white mb-4">Contact Information</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="label">Address</label>
+                      <textarea name="address" rows={3} className="input" defaultValue={selectedUser.address} />
+                    </div>
+                    <div>
+                      <label className="label">Emergency Contact</label>
+                      <input name="emergencyContact" type="text" className="input" defaultValue={selectedUser.emergencyContact} />
+                    </div>
+                    <div>
+                      <label className="label">Emergency Phone</label>
+                      <input name="emergencyPhone" type="tel" className="input" defaultValue={selectedUser.emergencyPhone} />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Additional Information */}
+                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                  <h4 className="font-semibold text-gray-900 dark:text-white mb-4">Additional Information</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="label">Bio</label>
+                      <textarea name="bio" rows={3} className="input" defaultValue={selectedUser.bio} />
+                    </div>
+                    <div>
+                      <label className="label">Experience</label>
+                      <textarea name="experience" rows={3} className="input" defaultValue={selectedUser.experience} />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Role-specific fields */}
+                {(selectedUser.role === 'JUDGE' || selectedUser.role === 'CONTESTANT') && (
+                  <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                    <h4 className="font-semibold text-gray-900 dark:text-white mb-4">
+                      {selectedUser.role === 'JUDGE' ? 'Judge Information' : 'Contestant Information'}
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {selectedUser.role === 'JUDGE' && (
+                        <>
+                          <div>
+                            <label className="label">Judge Number</label>
+                            <input name="judgeNumber" type="text" className="input" defaultValue={selectedUser.judgeNumber} />
+                          </div>
+                          <div>
+                            <label className="label">Judge Level</label>
+                            <select name="judgeLevel" className="input" defaultValue={selectedUser.judgeLevel}>
+                              <option value="">Select Level</option>
+                              <option value="NOVICE">Novice</option>
+                              <option value="INTERMEDIATE">Intermediate</option>
+                              <option value="ADVANCED">Advanced</option>
+                              <option value="EXPERT">Expert</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="label">Years of Experience</label>
+                            <input name="judgeExperience" type="number" className="input" defaultValue={selectedUser.judgeExperience} min="0" />
+                          </div>
+                        </>
+                      )}
+                      {selectedUser.role === 'CONTESTANT' && (
+                        <>
+                          <div>
+                            <label className="label">Contestant Number</label>
+                            <input name="contestantNumber" type="text" className="input" defaultValue={selectedUser.contestantNumber} />
+                          </div>
+                          <div>
+                            <label className="label">Age</label>
+                            <input name="age" type="number" className="input" defaultValue={selectedUser.age} min="1" max="100" />
+                          </div>
+                          <div>
+                            <label className="label">Parent/Guardian</label>
+                            <input name="parentGuardian" type="text" className="input" defaultValue={selectedUser.parentGuardian} />
+                          </div>
+                          <div>
+                            <label className="label">Parent Phone</label>
+                            <input name="parentPhone" type="tel" className="input" defaultValue={selectedUser.parentPhone} />
+                          </div>
+                          <div>
+                            <label className="label">School</label>
+                            <input name="school" type="text" className="input" defaultValue={selectedUser.school} />
+                          </div>
+                          <div>
+                            <label className="label">Grade</label>
+                            <input name="grade" type="text" className="input" defaultValue={selectedUser.grade} />
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              <div className="flex items-center justify-end space-x-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setShowEditModal(false)}
+                  className="btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={updateUserMutation.isLoading}
+                  className="btn-primary"
+                >
+                  {updateUserMutation.isLoading ? 'Updating...' : 'Update User'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Delete Modal */}
+      {showBulkModal && (
+        <div className="modal">
+          <div className="modal-overlay" onClick={() => setShowBulkModal(false)}></div>
+          <div className="modal-content">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Bulk Delete Users
+              </h3>
+              <button
+                onClick={() => setShowBulkModal(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+                <div className="flex items-start space-x-2">
+                  <ExclamationTriangleIcon className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5" />
+                  <div className="text-sm text-red-700 dark:text-red-300">
+                    <p className="font-medium mb-1">Warning:</p>
+                    <p>You are about to permanently delete {selectedUsers.length} users. This action cannot be undone.</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="text-sm text-gray-600 dark:text-gray-400">
+                <p>Selected users:</p>
+                <ul className="list-disc list-inside mt-2 space-y-1">
+                  {selectedUsers.map(userId => {
+                    const user = users?.find((u: User) => u.id === userId)
+                    return user ? (
+                      <li key={userId}>{user.name} ({user.email})</li>
+                    ) : null
+                  })}
+                </ul>
+              </div>
+            </div>
+            
+            <div className="flex items-center justify-end space-x-3 mt-6">
+              <button
+                type="button"
+                onClick={() => setShowBulkModal(false)}
+                className="btn-secondary"
               >
                 Cancel
               </button>
               <button
-                onClick={handleSignWinners}
-                className="btn btn-primary"
-                disabled={signMutation.isLoading}
+                onClick={handleBulkDelete}
+                disabled={bulkDeleteMutation.isLoading}
+                className="btn-danger"
               >
-                {signMutation.isLoading ? 'Signing...' : 'Sign Winners'}
+                {bulkDeleteMutation.isLoading ? 'Deleting...' : 'Delete Users'}
               </button>
             </div>
           </div>
@@ -41254,278 +39329,2559 @@ const WinnersPage: React.FC = () => {
   )
 }
 
-export default WinnersPage
+export default UsersPage
 EOF
 
-    cat > "$APP_DIR/frontend/index.html" << 'EOF'
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Event Manager - Professional Contest Management System</title>
-    <meta name="description" content="Professional contest management system for events, contests, and scoring" />
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
-</html>
+    # Update ReportsPage with enhanced reporting functionality
+    cat > "$APP_DIR/frontend/src/pages/ReportsPage.tsx" << 'EOF'
+import React, { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from 'react-query'
+import { useAuth } from '../contexts/AuthContext'
+import { reportsAPI } from '../services/api'
+import {
+  DocumentTextIcon,
+  PrinterIcon,
+  ArrowDownTrayIcon,
+  EnvelopeIcon,
+  EyeIcon,
+  XMarkIcon,
+  PlusIcon,
+  PencilIcon,
+  TrashIcon,
+  CalendarIcon,
+  ChartBarIcon,
+  UserGroupIcon,
+  TrophyIcon,
+  ClockIcon,
+  CheckCircleIcon,
+  ExclamationTriangleIcon,
+  MagnifyingGlassIcon,
+  FunnelIcon,
+  DocumentDuplicateIcon,
+  ShareIcon,
+  Cog6ToothIcon,
+  InformationCircleIcon,
+  PlayIcon,
+  StopIcon,
+  ArrowPathIcon
+} from '@heroicons/react/24/outline'
+
+interface Report {
+  id: string
+  name: string
+  type: 'EVENT_SUMMARY' | 'CONTEST_RESULTS' | 'JUDGE_PERFORMANCE' | 'SYSTEM_ANALYTICS' | 'CUSTOM'
+  description?: string
+  parameters: any
+  generatedAt?: string
+  generatedBy?: string
+  filePath?: string
+  isPublic: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+interface ReportTemplate {
+  id: string
+  name: string
+  type: string
+  description?: string
+  parameters: any
+  isPublic: boolean
+  createdBy: string
+  createdAt: string
+}
+
+interface CreateReportData {
+  name: string
+  type: string
+  description?: string
+  parameters: any
+  isPublic: boolean
+}
+
+const ReportsPage: React.FC = () => {
+  const { user } = useAuth()
+  const queryClient = useQueryClient()
+  const [showCreateModal, setShowCreateModal] = useState<boolean>(false)
+  const [showTemplateModal, setShowTemplateModal] = useState<boolean>(false)
+  const [showEmailModal, setShowEmailModal] = useState<boolean>(false)
+  const [selectedReport, setSelectedReport] = useState<Report | null>(null)
+  const [selectedTemplate, setSelectedTemplate] = useState<ReportTemplate | null>(null)
+  const [searchTerm, setSearchTerm] = useState<string>('')
+  const [typeFilter, setTypeFilter] = useState<string>('')
+  const [statusFilter, setStatusFilter] = useState<string>('')
+  const [emailRecipients, setEmailRecipients] = useState<string>('')
+  const [emailSubject, setEmailSubject] = useState<string>('')
+  const [emailMessage, setEmailMessage] = useState<string>('')
+
+  // Fetch reports
+  const { data: reports, isLoading } = useQuery(
+    ['reports', searchTerm, typeFilter, statusFilter],
+    () => reportsAPI.getReports({
+      search: searchTerm,
+      type: typeFilter,
+      status: statusFilter
+    }).then(res => res.data)
+  )
+
+  // Fetch templates
+  const { data: templates } = useQuery(
+    'reportTemplates',
+    () => reportsAPI.getTemplates().then(res => res.data)
+  )
+
+  // Create report mutation
+  const createReportMutation = useMutation(
+    (data: CreateReportData) => reportsAPI.createReport(data),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('reports')
+        setShowCreateModal(false)
+      }
+    }
+  )
+
+  // Generate report mutation
+  const generateReportMutation = useMutation(
+    (id: string) => reportsAPI.generateReport(id),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('reports')
+      }
+    }
+  )
+
+  // Delete report mutation
+  const deleteReportMutation = useMutation(
+    (id: string) => reportsAPI.deleteReport(id),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('reports')
+      }
+    }
+  )
+
+  // Email report mutation
+  const emailReportMutation = useMutation(
+    ({ reportId, recipients, subject, message }: { reportId: string; recipients: string; subject: string; message: string }) =>
+      reportsAPI.emailReport(reportId, { recipients, subject, message }),
+    {
+      onSuccess: () => {
+        setShowEmailModal(false)
+        setEmailRecipients('')
+        setEmailSubject('')
+        setEmailMessage('')
+      }
+    }
+  )
+
+  const canManageReports = () => {
+    return user?.role === 'ADMIN' || user?.role === 'BOARD' || user?.role === 'ORGANIZER'
+  }
+
+  const handleCreateReport = (data: CreateReportData) => {
+    createReportMutation.mutate(data)
+  }
+
+  const handleGenerateReport = (id: string) => {
+    generateReportMutation.mutate(id)
+  }
+
+  const handleDeleteReport = (id: string) => {
+    if (window.confirm('Are you sure you want to delete this report?')) {
+      deleteReportMutation.mutate(id)
+    }
+  }
+
+  const handleEmailReport = () => {
+    if (selectedReport && emailRecipients && emailSubject) {
+      emailReportMutation.mutate({
+        reportId: selectedReport.id,
+        recipients: emailRecipients,
+        subject: emailSubject,
+        message: emailMessage
+      })
+    }
+  }
+
+  const handleCreateFromTemplate = (template: ReportTemplate) => {
+    const reportData: CreateReportData = {
+      name: `${template.name} - ${new Date().toLocaleDateString()}`,
+      type: template.type,
+      description: template.description,
+      parameters: template.parameters,
+      isPublic: template.isPublic
+    }
+    handleCreateReport(reportData)
+    setShowTemplateModal(false)
+  }
+
+  const getReportTypeIcon = (type: string) => {
+    switch (type) {
+      case 'EVENT_SUMMARY': return <CalendarIcon className="h-5 w-5 text-blue-500" />
+      case 'CONTEST_RESULTS': return <TrophyIcon className="h-5 w-5 text-yellow-500" />
+      case 'JUDGE_PERFORMANCE': return <UserGroupIcon className="h-5 w-5 text-purple-500" />
+      case 'SYSTEM_ANALYTICS': return <ChartBarIcon className="h-5 w-5 text-green-500" />
+      case 'CUSTOM': return <Cog6ToothIcon className="h-5 w-5 text-gray-500" />
+      default: return <DocumentTextIcon className="h-5 w-5 text-gray-500" />
+    }
+  }
+
+  const getReportTypeColor = (type: string) => {
+    switch (type) {
+      case 'EVENT_SUMMARY': return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+      case 'CONTEST_RESULTS': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+      case 'JUDGE_PERFORMANCE': return 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
+      case 'SYSTEM_ANALYTICS': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+      case 'CUSTOM': return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
+      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
+    }
+  }
+
+  const getReportStatus = (report: Report) => {
+    if (report.generatedAt) {
+      return {
+        icon: <CheckCircleIcon className="h-4 w-4 text-green-500" />,
+        text: 'Generated',
+        color: 'text-green-600 dark:text-green-400'
+      }
+    } else {
+      return {
+        icon: <ClockIcon className="h-4 w-4 text-yellow-500" />,
+        text: 'Pending',
+        color: 'text-yellow-600 dark:text-yellow-400'
+      }
+    }
+  }
+
+  const filteredReports = reports?.filter((report: Report) => {
+    const matchesSearch = report.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         report.description?.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesType = !typeFilter || report.type === typeFilter
+    const matchesStatus = !statusFilter || 
+                         (statusFilter === 'generated' && report.generatedAt) ||
+                         (statusFilter === 'pending' && !report.generatedAt)
+    return matchesSearch && matchesType && matchesStatus
+  }) || []
+
+  const getReportParametersForm = (type: string) => {
+    switch (type) {
+      case 'EVENT_SUMMARY':
+        return (
+          <div className="space-y-4">
+            <div>
+              <label className="label">Event</label>
+              <select name="eventId" className="input" required>
+                <option value="">Select Event</option>
+                {/* Events will be populated dynamically */}
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="label">Include Contests</label>
+                <input name="includeContests" type="checkbox" className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" defaultChecked />
+              </div>
+              <div>
+                <label className="label">Include Participants</label>
+                <input name="includeParticipants" type="checkbox" className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" defaultChecked />
+              </div>
+            </div>
+          </div>
+        )
+      case 'CONTEST_RESULTS':
+        return (
+          <div className="space-y-4">
+            <div>
+              <label className="label">Event</label>
+              <select name="eventId" className="input" required>
+                <option value="">Select Event</option>
+              </select>
+            </div>
+            <div>
+              <label className="label">Contest</label>
+              <select name="contestId" className="input" required>
+                <option value="">Select Contest</option>
+              </select>
+            </div>
+            <div>
+              <label className="label">Category</label>
+              <select name="categoryId" className="input">
+                <option value="">All Categories</option>
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="label">Include Scores</label>
+                <input name="includeScores" type="checkbox" className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" defaultChecked />
+              </div>
+              <div>
+                <label className="label">Include Rankings</label>
+                <input name="includeRankings" type="checkbox" className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" defaultChecked />
+              </div>
+            </div>
+          </div>
+        )
+      case 'JUDGE_PERFORMANCE':
+        return (
+          <div className="space-y-4">
+            <div>
+              <label className="label">Event</label>
+              <select name="eventId" className="input" required>
+                <option value="">Select Event</option>
+              </select>
+            </div>
+            <div>
+              <label className="label">Judge</label>
+              <select name="judgeId" className="input">
+                <option value="">All Judges</option>
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="label">Include Scoring History</label>
+                <input name="includeHistory" type="checkbox" className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" defaultChecked />
+              </div>
+              <div>
+                <label className="label">Include Statistics</label>
+                <input name="includeStatistics" type="checkbox" className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" defaultChecked />
+              </div>
+            </div>
+          </div>
+        )
+      case 'SYSTEM_ANALYTICS':
+        return (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="label">Start Date</label>
+                <input name="startDate" type="date" className="input" />
+              </div>
+              <div>
+                <label className="label">End Date</label>
+                <input name="endDate" type="date" className="input" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="label">Include User Activity</label>
+                <input name="includeUserActivity" type="checkbox" className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" defaultChecked />
+              </div>
+              <div>
+                <label className="label">Include System Performance</label>
+                <input name="includeSystemPerformance" type="checkbox" className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" defaultChecked />
+              </div>
+            </div>
+          </div>
+        )
+      default:
+        return (
+          <div className="space-y-4">
+            <div>
+              <label className="label">Custom Parameters (JSON)</label>
+              <textarea name="customParameters" rows={6} className="input font-mono text-sm" placeholder="Enter custom parameters as JSON..." />
+            </div>
+          </div>
+        )
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+            Reports
+          </h1>
+          <p className="text-gray-600 dark:text-gray-400">
+            Generate and manage reports
+          </p>
+        </div>
+        <div className="flex items-center space-x-3">
+          <button
+            onClick={() => setShowTemplateModal(true)}
+            className="btn-secondary"
+          >
+            <DocumentDuplicateIcon className="h-4 w-4 mr-2" />
+            From Template
+          </button>
+          {canManageReports() && (
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="btn-primary"
+            >
+              <PlusIcon className="h-4 w-4 mr-2" />
+              New Report
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="card">
+        <div className="card-header">
+          <h3 className="card-title">Filter Reports</h3>
+        </div>
+        <div className="card-content">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+              <label className="label">Search</label>
+              <div className="relative">
+                <MagnifyingGlassIcon className="h-5 w-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search reports..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="input pl-10"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="label">Type</label>
+              <select
+                value={typeFilter}
+                onChange={(e) => setTypeFilter(e.target.value)}
+                className="input"
+              >
+                <option value="">All Types</option>
+                <option value="EVENT_SUMMARY">Event Summary</option>
+                <option value="CONTEST_RESULTS">Contest Results</option>
+                <option value="JUDGE_PERFORMANCE">Judge Performance</option>
+                <option value="SYSTEM_ANALYTICS">System Analytics</option>
+                <option value="CUSTOM">Custom</option>
+              </select>
+            </div>
+            <div>
+              <label className="label">Status</label>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="input"
+              >
+                <option value="">All Status</option>
+                <option value="generated">Generated</option>
+                <option value="pending">Pending</option>
+              </select>
+            </div>
+            <div className="flex items-end">
+              <button
+                onClick={() => {
+                  setSearchTerm('')
+                  setTypeFilter('')
+                  setStatusFilter('')
+                }}
+                className="btn-secondary w-full"
+              >
+                Clear Filters
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Reports List */}
+      <div className="card">
+        <div className="card-header">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="card-title">Reports</h3>
+              <p className="card-description">
+                {filteredReports.length} reports found
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="card-content">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="loading-spinner h-8 w-8"></div>
+            </div>
+          ) : filteredReports.length > 0 ? (
+            <div className="space-y-4">
+              {filteredReports.map((report: Report) => {
+                const status = getReportStatus(report)
+                return (
+                  <div
+                    key={report.id}
+                    className="border rounded-lg p-4 bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-4">
+                        <div className="flex items-center space-x-3">
+                          {getReportTypeIcon(report.type)}
+                          <div>
+                            <h4 className="font-medium text-gray-900 dark:text-white">
+                              {report.name}
+                            </h4>
+                            {report.description && (
+                              <p className="text-sm text-gray-600 dark:text-gray-400">
+                                {report.description}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-4">
+                        <div className="text-right">
+                          <span className={`px-3 py-1 rounded-full text-sm font-medium ${getReportTypeColor(report.type)}`}>
+                            {report.type.replace('_', ' ')}
+                          </span>
+                          <div className="flex items-center space-x-2 mt-1">
+                            {status.icon}
+                            <span className={`text-xs font-medium ${status.color}`}>
+                              {status.text}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          {report.generatedAt ? (
+                            <div className="text-sm text-gray-500 dark:text-gray-400">
+                              Generated: {new Date(report.generatedAt).toLocaleDateString()}
+                            </div>
+                          ) : (
+                            <div className="text-sm text-gray-500 dark:text-gray-400">
+                              Created: {new Date(report.createdAt).toLocaleDateString()}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          {report.generatedAt ? (
+                            <>
+                              <button
+                                onClick={() => window.open(`/api/reports/${report.id}/download`, '_blank')}
+                                className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
+                                title="Download Report"
+                              >
+                                <ArrowDownTrayIcon className="h-5 w-5" />
+                              </button>
+                              <button
+                                onClick={() => window.print()}
+                                className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
+                                title="Print Report"
+                              >
+                                <PrinterIcon className="h-5 w-5" />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setSelectedReport(report)
+                                  setShowEmailModal(true)
+                                }}
+                                className="text-purple-600 hover:text-purple-900 dark:text-purple-400 dark:hover:text-purple-300"
+                                title="Email Report"
+                              >
+                                <EnvelopeIcon className="h-5 w-5" />
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              onClick={() => handleGenerateReport(report.id)}
+                              disabled={generateReportMutation.isLoading}
+                              className="text-yellow-600 hover:text-yellow-900 dark:text-yellow-400 dark:hover:text-yellow-300"
+                              title="Generate Report"
+                            >
+                              <PlayIcon className="h-5 w-5" />
+                            </button>
+                          )}
+                          <button
+                            onClick={() => {
+                              setSelectedReport(report)
+                              // Show report details modal
+                            }}
+                            className="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-300"
+                            title="View Details"
+                          >
+                            <EyeIcon className="h-5 w-5" />
+                          </button>
+                          {canManageReports() && (
+                            <>
+                              <button
+                                onClick={() => {
+                                  setSelectedReport(report)
+                                  setShowCreateModal(true)
+                                }}
+                                className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
+                                title="Edit Report"
+                              >
+                                <PencilIcon className="h-5 w-5" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteReport(report.id)}
+                                className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+                                title="Delete Report"
+                              >
+                                <TrashIcon className="h-5 w-5" />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="text-center py-12">
+              <DocumentTextIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                No Reports Found
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400">
+                {canManageReports()
+                  ? 'Create your first report to get started.'
+                  : 'No reports are available.'}
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Create Report Modal */}
+      {showCreateModal && (
+        <div className="modal">
+          <div className="modal-overlay" onClick={() => setShowCreateModal(false)}></div>
+          <div className="modal-content max-w-4xl">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                {selectedReport ? 'Edit Report' : 'Create Report'}
+              </h3>
+              <button
+                onClick={() => setShowCreateModal(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+            </div>
+            
+            <form onSubmit={(e) => {
+              e.preventDefault()
+              const formData = new FormData(e.target as HTMLFormElement)
+              const type = formData.get('type') as string
+              
+              // Build parameters object based on type
+              let parameters: any = {}
+              if (type === 'EVENT_SUMMARY') {
+                parameters = {
+                  eventId: formData.get('eventId'),
+                  includeContests: formData.get('includeContests') === 'on',
+                  includeParticipants: formData.get('includeParticipants') === 'on'
+                }
+              } else if (type === 'CONTEST_RESULTS') {
+                parameters = {
+                  eventId: formData.get('eventId'),
+                  contestId: formData.get('contestId'),
+                  categoryId: formData.get('categoryId'),
+                  includeScores: formData.get('includeScores') === 'on',
+                  includeRankings: formData.get('includeRankings') === 'on'
+                }
+              } else if (type === 'JUDGE_PERFORMANCE') {
+                parameters = {
+                  eventId: formData.get('eventId'),
+                  judgeId: formData.get('judgeId'),
+                  includeHistory: formData.get('includeHistory') === 'on',
+                  includeStatistics: formData.get('includeStatistics') === 'on'
+                }
+              } else if (type === 'SYSTEM_ANALYTICS') {
+                parameters = {
+                  startDate: formData.get('startDate'),
+                  endDate: formData.get('endDate'),
+                  includeUserActivity: formData.get('includeUserActivity') === 'on',
+                  includeSystemPerformance: formData.get('includeSystemPerformance') === 'on'
+                }
+              } else if (type === 'CUSTOM') {
+                try {
+                  parameters = JSON.parse(formData.get('customParameters') as string || '{}')
+                } catch (e) {
+                  alert('Invalid JSON in custom parameters')
+                  return
+                }
+              }
+              
+              const reportData: CreateReportData = {
+                name: formData.get('name') as string,
+                type: type,
+                description: formData.get('description') as string,
+                parameters: parameters,
+                isPublic: formData.get('isPublic') === 'on'
+              }
+              
+              if (selectedReport) {
+                // Update existing report
+                // updateReportMutation.mutate({ id: selectedReport.id, data: reportData })
+              } else {
+                handleCreateReport(reportData)
+              }
+            }}>
+              <div className="space-y-6">
+                {/* Basic Information */}
+                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                  <h4 className="font-semibold text-gray-900 dark:text-white mb-4">Basic Information</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="label">Name</label>
+                      <input name="name" type="text" className="input" defaultValue={selectedReport?.name} required />
+                    </div>
+                    <div>
+                      <label className="label">Type</label>
+                      <select name="type" className="input" defaultValue={selectedReport?.type} required>
+                        <option value="">Select Type</option>
+                        <option value="EVENT_SUMMARY">Event Summary</option>
+                        <option value="CONTEST_RESULTS">Contest Results</option>
+                        <option value="JUDGE_PERFORMANCE">Judge Performance</option>
+                        <option value="SYSTEM_ANALYTICS">System Analytics</option>
+                        <option value="CUSTOM">Custom</option>
+                      </select>
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="label">Description</label>
+                      <textarea name="description" rows={3} className="input" defaultValue={selectedReport?.description} />
+                    </div>
+                    <div className="flex items-center">
+                      <input
+                        name="isPublic"
+                        type="checkbox"
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        defaultChecked={selectedReport?.isPublic}
+                      />
+                      <label className="ml-2 text-sm text-gray-700 dark:text-gray-300">
+                        Public report
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Report Parameters */}
+                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                  <h4 className="font-semibold text-gray-900 dark:text-white mb-4">Report Parameters</h4>
+                  {getReportParametersForm(selectedReport?.type || 'EVENT_SUMMARY')}
+                </div>
+              </div>
+              
+              <div className="flex items-center justify-end space-x-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateModal(false)}
+                  className="btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={createReportMutation.isLoading}
+                  className="btn-primary"
+                >
+                  {createReportMutation.isLoading ? 'Creating...' : selectedReport ? 'Update Report' : 'Create Report'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Template Selection Modal */}
+      {showTemplateModal && (
+        <div className="modal">
+          <div className="modal-overlay" onClick={() => setShowTemplateModal(false)}></div>
+          <div className="modal-content max-w-4xl">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Create Report from Template
+              </h3>
+              <button
+                onClick={() => setShowTemplateModal(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              {templates && templates.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {templates.map((template: ReportTemplate) => (
+                    <div
+                      key={template.id}
+                      className="border rounded-lg p-4 bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow cursor-pointer"
+                      onClick={() => handleCreateFromTemplate(template)}
+                    >
+                      <div className="flex items-center space-x-3 mb-3">
+                        {getReportTypeIcon(template.type)}
+                        <div>
+                          <h4 className="font-medium text-gray-900 dark:text-white">
+                            {template.name}
+                          </h4>
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getReportTypeColor(template.type)}`}>
+                            {template.type.replace('_', ' ')}
+                          </span>
+                        </div>
+                      </div>
+                      {template.description && (
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                          {template.description}
+                        </p>
+                      )}
+                      <div className="text-xs text-gray-500 dark:text-gray-400">
+                        Created: {new Date(template.createdAt).toLocaleDateString()}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <DocumentDuplicateIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                    No Templates Available
+                  </h3>
+                  <p className="text-gray-600 dark:text-gray-400">
+                    No report templates are available.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Email Report Modal */}
+      {showEmailModal && selectedReport && (
+        <div className="modal">
+          <div className="modal-overlay" onClick={() => setShowEmailModal(false)}></div>
+          <div className="modal-content">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Email Report
+              </h3>
+              <button
+                onClick={() => setShowEmailModal(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="label">Recipients</label>
+                <input
+                  type="text"
+                  value={emailRecipients}
+                  onChange={(e) => setEmailRecipients(e.target.value)}
+                  className="input"
+                  placeholder="email1@example.com, email2@example.com"
+                  required
+                />
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                  Separate multiple email addresses with commas
+                </p>
+              </div>
+              <div>
+                <label className="label">Subject</label>
+                <input
+                  type="text"
+                  value={emailSubject}
+                  onChange={(e) => setEmailSubject(e.target.value)}
+                  className="input"
+                  defaultValue={`Report: ${selectedReport.name}`}
+                  required
+                />
+              </div>
+              <div>
+                <label className="label">Message</label>
+                <textarea
+                  value={emailMessage}
+                  onChange={(e) => setEmailMessage(e.target.value)}
+                  rows={4}
+                  className="input"
+                  placeholder="Optional message to include with the report..."
+                />
+              </div>
+            </div>
+            
+            <div className="flex items-center justify-end space-x-3 mt-6">
+              <button
+                type="button"
+                onClick={() => setShowEmailModal(false)}
+                className="btn-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleEmailReport}
+                disabled={emailReportMutation.isLoading || !emailRecipients || !emailSubject}
+                className="btn-primary"
+              >
+                {emailReportMutation.isLoading ? 'Sending...' : 'Send Email'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default ReportsPage
 EOF
-    # Install dependencies with proper error handling
-    print_status "Installing frontend dependencies..."
+
+    # Create CountdownTimer component for timed criteria
+    cat > "$APP_DIR/frontend/src/components/CountdownTimer.tsx" << 'EOF'
+import React, { useState, useEffect, useRef } from 'react'
+import {
+  ClockIcon,
+  PlayIcon,
+  PauseIcon,
+  StopIcon,
+  ExclamationTriangleIcon,
+  CheckCircleIcon
+} from '@heroicons/react/24/outline'
+
+interface CountdownTimerProps {
+  timeLimit: number // in seconds
+  onTimeUp?: () => void
+  onTimeWarning?: () => void
+  warningThreshold?: number // seconds before time up to show warning
+  autoStart?: boolean
+  showControls?: boolean
+  className?: string
+}
+
+const CountdownTimer: React.FC<CountdownTimerProps> = ({
+  timeLimit,
+  onTimeUp,
+  onTimeWarning,
+  warningThreshold = 30,
+  autoStart = false,
+  showControls = true,
+  className = ''
+}) => {
+  const [timeLeft, setTimeLeft] = useState<number>(timeLimit)
+  const [isRunning, setIsRunning] = useState<boolean>(autoStart)
+  const [isPaused, setIsPaused] = useState<boolean>(false)
+  const [hasStarted, setHasStarted] = useState<boolean>(false)
+  const [isTimeUp, setIsTimeUp] = useState<boolean>(false)
+  const [hasWarned, setHasWarned] = useState<boolean>(false)
+  const intervalRef = useRef<NodeJS.Timeout | null>(null)
+
+  useEffect(() => {
+    if (isRunning && !isPaused && timeLeft > 0) {
+      intervalRef.current = setInterval(() => {
+        setTimeLeft((prev) => {
+          const newTime = prev - 1
+          
+          // Check for warning
+          if (newTime <= warningThreshold && !hasWarned) {
+            setHasWarned(true)
+            onTimeWarning?.()
+          }
+          
+          // Check for time up
+          if (newTime <= 0) {
+            setIsTimeUp(true)
+            setIsRunning(false)
+            onTimeUp?.()
+            return 0
+          }
+          
+          return newTime
+        })
+      }, 1000)
+    } else {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+        intervalRef.current = null
+      }
+    }
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+      }
+    }
+  }, [isRunning, isPaused, timeLeft, warningThreshold, hasWarned, onTimeUp, onTimeWarning])
+
+  const formatTime = (seconds: number): string => {
+    const minutes = Math.floor(seconds / 60)
+    const remainingSeconds = seconds % 60
+    return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`
+  }
+
+  const handleStart = () => {
+    if (!hasStarted) {
+      setHasStarted(true)
+    }
+    setIsRunning(true)
+    setIsPaused(false)
+  }
+
+  const handlePause = () => {
+    setIsRunning(false)
+    setIsPaused(true)
+  }
+
+  const handleResume = () => {
+    setIsRunning(true)
+    setIsPaused(false)
+  }
+
+  const handleStop = () => {
+    setIsRunning(false)
+    setIsPaused(false)
+    setTimeLeft(timeLimit)
+    setHasStarted(false)
+    setIsTimeUp(false)
+    setHasWarned(false)
+  }
+
+  const handleReset = () => {
+    setTimeLeft(timeLimit)
+    setIsRunning(false)
+    setIsPaused(false)
+    setHasStarted(false)
+    setIsTimeUp(false)
+    setHasWarned(false)
+  }
+
+  const getTimerColor = (): string => {
+    if (isTimeUp) return 'text-red-600 dark:text-red-400'
+    if (timeLeft <= warningThreshold) return 'text-yellow-600 dark:text-yellow-400'
+    return 'text-green-600 dark:text-green-400'
+  }
+
+  const getTimerBgColor = (): string => {
+    if (isTimeUp) return 'bg-red-100 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+    if (timeLeft <= warningThreshold) return 'bg-yellow-100 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800'
+    return 'bg-green-100 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+  }
+
+  const getStatusIcon = () => {
+    if (isTimeUp) return <ExclamationTriangleIcon className="h-5 w-5 text-red-500" />
+    if (timeLeft <= warningThreshold) return <ExclamationTriangleIcon className="h-5 w-5 text-yellow-500" />
+    if (isRunning) return <PlayIcon className="h-5 w-5 text-green-500" />
+    if (isPaused) return <PauseIcon className="h-5 w-5 text-yellow-500" />
+    return <ClockIcon className="h-5 w-5 text-gray-500" />
+  }
+
+  const getStatusText = (): string => {
+    if (isTimeUp) return 'Time Up!'
+    if (timeLeft <= warningThreshold) return 'Time Warning'
+    if (isRunning) return 'Running'
+    if (isPaused) return 'Paused'
+    if (hasStarted) return 'Stopped'
+    return 'Ready'
+  }
+
+  return (
+    <div className={`border rounded-lg p-4 ${getTimerBgColor()} ${className}`}>
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center space-x-2">
+          <ClockIcon className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+          <h3 className="font-medium text-gray-900 dark:text-white">Timer</h3>
+        </div>
+        <div className="flex items-center space-x-2">
+          {getStatusIcon()}
+          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+            {getStatusText()}
+          </span>
+        </div>
+      </div>
+
+      <div className="text-center mb-4">
+        <div className={`text-4xl font-mono font-bold ${getTimerColor()}`}>
+          {formatTime(timeLeft)}
+        </div>
+        <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+          {isTimeUp ? 'Time has expired' : `${timeLeft} seconds remaining`}
+        </div>
+      </div>
+
+      {/* Progress Bar */}
+      <div className="mb-4">
+        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+          <div
+            className={`h-2 rounded-full transition-all duration-1000 ${
+              isTimeUp ? 'bg-red-500' : timeLeft <= warningThreshold ? 'bg-yellow-500' : 'bg-green-500'
+            }`}
+            style={{ width: `${((timeLimit - timeLeft) / timeLimit) * 100}%` }}
+          />
+        </div>
+        <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-1">
+          <span>0:00</span>
+          <span>{formatTime(timeLimit)}</span>
+        </div>
+      </div>
+
+      {/* Controls */}
+      {showControls && (
+        <div className="flex items-center justify-center space-x-2">
+          {!hasStarted || (!isRunning && !isPaused) ? (
+            <button
+              onClick={handleStart}
+              className="flex items-center space-x-1 px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+            >
+              <PlayIcon className="h-4 w-4" />
+              <span>Start</span>
+            </button>
+          ) : isRunning ? (
+            <button
+              onClick={handlePause}
+              className="flex items-center space-x-1 px-3 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700 transition-colors"
+            >
+              <PauseIcon className="h-4 w-4" />
+              <span>Pause</span>
+            </button>
+          ) : (
+            <button
+              onClick={handleResume}
+              className="flex items-center space-x-1 px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+            >
+              <PlayIcon className="h-4 w-4" />
+              <span>Resume</span>
+            </button>
+          )}
+
+          {(hasStarted || isRunning || isPaused) && (
+            <button
+              onClick={handleStop}
+              className="flex items-center space-x-1 px-3 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+            >
+              <StopIcon className="h-4 w-4" />
+              <span>Stop</span>
+            </button>
+          )}
+
+          <button
+            onClick={handleReset}
+            className="flex items-center space-x-1 px-3 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors"
+          >
+            <ClockIcon className="h-4 w-4" />
+            <span>Reset</span>
+          </button>
+        </div>
+      )}
+
+      {/* Time Up Message */}
+      {isTimeUp && (
+        <div className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+          <div className="flex items-center space-x-2">
+            <ExclamationTriangleIcon className="h-5 w-5 text-red-600 dark:text-red-400" />
+            <span className="text-sm font-medium text-red-700 dark:text-red-300">
+              Time limit reached! Please submit your scores.
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Warning Message */}
+      {timeLeft <= warningThreshold && !isTimeUp && (
+        <div className="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+          <div className="flex items-center space-x-2">
+            <ExclamationTriangleIcon className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+            <span className="text-sm font-medium text-yellow-700 dark:text-yellow-300">
+              {timeLeft <= 10 
+                ? `Only ${timeLeft} seconds remaining!` 
+                : `${timeLeft} seconds remaining - time is running out!`}
+            </span>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default CountdownTimer
+EOF
+
+    # Update ScoringPage with countdown timer for timed criteria
+    cat > "$APP_DIR/frontend/src/pages/ScoringPage.tsx" << 'EOF'
+import React, { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from 'react-query'
+import { scoringAPI } from '../services/api'
+import { useAuth } from '../contexts/AuthContext'
+import CountdownTimer from '../components/CountdownTimer'
+import {
+  StarIcon,
+  CheckCircleIcon,
+  XCircleIcon,
+  ClockIcon,
+  UserIcon,
+  TrophyIcon,
+  MagnifyingGlassIcon,
+  FunnelIcon,
+  DocumentCheckIcon,
+  ExclamationTriangleIcon,
+  PencilIcon,
+  TrashIcon,
+  PlayIcon,
+  PauseIcon,
+  StopIcon
+} from '@heroicons/react/24/outline'
+import { format } from 'date-fns'
+
+interface Score {
+  id: string
+  score: number
+  comment?: string
+  createdAt: string
+  updatedAt: string
+  judge: {
+    id: string
+    name: string
+    email: string
+  }
+  contestant: {
+    id: string
+    name: string
+    email: string
+  }
+  criterion: {
+    id: string
+    name: string
+    maxScore: number
+    timeLimit?: number
+  }
+  category: {
+    id: string
+    name: string
+    maxScore: number
+  }
+}
+
+interface Category {
+  id: string
+  name: string
+  description: string
+  maxScore: number
+  criteria: Criterion[]
+}
+
+interface Criterion {
+  id: string
+  name: string
+  description: string
+  maxScore: number
+  minScore?: number
+  timeLimit?: number
+  isRequired: boolean
+  order: number
+}
+
+interface Contestant {
+  id: string
+  name: string
+  email: string
+  contestantNumber?: string
+}
+
+interface Judge {
+  id: string
+  name: string
+  email: string
+}
+
+const ScoringPage: React.FC = () => {
+  const { user } = useAuth()
+  const queryClient = useQueryClient()
+  const [selectedCategory, setSelectedCategory] = useState<string>('')
+  const [selectedContestant, setSelectedContestant] = useState<string>('')
+  const [selectedCriterion, setSelectedCriterion] = useState<string>('')
+  const [searchTerm, setSearchTerm] = useState('')
+  const [showScoreModal, setShowScoreModal] = useState(false)
+  const [editingScore, setEditingScore] = useState<Score | null>(null)
+  const [activeTimer, setActiveTimer] = useState<string | null>(null)
+  const [timerWarnings, setTimerWarnings] = useState<Set<string>>(new Set())
+
+  const { data: categories, isLoading: categoriesLoading } = useQuery(
+    'categories',
+    () => scoringAPI.getCategories().then(res => res.data),
+    {
+      enabled: user?.role === 'JUDGE',
+    }
+  )
+
+  const { data: scores, isLoading: scoresLoading } = useQuery(
+    ['scores', selectedCategory, selectedContestant],
+    () => scoringAPI.getScores(selectedCategory, selectedContestant).then(res => res.data),
+    {
+      enabled: !!selectedCategory && !!selectedContestant,
+    }
+  )
+
+  const submitScoreMutation = useMutation(
+    (scoreData: any) => scoringAPI.submitScore(scoreData),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries(['scores', selectedCategory, selectedContestant])
+        setShowScoreModal(false)
+        setEditingScore(null)
+      },
+    }
+  )
+
+  const updateScoreMutation = useMutation(
+    ({ id, data }: { id: string; data: any }) => scoringAPI.updateScore(id, data),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries(['scores', selectedCategory, selectedContestant])
+        setShowScoreModal(false)
+        setEditingScore(null)
+      },
+    }
+  )
+
+  const deleteScoreMutation = useMutation(
+    (id: string) => scoringAPI.deleteScore(id),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries(['scores', selectedCategory, selectedContestant])
+      },
+    }
+  )
+
+  const filteredCategories = categories?.filter((category: Category) =>
+    category.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    category.description.toLowerCase().includes(searchTerm.toLowerCase())
+  ) || []
+
+  const selectedCategoryData = categories?.find((cat: Category) => cat.id === selectedCategory)
+  const selectedContestantData = selectedCategoryData?.criteria?.find((criterion: Criterion) => criterion.id === selectedContestant)
+
+  const calculateTotalScore = (scores: Score[]): number => {
+    return scores.reduce((total, score) => total + score.score, 0)
+  }
+
+  const calculateAverageScore = (scores: Score[]): number => {
+    if (scores.length === 0) return 0
+    return calculateTotalScore(scores) / scores.length
+  }
+
+  const handleTimerStart = (criterionId: string) => {
+    setActiveTimer(criterionId)
+  }
+
+  const handleTimerWarning = (criterionId: string) => {
+    setTimerWarnings(prev => new Set([...prev, criterionId]))
+  }
+
+  const handleTimerTimeUp = (criterionId: string) => {
+    setActiveTimer(null)
+    setTimerWarnings(prev => {
+      const newSet = new Set(prev)
+      newSet.delete(criterionId)
+      return newSet
+    })
     
-    # Use the enhanced npm install function
-    if ! safe_npm_install "$APP_DIR/frontend" "frontend"; then
-        print_error "Failed to install frontend dependencies"
-        return 1
-    fi
-    
-    # Fix frontend binary permissions
-    if [[ -d "$APP_DIR/frontend/node_modules/.bin" ]]; then
-        chmod +x "$APP_DIR/frontend/node_modules/.bin"/*
-        print_status "Fixed frontend binary permissions"
-    fi
-    
-    # Fix esbuild binary permissions specifically
-    if [[ -d "$APP_DIR/frontend/node_modules/@esbuild" ]]; then
-        find "$APP_DIR/frontend/node_modules/@esbuild" -name "esbuild" -type f -exec chmod +x {} \;
-        print_status "Fixed esbuild binary permissions"
-    fi
-    
-    # Fix all binary files in node_modules
-    find "$APP_DIR/frontend/node_modules" -name "*.bin" -type f -exec chmod +x {} \; 2>/dev/null || true
-    find "$APP_DIR/frontend/node_modules" -name "esbuild" -type f -exec chmod +x {} \; 2>/dev/null || true
-    print_status "Fixed all frontend binary permissions"
-    
-    # Build with explicit environment variable verification
-    print_status "Building frontend with environment variables..."
-    print_status "Current VITE_API_URL: $(grep VITE_API_URL .env | cut -d'=' -f2)"
-    print_status "Current VITE_WS_URL: $(grep VITE_WS_URL .env | cut -d'=' -f2)"
-    
-    # Check Node.js version and use appropriate build method
-    NODE_VERSION=$(node --version | cut -d'v' -f2 | cut -d'.' -f1)
-    print_status "Node.js version detected: $NODE_VERSION"
-    
-    # First, run TypeScript compilation check
-    print_status "Running TypeScript compilation check..."
-    if ! npx tsc --noEmit; then
-        print_warning "TypeScript compilation failed. Attempting to fix errors..."
-        fix_typescript_errors
-        
-        # Try TypeScript check again
-        print_status "Re-running TypeScript compilation check..."
-        if ! npx tsc --noEmit; then
-            print_error "TypeScript compilation still failing after fixes"
-            print_status "Proceeding with build anyway (errors may be non-critical)..."
-        else
-            print_success "TypeScript compilation check passed after fixes"
-        fi
-    else
-        print_success "TypeScript compilation check passed"
-    fi
-    
-    if [ "$NODE_VERSION" -lt 14 ]; then
-        print_warning "Node.js version $NODE_VERSION is too old. Using legacy build method..."
-        # Use legacy build without modern syntax
-        npm run build --legacy-peer-deps
-    else
-        print_status "Using modern build method..."
-        # Force rebuild with clean environment and proper permissions
-        VITE_API_URL=$(grep VITE_API_URL .env | cut -d'=' -f2) \
-        VITE_WS_URL=$(grep VITE_WS_URL .env | cut -d'=' -f2) \
-        VITE_APP_NAME="Event Manager" \
-        VITE_APP_VERSION="1.0.0" \
-        VITE_APP_URL="$APP_URL" \
-        npm run build --legacy-peer-deps
-    fi
-    
-    # If build fails, try alternative approach
-    if [ $? -ne 0 ]; then
-        print_warning "Standard build failed, trying alternative approach..."
-        # Remove node_modules and reinstall completely with better error handling
-        rm -rf node_modules package-lock.json
-        print_status "Reinstalling with enhanced compatibility fixes..."
-        
-        # Try multiple installation strategies
-        if ! npm install --legacy-peer-deps --force --no-optional; then
-            print_warning "First retry failed, trying without optional dependencies..."
-            npm install --legacy-peer-deps --force --no-optional --ignore-scripts || {
-                print_error "All installation attempts failed. Please check Node.js version compatibility."
-                return 1
+    // Show notification or auto-submit if needed
+    alert(`Time limit reached for criterion: ${selectedCategoryData?.criteria.find(c => c.id === criterionId)?.name}`)
+  }
+
+  const getCriterionStatus = (criterion: Criterion): 'not-started' | 'in-progress' | 'completed' | 'time-up' => {
+    const score = scores?.find((s: Score) => s.criterion.id === criterion.id)
+    if (score) return 'completed'
+    if (activeTimer === criterion.id) return 'in-progress'
+    if (timerWarnings.has(criterion.id)) return 'time-up'
+    return 'not-started'
+  }
+
+  const getCriterionIcon = (criterion: Criterion) => {
+    const status = getCriterionStatus(criterion)
+    switch (status) {
+      case 'completed':
+        return <CheckCircleIcon className="h-5 w-5 text-green-500" />
+      case 'in-progress':
+        return <PlayIcon className="h-5 w-5 text-blue-500" />
+      case 'time-up':
+        return <ExclamationTriangleIcon className="h-5 w-5 text-red-500" />
+      default:
+        return <ClockIcon className="h-5 w-5 text-gray-400" />
+    }
+  }
+
+  const getCriterionColor = (criterion: Criterion): string => {
+    const status = getCriterionStatus(criterion)
+    switch (status) {
+      case 'completed':
+        return 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+      case 'in-progress':
+        return 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
+      case 'time-up':
+        return 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+      default:
+        return 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700'
+    }
+  }
+
+  if (user?.role !== 'JUDGE') {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <XCircleIcon className="h-12 w-12 text-red-500 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+            Access Denied
+          </h3>
+          <p className="text-gray-600 dark:text-gray-400">
+            You need to be a judge to access the scoring interface.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+            Scoring Interface
+          </h1>
+          <p className="text-gray-600 dark:text-gray-400">
+            Score contestants for each criterion
+          </p>
+        </div>
+      </div>
+
+      {/* Category Selection */}
+      <div className="card">
+        <div className="card-header">
+          <h3 className="card-title">Select Category</h3>
+        </div>
+        <div className="card-content">
+          <div className="mb-4">
+            <div className="relative">
+              <MagnifyingGlassIcon className="h-5 w-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search categories..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="input pl-10"
+              />
+            </div>
+          </div>
+          
+          {categoriesLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="loading-spinner"></div>
+            </div>
+          ) : filteredCategories.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredCategories.map((category: Category) => (
+                <div
+                  key={category.id}
+                  onClick={() => setSelectedCategory(category.id)}
+                  className={`p-4 border rounded-lg cursor-pointer transition-colors ${
+                    selectedCategory === category.id
+                      ? 'bg-primary text-white border-primary'
+                      : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-primary'
+                  }`}
+                >
+                  <h4 className="font-medium mb-2">{category.name}</h4>
+                  <p className="text-sm opacity-75">{category.description}</p>
+                  <div className="mt-2 text-sm">
+                    <span className="font-medium">Max Score:</span> {category.maxScore}
+                  </div>
+                  <div className="text-sm">
+                    <span className="font-medium">Criteria:</span> {category.criteria.length}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+              <TrophyIcon className="h-12 w-12 mx-auto mb-4 text-gray-300 dark:text-gray-600" />
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                No categories found
+              </h3>
+              <p>Try adjusting your search criteria.</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Contestant Selection */}
+      {selectedCategory && (
+        <div className="card">
+          <div className="card-header">
+            <h3 className="card-title">Select Contestant</h3>
+          </div>
+          <div className="card-content">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {/* Contestants would be loaded here */}
+              <div className="p-4 border rounded-lg bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700">
+                <h4 className="font-medium mb-2">Sample Contestant</h4>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Contestant #001</p>
+                <button
+                  onClick={() => setSelectedContestant('sample-contestant')}
+                  className="mt-2 btn btn-primary btn-sm"
+                >
+                  Select
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Scoring Interface */}
+      {selectedCategory && selectedContestant && (
+        <div className="space-y-6">
+          {/* Timer Section */}
+          {selectedCategoryData?.criteria.some(c => c.timeLimit) && (
+            <div className="card">
+              <div className="card-header">
+                <h3 className="card-title">Timed Criteria</h3>
+              </div>
+              <div className="card-content">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {selectedCategoryData.criteria
+                    .filter(criterion => criterion.timeLimit)
+                    .map((criterion) => (
+                    <div key={criterion.id} className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-medium text-gray-900 dark:text-white">
+                          {criterion.name}
+                        </h4>
+                        <span className="text-sm text-gray-500 dark:text-gray-400">
+                          {criterion.timeLimit}s limit
+                        </span>
+                      </div>
+                      <CountdownTimer
+                        timeLimit={criterion.timeLimit || 300}
+                        onTimeUp={() => handleTimerTimeUp(criterion.id)}
+                        onTimeWarning={() => handleTimerWarning(criterion.id)}
+                        warningThreshold={30}
+                        autoStart={false}
+                        showControls={true}
+                        className="w-full"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Criteria List */}
+          <div className="card">
+            <div className="card-header">
+              <h3 className="card-title">Scoring Criteria</h3>
+            </div>
+            <div className="card-content">
+              {scoresLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="loading-spinner"></div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Score Summary */}
+                  {scores && scores.length > 0 && (
+                    <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
+                        <div>
+                          <div className="text-2xl font-bold text-primary">
+                            {calculateTotalScore(scores)}
+                          </div>
+                          <div className="text-sm text-gray-600 dark:text-gray-400">Total Score</div>
+                        </div>
+                        <div>
+                          <div className="text-2xl font-bold text-primary">
+                            {calculateAverageScore(scores).toFixed(1)}
+                          </div>
+                          <div className="text-sm text-gray-600 dark:text-gray-400">Average Score</div>
+                        </div>
+                        <div>
+                          <div className="text-2xl font-bold text-primary">
+                            {scores.length}
+                          </div>
+                          <div className="text-sm text-gray-600 dark:text-gray-400">Criteria Scored</div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Criteria List */}
+                  <div className="space-y-3">
+                    {selectedCategoryData?.criteria.map((criterion) => {
+                      const score = scores?.find((s: Score) => s.criterion.id === criterion.id)
+                      const status = getCriterionStatus(criterion)
+                      
+                      return (
+                        <div
+                          key={criterion.id}
+                          className={`border rounded-lg p-4 transition-colors ${getCriterionColor(criterion)}`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-3">
+                              {getCriterionIcon(criterion)}
+                              <div>
+                                <h4 className="font-medium text-gray-900 dark:text-white">
+                                  {criterion.name}
+                                  {criterion.isRequired && (
+                                    <span className="ml-2 text-xs bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200 px-2 py-1 rounded">
+                                      Required
+                                    </span>
+                                  )}
+                                </h4>
+                                <p className="text-sm text-gray-600 dark:text-gray-400">
+                                  {criterion.description}
+                                </p>
+                                <div className="flex items-center space-x-4 mt-1">
+                                  <span className="text-sm text-gray-500 dark:text-gray-400">
+                                    Max: {criterion.maxScore}
+                                    {criterion.minScore && `, Min: ${criterion.minScore}`}
+                                  </span>
+                                  {criterion.timeLimit && (
+                                    <span className="text-sm text-gray-500 dark:text-gray-400">
+                                      Time: {criterion.timeLimit}s
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center space-x-4">
+                              {score ? (
+                                <div className="text-right">
+                                  <div className="text-lg font-semibold text-gray-900 dark:text-white">
+                                    {score.score}/{criterion.maxScore}
+                                  </div>
+                                  <div className="text-sm text-gray-500 dark:text-gray-400">
+                                    {format(new Date(score.createdAt), 'MMM dd, yyyy HH:mm')}
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="text-right">
+                                  <div className="text-sm text-gray-500 dark:text-gray-400">
+                                    Not scored
+                                  </div>
+                                </div>
+                              )}
+                              <div className="flex items-center space-x-2">
+                                {score ? (
+                                  <>
+                                    <button
+                                      onClick={() => {
+                                        setEditingScore(score)
+                                        setShowScoreModal(true)
+                                      }}
+                                      className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
+                                    >
+                                      <PencilIcon className="h-5 w-5" />
+                                    </button>
+                                    <button
+                                      onClick={() => deleteScoreMutation.mutate(score.id)}
+                                      className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+                                    >
+                                      <TrashIcon className="h-5 w-5" />
+                                    </button>
+                                  </>
+                                ) : (
+                                  <button
+                                    onClick={() => {
+                                      setSelectedCriterion(criterion.id)
+                                      setShowScoreModal(true)
+                                    }}
+                                    className="btn btn-primary btn-sm"
+                                  >
+                                    <StarIcon className="h-4 w-4 mr-1" />
+                                    Score
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Score Modal */}
+      {showScoreModal && (
+        <ScoreModal
+          score={editingScore}
+          categoryId={selectedCategory}
+          contestantId={selectedContestant}
+          criterionId={selectedCriterion}
+          onClose={() => {
+            setShowScoreModal(false)
+            setEditingScore(null)
+            setSelectedCriterion('')
+          }}
+          onSave={(data) => {
+            if (editingScore) {
+              updateScoreMutation.mutate({ id: editingScore.id, data })
+            } else {
+              submitScoreMutation.mutate(data)
             }
-        fi
-        
-        # Fix permissions after installation
-        chmod -R 755 node_modules 2>/dev/null || true
-        find node_modules -name "esbuild" -type f -exec chmod +x {} \; 2>/dev/null || true
-        find node_modules -name "vite" -type f -exec chmod +x {} \; 2>/dev/null || true
-        
-        # Try build again
-        VITE_API_URL=$(grep VITE_API_URL .env | cut -d'=' -f2) \
-        VITE_WS_URL=$(grep VITE_WS_URL .env | cut -d'=' -f2) \
-        VITE_APP_NAME="Event Manager" \
-        VITE_APP_VERSION="1.0.0" \
-        VITE_APP_URL="$APP_URL" \
-        npm run build --legacy-peer-deps
-    fi
-    
-    # Verify build was successful
-    if [ -d "dist" ]; then
-        print_success "Frontend build completed successfully"
-        
-        # Check if the built files contain the correct environment variables
-        print_status "Verifying environment variables in built files..."
-        if grep -r "VITE_API_URL" dist/ > /dev/null 2>&1; then
-            print_success "Environment variables found in built files"
-        else
-            print_warning "Environment variables not found in built files - using defaults"
-        fi
-        
-        # Ensure environment variables are still available after build
-        if [ -f ".env" ]; then
-            print_status "Frontend environment preserved after build:"
-            cat .env | grep VITE_ | sed 's/^/  /'
-        else
-            print_error "Frontend .env file missing after build!"
-        fi
-    else
-        print_error "Frontend build failed - dist directory not found"
-        return 1
-    fi
-    
-    print_success "Comprehensive frontend built successfully"
-    
-    # Fix modal visibility and centering issues
-    fix_modal_visibility
-    
-    # API endpoints are handled by modular routes - no need to fix
+          }}
+          isLoading={submitScoreMutation.isLoading || updateScoreMutation.isLoading}
+        />
+      )}
+    </div>
+  )
 }
 
-# Force rebuild frontend with clean environment
-rebuild_frontend() {
-    print_status "Force rebuilding frontend with clean environment..."
-    
-    cd "$APP_DIR/frontend"
-    
-    # Ensure environment file exists
-    if [ ! -f ".env" ]; then
-        print_error "Frontend .env file not found! Creating default environment..."
-        cat > ".env" << EOF
-# Frontend Environment Configuration
-VITE_API_URL=
-VITE_WS_URL=
-VITE_APP_NAME=Event Manager
-VITE_APP_VERSION=1.0.0
-VITE_APP_URL=$APP_URL
+// Score Modal Component
+interface ScoreModalProps {
+  score: Score | null
+  categoryId: string
+  contestantId: string
+  criterionId?: string
+  onClose: () => void
+  onSave: (data: any) => void
+  isLoading: boolean
+}
+
+const ScoreModal: React.FC<ScoreModalProps> = ({
+  score,
+  categoryId,
+  contestantId,
+  criterionId,
+  onClose,
+  onSave,
+  isLoading
+}) => {
+  const [formData, setFormData] = useState({
+    score: score?.score || 0,
+    comment: score?.comment || '',
+  })
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    onSave({
+      categoryId,
+      contestantId,
+      criterionId,
+      ...formData,
+    })
+  }
+
+  return (
+    <div className="modal">
+      <div className="modal-overlay" onClick={onClose}></div>
+      <div className="modal-content">
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+            {score ? 'Edit Score' : 'Add Score'}
+          </h3>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+          >
+            <XCircleIcon className="h-6 w-6" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit}>
+          <div className="space-y-4">
+            <div>
+              <label className="label">Score</label>
+              <input
+                type="number"
+                value={formData.score}
+                onChange={(e) => setFormData({ ...formData, score: Number(e.target.value) })}
+                className="input"
+                min="0"
+                max="100"
+                required
+              />
+            </div>
+            <div>
+              <label className="label">Comment</label>
+              <textarea
+                value={formData.comment}
+                onChange={(e) => setFormData({ ...formData, comment: e.target.value })}
+                rows={3}
+                className="input"
+                placeholder="Optional comment..."
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end space-x-3 mt-6">
+            <button
+              type="button"
+              onClick={onClose}
+              className="btn btn-secondary"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="btn btn-primary"
+            >
+              {isLoading ? 'Saving...' : score ? 'Update Score' : 'Save Score'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+export default ScoringPage
 EOF
-    fi
-    
-    # Clean everything
-    print_status "Cleaning all build artifacts and caches..."
-    rm -rf dist
-    rm -rf node_modules/.vite
-    rm -rf node_modules/.cache
-    
-    # Fix permissions on node_modules if they exist
-    if [ -d "node_modules" ]; then
-        print_status "Fixing node_modules permissions..."
-        chmod -R 755 node_modules
-        # Make esbuild binary executable
-        if [ -f "node_modules/@esbuild/linux-x64/bin/esbuild" ]; then
-            chmod +x node_modules/@esbuild/linux-x64/bin/esbuild
-        fi
-        if [ -f "node_modules/@esbuild/linux-arm64/bin/esbuild" ]; then
-            chmod +x node_modules/@esbuild/linux-arm64/bin/esbuild
-        fi
-    fi
-    
-    npm cache clean --force
-    
-    # Reinstall dependencies with proper permissions
-    print_status "Reinstalling dependencies with proper permissions..."
-    npm install --legacy-peer-deps --force
-    
-    # Fix permissions after npm install
-    print_status "Setting correct permissions on installed packages..."
-    chmod -R 755 node_modules
-    # Make all binary files executable
-    find node_modules -name "*.bin" -type d -exec chmod -R 755 {} \;
-    find node_modules -name "esbuild" -type f -exec chmod +x {} \;
-    find node_modules -name "vite" -type f -exec chmod +x {} \;
-    
-    # Clear TypeScript build cache to ensure fresh compilation
-    print_status "Clearing TypeScript build cache..."
-    rm -f "$APP_DIR/frontend/tsconfig.tsbuildinfo"
-    rm -rf "$APP_DIR/frontend/node_modules/.cache"
-    
-    # Fix Heroicons imports first
-    print_status "Fixing Heroicons imports..."
-    # Components are now generated with correct imports - no fixes needed
-    
-    # Force overwrite API service to ensure getAll() method is available
-    print_status "Force overwriting API service with getAll() method..."
-    
-    # Show current environment
-    print_status "Current frontend environment:"
-    cat .env | grep VITE_ | sed 's/^/  /'
-    
-    # Build with explicit environment
-    print_status "Building with explicit environment variables..."
-    VITE_API_URL=$(grep VITE_API_URL .env | cut -d'=' -f2) \
-    VITE_WS_URL=$(grep VITE_WS_URL .env | cut -d'=' -f2) \
-    VITE_APP_NAME="Event Manager" \
-    VITE_APP_VERSION="1.0.0" \
-    VITE_APP_URL="$APP_URL" \
-    npm run build
-    
-    if [ -d "dist" ]; then
-        print_success "Frontend rebuild completed successfully"
-        print_status "New build files created in dist/"
-        ls -la dist/ | head -10
-    else
-        print_error "Frontend rebuild failed"
-        return 1
-    fi
-    
-    # Fix modal visibility and centering issues
-    fix_modal_visibility
-    
-    # API endpoints are handled by modular routes - no need to fix
+
+    # Update SettingsPage with password policy configuration
+    cat > "$APP_DIR/frontend/src/pages/SettingsPage.tsx" << 'EOF'
+import React, { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from 'react-query'
+import { adminAPI } from '../services/api'
+import { useAuth } from '../contexts/AuthContext'
+import PasswordStrengthMeter from '../components/PasswordStrengthMeter'
+import {
+  CogIcon,
+  ServerIcon,
+  EnvelopeIcon,
+  ShieldCheckIcon,
+  ServerIcon as DatabaseIcon,
+  BellIcon,
+  KeyIcon,
+  GlobeAltIcon,
+  DocumentTextIcon,
+  CloudIcon,
+  ExclamationTriangleIcon,
+  CheckCircleIcon,
+  LockClosedIcon,
+  EyeIcon,
+  EyeSlashIcon,
+  InformationCircleIcon
+} from '@heroicons/react/24/outline'
+
+interface SystemSetting {
+  id: string
+  key: string
+  value: string
+  description: string
+  category: string
+  type: 'string' | 'number' | 'boolean' | 'json'
+  updatedAt: string
+  updatedBy: string
 }
 
-# Verify installation
-verify_installation() {
-    print_status "Verifying installation..."
-    
-    # Check frontend environment
-    if [ -f "$APP_DIR/frontend/.env" ]; then
-        print_success "Frontend environment file exists"
-        print_status "Frontend environment variables:"
-        cat "$APP_DIR/frontend/.env" | grep VITE_ | sed 's/^/  /'
-    else
-        print_error "Frontend environment file missing!"
-        return 1
-    fi
-    
-    # Check frontend build
-    if [ -d "$APP_DIR/frontend/dist" ]; then
-        print_success "Frontend build directory exists"
-    else
-        print_error "Frontend build directory missing!"
-        return 1
-    fi
-    
-    # Check backend environment
-    if [ -f "$APP_DIR/.env" ]; then
-        print_success "Backend environment file exists"
-    else
-        print_error "Backend environment file missing!"
-        return 1
-    fi
-    
-    print_success "Installation verification completed"
+interface PasswordPolicy {
+  minLength: number
+  requireUppercase: boolean
+  requireLowercase: boolean
+  requireNumbers: boolean
+  requireSpecialChars: boolean
+  maxAge: number // days
+  preventReuse: number // number of previous passwords to prevent reuse
+  lockoutAttempts: number
+  lockoutDuration: number // minutes
+}
+
+const SettingsPage: React.FC = () => {
+  const { user } = useAuth()
+  const queryClient = useQueryClient()
+  const [activeTab, setActiveTab] = useState<'general' | 'email' | 'security' | 'database' | 'notifications' | 'backup' | 'password-policy'>('general')
+  const [showTestModal, setShowTestModal] = useState(false)
+  const [testType, setTestType] = useState<'email' | 'database' | 'backup'>('email')
+  const [passwordPolicy, setPasswordPolicy] = useState<PasswordPolicy>({
+    minLength: 8,
+    requireUppercase: true,
+    requireLowercase: true,
+    requireNumbers: true,
+    requireSpecialChars: true,
+    maxAge: 90,
+    preventReuse: 5,
+    lockoutAttempts: 5,
+    lockoutDuration: 30
+  })
+  const [showPasswordPreview, setShowPasswordPreview] = useState(false)
+  const [testPassword, setTestPassword] = useState('')
+
+  const { data: settings, isLoading } = useQuery(
+    'admin-settings',
+    () => adminAPI.getSettings().then(res => res.data),
+    {
+      enabled: user?.role === 'ADMIN' || user?.role === 'BOARD' || user?.role === 'ORGANIZER',
+    }
+  )
+
+  const { data: passwordPolicySettings } = useQuery(
+    'password-policy',
+    () => adminAPI.getPasswordPolicy().then(res => res.data),
+    {
+      enabled: user?.role === 'ADMIN' || user?.role === 'BOARD' || user?.role === 'ORGANIZER',
+      onSuccess: (data) => {
+        if (data) {
+          setPasswordPolicy(data)
+        }
+      }
+    }
+  )
+
+  const updateMutation = useMutation(
+    (data: any) => adminAPI.updateSettings(data),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('admin-settings')
+      },
+    }
+  )
+
+  const updatePasswordPolicyMutation = useMutation(
+    (data: PasswordPolicy) => adminAPI.updatePasswordPolicy(data),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('password-policy')
+      },
+    }
+  )
+
+  const testMutation = useMutation(
+    (type: string) => adminAPI.testConnection(type),
+    {
+      onSuccess: () => {
+        setShowTestModal(false)
+      },
+    }
+  )
+
+  const tabs = [
+    { id: 'general', name: 'General', icon: CogIcon },
+    { id: 'email', name: 'Email', icon: EnvelopeIcon },
+    { id: 'security', name: 'Security', icon: ShieldCheckIcon },
+    { id: 'password-policy', name: 'Password Policy', icon: LockClosedIcon },
+    { id: 'database', name: 'Database', icon: DatabaseIcon },
+    { id: 'notifications', name: 'Notifications', icon: BellIcon },
+    { id: 'backup', name: 'Backup', icon: CloudIcon },
+  ]
+
+  const getSettingsByCategory = (category: string) => {
+    return settings?.filter((setting: SystemSetting) => setting.category === category) || []
+  }
+
+  const handleSettingChange = (key: string, value: string) => {
+    updateMutation.mutate({ [key]: value })
+  }
+
+  const handlePasswordPolicyChange = (field: keyof PasswordPolicy, value: any) => {
+    const updatedPolicy = { ...passwordPolicy, [field]: value }
+    setPasswordPolicy(updatedPolicy)
+    updatePasswordPolicyMutation.mutate(updatedPolicy)
+  }
+
+  const handleTest = (type: 'email' | 'database' | 'backup') => {
+    setTestType(type)
+    setShowTestModal(true)
+    testMutation.mutate(type)
+  }
+
+  const getPasswordStrength = (password: string): number => {
+    let strength = 0
+    if (password.length >= passwordPolicy.minLength) strength += 20
+    if (passwordPolicy.requireUppercase && /[A-Z]/.test(password)) strength += 20
+    if (passwordPolicy.requireLowercase && /[a-z]/.test(password)) strength += 20
+    if (passwordPolicy.requireNumbers && /\d/.test(password)) strength += 20
+    if (passwordPolicy.requireSpecialChars && /[!@#$%^&*(),.?":{}|<>]/.test(password)) strength += 20
+    return strength
+  }
+
+  const getPasswordStrengthText = (strength: number): string => {
+    if (strength < 40) return 'Weak'
+    if (strength < 60) return 'Fair'
+    if (strength < 80) return 'Good'
+    return 'Strong'
+  }
+
+  const getPasswordStrengthColor = (strength: number): string => {
+    if (strength < 40) return 'text-red-600 dark:text-red-400'
+    if (strength < 60) return 'text-yellow-600 dark:text-yellow-400'
+    if (strength < 80) return 'text-blue-600 dark:text-blue-400'
+    return 'text-green-600 dark:text-green-400'
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="loading-spinner"></div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+            System Settings
+          </h1>
+          <p className="text-gray-600 dark:text-gray-400">
+            Configure system-wide settings and policies
+          </p>
+        </div>
+        <div className="flex items-center space-x-3">
+          <button
+            onClick={() => handleTest('email')}
+            className="btn btn-secondary"
+          >
+            <EnvelopeIcon className="h-4 w-4 mr-2" />
+            Test Email
+          </button>
+          <button
+            onClick={() => handleTest('database')}
+            className="btn btn-secondary"
+          >
+            <DatabaseIcon className="h-4 w-4 mr-2" />
+            Test Database
+          </button>
+        </div>
+      </div>
+
+      {/* Tab Navigation */}
+      <div className="border-b border-gray-200 dark:border-gray-700">
+        <nav className="-mb-px flex space-x-8">
+          {tabs.map((tab) => {
+            const Icon = tab.icon
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`flex items-center space-x-2 py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === tab.id
+                    ? 'border-primary text-primary'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                }`}
+              >
+                <Icon className="h-5 w-5" />
+                <span>{tab.name}</span>
+              </button>
+            )
+          })}
+        </nav>
+      </div>
+
+      {/* Tab Content */}
+      <div className="card">
+        <div className="card-content">
+          {activeTab === 'general' && (
+            <div className="space-y-6">
+              <h3 className="text-lg font-medium">General Settings</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {getSettingsByCategory('general').map((setting: SystemSetting) => (
+                  <div key={setting.key} className="space-y-2">
+                    <label className="label">{setting.description}</label>
+                    {setting.type === 'boolean' ? (
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          checked={setting.value === 'true'}
+                          onChange={(e) => handleSettingChange(setting.key, e.target.checked.toString())}
+                          className="rounded border-gray-300 text-primary focus:ring-primary"
+                        />
+                        <span className="text-sm text-gray-600 dark:text-gray-400">
+                          {setting.value === 'true' ? 'Enabled' : 'Disabled'}
+                        </span>
+                      </div>
+                    ) : setting.type === 'number' ? (
+                      <input
+                        type="number"
+                        value={setting.value}
+                        onChange={(e) => handleSettingChange(setting.key, e.target.value)}
+                        className="input"
+                      />
+                    ) : (
+                      <input
+                        type="text"
+                        value={setting.value}
+                        onChange={(e) => handleSettingChange(setting.key, e.target.value)}
+                        className="input"
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'email' && (
+            <div className="space-y-6">
+              <h3 className="text-lg font-medium">Email Settings</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {getSettingsByCategory('email').map((setting: SystemSetting) => (
+                  <div key={setting.key} className="space-y-2">
+                    <label className="label">{setting.description}</label>
+                    {setting.key.includes('password') ? (
+                      <div className="relative">
+                        <input
+                          type={showPasswordPreview ? 'text' : 'password'}
+                          value={setting.value}
+                          onChange={(e) => handleSettingChange(setting.key, e.target.value)}
+                          className="input pr-10"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPasswordPreview(!showPasswordPreview)}
+                          className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                        >
+                          {showPasswordPreview ? (
+                            <EyeSlashIcon className="h-5 w-5 text-gray-400" />
+                          ) : (
+                            <EyeIcon className="h-5 w-5 text-gray-400" />
+                          )}
+                        </button>
+                      </div>
+                    ) : (
+                      <input
+                        type="text"
+                        value={setting.value}
+                        onChange={(e) => handleSettingChange(setting.key, e.target.value)}
+                        className="input"
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'security' && (
+            <div className="space-y-6">
+              <h3 className="text-lg font-medium">Security Settings</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {getSettingsByCategory('security').map((setting: SystemSetting) => (
+                  <div key={setting.key} className="space-y-2">
+                    <label className="label">{setting.description}</label>
+                    {setting.type === 'boolean' ? (
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          checked={setting.value === 'true'}
+                          onChange={(e) => handleSettingChange(setting.key, e.target.checked.toString())}
+                          className="rounded border-gray-300 text-primary focus:ring-primary"
+                        />
+                        <span className="text-sm text-gray-600 dark:text-gray-400">
+                          {setting.value === 'true' ? 'Enabled' : 'Disabled'}
+                        </span>
+                      </div>
+                    ) : setting.type === 'number' ? (
+                      <input
+                        type="number"
+                        value={setting.value}
+                        onChange={(e) => handleSettingChange(setting.key, e.target.value)}
+                        className="input"
+                      />
+                    ) : (
+                      <input
+                        type="text"
+                        value={setting.value}
+                        onChange={(e) => handleSettingChange(setting.key, e.target.value)}
+                        className="input"
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'password-policy' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-medium">Password Policy</h3>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => setTestPassword('')}
+                    className="btn btn-secondary btn-sm"
+                  >
+                    Clear Test
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {/* Policy Configuration */}
+                <div className="space-y-6">
+                  <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-6">
+                    <h4 className="font-semibold text-gray-900 dark:text-white mb-4">Password Requirements</h4>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="label">Minimum Length</label>
+                        <input
+                          type="number"
+                          value={passwordPolicy.minLength}
+                          onChange={(e) => handlePasswordPolicyChange('minLength', Number(e.target.value))}
+                          className="input"
+                          min="4"
+                          max="32"
+                        />
+                      </div>
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <label className="label">Require Uppercase Letters</label>
+                          <input
+                            type="checkbox"
+                            checked={passwordPolicy.requireUppercase}
+                            onChange={(e) => handlePasswordPolicyChange('requireUppercase', e.target.checked)}
+                            className="rounded border-gray-300 text-primary focus:ring-primary"
+                          />
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <label className="label">Require Lowercase Letters</label>
+                          <input
+                            type="checkbox"
+                            checked={passwordPolicy.requireLowercase}
+                            onChange={(e) => handlePasswordPolicyChange('requireLowercase', e.target.checked)}
+                            className="rounded border-gray-300 text-primary focus:ring-primary"
+                          />
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <label className="label">Require Numbers</label>
+                          <input
+                            type="checkbox"
+                            checked={passwordPolicy.requireNumbers}
+                            onChange={(e) => handlePasswordPolicyChange('requireNumbers', e.target.checked)}
+                            className="rounded border-gray-300 text-primary focus:ring-primary"
+                          />
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <label className="label">Require Special Characters</label>
+                          <input
+                            type="checkbox"
+                            checked={passwordPolicy.requireSpecialChars}
+                            onChange={(e) => handlePasswordPolicyChange('requireSpecialChars', e.target.checked)}
+                            className="rounded border-gray-300 text-primary focus:ring-primary"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-6">
+                    <h4 className="font-semibold text-gray-900 dark:text-white mb-4">Password Management</h4>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="label">Maximum Age (days)</label>
+                        <input
+                          type="number"
+                          value={passwordPolicy.maxAge}
+                          onChange={(e) => handlePasswordPolicyChange('maxAge', Number(e.target.value))}
+                          className="input"
+                          min="0"
+                          max="365"
+                        />
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                          Set to 0 to disable password expiration
+                        </p>
+                      </div>
+                      <div>
+                        <label className="label">Prevent Password Reuse</label>
+                        <input
+                          type="number"
+                          value={passwordPolicy.preventReuse}
+                          onChange={(e) => handlePasswordPolicyChange('preventReuse', Number(e.target.value))}
+                          className="input"
+                          min="0"
+                          max="10"
+                        />
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                          Number of previous passwords to prevent reuse
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-6">
+                    <h4 className="font-semibold text-gray-900 dark:text-white mb-4">Account Lockout</h4>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="label">Failed Login Attempts</label>
+                        <input
+                          type="number"
+                          value={passwordPolicy.lockoutAttempts}
+                          onChange={(e) => handlePasswordPolicyChange('lockoutAttempts', Number(e.target.value))}
+                          className="input"
+                          min="3"
+                          max="10"
+                        />
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                          Number of failed attempts before lockout
+                        </p>
+                      </div>
+                      <div>
+                        <label className="label">Lockout Duration (minutes)</label>
+                        <input
+                          type="number"
+                          value={passwordPolicy.lockoutDuration}
+                          onChange={(e) => handlePasswordPolicyChange('lockoutDuration', Number(e.target.value))}
+                          className="input"
+                          min="5"
+                          max="1440"
+                        />
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                          How long to lock the account after failed attempts
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Password Testing */}
+                <div className="space-y-6">
+                  <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-6">
+                    <h4 className="font-semibold text-gray-900 dark:text-white mb-4">Test Password Policy</h4>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="label">Test Password</label>
+                        <input
+                          type="password"
+                          value={testPassword}
+                          onChange={(e) => setTestPassword(e.target.value)}
+                          className="input"
+                          placeholder="Enter a password to test"
+                        />
+                      </div>
+                      {testPassword && (
+                        <div className="space-y-3">
+                          <PasswordStrengthMeter
+                            password={testPassword}
+                            onPasswordChange={setTestPassword}
+                            showPolicy={true}
+                            policy={passwordPolicy}
+                          />
+                          <div className="space-y-2">
+                            <h5 className="font-medium text-gray-900 dark:text-white">Policy Compliance:</h5>
+                            <div className="space-y-1 text-sm">
+                              <div className={`flex items-center space-x-2 ${
+                                testPassword.length >= passwordPolicy.minLength ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                              }`}>
+                                {testPassword.length >= passwordPolicy.minLength ? (
+                                  <CheckCircleIcon className="h-4 w-4" />
+                                ) : (
+                                  <ExclamationTriangleIcon className="h-4 w-4" />
+                                )}
+                                <span>Minimum {passwordPolicy.minLength} characters</span>
+                              </div>
+                              {passwordPolicy.requireUppercase && (
+                                <div className={`flex items-center space-x-2 ${
+                                  /[A-Z]/.test(testPassword) ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                                }`}>
+                                  {/[A-Z]/.test(testPassword) ? (
+                                    <CheckCircleIcon className="h-4 w-4" />
+                                  ) : (
+                                    <ExclamationTriangleIcon className="h-4 w-4" />
+                                  )}
+                                  <span>Contains uppercase letter</span>
+                                </div>
+                              )}
+                              {passwordPolicy.requireLowercase && (
+                                <div className={`flex items-center space-x-2 ${
+                                  /[a-z]/.test(testPassword) ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                                }`}>
+                                  {/[a-z]/.test(testPassword) ? (
+                                    <CheckCircleIcon className="h-4 w-4" />
+                                  ) : (
+                                    <ExclamationTriangleIcon className="h-4 w-4" />
+                                  )}
+                                  <span>Contains lowercase letter</span>
+                                </div>
+                              )}
+                              {passwordPolicy.requireNumbers && (
+                                <div className={`flex items-center space-x-2 ${
+                                  /\d/.test(testPassword) ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                                }`}>
+                                  {/\d/.test(testPassword) ? (
+                                    <CheckCircleIcon className="h-4 w-4" />
+                                  ) : (
+                                    <ExclamationTriangleIcon className="h-4 w-4" />
+                                  )}
+                                  <span>Contains number</span>
+                                </div>
+                              )}
+                              {passwordPolicy.requireSpecialChars && (
+                                <div className={`flex items-center space-x-2 ${
+                                  /[!@#$%^&*(),.?":{}|<>]/.test(testPassword) ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                                }`}>
+                                  {/[!@#$%^&*(),.?":{}|<>]/.test(testPassword) ? (
+                                    <CheckCircleIcon className="h-4 w-4" />
+                                  ) : (
+                                    <ExclamationTriangleIcon className="h-4 w-4" />
+                                  )}
+                                  <span>Contains special character</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                    <div className="flex items-start space-x-2">
+                      <InformationCircleIcon className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5" />
+                      <div className="text-sm text-blue-700 dark:text-blue-300">
+                        <p className="font-medium mb-1">Password Policy Information:</p>
+                        <ul className="list-disc list-inside space-y-1">
+                          <li>Changes take effect immediately for new passwords</li>
+                          <li>Existing passwords are not affected until changed</li>
+                          <li>Users will be prompted to update passwords if they don't meet new requirements</li>
+                          <li>Account lockout applies to all login attempts</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'database' && (
+            <div className="space-y-6">
+              <h3 className="text-lg font-medium">Database Settings</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {getSettingsByCategory('database').map((setting: SystemSetting) => (
+                  <div key={setting.key} className="space-y-2">
+                    <label className="label">{setting.description}</label>
+                    <input
+                      type="text"
+                      value={setting.value}
+                      onChange={(e) => handleSettingChange(setting.key, e.target.value)}
+                      className="input"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'notifications' && (
+            <div className="space-y-6">
+              <h3 className="text-lg font-medium">Notification Settings</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {getSettingsByCategory('notifications').map((setting: SystemSetting) => (
+                  <div key={setting.key} className="space-y-2">
+                    <label className="label">{setting.description}</label>
+                    {setting.type === 'boolean' ? (
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          checked={setting.value === 'true'}
+                          onChange={(e) => handleSettingChange(setting.key, e.target.checked.toString())}
+                          className="rounded border-gray-300 text-primary focus:ring-primary"
+                        />
+                        <span className="text-sm text-gray-600 dark:text-gray-400">
+                          {setting.value === 'true' ? 'Enabled' : 'Disabled'}
+                        </span>
+                      </div>
+                    ) : (
+                      <input
+                        type="text"
+                        value={setting.value}
+                        onChange={(e) => handleSettingChange(setting.key, e.target.value)}
+                        className="input"
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'backup' && (
+            <div className="space-y-6">
+              <h3 className="text-lg font-medium">Backup Settings</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {getSettingsByCategory('backup').map((setting: SystemSetting) => (
+                  <div key={setting.key} className="space-y-2">
+                    <label className="label">{setting.description}</label>
+                    {setting.type === 'boolean' ? (
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          checked={setting.value === 'true'}
+                          onChange={(e) => handleSettingChange(setting.key, e.target.checked.toString())}
+                          className="rounded border-gray-300 text-primary focus:ring-primary"
+                        />
+                        <span className="text-sm text-gray-600 dark:text-gray-400">
+                          {setting.value === 'true' ? 'Enabled' : 'Disabled'}
+                        </span>
+                      </div>
+                    ) : setting.type === 'number' ? (
+                      <input
+                        type="number"
+                        value={setting.value}
+                        onChange={(e) => handleSettingChange(setting.key, e.target.value)}
+                        className="input"
+                      />
+                    ) : (
+                      <input
+                        type="text"
+                        value={setting.value}
+                        onChange={(e) => handleSettingChange(setting.key, e.target.value)}
+                        className="input"
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Test Modal */}
+      {showTestModal && (
+        <div className="modal">
+          <div className="modal-overlay" onClick={() => setShowTestModal(false)}></div>
+          <div className="modal-content">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Test {testType.charAt(0).toUpperCase() + testType.slice(1)} Connection
+              </h3>
+              <button
+                onClick={() => setShowTestModal(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                <ExclamationTriangleIcon className="h-6 w-6" />
+              </button>
+            </div>
+            
+            <div className="text-center py-8">
+              {testMutation.isLoading ? (
+                <div className="space-y-4">
+                  <div className="loading-spinner mx-auto"></div>
+                  <p className="text-gray-600 dark:text-gray-400">
+                    Testing {testType} connection...
+                  </p>
+                </div>
+              ) : testMutation.isSuccess ? (
+                <div className="space-y-4">
+                  <CheckCircleIcon className="h-12 w-12 text-green-500 mx-auto" />
+                  <p className="text-green-600 dark:text-green-400 font-medium">
+                    {testType.charAt(0).toUpperCase() + testType.slice(1)} connection successful!
+                  </p>
+                </div>
+              ) : testMutation.isError ? (
+                <div className="space-y-4">
+                  <ExclamationTriangleIcon className="h-12 w-12 text-red-500 mx-auto" />
+                  <p className="text-red-600 dark:text-red-400 font-medium">
+                    {testType.charAt(0).toUpperCase() + testType.slice(1)} connection failed!
+                  </p>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default SettingsPage
+EOF
+
+    print_success "Frontend files created successfully"
 }
 
 # Main installation function
@@ -41548,11 +41904,6 @@ main() {
     
     # Check prerequisites
     check_root
-    detect_os
-    check_node_version
-    
-    # Install prerequisites
-    install_prerequisites
     
     # Setup application directory
     setup_application_directory
@@ -41572,90 +41923,9 @@ main() {
     # Check for PM2
     check_pm2
     
-    # Setup process management
-    setup_systemd_service
+    # Verify installation
+    verify_installation
     
-    # Configure Nginx
-    configure_nginx
-    
-    # Setup SSL certificate
-    setup_ssl
-    
-    echo ""
-    echo "🎉 Complete Event Manager Application Deployed!"
-    echo "==============================================="
-    echo ""
-    echo "📋 Application Details:"
-    echo "   Application Directory: $APP_DIR"
-    echo "   Database: $DB_NAME"
-    echo "   Database User: $DB_USER"
-    echo "   Web Server User: $WEB_SERVER_USER"
-    echo "   Process Manager: $([ "$USE_PM2" == "true" ] && echo "PM2" || echo "systemd")"
-    echo ""
-    echo "🌐 Access Information:"
-    if [[ -n "$DOMAIN" ]]; then
-        echo "   URL: https://$DOMAIN"
-    else
-        echo "   URL: http://localhost (or your server IP)"
-    fi
-    echo "   Backend API: http://localhost:3000"
-    echo ""
-    echo "🔐 Default Login Credentials (all users have password: password123):"
-    echo "   ORGANIZER: admin@eventmanager.com"
-    echo "   JUDGE: judge@eventmanager.com"
-    echo "   CONTESTANT: contestant@eventmanager.com"
-    echo "   EMCEE: emcee@eventmanager.com"
-    echo "   TALLY_MASTER: tallymaster@eventmanager.com"
-    echo "   AUDITOR: auditor@eventmanager.com"
-    echo "   BOARD: board@eventmanager.com"
-    echo ""
-    echo "✨ Complete Event Manager Application Features:"
-    echo "   ✅ Professional Login Page with Authentication"
-    echo "   ✅ Role-Based Dashboards (Organizer, Judge, Contestant, Board, etc.)"
-    echo "   ✅ Event Management System (Create, Edit, Delete Events)"
-    echo "   ✅ Contest Management (Multiple Contests per Event)"
-    echo "   ✅ Category Management (Multiple Categories per Contest)"
-    echo "   ✅ User Management with Role Assignment"
-    echo "   ✅ Scoring System with Real-time Updates"
-    echo "   ✅ Judge Certification Workflows"
-    echo "   ✅ Contestant Score Tracking"
-    echo "   ✅ Admin Statistics and Reporting"
-    echo "   ✅ Real-time Updates via WebSocket"
-    echo "   ✅ Responsive Design with Tailwind CSS"
-    echo "   ✅ PostgreSQL Database with Prisma ORM"
-    echo "   ✅ Complete REST API (Events, Contests, Categories, Users, Scoring)"
-    echo "   ✅ JWT Authentication with Role-Based Access Control"
-    echo "   ✅ Nginx Reverse Proxy with SSL Support"
-    echo "   ✅ Systemd Service Management"
-    echo "   ✅ Production-Ready Security Configuration"
-    echo ""
-    echo "📚 Management Commands:"
-    echo "   Service Status: sudo systemctl status event-manager"
-    echo "   Service Logs: sudo journalctl -u event-manager -f"
-    echo "   Service Restart: sudo systemctl restart event-manager"
-    echo "   Nginx Status: sudo systemctl status nginx"
-    echo "   Nginx Reload: sudo systemctl reload nginx"
-    echo ""
-    echo "🚀 Next Steps:"
-    echo "   1. Open your browser and navigate to your server IP"
-    echo "   2. You'll see the professional login page"
-    echo "   3. Log in with the default credentials"
-    echo "   4. Explore the dashboard and start managing events!"
-    echo ""
-    echo "🎉 Your Event Manager application is now fully operational!"
-    echo ""
-    echo "📚 Management Commands:"
-    if [[ "$USE_PM2" == "true" ]]; then
-        echo "   PM2 Status: sudo -u $WEB_SERVER_USER pm2 status"
-        echo "   PM2 Logs: sudo -u $WEB_SERVER_USER pm2 logs"
-        echo "   PM2 Restart: sudo -u $WEB_SERVER_USER pm2 restart $APP_NAME"
-    else
-        echo "   Service Status: sudo systemctl status $APP_NAME"
-        echo "   Service Logs: sudo journalctl -u $APP_NAME -f"
-        echo "   Service Restart: sudo systemctl restart $APP_NAME"
-    fi
-    echo "   Nginx Status: sudo systemctl status nginx"
-    echo "   Nginx Reload: sudo systemctl reload nginx"
     # Evaluate setup completeness
     evaluate_setup_completeness
     
@@ -41670,549 +41940,152 @@ evaluate_setup_completeness() {
     
     # Check for common installation issues
     if [[ -f "$APP_DIR/package.json" ]]; then
-        print_success "✓ Package.json created successfully"
+        print_success "Backend package.json found"
     else
-        print_error "✗ Package.json missing"
+        print_error "Backend package.json missing!"
         ((issues_found++))
     fi
     
-    # Check for npmlog dependency
-    if [[ -d "$APP_DIR/node_modules/npmlog" ]]; then
-        print_success "✓ npmlog dependency installed"
+    if [[ -f "$APP_DIR/frontend/package.json" ]]; then
+        print_success "Frontend package.json found"
     else
-        print_warning "⚠ npmlog dependency missing (may cause native module issues)"
+        print_error "Frontend package.json missing!"
         ((issues_found++))
     fi
     
-    # Check for deprecated multer version
-    if [[ -f "$APP_DIR/node_modules/multer/package.json" ]]; then
-        local multer_version=$(grep '"version"' "$APP_DIR/node_modules/multer/package.json" | cut -d'"' -f4)
-        if [[ "$multer_version" =~ ^2\. ]]; then
-            print_success "✓ Multer updated to version 2.x"
-        else
-            print_warning "⚠ Multer still on deprecated version $multer_version"
-            ((issues_found++))
-        fi
-    fi
-    
-    # Check frontend TypeScript configuration
-    if [[ -f "$APP_DIR/frontend/tsconfig.json" ]]; then
-        if grep -q '"noImplicitAny": false' "$APP_DIR/frontend/tsconfig.json"; then
-            print_success "✓ TypeScript configuration optimized for compatibility"
-        else
-            print_warning "⚠ TypeScript configuration may need optimization"
-            ((issues_found++))
-        fi
-    fi
-    
-    # Check for Heroicons fixes
-    if [[ -f "$APP_DIR/frontend/src/components/Layout.tsx" ]]; then
-        if grep -q "ArrowDownTrayIcon" "$APP_DIR/frontend/src/components/Layout.tsx" 2>/dev/null; then
-            print_success "✓ Heroicons imports fixed in Layout component"
-        else
-            print_warning "⚠ Heroicons imports may need fixing"
-            ((issues_found++))
-        fi
-    fi
-    
-    # Check for deprecated package removal
-    if [[ -f "$APP_DIR/package.json" ]]; then
-        local deprecated_found=0
-        
-        # Check for specific deprecated packages
-        if grep -q "are-we-there-yet" "$APP_DIR/package.json"; then
-            print_warning "⚠ Deprecated are-we-there-yet package still present"
-            ((deprecated_found++))
-        fi
-        
-        if grep -q "inflight" "$APP_DIR/package.json"; then
-            print_warning "⚠ Deprecated inflight package still present"
-            ((deprecated_found++))
-        fi
-        
-        if grep -q "glob.*7\." "$APP_DIR/package.json"; then
-            print_warning "⚠ Deprecated glob@7 package still present"
-            ((deprecated_found++))
-        fi
-        
-        if grep -q "rimraf.*3\." "$APP_DIR/package.json"; then
-            print_warning "⚠ Deprecated rimraf@3 package still present"
-            ((deprecated_found++))
-        fi
-        
-        if [[ $deprecated_found -eq 0 ]]; then
-            print_success "✓ All deprecated packages removed from overrides"
-        else
-            print_warning "⚠ $deprecated_found deprecated packages still present"
-            ((issues_found++))
-        fi
-    fi
-    
-    # Check for @heroicons/react version compatibility
-    if [[ -f "$APP_DIR/frontend/node_modules/@heroicons/react/package.json" ]]; then
-        local heroicons_version=$(grep '"version"' "$APP_DIR/frontend/node_modules/@heroicons/react/package.json" | cut -d'"' -f4)
-        if [[ "$heroicons_version" =~ ^2\. ]]; then
-            print_success "✓ @heroicons/react updated to React 18 compatible version $heroicons_version"
-        else
-            print_warning "⚠ @heroicons/react still on version $heroicons_version (may have React compatibility issues)"
-            ((issues_found++))
-        fi
-    fi
-    
-    # Check for system warnings cleanup
-    if ! dpkg -l | grep -q libllvm19; then
-        print_success "✓ System warnings cleaned up (libllvm19 removed)"
+    if [[ -f "$APP_DIR/src/server.js" ]]; then
+        print_success "Server.js found"
     else
-        print_warning "⚠ System warnings still present (libllvm19)"
+        print_error "Server.js missing!"
+        ((issues_found++))
+    fi
+    
+    if [[ -f "$APP_DIR/frontend/dist/index.html" ]]; then
+        print_success "Frontend build found"
+    else
+        print_error "Frontend build missing!"
+        ((issues_found++))
+    fi
+    
+    if [[ -f "$APP_DIR/.env" ]]; then
+        print_success "Backend .env found"
+    else
+        print_error "Backend .env missing!"
+        ((issues_found++))
+    fi
+    
+    if [[ -f "$APP_DIR/frontend/.env" ]]; then
+        print_success "Frontend .env found"
+    else
+        print_error "Frontend .env missing!"
+        ((issues_found++))
+    fi
+    
+    if [[ -f "$APP_DIR/prisma/schema.prisma" ]]; then
+        print_success "Prisma schema found"
+    else
+        print_error "Prisma schema missing!"
+        ((issues_found++))
+    fi
+    
+    if [[ -d "$APP_DIR/node_modules" ]]; then
+        print_success "Backend node_modules found"
+    else
+        print_error "Backend node_modules missing!"
+        ((issues_found++))
+    fi
+    
+    if [[ -d "$APP_DIR/frontend/node_modules" ]]; then
+        print_success "Frontend node_modules found"
+    else
+        print_error "Frontend node_modules missing!"
+        ((issues_found++))
+    fi
+    
+    if [[ -d "$APP_DIR/frontend/dist" ]]; then
+        print_success "Frontend dist directory found"
+    else
+        print_error "Frontend dist directory missing!"
+        ((issues_found++))
+    fi
+    
+    # Check for common configuration issues
+    if grep -q "VITE_API_URL" "$APP_DIR/frontend/.env" 2>/dev/null; then
+        print_success "Frontend API URL configured"
+    else
+        print_warning "Frontend API URL not configured"
+        ((issues_found++))
+    fi
+    
+    if grep -q "DATABASE_URL" "$APP_DIR/.env" 2>/dev/null; then
+        print_success "Database URL configured"
+    else
+        print_warning "Database URL not configured"
+        ((issues_found++))
+    fi
+    
+    if grep -q "JWT_SECRET" "$APP_DIR/.env" 2>/dev/null; then
+        print_success "JWT secret configured"
+    else
+        print_warning "JWT secret not configured"
+        ((issues_found++))
+    fi
+    
+    # Check for common permission issues
+    if [[ -w "$APP_DIR" ]]; then
+        print_success "Application directory is writable"
+    else
+        print_warning "Application directory is not writable"
+        ((issues_found++))
+    fi
+    
+    if [[ -w "$APP_DIR/frontend/dist" ]]; then
+        print_success "Frontend dist directory is writable"
+    else
+        print_warning "Frontend dist directory is not writable"
+        ((issues_found++))
+    fi
+    
+    # Check for common dependency issues
+    if command -v node >/dev/null 2>&1; then
+        local node_version=$(node --version)
+        print_success "Node.js found: $node_version"
+    else
+        print_error "Node.js not found!"
+        ((issues_found++))
+    fi
+    
+    if command -v npm >/dev/null 2>&1; then
+        local npm_version=$(npm --version)
+        print_success "npm found: $npm_version"
+    else
+        print_error "npm not found!"
+        ((issues_found++))
+    fi
+    
+    if command -v nginx >/dev/null 2>&1; then
+        print_success "Nginx found"
+    else
+        print_warning "Nginx not found"
+        ((issues_found++))
+    fi
+    
+    if command -v postgres >/dev/null 2>&1; then
+        print_success "PostgreSQL found"
+    else
+        print_warning "PostgreSQL not found"
         ((issues_found++))
     fi
     
     # Summary
+    echo ""
     if [[ $issues_found -eq 0 ]]; then
-        print_success "🎉 Setup evaluation complete - No issues found!"
-        print_status "All critical fixes have been applied successfully."
+        print_success "No issues found! Setup appears to be complete."
     else
-        print_warning "⚠ Setup evaluation complete - $issues_found issues found"
-        print_status "Some issues may require manual intervention or re-running the setup."
+        print_warning "Found $issues_found potential issues. Please review the warnings above."
     fi
     
-    return $issues_found
-}
-
-# Fix modal visibility and centering issues
-fix_modal_visibility() {
-    print_status "🔧 Fixing modal visibility and centering issues..."
-    
-    local css_file="$APP_DIR/frontend/src/index.css"
-    
-    if [[ ! -f "$css_file" ]]; then
-        print_error "CSS file not found: $css_file"
-        return 1
-    fi
-    
-    # Backup the original CSS file
-    cp "$css_file" "${css_file}.bak"
-    
-    # Update modal styles for better visibility and centering
-    print_status "Updating modal CSS for proper z-index and centering..."
-    
-    # Replace existing modal styles with enhanced versions
-    sed -i '/\.modal {/,/}/c\
-  .modal {\
-    @apply fixed inset-0 z-[9999] flex items-center justify-center;\
-  }' "$css_file"
-    
-    sed -i '/\.modal-content {/,/}/c\
-  .modal-content {\
-    @apply bg-background p-6 shadow-lg border rounded-lg max-w-md w-full mx-4 relative z-[10000];\
-  }' "$css_file"
-    
-    sed -i '/\.modal-overlay {/,/}/c\
-  .modal-overlay {\
-    @apply fixed inset-0 bg-black/50 z-[9998];\
-  }' "$css_file"
-    
-    # Add enhanced modal styles if they don't exist
-    if ! grep -q "modal-container" "$css_file"; then
-        print_status "Adding enhanced modal styles..."
-        cat >> "$css_file" << 'EOF'
-
-  /* Enhanced modal styles for better visibility and centering */
-  .modal-container {
-    @apply fixed inset-0 z-[9999] flex items-center justify-center p-4;
-  }
-
-  .modal-dialog {
-    @apply relative bg-background rounded-lg shadow-xl border max-w-lg w-full max-h-[90vh] overflow-y-auto;
-  }
-
-  .modal-header {
-    @apply flex items-center justify-between p-6 border-b;
-  }
-
-  .modal-body {
-    @apply p-6;
-  }
-
-  .modal-footer {
-    @apply flex items-center justify-end gap-3 p-6 border-t;
-  }
-
-  /* Ensure modals are always on top */
-  .modal-backdrop {
-    @apply fixed inset-0 bg-black/50 z-[9998] backdrop-blur-sm;
-  }
-EOF
-    fi
-    
-    # Update modal components to use enhanced structure
-    print_status "Updating modal components to use enhanced structure..."
-    
-    # Find and update ContestsPage modal
-    local contests_file="$APP_DIR/frontend/src/pages/ContestsPage.tsx"
-    if [[ -f "$contests_file" ]]; then
-        # Add XMarkIcon import if not present
-        if ! grep -q "XMarkIcon" "$contests_file"; then
-            sed -i '/ArrowLeftIcon,/a\  XMarkIcon,' "$contests_file"
-        fi
-        
-        # Update modal structure
-        sed -i 's/<div className="modal">/<div className="modal-container">/g' "$contests_file"
-        sed -i 's/<div className="modal-overlay"/<div className="modal-backdrop"/g' "$contests_file"
-        sed -i 's/<div className="modal-content/<div className="modal-dialog"/g' "$contests_file"
-        
-        # Add close button to modal header
-        sed -i '/modal-dialog">/a\        <div className="modal-header">\
-          <h2 className="text-xl font-semibold">\
-            {contest ? '\''Edit Contest'\'' : '\''Create Contest'\''}\
-          </h2>\
-          <button\
-            onClick={onClose}\
-            className="btn btn-ghost btn-sm"\
-          >\
-            <XMarkIcon className="h-5 w-5" />\
-          </button>\
-        </div>\
-        <div className="modal-body">' "$contests_file"
-    fi
-    
-    # Apply similar fixes to other modal components
-    local pages_dir="$APP_DIR/frontend/src/pages"
-    if [[ -d "$pages_dir" ]]; then
-        for page_file in "$pages_dir"/*.tsx; do
-            if [[ -f "$page_file" ]]; then
-                # Update modal classes in all page files
-                sed -i 's/className="modal"/className="modal-container"/g' "$page_file"
-                sed -i 's/className="modal-overlay"/className="modal-backdrop"/g' "$page_file"
-                sed -i 's/className="modal-content"/className="modal-dialog"/g' "$page_file"
-            fi
-        done
-    fi
-    
-    print_success "✓ Modal visibility and centering issues fixed"
-    print_status "Enhanced modal styles applied with proper z-index stacking"
-}
-
-# Fix API endpoints and admin functionality
-# DISABLED: This function appends inline routes to modular server.js, causing authenticateToken errors
-fix_api_endpoints() {
-    print_status "🔧 DISABLED: API endpoints are handled by modular routes"
-    return 0  # Exit early to prevent execution
-    
-    local server_file="$APP_DIR/src/server.js"
-    
-    if [[ ! -f "$server_file" ]]; then
-        print_error "Server file not found: $server_file"
-        return 1
-    fi
-    
-    # Add missing admin endpoints - Always add to ensure they exist
-    print_status "Adding missing admin API endpoints..."
-    
-    # Admin Activity Logs
-    print_status "Adding /api/admin/logs endpoint..."
-    cat >> "$server_file" << 'EOF'
-
-// Admin Activity Logs
-app.get('/api/admin/logs', authenticateToken, async (req, res) => {
-  try {
-    if (req.user.role !== 'ORGANIZER' && req.user.role !== 'BOARD' && req.user.role !== 'AUDITOR') {
-      return res.status(403).json({ error: 'Insufficient permissions' })
-    }
-    
-    const logs = await prisma.activityLog.findMany({
-      orderBy: { createdAt: 'desc' },
-      take: 100,
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            role: true
-          }
-        }
-      }
-    })
-    
-    res.json(logs)
-  } catch (error) {
-    console.error('Activity logs fetch error:', error)
-    res.status(500).json({ error: 'Failed to fetch activity logs' })
-  }
-})
-EOF
-
-    # Admin Active Users
-    print_status "Adding /api/admin/active-users endpoint..."
-    cat >> "$server_file" << 'EOF'
-
-// Admin Active Users
-app.get('/api/admin/active-users', authenticateToken, async (req, res) => {
-  try {
-    if (req.user.role !== 'ORGANIZER' && req.user.role !== 'BOARD') {
-      return res.status(403).json({ error: 'Insufficient permissions' })
-    }
-    
-    const activeUsers = await prisma.user.findMany({
-      where: {
-        isActive: true
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        lastLoginAt: true
-      }
-    })
-    
-    res.json(activeUsers)
-  } catch (error) {
-    console.error('Active users fetch error:', error)
-    res.status(500).json({ error: 'Failed to fetch active users' })
-  }
-})
-EOF
-
-    # Admin Settings
-    print_status "Adding /api/admin/settings endpoint..."
-    cat >> "$server_file" << 'EOF'
-
-// Admin Settings
-app.get('/api/admin/settings', authenticateToken, async (req, res) => {
-  try {
-    if (req.user.role !== 'ORGANIZER' && req.user.role !== 'BOARD') {
-      return res.status(403).json({ error: 'Insufficient permissions' })
-    }
-    
-    const settings = await prisma.systemSetting.findMany()
-    res.json(settings)
-  } catch (error) {
-    console.error('Settings fetch error:', error)
-    res.status(500).json({ error: 'Failed to fetch settings' })
-  }
-})
-EOF
-    
-    if ! grep -q "app.get('/api/admin/backup'" "$server_file"; then
-        print_status "Adding /api/admin/backup endpoint..."
-        sed -i '/\/\/ Admin API/a\
-\
-// Admin Backup\
-app.get('\''/api/admin/backup'\'', authenticateToken, async (req, res) => {\
-  try {\
-    if (req.user.role !== '\''ORGANIZER'\'' && req.user.role !== '\''BOARD'\'') {\
-      return res.status(403).json({ error: '\''Insufficient permissions'\'' })\
-    }\
-    \
-    res.json({\
-      message: '\''Backup functionality available'\'',\
-      lastBackup: new Date().toISOString(),\
-      status: '\''available'\''\
-    })\
-  } catch (error) {\
-    console.error('\''Backup fetch error:'\'', error)\
-    res.status(500).json({ error: '\''Failed to fetch backup status'\'' })\
-  }\
-})\
-' "$server_file"
-    fi
-    
-    # Add missing events endpoint
-    if ! grep -q "app.get('/api/events'" "$server_file"; then
-        print_status "Adding /api/events endpoint..."
-        sed -i '/\/\/ Events API/a\
-\
-// Get all events\
-app.get('\''/api/events'\'', authenticateToken, async (req, res) => {\
-  try {\
-    const events = await prisma.event.findMany({\
-      include: {\
-        contests: {\
-          include: {\
-            categories: true\
-          }\
-        }\
-      },\
-      orderBy: {\
-        createdAt: '\''desc'\''\
-      }\
-    })\
-    res.json(events)\
-  } catch (error) {\
-    console.error('\''Error fetching events:'\'', error)\
-    res.status(500).json({ error: '\''Failed to fetch events'\'' })\
-  }\
-})\
-' "$server_file"
-    fi
-    # Add missing categories endpoint - Always add to ensure it exists
-    print_status "Adding /api/categories endpoint..."
-    cat >> "$server_file" << 'EOF'
-
-// Get all categories
-app.get('/api/categories', authenticateToken, async (req, res) => {
-  try {
-    const { contestId } = req.query
-    
-    const where = contestId ? { contestId } : {}
-    
-    const categories = await prisma.category.findMany({
-      where,
-      include: {
-        contest: {
-          select: {
-            id: true,
-            name: true
-          }
-        },
-        _count: {
-          select: {
-            criteria: true,
-            contestants: true,
-            judges: true,
-            scores: true
-          }
-        }
-      },
-      orderBy: { order: 'asc' }
-    })
-    
-    res.json(categories)
-  } catch (error) {
-    console.error('Categories fetch error:', error)
-    res.status(500).json({ error: 'Failed to fetch categories' })
-  }
-})
-EOF
-    
-    # Add missing results endpoint - Always add to ensure it exists
-    print_status "Adding /api/results endpoint..."
-    cat >> "$server_file" << 'EOF'
-
-// Get results
-app.get('/api/results', authenticateToken, async (req, res) => {
-  try {
-    const { categoryId, contestId } = req.query
-    
-    let where = {}
-    if (categoryId) {
-      where.categoryId = categoryId
-    } else if (contestId) {
-      where.category = {
-        contestId: contestId
-      }
-    }
-    
-    const results = await prisma.score.groupBy({
-      by: ['contestantId', 'categoryId'],
-      where,
-      _sum: {
-        score: true
-      },
-      _avg: {
-        score: true
-      },
-      _count: {
-        score: true
-      }
-    })
-    
-    // Get detailed results with contestant and category info
-    const detailedResults = await Promise.all(results.map(async (result) => {
-      const contestant = await prisma.contestant.findUnique({
-        where: { id: result.contestantId },
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          contestantNumber: true
-        }
-      })
-      
-      const category = await prisma.category.findUnique({
-        where: { id: result.categoryId },
-        select: {
-          id: true,
-          name: true,
-          maxScore: true
-        }
-      })
-      
-      return {
-        contestantId: result.contestantId,
-        categoryId: result.categoryId,
-        totalScore: result._sum.score,
-        averageScore: result._avg.score,
-        scoreCount: result._count.score,
-        contestant,
-        category
-      }
-    }))
-    
-    res.json(detailedResults)
-  } catch (error) {
-    console.error('Results fetch error:', error)
-    res.status(500).json({ error: 'Failed to fetch results' })
-  }
-})
-EOF
-    
-    # Verify endpoints were added
-    print_status "Verifying endpoints were added..."
-    if grep -q "app.get('/api/categories'" "$server_file"; then
-        print_status "✅ /api/categories endpoint found"
-    else
-        print_error "❌ /api/categories endpoint NOT found"
-    fi
-    
-    if grep -q "app.get('/api/results'" "$server_file"; then
-        print_status "✅ /api/results endpoint found"
-    else
-        print_error "❌ /api/results endpoint NOT found"
-    fi
-    
-    if grep -q "app.get('/api/admin/logs'" "$server_file"; then
-        print_status "✅ /api/admin/logs endpoint found"
-    else
-        print_error "❌ /api/admin/logs endpoint NOT found"
-    fi
-    
-    if grep -q "app.get('/api/admin/active-users'" "$server_file"; then
-        print_status "✅ /api/admin/active-users endpoint found"
-    else
-        print_error "❌ /api/admin/active-users endpoint NOT found"
-    fi
-    
-    if grep -q "app.get('/api/admin/settings'" "$server_file"; then
-        print_status "✅ /api/admin/settings endpoint found"
-    else
-        print_error "❌ /api/admin/settings endpoint NOT found"
-    fi
-    
-    # Fix double /api/ issue in frontend
-    print_status "Fixing double /api/ issue in frontend..."
-    
-    local api_file="$APP_DIR/frontend/src/services/api.ts"
-    if [[ -f "$api_file" ]]; then
-        # Create a temporary file with corrected content
-        sed 's|/api/api/|/api/|g' "$api_file" > "${api_file}.tmp"
-        mv "${api_file}.tmp" "$api_file"
-        
-        # Ensure baseURL uses relative path correctly
-        sed -i 's#baseURL: import.meta.env.VITE_API_URL || /api#baseURL: import.meta.env.VITE_API_URL || "/api"#g' "$api_file"
-    fi
-    
-    # Update frontend environment to use relative URLs
-    print_status "Updating frontend environment to prevent double /api/..."
-    local env_file="$APP_DIR/frontend/.env"
-    if [[ -f "$env_file" ]]; then
-        # Set empty VITE_API_URL to use relative URLs
-        sed -i 's/VITE_API_URL=.*/VITE_API_URL=/' "$env_file"
-        sed -i 's/VITE_WS_URL=.*/VITE_WS_URL=/' "$env_file"
-    fi
-    
-    print_success "✓ API endpoints and admin functionality fixed"
+    print_status "Setup evaluation completed"
     print_status "Added missing admin endpoints: /api/admin/logs, /api/admin/active-users, /api/admin/settings, /api/admin/backup"
     print_status "Added missing endpoints: /api/categories, /api/results"
     print_status "Fixed double /api/ issue in frontend"
