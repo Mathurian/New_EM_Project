@@ -21279,7 +21279,12 @@ export const archiveAPI = {
   restore: (type: string, id: string) => api.post(`/archive/${type}/${id}/restore`),
   delete: (type: string, id: string) => api.delete(`/archive/${type}/${id}`),
   archiveEvent: (eventId: string, reason: string) => api.post(`/archive/event/${eventId}`, { reason }),
+  restoreEvent: (eventId: string) => api.post(`/archive/event/${eventId}/restore`),
   deleteEvent: (eventId: string) => api.delete(`/archive/event/${eventId}`),
+  // Backward compatibility methods
+  archiveSimple: (eventId: string, reason: string) => api.post(`/archive/event/${eventId}`, { reason }),
+  restoreSimple: (eventId: string) => api.post(`/archive/event/${eventId}/restore`),
+  deleteSimple: (eventId: string) => api.delete(`/archive/event/${eventId}`),
 }
 
 export const backupAPI = {
@@ -21349,6 +21354,8 @@ export const auditorAPI = {
   finalCertification: (categoryId: string, data: any) => api.post(`/auditor/category/${categoryId}/final-certification`, data),
   rejectAudit: (categoryId: string, reason: string) => api.post(`/auditor/category/${categoryId}/reject`, { reason }),
   finalizeCertification: (data: any) => api.post('/auditor/finalize-certification', data),
+  // Backward compatibility method
+  finalCertificationSimple: (data: any) => api.post('/auditor/finalize-certification', data),
 }
 
 export const boardAPI = {
@@ -21367,6 +21374,8 @@ export const tallyMasterAPI = {
   getPendingCertifications: () => api.get('/tally-master/pending'),
   certifyTotals: (categoryId: string, data: any) => api.post(`/tally-master/category/${categoryId}/certify-totals`, data),
   certifyTotalsData: (data: any) => api.post('/tally-master/certify-totals', data),
+  // Backward compatibility method
+  certifyTotalsSimple: (data: any) => api.post('/tally-master/certify-totals', data),
 }
 
 export const emailAPI = {
@@ -21779,7 +21788,12 @@ export const archiveAPI = {
   restore: (type: string, id: string) => api.post(`/archive/${type}/${id}/restore`),
   delete: (type: string, id: string) => api.delete(`/archive/${type}/${id}`),
   archiveEvent: (eventId: string, reason: string) => api.post(`/archive/event/${eventId}`, { reason }),
+  restoreEvent: (eventId: string) => api.post(`/archive/event/${eventId}/restore`),
   deleteEvent: (eventId: string) => api.delete(`/archive/event/${eventId}`),
+  // Backward compatibility methods
+  archiveSimple: (eventId: string, reason: string) => api.post(`/archive/event/${eventId}`, { reason }),
+  restoreSimple: (eventId: string) => api.post(`/archive/event/${eventId}/restore`),
+  deleteSimple: (eventId: string) => api.delete(`/archive/event/${eventId}`),
 }
 
 export const backupAPI = {
@@ -21838,6 +21852,8 @@ export const auditorAPI = {
   finalCertification: (categoryId: string, data: any) => api.post(`/auditor/category/${categoryId}/final-certification`, data),
   rejectAudit: (categoryId: string, reason: string) => api.post(`/auditor/category/${categoryId}/reject`, { reason }),
   finalizeCertification: (data: any) => api.post('/auditor/finalize-certification', data),
+  // Backward compatibility method
+  finalCertificationSimple: (data: any) => api.post('/auditor/finalize-certification', data),
 }
 
 export const boardAPI = {
@@ -21856,6 +21872,8 @@ export const tallyMasterAPI = {
   getPendingCertifications: () => api.get('/tally-master/pending'),
   certifyTotals: (categoryId: string, data: any) => api.post(`/tally-master/category/${categoryId}/certify-totals`, data),
   certifyTotalsData: (data: any) => api.post('/tally-master/certify-totals', data),
+  // Backward compatibility method
+  certifyTotalsSimple: (data: any) => api.post('/tally-master/certify-totals', data),
 }
 
 export const emailAPI = {
@@ -40986,7 +41004,7 @@ const ScoringPage: React.FC = () => {
   )
 
   const submitScoreMutation = useMutation(
-    (scoreData: any) => scoringAPI.submitScore(scoreData),
+    (scoreData: any) => scoringAPI.submitScoreData(scoreData),
     {
       onSuccess: () => {
         queryClient.invalidateQueries(['scores', selectedCategory, selectedContestant])
