@@ -2709,7 +2709,7 @@ const getTableData = async (req, res) => {
 
     // Add search functionality
     if (search) {
-      const searchCondition = `WHERE ${Object.keys(await prisma[tableName].findFirst() || {}).slice(0, 5).map(col => `"${col}" ILIKE '%${search}%'`).join(' OR ')}`
+      const searchCondition = `WHERE ${Object.keys(await prisma[tableName].findFirst() || {}).slice(0, 5).map(col => '"' + col + '" ILIKE \'%' + search + '%\'').join(' OR ')}`
       query += ` ${searchCondition}`
       countQuery += ` ${searchCondition}`
     }
@@ -16057,7 +16057,7 @@ const generateCSVReport = async (res, event, stats, includeDetails) => {
     csvData.push(['Total Judges', stats.totalJudges])
     csvData.push(['Scores Submitted', stats.totalScores])
     csvData.push(['Average Score', stats.averageScore.toFixed(2)])
-    csvData.push(['Completion Rate', `${stats.completionRate.toFixed(1)}%`])
+    csvData.push(['Completion Rate', stats.completionRate.toFixed(1) + '%'])
     csvData.push([''])
 
     if (includeDetails) {
@@ -19279,7 +19279,7 @@ export const scoringAPI = {
   certifyTotals: (categoryId: string) => api.post(`/scoring/category/${categoryId}/certify-totals`),
   finalCertification: (categoryId: string) => api.post(`/scoring/category/${categoryId}/final-certification`),
   requestDeduction: (data: any) => api.post('/scoring/deductions', data),
-  getDeductions: (categoryId?: string) => api.get(`/scoring/deductions${categoryId ? `?categoryId=${categoryId}` : ''}`),
+  getDeductions: (categoryId?: string) => api.get(`/scoring/deductions${categoryId ? '?categoryId=' + categoryId : ''}`),
   approveDeduction: (deductionId: string, signature: string) => api.post(`/scoring/deductions/${deductionId}/approve`, { signature }),
   rejectDeduction: (deductionId: string, reason: string) => api.post(`/scoring/deductions/${deductionId}/reject`, { reason }),
 }
