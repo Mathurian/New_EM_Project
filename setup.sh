@@ -21598,6 +21598,340 @@ build_frontend() {
     
     cd "$APP_DIR/frontend"
     
+    # Generate API service first to ensure all components have access to updated APIs
+    print_status "Generating API service with all required methods..."
+    cat > "$APP_DIR/frontend/src/services/api.ts" << 'APIEOF'
+import axios from 'axios'
+
+const api = axios.create({
+  baseURL: import.meta.env.VITE_API_URL || '/api',
+  timeout: 10000,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+})
+
+// Request interceptor to add auth token
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token')
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`
+    }
+    return config
+  },
+  (error) => {
+    return Promise.reject(error)
+  }
+)
+
+// Response interceptor to handle errors
+api.interceptors.response.use(
+  (response) => {
+    return response
+  },
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('token')
+      window.location.href = '/login'
+    }
+    return Promise.reject(error)
+  }
+)
+
+export const eventsAPI = {
+  getAll: () => api.get('/events'),
+  getById: (id: string) => api.get(`/events/${id}`),
+  create: (data: any) => api.post('/events', data),
+  update: (id: string, data: any) => api.put(`/events/${id}`, data),
+  delete: (id: string) => api.delete(`/events/${id}`),
+}
+
+export const contestsAPI = {
+  getAll: async (): Promise<{ data: any[] }> => {
+    const events = await api.get('/events')
+    const allContests: any[] = []
+    for (const event of events.data) {
+      const contests = await api.get(`/contests/event/${event.id}`)
+      allContests.push(...contests.data.map((contest: any) => ({ ...contest, eventId: event.id })))
+    }
+    return { data: allContests }
+  },
+  getByEvent: (eventId: string) => api.get(`/contests/event/${eventId}`),
+  getById: (id: string) => api.get(`/contests/${id}`),
+  create: (eventId: string, data: any) => api.post(`/contests/event/${eventId}`, data),
+  update: (id: string, data: any) => api.put(`/contests/${id}`, data),
+  delete: (id: string) => api.delete(`/contests/${id}`),
+}
+
+export const categoriesAPI = {
+  getAll: () => api.get('/categories'),
+  getByContest: (contestId: string) => api.get(`/categories/contest/${contestId}`),
+  getById: (id: string) => api.get(`/categories/${id}`),
+  create: (contestId: string, data: any) => api.post(`/categories/contest/${contestId}`, data),
+  update: (id: string, data: any) => api.put(`/categories/${id}`, data),
+  delete: (id: string) => api.delete(`/categories/${id}`),
+  getCategories: (params?: { contestId?: string; search?: string }) => api.get('/categories', { params }),
+  createCategory: (data: any) => api.post('/categories', data),
+  updateCategory: (id: string, data: any) => api.put(`/categories/${id}`, data),
+  deleteCategory: (id: string) => api.delete(`/categories/${id}`),
+  createCriterion: (data: any) => api.post('/categories/criteria', data),
+  updateCriterion: (id: string, data: any) => api.put(`/categories/criteria/${id}`, data),
+  deleteCriterion: (id: string) => api.delete(`/categories/criteria/${id}`),
+}
+
+export const scoringAPI = {
+  getScores: (categoryId: string, contestantId: string) => api.get(`/scoring/category/${categoryId}/contestant/${contestantId}`),
+  submitScore: (categoryId: string, contestantId: string, data: any) => api.post(`/scoring/category/${categoryId}/contestant/${contestantId}`, data),
+  updateScore: (scoreId: string, data: any) => api.put(`/scoring/${scoreId}`, data),
+  deleteScore: (scoreId: string) => api.delete(`/scoring/${scoreId}`),
+  certifyScores: (categoryId: string) => api.post(`/scoring/category/${categoryId}/certify`),
+  getCertificationStatus: (categoryId: string) => api.get(`/scoring/category/${categoryId}/certification-status`),
+  getJudgeScores: (judgeId: string, categoryId: string) => api.get(`/scoring/judge/${judgeId}/category/${categoryId}`),
+  getDeductions: (categoryId?: string) => api.get(`/scoring/deductions${categoryId ? '?categoryId=' + categoryId : ''}`),
+  approveDeduction: (deductionId: string, signature: string) => api.post(`/scoring/deductions/${deductionId}/approve`, { signature }),
+  rejectDeduction: (deductionId: string, reason: string) => api.post(`/scoring/deductions/${deductionId}/reject`, { reason }),
+}
+
+export const resultsAPI = {
+  getAll: () => api.get('/results'),
+  getCategories: () => api.get('/results/categories'),
+  getContestantResults: (contestantId: string) => api.get(`/results/contestant/${contestantId}`),
+  getCategoryResults: (categoryId: string) => api.get(`/results/category/${categoryId}`),
+  getContestResults: (contestId: string) => api.get(`/results/contest/${contestId}`),
+  getEventResults: (eventId: string) => api.get(`/results/event/${eventId}`),
+}
+
+export const usersAPI = {
+  getAll: () => api.get('/users'),
+  getById: (id: string) => api.get(`/users/${id}`),
+  create: (data: any) => api.post('/users', data),
+  update: (id: string, data: any) => api.put(`/users/${id}`, data),
+  updateProfile: (id: string, data: any) => api.put(`/users/profile/${id}`, data),
+  delete: (id: string) => api.delete(`/users/${id}`),
+  resetPassword: (id: string, data: any) => api.post(`/users/${id}/reset-password`, data),
+  importCSV: (data: { csvData: any[], userType: string }) => api.post('/users/import-csv', data),
+  getCSVTemplate: (userType: string) => api.get(`/users/csv-template?userType=${userType}`),
+  getUsers: (params?: any) => api.get('/users', { params }),
+  createUser: (data: any) => api.post('/users', data),
+  updateUser: (id: string, data: any) => api.put(`/users/${id}`, data),
+  deleteUser: (id: string) => api.delete(`/users/${id}`),
+  bulkDeleteUsers: (ids: string[]) => api.post('/users/bulk-delete', { ids }),
+}
+
+export const adminAPI = {
+  getStats: () => api.get('/admin/stats'),
+  getLogs: (params?: any) => api.get('/admin/logs', { params }),
+  getActiveUsers: () => api.get('/admin/active-users'),
+  getSettings: () => api.get('/admin/settings'),
+  updateSettings: (data: any) => api.put('/admin/settings', data),
+  getUsers: () => api.get('/admin/users'),
+  getEvents: () => api.get('/admin/events'),
+  getContests: () => api.get('/admin/contests'),
+  getCategories: () => api.get('/admin/categories'),
+  getScores: () => api.get('/admin/scores'),
+  getActivityLogs: () => api.get('/admin/activity-logs'),
+  getAuditLogs: (params?: any) => api.get('/admin/audit-logs', { params }),
+  exportAuditLogs: (params?: any) => api.post('/admin/export-audit-logs', params),
+  testConnection: (type: string) => api.post(`/admin/test/${type}`),
+  getPasswordPolicy: () => api.get('/admin/password-policy'),
+  updatePasswordPolicy: (data: any) => api.put('/admin/password-policy', data),
+}
+
+export const uploadAPI = {
+  uploadFile: (file: File, type: string = 'OTHER') => {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('type', type)
+    return api.post('/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+  },
+  uploadMultipleFiles: (files: File[], type: string = 'OTHER') => {
+    const formData = new FormData()
+    files.forEach((file, index) => {
+      formData.append(`files`, file)
+    })
+    formData.append('type', type)
+    return api.post('/upload/multiple', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+  },
+  deleteFile: (fileId: string) => api.delete(`/upload/${fileId}`),
+  getFiles: (params?: any) => api.get('/upload/files', { params }),
+}
+
+export const archiveAPI = {
+  getAll: () => api.get('/archive'),
+  getActiveEvents: () => api.get('/events'),
+  getArchivedEvents: () => api.get('/archive/events'),
+  archive: (type: string, id: string, reason: string) => api.post(`/archive/${type}/${id}`, { reason }),
+  restore: (type: string, id: string) => api.post(`/archive/${type}/${id}/restore`),
+  delete: (type: string, id: string) => api.delete(`/archive/${type}/${id}`),
+  archiveEvent: (eventId: string, reason: string) => api.post(`/archive/event/${eventId}`, { reason }),
+  restoreEvent: (eventId: string) => api.post(`/archive/event/${eventId}/restore`),
+}
+
+export const backupAPI = {
+  getAll: () => api.get('/backup'),
+  create: (type: 'FULL' | 'SCHEMA' | 'DATA') => api.post('/backup', { type }),
+  list: () => api.get('/backup'),
+  download: async (backupId: string) => {
+    const response = await api.get(`/backup/${backupId}/download`, { responseType: 'blob' })
+    const blob = new Blob([response.data])
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `backup-${backupId}.sql`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+  },
+  restore: (backupId: string) => api.post(`/backup/${backupId}/restore`),
+  delete: (backupId: string) => api.delete(`/backup/${backupId}`),
+}
+
+export const settingsAPI = {
+  getAll: () => api.get('/settings'),
+  getSettings: () => api.get('/settings'),
+  update: (data: any) => api.put('/settings', data),
+  updateSettings: (data: any) => api.put('/settings', data),
+  test: (type: 'email' | 'database' | 'backup') => api.post(`/settings/test/${type}`),
+  getLoggingSettings: () => api.get('/settings/logging'),
+  updateLoggingSettings: (settings: any) => api.put('/settings/logging', settings),
+  getSecuritySettings: () => api.get('/settings/security'),
+  updateSecuritySettings: (settings: any) => api.put('/settings/security', settings),
+  getBackupSettings: () => api.get('/settings/backup'),
+  updateBackupSettings: (settings: any) => api.put('/settings/backup', settings),
+  getEmailSettings: () => api.get('/settings/email'),
+  updateEmailSettings: (settings: any) => api.put('/settings/email', settings),
+}
+
+export const assignmentsAPI = {
+  getAll: () => api.get('/assignments'),
+  getJudges: () => api.get('/assignments/judges'),
+  getCategories: () => api.get('/assignments/categories'),
+  assignJudge: (judgeId: string, categoryId: string) => api.post('/assignments/judge', { judgeId, categoryId }),
+  removeAssignment: (assignmentId: string) => api.delete(`/assignments/${assignmentId}`),
+  delete: (id: string) => api.delete(`/assignments/${id}`),
+}
+
+export const auditorAPI = {
+  getStats: () => api.get('/auditor/stats'),
+  getPendingAudits: () => api.get('/auditor/pending'),
+  getCompletedAudits: () => api.get('/auditor/completed'),
+  finalCertification: (categoryId: string, data: any) => api.post(`/auditor/category/${categoryId}/final-certification`, data),
+  rejectAudit: (categoryId: string, reason: string) => api.post(`/auditor/category/${categoryId}/reject`, { reason }),
+}
+
+export const boardAPI = {
+  getStats: () => api.get('/board/stats'),
+  getCertifications: () => api.get('/board/certifications'),
+  approveCertification: (id: string) => api.post(`/board/certifications/${id}/approve`),
+  rejectCertification: (id: string, reason: string) => api.post(`/board/certifications/${id}/reject`, { reason }),
+  getCertificationStatus: () => api.get('/board/certification-status'),
+  getEmceeScripts: () => api.get('/board/emcee-scripts'),
+}
+
+export const tallyMasterAPI = {
+  getStats: () => api.get('/tally-master/stats'),
+  getCertifications: () => api.get('/tally-master/certifications'),
+  getCertificationQueue: () => api.get('/tally-master/queue'),
+  getPendingCertifications: () => api.get('/tally-master/pending'),
+  certifyTotals: (categoryId: string, data: any) => api.post(`/tally-master/category/${categoryId}/certify-totals`, data),
+}
+
+export const emailAPI = {
+  getTemplates: () => api.get('/email/templates'),
+  createTemplate: (data: any) => api.post('/email/templates', data),
+  updateTemplate: (id: string, data: any) => api.put(`/email/templates/${id}`, data),
+  deleteTemplate: (id: string) => api.delete(`/email/templates/${id}`),
+  getCampaigns: () => api.get('/email/campaigns'),
+  createCampaign: (data: any) => api.post('/email/campaigns', data),
+  sendCampaign: (campaignId: string) => api.post(`/email/campaigns/${campaignId}/send`),
+  getLogs: () => api.get('/email/logs'),
+  sendMultiple: (data: { recipients: string[], subject: string, content: string }) => api.post('/email/send-multiple', data),
+  sendByRole: (data: { roles: string[], subject: string, content: string }) => api.post('/email/send-by-role', data),
+}
+
+export const bulkImportAPI = {
+  importUsers: (formData: FormData) => api.post('/bulk-import/users', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  }),
+  downloadSample: () => api.get('/bulk-import/sample', { responseType: 'blob' }),
+}
+
+export const databaseBrowserAPI = {
+  getTables: () => api.get('/database/tables'),
+  getTableData: (tableName: string, page = 1, limit = 50, search = '') =>
+    api.get(`/database/tables/${tableName}`, { params: { page, limit, search } }),
+  getTableSchema: (tableName: string) => api.get(`/database/tables/${tableName}/schema`),
+  insertRecord: (tableName: string, data: any) => api.post(`/database/tables/${tableName}`, data),
+  updateRecord: (tableName: string, id: string, data: any) =>
+    api.put(`/database/tables/${tableName}/${id}`, data),
+  deleteRecord: (tableName: string, id: string) =>
+    api.delete(`/database/tables/${tableName}/${id}`),
+  executeQuery: (query: string) => api.post('/database/query', { query }),
+  getTableStats: (tableName: string) => api.get(`/database/tables/${tableName}/stats`),
+}
+
+export const emceeScriptsAPI = {
+  getAll: () => api.get('/emcee-scripts'),
+  getById: (id: string) => api.get(`/emcee-scripts/${id}`),
+  create: (data: any) => api.post('/emcee-scripts', data),
+  update: (id: string, data: any) => api.put(`/emcee-scripts/${id}`, data),
+  delete: (id: string) => api.delete(`/emcee-scripts/${id}`),
+  getByEvent: (eventId: string) => api.get(`/emcee-scripts/event/${eventId}`),
+  getByContest: (contestId: string) => api.get(`/emcee-scripts/contest/${contestId}`),
+}
+
+export const winnersAPI = {
+  getWinners: (params?: { eventId?: string; contestId?: string; categoryId?: string }) =>
+    api.get('/winners', { params }),
+  getCertificationStatus: (categoryId: string) => api.get(`/winners/certification-status/${categoryId}`),
+  certifyWinners: (categoryId: string, data: any) => api.post(`/winners/certify/${categoryId}`, data),
+  getWinnerSignatures: (categoryId: string) => api.get(`/winners/signatures/${categoryId}`),
+}
+
+export const eventTemplatesAPI = {
+  getAll: () => api.get('/event-templates'),
+  getById: (id: string) => api.get(`/event-templates/${id}`),
+  create: (data: any) => api.post('/event-templates', data),
+  update: (id: string, data: any) => api.put(`/event-templates/${id}`, data),
+  delete: (id: string) => api.delete(`/event-templates/${id}`),
+  createEventFromTemplate: (templateId: string, eventData: any) => 
+    api.post(`/event-templates/${templateId}/create-event`, eventData),
+}
+
+export const reportsAPI = {
+  getReports: (params?: { search?: string; type?: string; status?: string }) => 
+    api.get('/reports', { params }),
+  getTemplates: () => api.get('/reports/templates'),
+  createReport: (data: any) => api.post('/reports', data),
+  generateReport: (id: string) => api.post(`/reports/${id}/generate`),
+  deleteReport: (id: string) => api.delete(`/reports/${id}`),
+  emailReport: (reportId: string, data: { recipients: string; subject: string; message: string }) => 
+    api.post(`/reports/${reportId}/email`, data),
+  generatePDF: (data: any) => api.post('/reports/generate-pdf', data),
+  generateImage: (data: any) => api.post('/reports/generate-image', data),
+  generateCSV: (data: any) => api.post('/reports/generate-csv', data),
+  generateXML: (data: any) => api.post('/reports/generate-xml', data),
+  generateExcel: (data: any) => api.post('/reports/generate-excel', data),
+  delete: (id: string) => api.delete(`/reports/${id}`),
+}
+
+// Export the api instance for direct use
+export { api }
+export default api
+APIEOF
+    
     # Verify frontend environment variables exist
     if [ ! -f ".env" ]; then
         print_error "Frontend .env file not found! Creating default environment..."
@@ -29906,7 +30240,8 @@ import {
   UsersIcon,
   CalendarIcon,
   TrophyIcon,
-  CogIcon
+  CogIcon,
+  DocumentTextIcon
 } from '@heroicons/react/24/outline'
 import { format } from 'date-fns'
 
@@ -34716,11 +35051,6 @@ import {
   DocumentArrowDownIcon,
   DocumentArrowUpIcon,
   ClipboardDocumentIcon,
-  ClipboardDocumentCheckIcon,
-  ClipboardDocumentListIcon,
-  ClipboardDocumentIcon as ClipboardIcon,
-  XMarkIcon,
-  ChevronDownIcon,
   ChevronRightIcon,
   FunnelIcon,
   AdjustmentsHorizontalIcon,
@@ -34729,7 +35059,6 @@ import {
   TableCellsIcon as TableIcon,
   CommandLineIcon,
   CpuChipIcon,
-  CircleStackIcon,
   KeyIcon,
   LinkIcon,
   TagIcon,
@@ -34772,13 +35101,9 @@ import {
   ArrowLeftIcon,
   ArrowRightIcon,
   Bars3CenterLeftIcon,
-  Bars3LeftIcon,
-  Bars3TopLeftIcon,
   Bars3BottomLeftIcon as Bars3BottomLeft,
   Bars3BottomRightIcon as Bars3BottomRight,
   Bars3CenterLeftIcon as Bars3CenterLeft,
-  Bars3LeftIcon as Bars3Left,
-  Bars3TopLeftIcon as Bars3TopLeft,
   Bars4Icon as Bars4,
   BarsArrowUpIcon as BarsArrowUp,
   BarsArrowDownIcon as BarsArrowDown,
@@ -34840,7 +35165,7 @@ import {
   StopIcon as Stop,
   PlayIcon as Play,
   Cog6ToothIcon as Cog6Tooth,
-  DatabaseIcon as Database,
+  CircleStackIcon as Database,
   ServerIcon as Server,
   ChartBarIcon as ChartBar,
   DocumentTextIcon as DocumentText,
@@ -35196,7 +35521,7 @@ const DatabaseBrowser: React.FC = () => {
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
             }`}
           >
-            <DatabaseIcon className="h-4 w-4 mr-2 inline" />
+            <Database className="h-4 w-4 mr-2 inline" />
             Schema
           </button>
           <button
@@ -41213,6 +41538,8 @@ interface PasswordPolicy {
   preventReuse: number // number of previous passwords to prevent reuse
   lockoutAttempts: number
   lockoutDuration: number // minutes
+  preventCommonPasswords: boolean
+  preventUserInfo: boolean
 }
 
 const SettingsPage: React.FC = () => {
