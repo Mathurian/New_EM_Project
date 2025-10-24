@@ -4633,19 +4633,6 @@ const getCertificationStatus = async (req, res) => {
 const getEmceeScripts = async (req, res) => {
   try {
     const scripts = await prisma.emceeScript.findMany({
-      orderBy: { createdAt: 'desc' }
-    })
-
-    res.json(scripts)
-  } catch (error) {
-    console.error('Get emcee scripts error:', error)
-    res.status(500).json({ error: 'Internal server error' })
-  }
-}
-
-const getEmceeScripts = async (req, res) => {
-  try {
-    const scripts = await prisma.emceeScript.findMany({
       where: { isActive: true },
       include: {
         event: true,
