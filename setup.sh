@@ -10555,7 +10555,7 @@ EOF
 const { PrismaClient } = require('@prisma/client')
 const XLSX = require('xlsx')
 const csvWriter = require('csv-writer')
-const { Builder } = require('xml2js')
+const xml2js = require('xml2js')
 const PDFDocument = require('pdfkit')
 const fs = require('fs').promises
 const path = require('path')
@@ -11011,7 +11011,7 @@ const exportJudgePerformanceToXML = async (req, res) => {
     }
 
     // Generate XML
-    const builder = new Builder({ rootName: 'judgePerformance', xmldec: { version: '1.0', encoding: 'UTF-8' } })
+    const builder = new xml2js.Builder({ rootName: 'judgePerformance', xmldec: { version: '1.0', encoding: 'UTF-8' } })
     const xml = builder.buildObject(xmlData)
 
     // Generate filename
