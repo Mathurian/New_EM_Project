@@ -9430,7 +9430,7 @@ const printEventReport = async (req, res) => {
     // Set appropriate headers
     if (format === 'pdf') {
       res.setHeader('Content-Type', 'application/pdf')
-      res.setHeader('Content-Disposition', `attachment; filename="event-report-${event.name}-${Date.now()}.pdf"`)
+      res.setHeader('Content-Disposition', 'attachment; filename="event-report-' + event.name + '-' + Date.now() + '.pdf"')
     } else {
       res.setHeader('Content-Type', 'text/html')
     }
@@ -9571,7 +9571,7 @@ const printContestResults = async (req, res) => {
     // Set appropriate headers
     if (format === 'pdf') {
       res.setHeader('Content-Type', 'application/pdf')
-      res.setHeader('Content-Disposition', `attachment; filename="contest-results-${contest.name}-${Date.now()}.pdf"`)
+      res.setHeader('Content-Disposition', 'attachment; filename="contest-results-' + contest.name + '-' + Date.now() + '.pdf"')
     } else {
       res.setHeader('Content-Type', 'text/html')
     }
@@ -9710,7 +9710,7 @@ const printJudgePerformance = async (req, res) => {
     // Set appropriate headers
     if (format === 'pdf') {
       res.setHeader('Content-Type', 'application/pdf')
-      res.setHeader('Content-Disposition', `attachment; filename="judge-performance-${judge.name}-${Date.now()}.pdf"`)
+      res.setHeader('Content-Disposition', 'attachment; filename="judge-performance-' + judge.name + '-' + Date.now() + '.pdf"')
     } else {
       res.setHeader('Content-Type', 'text/html')
     }
@@ -10714,7 +10714,7 @@ const exportEventToExcel = async (req, res) => {
 
     // Set headers for download
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+    res.setHeader('Content-Disposition', 'attachment; filename="' + filename + '"')
 
     // Send file
     const fileBuffer = await fs.readFile(filepath)
@@ -10871,7 +10871,7 @@ const exportContestResultsToCSV = async (req, res) => {
 
     // Set headers for download
     res.setHeader('Content-Type', 'text/csv')
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+    res.setHeader('Content-Disposition', 'attachment; filename="' + filename + '"')
 
     // Send file
     const fileBuffer = await fs.readFile(filepath)
@@ -11023,7 +11023,7 @@ const exportJudgePerformanceToXML = async (req, res) => {
 
     // Set headers for download
     res.setHeader('Content-Type', 'application/xml')
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+    res.setHeader('Content-Disposition', 'attachment; filename="' + filename + '"')
 
     // Send file
     const fileBuffer = await fs.readFile(filepath)
@@ -11105,7 +11105,7 @@ const exportSystemAnalyticsToPDF = async (req, res) => {
 
     // Set headers for download
     res.setHeader('Content-Type', 'application/pdf')
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+    res.setHeader('Content-Disposition', 'attachment; filename="' + filename + '"')
 
     // Send file
     const fileBuffer = await fs.readFile(filepath)
@@ -12020,7 +12020,7 @@ const downloadFile = async (req, res) => {
     
     // Set appropriate headers
     res.setHeader('Content-Type', file.mimeType)
-    res.setHeader('Content-Disposition', `attachment; filename="${file.originalName}"`)
+    res.setHeader('Content-Disposition', 'attachment; filename="' + file.originalName + '"')
     res.setHeader('Content-Length', file.size)
     
     // Stream the file
@@ -14342,7 +14342,7 @@ const downloadBackup = async (req, res) => {
     const stats = await fs.stat(compressedPath)
     
     res.setHeader('Content-Type', 'application/gzip')
-    res.setHeader('Content-Disposition', `attachment; filename="${backupId}.tar.gz"`)
+    res.setHeader('Content-Disposition', 'attachment; filename="' + backupId + '.tar.gz"')
     res.setHeader('Content-Length', stats.size)
 
     const fileStream = require('fs').createReadStream(compressedPath)
@@ -15169,7 +15169,7 @@ const exportErrorLogs = async (req, res) => {
     if (format === 'csv') {
       const csv = convertToCSV(errors)
       res.setHeader('Content-Type', 'text/csv')
-      res.setHeader('Content-Disposition', `attachment; filename="error-logs-${period}.csv"`)
+      res.setHeader('Content-Disposition', 'attachment; filename="error-logs-' + period + '.csv"')
       res.send(csv)
     } else {
       res.json({
@@ -15942,7 +15942,7 @@ const generatePDFReport = async (res, event, stats, includeDetails) => {
     await browser.close()
 
     res.setHeader('Content-Type', 'application/pdf')
-    res.setHeader('Content-Disposition', `attachment; filename="event-report-${event.id}.pdf"`)
+    res.setHeader('Content-Disposition', 'attachment; filename="event-report-' + event.id + '.pdf"')
     res.send(pdf)
   } catch (error) {
     console.error('PDF generation error:', error)
@@ -16085,7 +16085,7 @@ const generateCSVReport = async (res, event, stats, includeDetails) => {
     const csvContent = csvData.map(row => row.map(cell => '"' + cell + '"').join(',')).join('\n')
     
     res.setHeader('Content-Type', 'text/csv')
-    res.setHeader('Content-Disposition', `attachment; filename="event-report-${event.id}.csv"`)
+    res.setHeader('Content-Disposition', 'attachment; filename="event-report-' + event.id + '.csv"')
     res.send(csvContent)
   } catch (error) {
     console.error('CSV generation error:', error)
@@ -16152,7 +16152,7 @@ const generateXMLReport = async (res, event, stats, includeDetails) => {
     const xml = builder.buildObject(reportData)
     
     res.setHeader('Content-Type', 'application/xml')
-    res.setHeader('Content-Disposition', `attachment; filename="event-report-${event.id}.xml"`)
+    res.setHeader('Content-Disposition', 'attachment; filename="event-report-' + event.id + '.xml"')
     res.send(xml)
   } catch (error) {
     console.error('XML generation error:', error)
@@ -16200,7 +16200,7 @@ const generateJSONReport = async (res, event, stats, includeDetails) => {
     }
 
     res.setHeader('Content-Type', 'application/json')
-    res.setHeader('Content-Disposition', `attachment; filename="event-report-${event.id}.json"`)
+    res.setHeader('Content-Disposition', 'attachment; filename="event-report-' + event.id + '.json"')
     res.json(reportData)
   } catch (error) {
     console.error('JSON generation error:', error)
