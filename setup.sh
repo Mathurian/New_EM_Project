@@ -15912,14 +15912,14 @@ const generatePDFReport = async (res, event, stats, includeDetails) => {
               </tr>
             </thead>
             <tbody>
-              ' + event.contests.map(contest => 
-                '<tr>' +
-                  '<td>' + contest.name + '</td>' +
-                  '<td>' + contest.categories.length + '</td>' +
-                  '<td>' + contest.categories.reduce((sum, cat) => sum + cat.contestants.length, 0) + '</td>' +
-                  '<td>' + contest.categories.reduce((sum, cat) => sum + cat.scores.length, 0) + '</td>' +
-                '</tr>'
-              ).join('') + '
+              ${event.contests.map(contest => `
+                <tr>
+                  <td>${contest.name}</td>
+                  <td>${contest.categories.length}</td>
+                  <td>${contest.categories.reduce((sum, cat) => sum + cat.contestants.length, 0)}</td>
+                  <td>${contest.categories.reduce((sum, cat) => sum + cat.scores.length, 0)}</td>
+                </tr>
+              `).join('')}
             </tbody>
           </table>
         </div>
@@ -15972,7 +15972,7 @@ const generateExcelReport = async (res, event, stats, includeDetails) => {
       ['Total Judges', stats.totalJudges],
       ['Scores Submitted', stats.totalScores],
       ['Average Score', stats.averageScore.toFixed(2)],
-      ['Completion Rate', `${stats.completionRate.toFixed(1)}%']
+      ['Completion Rate', `${stats.completionRate.toFixed(1)}%`]
     ]
 
     const summarySheet = XLSX.utils.aoa_to_sheet(summaryData)
@@ -16336,29 +16336,29 @@ const generateJudgePDFReport = async (res, judgeStats) => {
           <p>Generated on: ${new Date().toLocaleDateString()}</p>
         </div>
 
-        ' + Object.values(judgeStats).map(stat => 
-          '<div class="judge-card">' +
-            '<h2>' + stat.judge.user.firstName + ' ' + stat.judge.user.lastName + '</h2>' +
-            '<div class="stats">' +
-              '<div class="stat-item">' +
-                '<div class="stat-value">' + stat.totalScores + '</div>' +
-                '<div class="stat-label">Total Scores</div>' +
-              '</div>' +
-              '<div class="stat-item">' +
-                '<div class="stat-value">' + stat.averageScore.toFixed(2) + '</div>' +
-                '<div class="stat-label">Average Score</div>' +
-              '</div>' +
-              '<div class="stat-item">' +
-                '<div class="stat-value">' + stat.categoriesCount + '</div>' +
-                '<div class="stat-label">Categories</div>' +
-              '</div>' +
-              '<div class="stat-item">' +
-                '<div class="stat-value">' + stat.eventsCount + '</div>' +
-                '<div class="stat-label">Events</div>' +
-              '</div>' +
-            '</div>' +
-          '</div>'
-        ).join('') + '
+        ${Object.values(judgeStats).map(stat => `
+          <div class="judge-card">
+            <h2>${stat.judge.user.firstName} ${stat.judge.user.lastName}</h2>
+            <div class="stats">
+              <div class="stat-item">
+                <div class="stat-value">${stat.totalScores}</div>
+                <div class="stat-label">Total Scores</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-value">${stat.averageScore.toFixed(2)}</div>
+                <div class="stat-label">Average Score</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-value">${stat.categoriesCount}</div>
+                <div class="stat-label">Categories</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-value">${stat.eventsCount}</div>
+                <div class="stat-label">Events</div>
+              </div>
+            </div>
+          </div>
+        `).join('')}
       </body>
       </html>
     `
@@ -16614,13 +16614,13 @@ const generateAnalyticsPDFReport = async (res, analyticsData) => {
               </tr>
             </thead>
             <tbody>
-              ' + analyticsData.userRoles.map(role => 
-                '<tr>' +
-                  '<td>' + role.role + '</td>' +
-                  '<td>' + role._count.role + '</td>' +
-                  '<td>' + ((role._count.role / analyticsData.stats.totalUsers) * 100).toFixed(1) + '%</td>' +
-                '</tr>'
-              ).join('') + '
+              ${analyticsData.userRoles.map(role => `
+                <tr>
+                  <td>${role.role}</td>
+                  <td>${role._count.role}</td>
+                  <td>${((role._count.role / analyticsData.stats.totalUsers) * 100).toFixed(1)}%</td>
+                </tr>
+              `).join('')}
             </tbody>
           </table>
         </div>
@@ -16637,14 +16637,14 @@ const generateAnalyticsPDFReport = async (res, analyticsData) => {
               </tr>
             </thead>
             <tbody>
-              ' + analyticsData.recentActivity.slice(0, 20).map(activity => 
-                '<tr>' +
-                  '<td>' + new Date(activity.createdAt).toLocaleDateString() + '</td>' +
-                  '<td>' + (activity.user?.user?.firstName || '') + ' ' + (activity.user?.user?.lastName || '') + '</td>' +
-                  '<td>' + activity.action + '</td>' +
-                  '<td>' + activity.entityType + '</td>' +
-                '</tr>'
-              ).join('') + '
+              ${analyticsData.recentActivity.slice(0, 20).map(activity => `
+                <tr>
+                  <td>${new Date(activity.createdAt).toLocaleDateString()}</td>
+                  <td>${(activity.user?.user?.firstName || '')} ${(activity.user?.user?.lastName || '')}</td>
+                  <td>${activity.action}</td>
+                  <td>${activity.entityType}</td>
+                </tr>
+              `).join('')}
             </tbody>
           </table>
         </div>
