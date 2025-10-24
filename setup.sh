@@ -2434,17 +2434,6 @@ const getActiveUsers = async (req, res) => {
   }
 }
 
-const getSettings = async (req, res) => {
-  try {
-    const settings = await prisma.systemSetting.findMany()
-    res.json(settings)
-  } catch (error) {
-    console.error('Get settings error:', error)
-    res.status(500).json({ error: 'Internal server error' })
-  }
-}
-
-
 const getUsers = async (req, res) => {
   try {
     const users = await prisma.user.findMany({
