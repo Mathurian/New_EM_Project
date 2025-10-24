@@ -2656,33 +2656,6 @@ const exportAuditLogs = async (req, res) => {
 const testConnection = async (req, res) => {
   try {
     const { type } = req.params
-
-    switch (type) {
-      case 'email':
-        // Test email connection
-        res.json({ status: 'success', message: 'Email connection test passed' })
-        break
-      case 'database':
-        // Test database connection
-        await prisma.$queryRaw`SELECT 1`
-        res.json({ status: 'success', message: 'Database connection test passed' })
-        break
-      case 'backup':
-        // Test backup functionality
-        res.json({ status: 'success', message: 'Backup test passed' })
-        break
-      default:
-        res.status(400).json({ error: 'Invalid test type' })
-    }
-  } catch (error) {
-    console.error('Test connection error:', error)
-    res.status(500).json({ error: 'Internal server error' })
-  }
-}
-
-const testConnection = async (req, res) => {
-  try {
-    const { type } = req.params
     
     switch (type) {
       case 'database':
@@ -2692,6 +2665,10 @@ const testConnection = async (req, res) => {
       case 'email':
         // Test email configuration
         res.json({ status: 'success', message: 'Email configuration test successful' })
+        break
+      case 'backup':
+        // Test backup functionality
+        res.json({ status: 'success', message: 'Backup test passed' })
         break
       default:
         res.status(400).json({ error: 'Invalid test type' })
