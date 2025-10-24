@@ -10554,7 +10554,7 @@ EOF
     cat > "$APP_DIR/src/controllers/exportController.js" << 'EOF'
 const { PrismaClient } = require('@prisma/client')
 const XLSX = require('xlsx')
-const createCsvWriter = require('csv-writer').createObjectCsvWriter
+const csvWriter = require('csv-writer')
 const { Builder } = require('xml2js')
 const PDFDocument = require('pdfkit')
 const fs = require('fs').promises
@@ -10851,7 +10851,7 @@ const exportContestResultsToCSV = async (req, res) => {
     const filepath = path.join(EXPORT_DIR, filename)
 
     // Create CSV writer
-    const csvWriter = createCsvWriter({
+    const writer = csvWriter.createObjectCsvWriter({
       path: filepath,
       header: [
         { id: 'Event', title: 'Event' },
@@ -10867,7 +10867,7 @@ const exportContestResultsToCSV = async (req, res) => {
     })
 
     // Write CSV file
-    await csvWriter.writeRecords(csvData)
+    await writer.writeRecords(csvData)
 
     // Set headers for download
     res.setHeader('Content-Type', 'text/csv')
