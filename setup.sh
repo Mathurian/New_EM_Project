@@ -41923,9 +41923,6 @@ main() {
     # Check for PM2
     check_pm2
     
-    # Verify installation
-    verify_installation
-    
     # Evaluate setup completeness
     evaluate_setup_completeness
     
