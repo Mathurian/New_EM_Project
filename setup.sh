@@ -14395,10 +14395,11 @@ EOF
     cat > "$APP_DIR/src/routes/performanceRoutes.js" << 'EOF'
 const express = require('express')
 const { 
-  getSystemPerformance,
-  getPerformanceHistory,
-  getPerformanceAlerts,
-  cleanupPerformanceData
+  getPerformanceStats,
+  getSystemMetrics,
+  getPerformanceLogs,
+  clearPerformanceLogs,
+  getHealthCheck
 } = require('../controllers/performanceController')
 const { authenticateToken, requireRole } = require('../middleware/auth')
 const { logActivity } = require('../middleware/errorHandler')
@@ -14409,10 +14410,11 @@ const router = express.Router()
 router.use(authenticateToken)
 
 // Performance monitoring
-router.get('/metrics', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), getSystemPerformance)
-router.get('/history', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), getPerformanceHistory)
-router.get('/alerts', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), getPerformanceAlerts)
-router.post('/cleanup', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), logActivity('CLEANUP_PERFORMANCE_DATA', 'SYSTEM'), cleanupPerformanceData)
+router.get('/metrics', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), getSystemMetrics)
+router.get('/stats', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), getPerformanceStats)
+router.get('/logs', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), getPerformanceLogs)
+router.get('/health', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), getHealthCheck)
+router.post('/clear-logs', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), logActivity('CLEAR_PERFORMANCE_LOGS', 'SYSTEM'), clearPerformanceLogs)
 
 module.exports = router
 EOF
