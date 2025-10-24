@@ -3111,13 +3111,182 @@ const getJWTConfig = async (req, res) => {
   }
 }
 
+// Specific settings endpoints
+const getLoggingLevels = async (req, res) => {
+  try {
+    const settings = await prisma.systemSetting.findMany({
+      where: {
+        settingKey: {
+          in: ['LOG_LEVEL', 'LOG_RETENTION_DAYS', 'LOG_FILE_SIZE_MB']
+        }
+      }
+    })
+    res.json(settings)
+  } catch (error) {
+    console.error('Get logging levels error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const updateLoggingLevel = async (req, res) => {
+  try {
+    const { settings } = req.body
+
+    for (const setting of settings) {
+      await prisma.systemSetting.upsert({
+        where: { settingKey: setting.key },
+        update: { settingValue: setting.value },
+        create: { 
+          settingKey: setting.key, 
+          settingValue: setting.value,
+          description: setting.description,
+          updatedById: req.user.id
+        }
+      })
+    }
+
+    res.json({ message: 'Logging levels updated successfully' })
+  } catch (error) {
+    console.error('Update logging levels error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getSecuritySettings = async (req, res) => {
+  try {
+    const settings = await prisma.systemSetting.findMany({
+      where: {
+        settingKey: {
+          in: ['PASSWORD_MIN_LENGTH', 'PASSWORD_REQUIRE_UPPERCASE', 'PASSWORD_REQUIRE_LOWERCASE', 'PASSWORD_REQUIRE_NUMBERS', 'PASSWORD_REQUIRE_SYMBOLS', 'LOGIN_ATTEMPTS_LIMIT', 'ACCOUNT_LOCKOUT_DURATION']
+        }
+      }
+    })
+    res.json(settings)
+  } catch (error) {
+    console.error('Get security settings error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const updateSecuritySettings = async (req, res) => {
+  try {
+    const { settings } = req.body
+
+    for (const setting of settings) {
+      await prisma.systemSetting.upsert({
+        where: { settingKey: setting.key },
+        update: { settingValue: setting.value },
+        create: { 
+          settingKey: setting.key, 
+          settingValue: setting.value,
+          description: setting.description,
+          updatedById: req.user.id
+        }
+      })
+    }
+
+    res.json({ message: 'Security settings updated successfully' })
+  } catch (error) {
+    console.error('Update security settings error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getBackupSettings = async (req, res) => {
+  try {
+    const settings = await prisma.systemSetting.findMany({
+      where: {
+        settingKey: {
+          in: ['BACKUP_FREQUENCY', 'BACKUP_RETENTION_DAYS', 'BACKUP_LOCATION', 'AUTO_BACKUP_ENABLED']
+        }
+      }
+    })
+    res.json(settings)
+  } catch (error) {
+    console.error('Get backup settings error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const updateBackupSettings = async (req, res) => {
+  try {
+    const { settings } = req.body
+
+    for (const setting of settings) {
+      await prisma.systemSetting.upsert({
+        where: { settingKey: setting.key },
+        update: { settingValue: setting.value },
+        create: { 
+          settingKey: setting.key, 
+          settingValue: setting.value,
+          description: setting.description,
+          updatedById: req.user.id
+        }
+      })
+    }
+
+    res.json({ message: 'Backup settings updated successfully' })
+  } catch (error) {
+    console.error('Update backup settings error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getEmailSettings = async (req, res) => {
+  try {
+    const settings = await prisma.systemSetting.findMany({
+      where: {
+        settingKey: {
+          in: ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS', 'SMTP_SECURE', 'EMAIL_FROM', 'EMAIL_FROM_NAME']
+        }
+      }
+    })
+    res.json(settings)
+  } catch (error) {
+    console.error('Get email settings error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const updateEmailSettings = async (req, res) => {
+  try {
+    const { settings } = req.body
+
+    for (const setting of settings) {
+      await prisma.systemSetting.upsert({
+        where: { settingKey: setting.key },
+        update: { settingValue: setting.value },
+        create: { 
+          settingKey: setting.key, 
+          settingValue: setting.value,
+          description: setting.description,
+          updatedById: req.user.id
+        }
+      })
+    }
+
+    res.json({ message: 'Email settings updated successfully' })
+  } catch (error) {
+    console.error('Update email settings error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
 module.exports = {
   getAllSettings,
   getSettings,
   updateSettings,
   testSettings,
   updateJWTConfig,
-  getJWTConfig
+  getJWTConfig,
+  getLoggingLevels,
+  updateLoggingLevel,
+  getSecuritySettings,
+  updateSecuritySettings,
+  getBackupSettings,
+  updateBackupSettings,
+  getEmailSettings,
+  updateEmailSettings
 }
 EOF
 
@@ -13240,7 +13409,22 @@ EOF
     # Settings Routes
     cat > "$APP_DIR/src/routes/settingsRoutes.js" << 'EOF'
 const express = require('express')
-const { getAllSettings, getSettings, updateSettings, testSettings, updateJWTConfig, getJWTConfig } = require('../controllers/settingsController')
+const { 
+  getAllSettings, 
+  getSettings, 
+  updateSettings, 
+  testSettings, 
+  updateJWTConfig, 
+  getJWTConfig,
+  getLoggingLevels,
+  updateLoggingLevel,
+  getSecuritySettings,
+  updateSecuritySettings,
+  getBackupSettings,
+  updateBackupSettings,
+  getEmailSettings,
+  updateEmailSettings
+} = require('../controllers/settingsController')
 const { authenticateToken, requireRole } = require('../middleware/auth')
 const { logActivity } = require('../middleware/errorHandler')
 
@@ -13257,20 +13441,20 @@ router.put('/settings', requireRole(['ORGANIZER', 'BOARD']), logActivity('UPDATE
 router.post('/test/:type', requireRole(['ORGANIZER', 'BOARD']), testSettings)
 
 // Logging settings
-router.get('/logging-levels', getAllSettings)
-router.put('/logging-level', requireRole(['ORGANIZER', 'BOARD']), logActivity('UPDATE_LOGGING_LEVEL', 'SETTINGS'), updateSettings)
+router.get('/logging-levels', getLoggingLevels)
+router.put('/logging-levels', requireRole(['ORGANIZER', 'BOARD']), logActivity('UPDATE_LOGGING_LEVEL', 'SETTINGS'), updateLoggingLevel)
 
 // Security settings
-router.get('/security', getAllSettings)
-router.put('/security', requireRole(['ORGANIZER', 'BOARD']), logActivity('UPDATE_SECURITY_SETTINGS', 'SETTINGS'), updateSettings)
+router.get('/security', getSecuritySettings)
+router.put('/security', requireRole(['ORGANIZER', 'BOARD']), logActivity('UPDATE_SECURITY_SETTINGS', 'SETTINGS'), updateSecuritySettings)
 
 // Backup settings
-router.get('/backup', getAllSettings)
-router.put('/backup', requireRole(['ORGANIZER', 'BOARD']), logActivity('UPDATE_BACKUP_SETTINGS', 'SETTINGS'), updateSettings)
+router.get('/backup', getBackupSettings)
+router.put('/backup', requireRole(['ORGANIZER', 'BOARD']), logActivity('UPDATE_BACKUP_SETTINGS', 'SETTINGS'), updateBackupSettings)
 
 // Email settings
-router.get('/email', getAllSettings)
-router.put('/email', requireRole(['ORGANIZER', 'BOARD']), logActivity('UPDATE_EMAIL_SETTINGS', 'SETTINGS'), updateSettings)
+router.get('/email', getEmailSettings)
+router.put('/email', requireRole(['ORGANIZER', 'BOARD']), logActivity('UPDATE_EMAIL_SETTINGS', 'SETTINGS'), updateEmailSettings)
 
 // JWT configuration routes
 router.get('/jwt-config', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), getJWTConfig)
