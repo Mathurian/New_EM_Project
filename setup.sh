@@ -16948,34 +16948,6 @@ router.delete('/:id', checkFileAccess('DELETE'), logActivity('DELETE_FILE', 'FIL
 module.exports = router
 EOF
 
-    # Performance Routes
-    cat > "$APP_DIR/src/routes/performanceRoutes.js" << 'EOF'
-const express = require('express')
-const { 
-  getPerformanceStats,
-  getSystemMetrics,
-  getPerformanceLogs,
-  clearPerformanceLogs,
-  getHealthCheck
-} = require('../controllers/performanceController')
-const { authenticateToken, requireRole } = require('../middleware/auth')
-const { logActivity } = require('../middleware/errorHandler')
-
-const router = express.Router()
-
-// Apply authentication to all routes
-router.use(authenticateToken)
-
-// Performance endpoints
-router.get('/stats', getPerformanceStats)
-router.get('/system', requireRole(['ORGANIZER', 'BOARD']), getSystemMetrics)
-router.get('/logs', requireRole(['ORGANIZER', 'BOARD']), getPerformanceLogs)
-router.get('/health', getHealthCheck)
-router.delete('/logs', requireRole(['ORGANIZER', 'BOARD']), logActivity('CLEAR_PERFORMANCE_LOGS', 'PERFORMANCE'), clearPerformanceLogs)
-
-module.exports = router
-EOF
-
     # Certification Routes
     cat > "$APP_DIR/src/routes/certificationRoutes.js" << 'EOF'
 const express = require('express')
@@ -17095,7 +17067,6 @@ const printRoutes = require('./routes/printRoutes')
 const exportRoutes = require('./routes/exportRoutes')
 const fileManagementRoutes = require('./routes/fileManagementRoutes')
 const fileBackupRoutes = require('./routes/fileBackupRoutes')
-const performanceRoutes = require('./routes/performanceRoutes')
 const errorHandlingRoutes = require('./routes/errorHandlingRoutes')
 const templatesRoutes = require('./routes/templatesRoutes')
 const notificationsRoutes = require('./routes/notificationsRoutes')
@@ -17195,7 +17166,6 @@ app.use('/api/print', printRoutes)
 app.use('/api/export', exportRoutes)
 app.use('/api/file-management', fileManagementRoutes)
 app.use('/api/file-backup', fileBackupRoutes)
-app.use('/api/performance', performanceRoutes)
 app.use('/api/errors', errorHandlingRoutes)
 app.use('/api/templates', templatesRoutes)
 app.use('/api/notifications', notificationsRoutes)
