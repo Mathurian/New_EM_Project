@@ -20958,8 +20958,11 @@ import {\
         # Replace PencilIcon with PencilSquareIcon (Heroicons v2 name)
         sed -i 's/PencilIcon/PencilSquareIcon/g' "src/pages/AuditorPage.tsx"
         
+        # Fix API call signature
+        sed -i 's/auditorAPI\.finalCertification(data)/auditorAPI.finalizeCertification(data)/g' "src/pages/AuditorPage.tsx"
+        
         # No need to add imports - they're already included in the generated file
-        print_status "Fixed AuditorPage.tsx PencilIcon -> PencilSquareIcon"
+        print_status "Fixed AuditorPage.tsx PencilIcon -> PencilSquareIcon and API call"
     fi
     
     # Fix ReportsPage.tsx - Remove duplicate DocumentTextIcon and fix DownloadIcon
@@ -21026,6 +21029,8 @@ import {\
         sed -i 's/DocumentReportIcon/DocumentTextIcon/g' "src/pages/TallyMasterPage.tsx"
         sed -i 's/TrendingUpIcon/ArrowTrendingUpIcon/g' "src/pages/TallyMasterPage.tsx"
         sed -i 's/TrendingDownIcon/ArrowTrendingDownIcon/g' "src/pages/TallyMasterPage.tsx"
+        # Fix API call signature
+        sed -i 's/tallyMasterAPI\.certifyTotals(data)/tallyMasterAPI.certifyTotalsData(data)/g' "src/pages/TallyMasterPage.tsx"
     fi
     
     # Fix ProfilePage.tsx - Fix role type casting
