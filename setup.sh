@@ -21279,7 +21279,7 @@ export const archiveAPI = {
   restore: (type: string, id: string) => api.post(`/archive/${type}/${id}/restore`),
   delete: (type: string, id: string) => api.delete(`/archive/${type}/${id}`),
   archiveEvent: (eventId: string, reason: string) => api.post(`/archive/event/${eventId}`, { reason }),
-  restoreEvent: (eventId: string) => api.post(`/archive/event/${eventId}/restore`),
+  deleteEvent: (eventId: string) => api.delete(`/archive/event/${eventId}`),
 }
 
 export const backupAPI = {
@@ -21338,6 +21338,8 @@ export const assignmentsAPI = {
   assignJudge: (judgeId: string, categoryId: string) => api.post('/assignments/judge', { judgeId, categoryId }),
   removeAssignment: (assignmentId: string) => api.delete(`/assignments/${assignmentId}`),
   delete: (id: string) => api.delete(`/assignments/${id}`),
+  create: (data: any) => api.post('/assignments', data),
+  update: (id: string, data: any) => api.put(`/assignments/${id}`, data),
 }
 
 export const auditorAPI = {
@@ -21346,6 +21348,7 @@ export const auditorAPI = {
   getCompletedAudits: () => api.get('/auditor/completed'),
   finalCertification: (categoryId: string, data: any) => api.post(`/auditor/category/${categoryId}/final-certification`, data),
   rejectAudit: (categoryId: string, reason: string) => api.post(`/auditor/category/${categoryId}/reject`, { reason }),
+  finalizeCertification: (data: any) => api.post('/auditor/finalize-certification', data),
 }
 
 export const boardAPI = {
@@ -21363,6 +21366,7 @@ export const tallyMasterAPI = {
   getCertificationQueue: () => api.get('/tally-master/queue'),
   getPendingCertifications: () => api.get('/tally-master/pending'),
   certifyTotals: (categoryId: string, data: any) => api.post(`/tally-master/category/${categoryId}/certify-totals`, data),
+  certifyTotalsData: (data: any) => api.post('/tally-master/certify-totals', data),
 }
 
 export const emailAPI = {
@@ -21481,7 +21485,7 @@ const ArchiveManager: React.FC = () => {
 
   const archiveMutation = useMutation(
     ({ eventId, reason }: { eventId: string; reason: string }) => 
-      archiveAPI.archive('event', eventId, reason),
+      archiveAPI.archiveEvent(eventId, reason),
     {
       onSuccess: () => {
         queryClient.invalidateQueries('archivedEvents')
@@ -21493,7 +21497,7 @@ const ArchiveManager: React.FC = () => {
   )
 
   const restoreMutation = useMutation(
-    (eventId: string) => archiveAPI.restore('event', eventId),
+    (eventId: string) => archiveAPI.restoreEvent(eventId),
     {
       onSuccess: () => {
         queryClient.invalidateQueries('archivedEvents')
@@ -21504,7 +21508,7 @@ const ArchiveManager: React.FC = () => {
   )
 
   const deleteMutation = useMutation(
-    (eventId: string) => archiveAPI.delete('event', eventId),
+    (eventId: string) => archiveAPI.deleteEvent(eventId),
     {
       onSuccess: () => {
         queryClient.invalidateQueries('archivedEvents')
@@ -21691,6 +21695,8 @@ export const scoringAPI = {
   getDeductions: (categoryId?: string) => api.get(`/scoring/deductions${categoryId ? '?categoryId=' + categoryId : ''}`),
   approveDeduction: (deductionId: string, signature: string) => api.post(`/scoring/deductions/${deductionId}/approve`, { signature }),
   rejectDeduction: (deductionId: string, reason: string) => api.post(`/scoring/deductions/${deductionId}/reject`, { reason }),
+  getCategories: () => api.get('/scoring/categories'),
+  submitScoreData: (scoreData: any) => api.post('/scoring/submit', scoreData),
 }
 
 export const resultsAPI = {
@@ -21773,7 +21779,7 @@ export const archiveAPI = {
   restore: (type: string, id: string) => api.post(`/archive/${type}/${id}/restore`),
   delete: (type: string, id: string) => api.delete(`/archive/${type}/${id}`),
   archiveEvent: (eventId: string, reason: string) => api.post(`/archive/event/${eventId}`, { reason }),
-  restoreEvent: (eventId: string) => api.post(`/archive/event/${eventId}/restore`),
+  deleteEvent: (eventId: string) => api.delete(`/archive/event/${eventId}`),
 }
 
 export const backupAPI = {
@@ -21810,6 +21816,8 @@ export const settingsAPI = {
   updateBackupSettings: (settings: any) => api.put('/settings/backup', settings),
   getEmailSettings: () => api.get('/settings/email'),
   updateEmailSettings: (settings: any) => api.put('/settings/email', settings),
+  getLoggingLevels: () => api.get('/settings/logging-levels'),
+  updateLoggingLevel: (level: string) => api.put('/settings/logging-level', { level }),
 }
 
 export const assignmentsAPI = {
@@ -21819,6 +21827,8 @@ export const assignmentsAPI = {
   assignJudge: (judgeId: string, categoryId: string) => api.post('/assignments/judge', { judgeId, categoryId }),
   removeAssignment: (assignmentId: string) => api.delete(`/assignments/${assignmentId}`),
   delete: (id: string) => api.delete(`/assignments/${id}`),
+  create: (data: any) => api.post('/assignments', data),
+  update: (id: string, data: any) => api.put(`/assignments/${id}`, data),
 }
 
 export const auditorAPI = {
@@ -21827,6 +21837,7 @@ export const auditorAPI = {
   getCompletedAudits: () => api.get('/auditor/completed'),
   finalCertification: (categoryId: string, data: any) => api.post(`/auditor/category/${categoryId}/final-certification`, data),
   rejectAudit: (categoryId: string, reason: string) => api.post(`/auditor/category/${categoryId}/reject`, { reason }),
+  finalizeCertification: (data: any) => api.post('/auditor/finalize-certification', data),
 }
 
 export const boardAPI = {
@@ -21844,6 +21855,7 @@ export const tallyMasterAPI = {
   getCertificationQueue: () => api.get('/tally-master/queue'),
   getPendingCertifications: () => api.get('/tally-master/pending'),
   certifyTotals: (categoryId: string, data: any) => api.post(`/tally-master/category/${categoryId}/certify-totals`, data),
+  certifyTotalsData: (data: any) => api.post('/tally-master/certify-totals', data),
 }
 
 export const emailAPI = {
@@ -21908,6 +21920,10 @@ export const eventTemplatesAPI = {
   delete: (id: string) => api.delete(`/event-templates/${id}`),
   createEventFromTemplate: (templateId: string, eventData: any) => 
     api.post(`/event-templates/${templateId}/create-event`, eventData),
+  getTemplates: (params?: any) => api.get('/event-templates', { params }),
+  createTemplate: (data: any) => api.post('/event-templates', data),
+  updateTemplate: (id: string, data: any) => api.put(`/event-templates/${id}`, data),
+  deleteTemplate: (id: string) => api.delete(`/event-templates/${id}`),
 }
 
 export const reportsAPI = {
@@ -24004,7 +24020,7 @@ const BackupManager: React.FC = () => {
                         Selected: {selectedFile.name}
                       </p>
                       <button
-                        onClick={() => restoreBackupMutation.mutate(selectedFile)}
+                        onClick={() => restoreBackupMutation.mutate(selectedFile.name)}
                         disabled={restoreBackupMutation.isLoading}
                         className="mt-2 btn-primary"
                       >
@@ -25164,7 +25180,7 @@ const FileUpload: React.FC = () => {
   )
 
   const uploadMutation = useMutation(
-    (formData: FormData) => uploadAPI.uploadFileData(formData),
+    (formData: FormData) => uploadAPI.uploadFile(formData.get('file') as File),
     {
       onSuccess: () => {
         queryClient.invalidateQueries('uploadedFiles')
@@ -35126,7 +35142,7 @@ import {
   DocumentPlusIcon as DocumentPlus,
   DocumentDuplicateIcon as DocumentDuplicate,
   PencilSquareIcon as PencilSquare,
-  ViewIcon as View,
+  EyeIcon as View,
   EyeSlashIcon as EyeSlash,
   LockClosedIcon as LockClosed,
   ShieldCheckIcon as ShieldCheck,
@@ -35145,7 +35161,7 @@ import {
   CpuChipIcon as CpuChip,
   CommandLineIcon as Terminal,
   CommandLineIcon as CommandLine,
-  TableIcon as Table,
+  TableCellsIcon as Table,
   ListBulletIcon as ListBullet,
   Squares2X2Icon as Squares2X2,
   AdjustmentsHorizontalIcon as AdjustmentsHorizontal,
@@ -41557,7 +41573,9 @@ const SettingsPage: React.FC = () => {
     maxAge: 90,
     preventReuse: 5,
     lockoutAttempts: 5,
-    lockoutDuration: 30
+    lockoutDuration: 30,
+    preventCommonPasswords: true,
+    preventUserInfo: true
   })
   const [showPasswordPreview, setShowPasswordPreview] = useState(false)
   const [testPassword, setTestPassword] = useState('')
