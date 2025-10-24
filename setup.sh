@@ -37975,6 +37975,9 @@ const EventTemplatePage: React.FC = () => {
   )
 }
 
+export default EventTemplatePage
+EOF
+
     # Add PasswordStrengthMeter component
     cat > "$APP_DIR/frontend/src/components/PasswordStrengthMeter.tsx" << 'EOF'
 import React, { useState, useEffect } from 'react'
@@ -38616,6 +38619,7 @@ const UsersPage: React.FC = () => {
               <TrashIcon className="h-4 w-4 mr-2" />
               Delete Selected ({selectedUsers.length})
             </button>
+          )}
           {canManageUsers() && (
             <button
               onClick={() => setShowCreateModal(true)}
