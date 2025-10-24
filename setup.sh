@@ -2444,24 +2444,6 @@ const getSettings = async (req, res) => {
   }
 }
 
-const updateSettings = async (req, res) => {
-  try {
-    const { settings } = req.body
-
-    for (const setting of settings) {
-      await prisma.setting.upsert({
-        where: { key: setting.key },
-        update: { value: setting.value },
-        create: { key: setting.key, value: setting.value }
-      })
-    }
-
-    res.json({ message: 'Settings updated successfully' })
-  } catch (error) {
-    console.error('Update settings error:', error)
-    res.status(500).json({ error: 'Internal server error' })
-  }
-}
 
 const getUsers = async (req, res) => {
   try {
