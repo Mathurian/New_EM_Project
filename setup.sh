@@ -16031,7 +16031,7 @@ const generateExcelReport = async (res, event, stats, includeDetails) => {
     const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' })
     
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    res.setHeader('Content-Disposition', `attachment; filename="event-report-${event.id}.xlsx"`)
+    res.setHeader('Content-Disposition', 'attachment; filename="event-report-' + event.id + '.xlsx"')
     res.send(buffer)
   } catch (error) {
     console.error('Excel generation error:', error)
