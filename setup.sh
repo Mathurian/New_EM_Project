@@ -21180,6 +21180,13 @@ export const categoriesAPI = {
   create: (contestId: string, data: any) => api.post(`/categories/contest/${contestId}`, data),
   update: (id: string, data: any) => api.put(`/categories/${id}`, data),
   delete: (id: string) => api.delete(`/categories/${id}`),
+  getCategories: (params?: { contestId?: string; search?: string }) => api.get('/categories', { params }),
+  createCategory: (data: any) => api.post('/categories', data),
+  updateCategory: (id: string, data: any) => api.put(`/categories/${id}`, data),
+  deleteCategory: (id: string) => api.delete(`/categories/${id}`),
+  createCriterion: (data: any) => api.post('/categories/criteria', data),
+  updateCriterion: (id: string, data: any) => api.put(`/categories/criteria/${id}`, data),
+  deleteCriterion: (id: string) => api.delete(`/categories/criteria/${id}`),
 }
 
 export const scoringAPI = {
@@ -21215,6 +21222,11 @@ export const usersAPI = {
   resetPassword: (id: string, data: any) => api.post(`/users/${id}/reset-password`, data),
   importCSV: (data: { csvData: any[], userType: string }) => api.post('/users/import-csv', data),
   getCSVTemplate: (userType: string) => api.get(`/users/csv-template?userType=${userType}`),
+  getUsers: (params?: any) => api.get('/users', { params }),
+  createUser: (data: any) => api.post('/users', data),
+  updateUser: (id: string, data: any) => api.put(`/users/${id}`, data),
+  deleteUser: (id: string) => api.delete(`/users/${id}`),
+  bulkDeleteUsers: (ids: string[]) => api.post('/users/bulk-delete', { ids }),
 }
 
 export const adminAPI = {
@@ -21232,6 +21244,8 @@ export const adminAPI = {
   getAuditLogs: (params?: any) => api.get('/admin/audit-logs', { params }),
   exportAuditLogs: (params?: any) => api.post('/admin/export-audit-logs', params),
   testConnection: (type: string) => api.post(`/admin/test/${type}`),
+  getPasswordPolicy: () => api.get('/admin/password-policy'),
+  updatePasswordPolicy: (data: any) => api.put('/admin/password-policy', data),
 }
 
 export const uploadAPI = {
@@ -25808,8 +25822,8 @@ const BulkImport: React.FC = () => {
   const [showSample, setShowSample] = useState(false)
 
   const importMutation = useMutation(bulkImportAPI.importUsers, {
-    onSuccess: (data) => {
-      setImportResult(data)
+    onSuccess: (data: any) => {
+      setImportResult(data as ImportResult)
       setIsUploading(false)
       queryClient.invalidateQueries(['users'])
     },
@@ -25828,8 +25842,8 @@ const BulkImport: React.FC = () => {
   })
 
   const downloadSampleMutation = useMutation(bulkImportAPI.downloadSample, {
-    onSuccess: (data) => {
-      const blob = new Blob([data], { type: 'text/csv' })
+    onSuccess: (data: any) => {
+      const blob = new Blob([data as BlobPart], { type: 'text/csv' })
       const url = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
@@ -25860,7 +25874,7 @@ const BulkImport: React.FC = () => {
     const formData = new FormData()
     formData.append('file', file)
     
-    importMutation.mutate(formData)
+    importMutation.mutate(formData as any)
   }
 
   const handleDownloadSample = () => {
@@ -29878,6 +29892,7 @@ import AuditLog from '../components/AuditLog'
 import BackupManager from '../components/BackupManager'
 import SecurityDashboard from '../components/SecurityDashboard'
 import SettingsForm from '../components/SettingsForm'
+import EmceeScripts from '../components/EmceeScripts'
 import DataTable from '../components/DataTable'
 import SearchFilter from '../components/SearchFilter'
 import { 
@@ -32963,7 +32978,37 @@ const TemplatesPage: React.FC = () => {
   })
   const queryClient = useQueryClient()
 
-  // Mock data for templates
+  // Mutations for template management
+  const createTemplateMutation = useMutation(
+    (data: any) => categoriesAPI.createCategory(data),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries(['categoryTemplates'])
+        setShowCreateModal(false)
+        setFormData({})
+      }
+    }
+  )
+
+  const updateTemplateMutation = useMutation(
+    ({ id, data }: { id: string; data: any }) => categoriesAPI.updateCategory(id, data),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries(['categoryTemplates'])
+        setShowEditModal(false)
+        setFormData({})
+      }
+    }
+  )
+
+  const deleteTemplateMutation = useMutation(
+    (id: string) => categoriesAPI.deleteCategory(id),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries(['categoryTemplates'])
+      }
+    }
+  )
   const categoryTemplates: CategoryTemplate[] = [
     {
       id: '1',
@@ -33093,7 +33138,6 @@ const TemplatesPage: React.FC = () => {
         await createTemplateMutation.mutateAsync({
           name: formData.name,
           description: formData.description,
-          eventData: formData.eventData,
           isPublic: formData.isPublic || false
         })
       } else if (showEditModal && selectedTemplate) {
@@ -33102,7 +33146,6 @@ const TemplatesPage: React.FC = () => {
           data: {
             name: formData.name,
             description: formData.description,
-            eventData: formData.eventData,
             isPublic: formData.isPublic || false
           }
         })
@@ -34663,7 +34706,7 @@ import {
   DocumentTextIcon,
   ChartBarIcon,
   ServerIcon,
-  DatabaseIcon,
+  CircleStackIcon,
   Cog6ToothIcon,
   PlayIcon,
   StopIcon,
@@ -34685,7 +34728,6 @@ import {
   ListBulletIcon,
   TableCellsIcon as TableIcon,
   CommandLineIcon,
-  TerminalIcon,
   CpuChipIcon,
   CircleStackIcon,
   KeyIcon,
@@ -34707,7 +34749,7 @@ import {
   DocumentDuplicateIcon,
   DocumentPlusIcon,
   DocumentMinusIcon,
-  DocumentXMarkIcon,
+  XMarkIcon,
   DocumentCheckIcon,
   DocumentIcon,
   FolderIcon,
@@ -34727,27 +34769,21 @@ import {
   Bars4Icon,
   BarsArrowUpIcon,
   BarsArrowDownIcon,
-  BarsArrowLeftIcon,
-  BarsArrowRightIcon,
+  ArrowLeftIcon,
+  ArrowRightIcon,
   Bars3CenterLeftIcon,
-  Bars3CenterRightIcon,
   Bars3LeftIcon,
-  Bars3RightIcon,
   Bars3TopLeftIcon,
-  Bars3TopRightIcon,
   Bars3BottomLeftIcon as Bars3BottomLeft,
   Bars3BottomRightIcon as Bars3BottomRight,
   Bars3CenterLeftIcon as Bars3CenterLeft,
-  Bars3CenterRightIcon as Bars3CenterRight,
   Bars3LeftIcon as Bars3Left,
-  Bars3RightIcon as Bars3Right,
   Bars3TopLeftIcon as Bars3TopLeft,
-  Bars3TopRightIcon as Bars3TopRight,
   Bars4Icon as Bars4,
   BarsArrowUpIcon as BarsArrowUp,
   BarsArrowDownIcon as BarsArrowDown,
-  BarsArrowLeftIcon as BarsArrowLeft,
-  BarsArrowRightIcon as BarsArrowRight,
+  ArrowLeftIcon as BarsArrowLeft,
+  ArrowRightIcon as BarsArrowRight,
   QueueListIcon as QueueList,
   InboxStackIcon as InboxStack,
   InboxArrowDownIcon as InboxArrowDown,
@@ -34760,7 +34796,7 @@ import {
   FolderOpenIcon as FolderOpen,
   FolderIcon as Folder,
   DocumentCheckIcon as DocumentCheck,
-  DocumentXMarkIcon as DocumentXMark,
+  XMarkIcon as DocumentXMark,
   DocumentMinusIcon as DocumentMinus,
   DocumentPlusIcon as DocumentPlus,
   DocumentDuplicateIcon as DocumentDuplicate,
@@ -34782,7 +34818,7 @@ import {
   KeyIcon as Key,
   CircleStackIcon as CircleStack,
   CpuChipIcon as CpuChip,
-  TerminalIcon as Terminal,
+  CommandLineIcon as Terminal,
   CommandLineIcon as CommandLine,
   TableIcon as Table,
   ListBulletIcon as ListBullet,
@@ -35859,18 +35895,12 @@ EOF
 
     # Add EmceeScripts component to admin and board pages
     # Update AdminPage to include EmceeScripts
-    sed -i '/import.*EmceeScripts/d' "$APP_DIR/frontend/src/pages/AdminPage.tsx" 2>/dev/null || true
-    sed -i '/import.*components/a import EmceeScripts from "../components/EmceeScripts"' "$APP_DIR/frontend/src/pages/AdminPage.tsx" 2>/dev/null || true
-    
     # Add EmceeScripts tab to AdminPage
     if ! grep -q "Emcee Scripts" "$APP_DIR/frontend/src/pages/AdminPage.tsx" 2>/dev/null; then
         sed -i '/const tabs = \[/a\    { id: "emcee-scripts", name: "Emcee Scripts", icon: DocumentTextIcon, component: EmceeScripts },' "$APP_DIR/frontend/src/pages/AdminPage.tsx" 2>/dev/null || true
     fi
     
     # Update BoardPage to include EmceeScripts
-    sed -i '/import.*EmceeScripts/d' "$APP_DIR/frontend/src/pages/BoardPage.tsx" 2>/dev/null || true
-    sed -i '/import.*components/a import EmceeScripts from "../components/EmceeScripts"' "$APP_DIR/frontend/src/pages/BoardPage.tsx" 2>/dev/null || true
-    
     # Add EmceeScripts tab to BoardPage
     if ! grep -q "Emcee Scripts" "$APP_DIR/frontend/src/pages/BoardPage.tsx" 2>/dev/null; then
         sed -i '/const tabs = \[/a\    { id: "emcee-scripts", name: "Emcee Scripts", icon: DocumentTextIcon, component: EmceeScripts },' "$APP_DIR/frontend/src/pages/BoardPage.tsx" 2>/dev/null || true
@@ -35893,8 +35923,6 @@ import {
   DocumentTextIcon,
   UserGroupIcon,
   StarIcon,
-  MedalIcon,
-  AwardIcon,
   ShieldCheckIcon,
   LockClosedIcon,
   MagnifyingGlassIcon,
@@ -36017,8 +36045,8 @@ const WinnersPage: React.FC = () => {
   const getRankIcon = (rank: number) => {
     switch (rank) {
       case 1: return <TrophyIcon className="h-6 w-6 text-yellow-500" />
-      case 2: return <MedalIcon className="h-6 w-6 text-gray-400" />
-      case 3: return <AwardIcon className="h-6 w-6 text-amber-600" />
+      case 2: return <StarIcon className="h-6 w-6 text-gray-400" />
+      case 3: return <StarIcon className="h-6 w-6 text-amber-600" />
       default: return <StarIcon className="h-6 w-6 text-blue-500" />
     }
   }
@@ -38013,6 +38041,7 @@ interface PasswordStrengthMeterProps {
   placeholder?: string
   name?: string
   id?: string
+  policy?: PasswordPolicy
 }
 
 const PasswordStrengthMeter: React.FC<PasswordStrengthMeterProps> = ({
@@ -38023,10 +38052,11 @@ const PasswordStrengthMeter: React.FC<PasswordStrengthMeterProps> = ({
   disabled = false,
   placeholder = 'Enter password',
   name = 'password',
-  id = 'password'
+  id = 'password',
+  policy
 }) => {
   const [showPassword, setShowPassword] = useState<boolean>(false)
-  const [policy, setPolicy] = useState<PasswordPolicy>({
+  const [passwordPolicy, setPasswordPolicy] = useState<PasswordPolicy>(policy || {
     minLength: 8,
     requireUppercase: true,
     requireLowercase: true,
@@ -38038,25 +38068,28 @@ const PasswordStrengthMeter: React.FC<PasswordStrengthMeterProps> = ({
   })
 
   // Fetch password policy from API
-  const { data: passwordPolicy } = useQuery('passwordPolicy', () => 
+  const { data: apiPasswordPolicy } = useQuery('passwordPolicy', () => 
     fetch('/api/settings/password-policy').then(res => res.json()).catch(() => null)
   )
 
+  // Use API policy if available, otherwise use prop or default
+  const currentPolicy = apiPasswordPolicy || policy || passwordPolicy
+
   useEffect(() => {
-    if (passwordPolicy) {
-      setPolicy(passwordPolicy)
+    if (apiPasswordPolicy) {
+      setPasswordPolicy(apiPasswordPolicy)
     }
-  }, [passwordPolicy])
+  }, [apiPasswordPolicy])
 
   const checkPasswordStrength = (pwd: string) => {
     const checks = {
-      length: pwd.length >= policy.minLength && (!policy.maxLength || pwd.length <= policy.maxLength),
-      uppercase: !policy.requireUppercase || /[A-Z]/.test(pwd),
-      lowercase: !policy.requireLowercase || /[a-z]/.test(pwd),
-      numbers: !policy.requireNumbers || /\d/.test(pwd),
-      specialChars: !policy.requireSpecialChars || /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(pwd),
-      notCommon: !policy.preventCommonPasswords || !isCommonPassword(pwd),
-      notUserInfo: !policy.preventUserInfo || !containsUserInfo(pwd)
+      length: pwd.length >= currentPolicy.minLength && (!currentPolicy.maxLength || pwd.length <= currentPolicy.maxLength),
+      uppercase: !currentPolicy.requireUppercase || /[A-Z]/.test(pwd),
+      lowercase: !currentPolicy.requireLowercase || /[a-z]/.test(pwd),
+      numbers: !currentPolicy.requireNumbers || /\d/.test(pwd),
+      specialChars: !currentPolicy.requireSpecialChars || /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(pwd),
+      notCommon: !currentPolicy.preventCommonPasswords || !isCommonPassword(pwd),
+      notUserInfo: !currentPolicy.preventUserInfo || !containsUserInfo(pwd)
     }
 
     const passedChecks = Object.values(checks).filter(Boolean).length
@@ -38920,7 +38953,7 @@ const UsersPage: React.FC = () => {
             <form onSubmit={(e) => {
               e.preventDefault()
               const formData = new FormData(e.target as HTMLFormElement)
-              const role = formData.get('role') as string
+              const role = formData.get('role') as 'ADMIN' | 'BOARD' | 'ORGANIZER' | 'JUDGE' | 'TALLY_MASTER' | 'AUDITOR' | 'EMCEE' | 'CONTESTANT'
               
               const userData: CreateUserData = {
                 name: formData.get('name') as string,
@@ -39079,7 +39112,7 @@ const UsersPage: React.FC = () => {
               handleUpdateUser(selectedUser.id, {
                 name: formData.get('name') as string,
                 email: formData.get('email') as string,
-                role: formData.get('role') as string,
+                role: formData.get('role') as 'ADMIN' | 'BOARD' | 'ORGANIZER' | 'JUDGE' | 'TALLY_MASTER' | 'AUDITOR' | 'EMCEE' | 'CONTESTANT',
                 isActive: formData.get('isActive') === 'on',
                 phone: formData.get('phone') as string,
                 address: formData.get('address') as string,
