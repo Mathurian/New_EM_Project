@@ -14690,7 +14690,7 @@ const getPerformanceAlerts = async (req, res) => {
       alerts.push({
         type: 'CPU_HIGH',
         severity: 'HIGH',
-        message: `CPU usage is ${cpuUsage.toFixed(1)}%`,
+        message: 'CPU usage is ' + cpuUsage.toFixed(1) + '%',
         timestamp: latest.timestamp
       })
     }
@@ -14701,7 +14701,7 @@ const getPerformanceAlerts = async (req, res) => {
       alerts.push({
         type: 'MEMORY_HIGH',
         severity: 'HIGH',
-        message: `Memory usage is ${memoryUsage.toFixed(1)}%`,
+        message: 'Memory usage is ' + memoryUsage.toFixed(1) + '%',
         timestamp: latest.timestamp
       })
     }
@@ -14721,7 +14721,7 @@ const getPerformanceAlerts = async (req, res) => {
       alerts.push({
         type: 'ERROR_RATE_HIGH',
         severity: 'HIGH',
-        message: `Error rate is ${applicationMetrics.errorRate.toFixed(1)}%`,
+        message: 'Error rate is ' + applicationMetrics.errorRate.toFixed(1) + '%',
         timestamp: latest.timestamp
       })
     }
@@ -16124,7 +16124,7 @@ const generateXMLReport = async (res, event, stats, includeDetails) => {
         TotalJudges: stats.totalJudges,
         ScoresSubmitted: stats.totalScores,
         AverageScore: stats.averageScore.toFixed(2),
-        CompletionRate: `${stats.completionRate.toFixed(1)}%`
+        CompletionRate: stats.completionRate.toFixed(1) + '%'
       }
     }
 
