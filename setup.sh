@@ -4582,6 +4582,10 @@ const updatePasswordPolicy = async (req, res) => {
   }
 }
 
+const updateJWTConfig = async (req, res) => {
+  try {
+    const { jwtExpiresIn, sessionTimeout, refreshTokenExpiresIn } = req.body
+    
     // Update JWT settings
     await prisma.systemSetting.upsert({
       where: { key: 'JWT_EXPIRES_IN' },
