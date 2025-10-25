@@ -19133,7 +19133,7 @@ const generateEventReport = async (req, res) => {
     // Generate report based on format
     switch (format.toLowerCase()) {
       case 'pdf':
-        return await generatePDFReport(res, event, stats, includeDetails)
+        return await generateEventPDFReport(res, event, stats, includeDetails)
       case 'excel':
         return await generateExcelReport(res, event, stats, includeDetails)
       case 'csv':
@@ -19152,7 +19152,7 @@ const generateEventReport = async (req, res) => {
 }
 
 // Generate PDF report using Puppeteer
-const generatePDFReport = async (res, event, stats, includeDetails) => {
+const generateEventPDFReport = async (res, event, stats, includeDetails) => {
   try {
     const browser = await puppeteer.launch({ headless: true })
     const page = await browser.newPage()
