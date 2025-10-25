@@ -42550,7 +42550,7 @@ evaluate_setup_completeness() {
         print_success "Backend package.json found"
     else
         print_error "Backend package.json missing!"
-        ((issues_found++))
+        issues_found=$((issues_found + 1))
     fi
     echo "[DEBUG] Backend package.json check completed"
     
@@ -42559,7 +42559,7 @@ evaluate_setup_completeness() {
         print_success "Frontend package.json found"
     else
         print_error "Frontend package.json missing!"
-        ((issues_found++))
+        issues_found=$((issues_found + 1))
     fi
     echo "[DEBUG] Frontend package.json check completed"
     
@@ -42568,7 +42568,7 @@ evaluate_setup_completeness() {
         print_success "Server.js found"
     else
         print_error "Server.js missing!"
-        ((issues_found++))
+        issues_found=$((issues_found + 1))
     fi
     echo "[DEBUG] Server.js check completed"
     
@@ -42577,7 +42577,7 @@ evaluate_setup_completeness() {
         print_success "Frontend build found"
     else
         print_error "Frontend build missing!"
-        ((issues_found++))
+        issues_found=$((issues_found + 1))
     fi
     echo "[DEBUG] Frontend build check completed"
     
@@ -42586,7 +42586,7 @@ evaluate_setup_completeness() {
         print_success "Backend .env found"
     else
         print_error "Backend .env missing!"
-        ((issues_found++))
+        issues_found=$((issues_found + 1))
     fi
     echo "[DEBUG] Backend .env check completed"
     
@@ -42595,7 +42595,7 @@ evaluate_setup_completeness() {
         print_success "Frontend .env found"
     else
         print_error "Frontend .env missing!"
-        ((issues_found++))
+        issues_found=$((issues_found + 1))
     fi
     echo "[DEBUG] Frontend .env check completed"
     
@@ -42604,7 +42604,7 @@ evaluate_setup_completeness() {
         print_success "Prisma schema found"
     else
         print_error "Prisma schema missing!"
-        ((issues_found++))
+        issues_found=$((issues_found + 1))
     fi
     echo "[DEBUG] Prisma schema check completed"
     
@@ -42613,7 +42613,7 @@ evaluate_setup_completeness() {
         print_success "Backend node_modules found"
     else
         print_error "Backend node_modules missing!"
-        ((issues_found++))
+        issues_found=$((issues_found + 1))
     fi
     echo "[DEBUG] Backend node_modules check completed"
     
@@ -42622,7 +42622,7 @@ evaluate_setup_completeness() {
         print_success "Frontend node_modules found"
     else
         print_error "Frontend node_modules missing!"
-        ((issues_found++))
+        issues_found=$((issues_found + 1))
     fi
     echo "[DEBUG] Frontend node_modules check completed"
     
@@ -42631,7 +42631,7 @@ evaluate_setup_completeness() {
         print_success "Frontend dist directory found"
     else
         print_error "Frontend dist directory missing!"
-        ((issues_found++))
+        issues_found=$((issues_found + 1))
     fi
     echo "[DEBUG] Frontend dist directory check completed"
     
@@ -42642,7 +42642,7 @@ evaluate_setup_completeness() {
     else
         print_warning "Frontend API URL not configured"
         echo "[DEBUG] Warning printed, incrementing issues_found..."
-        ((issues_found++))
+        issues_found=$((issues_found + 1))
         echo "[DEBUG] issues_found incremented to: $issues_found"
     fi
     echo "[DEBUG] Frontend API URL check completed"
@@ -42652,7 +42652,7 @@ evaluate_setup_completeness() {
         print_success "Database URL configured"
     else
         print_warning "Database URL not configured"
-        ((issues_found++))
+        issues_found=$((issues_found + 1))
     fi
     echo "[DEBUG] DATABASE_URL check completed"
     
@@ -42661,7 +42661,7 @@ evaluate_setup_completeness() {
         print_success "JWT secret configured"
     else
         print_warning "JWT secret not configured"
-        ((issues_found++))
+        issues_found=$((issues_found + 1))
     fi
     echo "[DEBUG] JWT_SECRET check completed"
     
@@ -42671,7 +42671,7 @@ evaluate_setup_completeness() {
         print_success "Application directory is writable"
     else
         print_warning "Application directory is not writable"
-        ((issues_found++))
+        issues_found=$((issues_found + 1))
     fi
     echo "[DEBUG] Application directory writable check completed"
     
@@ -42680,7 +42680,7 @@ evaluate_setup_completeness() {
         print_success "Frontend dist directory is writable"
     else
         print_warning "Frontend dist directory is not writable"
-        ((issues_found++))
+        issues_found=$((issues_found + 1))
     fi
     echo "[DEBUG] Frontend dist writable check completed"
     
@@ -42691,7 +42691,7 @@ evaluate_setup_completeness() {
         print_success "Node.js found: $node_version"
     else
         print_error "Node.js not found!"
-        ((issues_found++))
+        issues_found=$((issues_found + 1))
     fi
     echo "[DEBUG] Node.js check completed"
     
@@ -42701,7 +42701,7 @@ evaluate_setup_completeness() {
         print_success "npm found: $npm_version"
     else
         print_error "npm not found!"
-        ((issues_found++))
+        issues_found=$((issues_found + 1))
     fi
     echo "[DEBUG] npm check completed"
     
@@ -42710,7 +42710,7 @@ evaluate_setup_completeness() {
         print_success "Nginx found"
     else
         print_warning "Nginx not found"
-        ((issues_found++))
+        issues_found=$((issues_found + 1))
     fi
     echo "[DEBUG] nginx check completed"
     
@@ -42719,7 +42719,7 @@ evaluate_setup_completeness() {
         print_success "PostgreSQL found"
     else
         print_warning "PostgreSQL not found"
-        ((issues_found++))
+        issues_found=$((issues_found + 1))
     fi
     echo "[DEBUG] postgres check completed"
     
