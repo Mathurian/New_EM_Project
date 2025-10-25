@@ -19656,32 +19656,32 @@ const generateJudgePDFReport = async (res, judgeStats) => {
       <body>
         <div class="header">
           <h1>Judge Performance Report</h1>
-          <p>Generated on: ' + new Date().toLocaleDateString() + '</p>
+          <p>Generated on: ${new Date().toLocaleDateString()}</p>
         </div>
 
-        ' + Object.values(judgeStats).map(stat => `
+        ${Object.values(judgeStats).map(stat => `
           <div class="judge-card">
-            <h2>' + stat.judge.user.firstName + ' ' + stat.judge.user.lastName + '</h2>
+            <h2>${stat.judge.user.firstName} ${stat.judge.user.lastName}</h2>
             <div class="stats">
               <div class="stat-item">
-                <div class="stat-value">' + stat.totalScores + '</div>
+                <div class="stat-value">${stat.totalScores}</div>
                 <div class="stat-label">Total Scores</div>
               </div>
               <div class="stat-item">
-                <div class="stat-value">' + stat.averageScore.toFixed(2) + '</div>
+                <div class="stat-value">${stat.averageScore.toFixed(2)}</div>
                 <div class="stat-label">Average Score</div>
               </div>
               <div class="stat-item">
-                <div class="stat-value">' + stat.categoriesCount + '</div>
+                <div class="stat-value">${stat.categoriesCount}</div>
                 <div class="stat-label">Categories</div>
               </div>
               <div class="stat-item">
-                <div class="stat-value">' + stat.eventsCount + '</div>
+                <div class="stat-value">${stat.eventsCount}</div>
                 <div class="stat-label">Events</div>
               </div>
             </div>
           </div>
-        `).join('') + `
+        `).join('')}
       </body>
       </html>
     `
@@ -19903,25 +19903,25 @@ const generateAnalyticsPDFReport = async (res, analyticsData) => {
       <body>
         <div class="header">
           <h1>System Analytics Report</h1>
-          <p>Period: Last ' + analyticsData.period + ' days</p>
-          <p>Generated on: ' + new Date().toLocaleDateString() + '</p>
+          <p>Period: Last ${analyticsData.period} days</p>
+          <p>Generated on: ${new Date().toLocaleDateString()}</p>
         </div>
 
         <div class="stats">
           <div class="stat-card">
-            <div class="stat-value">' + analyticsData.stats.totalUsers + '</div>
+            <div class="stat-value">${analyticsData.stats.totalUsers}</div>
             <div class="stat-label">Total Users</div>
           </div>
           <div class="stat-card">
-            <div class="stat-value">' + analyticsData.stats.totalEvents + '</div>
+            <div class="stat-value">${analyticsData.stats.totalEvents}</div>
             <div class="stat-label">Total Events</div>
           </div>
           <div class="stat-card">
-            <div class="stat-value">' + analyticsData.stats.totalContests + '</div>
+            <div class="stat-value">${analyticsData.stats.totalContests}</div>
             <div class="stat-label">Total Contests</div>
           </div>
           <div class="stat-card">
-            <div class="stat-value">' + analyticsData.stats.totalScores + '</div>
+            <div class="stat-value">${analyticsData.stats.totalScores}</div>
             <div class="stat-label">Total Scores</div>
           </div>
         </div>
@@ -19937,19 +19937,19 @@ const generateAnalyticsPDFReport = async (res, analyticsData) => {
               </tr>
             </thead>
             <tbody>
-              ' + analyticsData.userRoles.map(role => `
+              ${analyticsData.userRoles.map(role => `
                 <tr>
-                  <td>' + role.role + '</td>
-                  <td>' + role._count.role + '</td>
-                  <td>' + ((role._count.role / analyticsData.stats.totalUsers) * 100).toFixed(1) + '%</td>
+                  <td>${role.role}</td>
+                  <td>${role._count.role}</td>
+                  <td>${((role._count.role / analyticsData.stats.totalUsers) * 100).toFixed(1)}%</td>
                 </tr>
-              `).join('') + `
+              `).join('')}
             </tbody>
           </table>
         </div>
 
         <div class="section">
-          <h2>Recent Activity (Last ' + analyticsData.period + ' days)</h2>
+          <h2>Recent Activity (Last ${analyticsData.period} days)</h2>
           <table>
             <thead>
               <tr>
@@ -19960,14 +19960,14 @@ const generateAnalyticsPDFReport = async (res, analyticsData) => {
               </tr>
             </thead>
             <tbody>
-              ' + analyticsData.recentActivity.slice(0, 20).map(activity => `
+              ${analyticsData.recentActivity.slice(0, 20).map(activity => `
                 <tr>
-                  <td>' + new Date(activity.createdAt).toLocaleDateString() + '</td>
-                  <td>' + (activity.user?.user?.firstName || '') + ' ' + (activity.user?.user?.lastName || '') + '</td>
-                  <td>' + activity.action + '</td>
-                  <td>' + activity.entityType + '</td>
+                  <td>${new Date(activity.createdAt).toLocaleDateString()}</td>
+                  <td>${(activity.user?.user?.firstName || '')} ${(activity.user?.user?.lastName || '')}</td>
+                  <td>${activity.action}</td>
+                  <td>${activity.entityType}</td>
                 </tr>
-              `).join('') + `
+              `).join('')}
             </tbody>
           </table>
         </div>
@@ -20538,20 +20538,20 @@ const generateContestResultsHTML = (data) => {
     <body>
       <div class="header">
         <h1>Contest Results Report</h1>
-        <h2>' + data.contest.name + '</h2>
-        <p>Generated on: ' + new Date(data.generatedAt).toLocaleDateString() + '</p>
+        <h2>${data.contest.name}</h2>
+        <p>Generated on: ${new Date(data.generatedAt).toLocaleDateString()}</p>
       </div>
-      ' + data.categories.map(cat => `
+      ${data.categories.map(cat => `
         <div class="category">
-          <h3>' + cat.name + '</h3>
-          ' + cat.contestants.map(contestant => `
+          <h3>${cat.name}</h3>
+          ${cat.contestants.map(contestant => `
             <div class="contestant">
-              <strong>' + contestant.contestant.name + '</strong>
-              <span class="score">Total: ' + contestant.totalScore + ' | Average: ' + contestant.averageScore.toFixed(2) + '</span>
+              <strong>${contestant.contestant.name}</strong>
+              <span class="score">Total: ${contestant.totalScore} | Average: ${contestant.averageScore.toFixed(2)}</span>
             </div>
-          `).join('') + `
+          `).join('')}
         </div>
-      `).join('') + `
+      `).join('')}
     </body>
     </html>
   `
