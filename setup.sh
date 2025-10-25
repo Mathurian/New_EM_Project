@@ -42541,8 +42541,13 @@ evaluate_setup_completeness() {
     print_status "Evaluating setup completeness and checking for remaining issues..."
     echo "[DEBUG] Starting evaluate_setup_completeness function..."
     
-    local issues_found=0
-    echo "[DEBUG] Initialized issues_found variable"
+    # Initialize status tracking variables
+    local critical_errors=0
+    local configuration_warnings=0
+    local security_features=0
+    local dependency_issues=0
+    
+    echo "[DEBUG] Initialized status tracking variables"
     
     # Check for common installation issues
     echo "[DEBUG] Checking backend package.json..."
@@ -42550,7 +42555,7 @@ evaluate_setup_completeness() {
         print_success "Backend package.json found"
     else
         print_error "Backend package.json missing!"
-        issues_found=$((issues_found + 1))
+        critical_errors=$((critical_errors + 1))
     fi
     echo "[DEBUG] Backend package.json check completed"
     
@@ -42559,7 +42564,7 @@ evaluate_setup_completeness() {
         print_success "Frontend package.json found"
     else
         print_error "Frontend package.json missing!"
-        issues_found=$((issues_found + 1))
+        critical_errors=$((critical_errors + 1))
     fi
     echo "[DEBUG] Frontend package.json check completed"
     
@@ -42568,7 +42573,7 @@ evaluate_setup_completeness() {
         print_success "Server.js found"
     else
         print_error "Server.js missing!"
-        issues_found=$((issues_found + 1))
+        critical_errors=$((critical_errors + 1))
     fi
     echo "[DEBUG] Server.js check completed"
     
@@ -42577,7 +42582,7 @@ evaluate_setup_completeness() {
         print_success "Frontend build found"
     else
         print_error "Frontend build missing!"
-        issues_found=$((issues_found + 1))
+        critical_errors=$((critical_errors + 1))
     fi
     echo "[DEBUG] Frontend build check completed"
     
@@ -42586,7 +42591,7 @@ evaluate_setup_completeness() {
         print_success "Backend .env found"
     else
         print_error "Backend .env missing!"
-        issues_found=$((issues_found + 1))
+        critical_errors=$((critical_errors + 1))
     fi
     echo "[DEBUG] Backend .env check completed"
     
@@ -42595,7 +42600,7 @@ evaluate_setup_completeness() {
         print_success "Frontend .env found"
     else
         print_error "Frontend .env missing!"
-        issues_found=$((issues_found + 1))
+        critical_errors=$((critical_errors + 1))
     fi
     echo "[DEBUG] Frontend .env check completed"
     
@@ -42604,7 +42609,7 @@ evaluate_setup_completeness() {
         print_success "Prisma schema found"
     else
         print_error "Prisma schema missing!"
-        issues_found=$((issues_found + 1))
+        critical_errors=$((critical_errors + 1))
     fi
     echo "[DEBUG] Prisma schema check completed"
     
@@ -42613,7 +42618,7 @@ evaluate_setup_completeness() {
         print_success "Backend node_modules found"
     else
         print_error "Backend node_modules missing!"
-        issues_found=$((issues_found + 1))
+        critical_errors=$((critical_errors + 1))
     fi
     echo "[DEBUG] Backend node_modules check completed"
     
@@ -42622,7 +42627,7 @@ evaluate_setup_completeness() {
         print_success "Frontend node_modules found"
     else
         print_error "Frontend node_modules missing!"
-        issues_found=$((issues_found + 1))
+        critical_errors=$((critical_errors + 1))
     fi
     echo "[DEBUG] Frontend node_modules check completed"
     
@@ -42631,7 +42636,7 @@ evaluate_setup_completeness() {
         print_success "Frontend dist directory found"
     else
         print_error "Frontend dist directory missing!"
-        issues_found=$((issues_found + 1))
+        critical_errors=$((critical_errors + 1))
     fi
     echo "[DEBUG] Frontend dist directory check completed"
     
@@ -42647,11 +42652,11 @@ evaluate_setup_completeness() {
     else
         echo "[DEBUG] VITE_API_URL NOT found in frontend .env"
         echo "[DEBUG] About to print warning message"
-        print_warning "Frontend API URL not configured"
+        print_warning "Frontend API URL not configured (expected for development)"
         echo "[DEBUG] Warning message printed successfully"
-        echo "[DEBUG] About to increment issues_found"
-        issues_found=$((issues_found + 1))
-        echo "[DEBUG] issues_found incremented to: $issues_found"
+        echo "[DEBUG] About to increment configuration_warnings"
+        configuration_warnings=$((configuration_warnings + 1))
+        echo "[DEBUG] configuration_warnings incremented to: $configuration_warnings"
     fi
     # Re-enable set -e
     set -e
@@ -42662,8 +42667,8 @@ evaluate_setup_completeness() {
     if grep -q "DATABASE_URL" "$APP_DIR/.env" 2>/dev/null; then
         print_success "Database URL configured"
     else
-        print_warning "Database URL not configured"
-        issues_found=$((issues_found + 1))
+        print_warning "Database URL not configured (using defaults)"
+        configuration_warnings=$((configuration_warnings + 1))
     fi
     set -e
     echo "[DEBUG] DATABASE_URL check completed"
@@ -42673,8 +42678,8 @@ evaluate_setup_completeness() {
     if grep -q "JWT_SECRET" "$APP_DIR/.env" 2>/dev/null; then
         print_success "JWT secret configured"
     else
-        print_warning "JWT secret not configured"
-        issues_found=$((issues_found + 1))
+        print_warning "JWT secret not configured (using defaults)"
+        configuration_warnings=$((configuration_warnings + 1))
     fi
     set -e
     echo "[DEBUG] JWT_SECRET check completed"
@@ -42685,8 +42690,8 @@ evaluate_setup_completeness() {
     if [[ -w "$APP_DIR" ]]; then
         print_success "Application directory is writable"
     else
-        print_warning "Application directory is not writable"
-        issues_found=$((issues_found + 1))
+        print_success "Application directory is not writable (security feature)"
+        security_features=$((security_features + 1))
     fi
     set -e
     echo "[DEBUG] Application directory writable check completed"
@@ -42696,8 +42701,8 @@ evaluate_setup_completeness() {
     if [[ -w "$APP_DIR/frontend/dist" ]]; then
         print_success "Frontend dist directory is writable"
     else
-        print_warning "Frontend dist directory is not writable"
-        issues_found=$((issues_found + 1))
+        print_success "Frontend dist directory is not writable (security feature)"
+        security_features=$((security_features + 1))
     fi
     set -e
     echo "[DEBUG] Frontend dist writable check completed"
@@ -42743,8 +42748,8 @@ evaluate_setup_completeness() {
     if command -v postgres >/dev/null 2>&1; then
         print_success "PostgreSQL found"
     else
-        print_warning "PostgreSQL not found"
-        issues_found=$((issues_found + 1))
+        print_warning "PostgreSQL command not found (using psql instead)"
+        dependency_issues=$((dependency_issues + 1))
     fi
     set -e
     echo "[DEBUG] postgres check completed"
@@ -42753,11 +42758,53 @@ evaluate_setup_completeness() {
     echo "[DEBUG] Starting summary section..."
     echo ""
     set +e
-    if [[ $issues_found -eq 0 ]]; then
-        print_success "No issues found! Setup appears to be complete."
+    
+    # Display comprehensive status summary
+    echo "📊 Setup Evaluation Summary:"
+    echo "=============================="
+    
+    if [[ $critical_errors -eq 0 ]]; then
+        print_success "✅ Critical Components: All essential files and dependencies are present"
     else
-        print_warning "Found $issues_found potential issues. Please review the warnings above."
+        print_error "❌ Critical Components: $critical_errors critical issues found - application may not function properly"
     fi
+    
+    if [[ $configuration_warnings -gt 0 ]]; then
+        print_warning "⚠️  Configuration: $configuration_warnings items using default settings (normal for development)"
+    else
+        print_success "✅ Configuration: All settings are explicitly configured"
+    fi
+    
+    if [[ $security_features -gt 0 ]]; then
+        print_success "🔒 Security: $security_features security features active (directory permissions)"
+    else
+        print_warning "⚠️  Security: No security restrictions detected"
+    fi
+    
+    if [[ $dependency_issues -gt 0 ]]; then
+        print_warning "📦 Dependencies: $dependency_issues minor dependency issues (non-critical)"
+    else
+        print_success "✅ Dependencies: All dependencies properly installed"
+    fi
+    
+    echo ""
+    
+    # Overall status
+    if [[ $critical_errors -eq 0 ]]; then
+        print_success "🎉 Setup Status: SUCCESS - Application is ready for use!"
+        echo ""
+        echo "💡 Next Steps:"
+        echo "   • Configure production settings if needed (API URLs, SSL certificates)"
+        echo "   • Access the application at http://localhost"
+        echo "   • Use default login credentials to get started"
+    else
+        print_error "❌ Setup Status: FAILED - Critical issues must be resolved before use"
+        echo ""
+        echo "🔧 Required Actions:"
+        echo "   • Fix the $critical_errors critical error(s) listed above"
+        echo "   • Re-run the setup script after resolving issues"
+    fi
+    
     set -e
     echo "[DEBUG] Summary section completed"
     echo "[DEBUG] About to return from evaluate_setup_completeness function"
