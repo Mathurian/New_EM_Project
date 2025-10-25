@@ -4244,7 +4244,7 @@ const testSettings = async (req, res) => {
 const getLoggingLevels = async (req, res) => {
   try {
     const settings = await prisma.systemSetting.findMany({
-      where: { settingKey: { startsWith: 'logging_' } }
+      where: { key: { startsWith: 'logging_' } }
     })
     
     const loggingLevels = {
@@ -4257,8 +4257,8 @@ const getLoggingLevels = async (req, res) => {
     
     // Override with stored settings
     settings.forEach(setting => {
-      const key = setting.settingKey.replace('logging_', '')
-      loggingLevels[key] = setting.settingValue
+      const key = setting.key.replace('logging_', '')
+      loggingLevels[key] = setting.value
     })
     
     res.json(loggingLevels)
@@ -4282,15 +4282,15 @@ const updateLoggingLevel = async (req, res) => {
     }
     
     await prisma.systemSetting.upsert({
-      where: { settingKey: `logging_${category}` },
+      where: { key: `logging_${category}` },
       update: { 
-        settingValue: level,
+        value: level,
         updatedAt: new Date(),
         updatedById: req.user?.id
       },
       create: { 
-        settingKey: `logging_${category}`, 
-        settingValue: level,
+        key: `logging_${category}`, 
+        value: level,
         description: `Logging level for ${category}`,
         updatedById: req.user?.id
       }
@@ -4307,7 +4307,7 @@ const updateLoggingLevel = async (req, res) => {
 const getSecuritySettings = async (req, res) => {
   try {
     const settings = await prisma.systemSetting.findMany({
-      where: { settingKey: { startsWith: 'security_' } }
+      where: { key: { startsWith: 'security_' } }
     })
     
     const securitySettings = {
@@ -4324,11 +4324,11 @@ const getSecuritySettings = async (req, res) => {
     
     // Override with stored settings
     settings.forEach(setting => {
-      const key = setting.settingKey.replace('security_', '')
+      const key = setting.key.replace('security_', '')
       if (key in securitySettings) {
-        securitySettings[key] = setting.settingValue === 'true' ? true : 
-                               setting.settingValue === 'false' ? false : 
-                               parseInt(setting.settingValue) || setting.settingValue
+        securitySettings[key] = setting.value === 'true' ? true : 
+                               setting.value === 'false' ? false : 
+                               parseInt(setting.value) || setting.value
       }
     })
     
@@ -4345,15 +4345,15 @@ const updateSecuritySettings = async (req, res) => {
     
     for (const [key, value] of Object.entries(settings)) {
       await prisma.systemSetting.upsert({
-        where: { settingKey: `security_${key}` },
+        where: { key: `security_${key}` },
         update: { 
-          settingValue: value.toString(),
+          value: value.toString(),
           updatedAt: new Date(),
           updatedById: req.user?.id
         },
         create: { 
-          settingKey: `security_${key}`, 
-          settingValue: value.toString(),
+          key: `security_${key}`, 
+          value: value.toString(),
           description: `Security setting for ${key}`,
           updatedById: req.user?.id
         }
@@ -4461,7 +4461,7 @@ const updateBackupSettings = async (req, res) => {
 const getEmailSettings = async (req, res) => {
   try {
     const settings = await prisma.systemSetting.findMany({
-      where: { settingKey: { startsWith: 'email_' } }
+      where: { key: { startsWith: 'email_' } }
     })
     
     const emailSettings = {
@@ -4477,11 +4477,11 @@ const getEmailSettings = async (req, res) => {
     
     // Override with stored settings
     settings.forEach(setting => {
-      const key = setting.settingKey.replace('email_', '')
+      const key = setting.key.replace('email_', '')
       if (key in emailSettings) {
-        emailSettings[key] = setting.settingValue === 'true' ? true : 
-                            setting.settingValue === 'false' ? false : 
-                            parseInt(setting.settingValue) || setting.settingValue
+        emailSettings[key] = setting.value === 'true' ? true : 
+                            setting.value === 'false' ? false : 
+                            parseInt(setting.value) || setting.value
       }
     })
     
@@ -4498,15 +4498,15 @@ const updateEmailSettings = async (req, res) => {
     
     for (const [key, value] of Object.entries(settings)) {
       await prisma.systemSetting.upsert({
-        where: { settingKey: `email_${key}` },
+        where: { key: `email_${key}` },
         update: { 
-          settingValue: value.toString(),
+          value: value.toString(),
           updatedAt: new Date(),
           updatedById: req.user?.id
         },
         create: { 
-          settingKey: `email_${key}`, 
-          settingValue: value.toString(),
+          key: `email_${key}`, 
+          value: value.toString(),
           description: `Email setting for ${key}`,
           updatedById: req.user?.id
         }
@@ -4524,7 +4524,7 @@ const updateEmailSettings = async (req, res) => {
 const getPasswordPolicy = async (req, res) => {
   try {
     const settings = await prisma.systemSetting.findMany({
-      where: { settingKey: { startsWith: 'password_' } }
+      where: { key: { startsWith: 'password_' } }
     })
     
     const passwordPolicy = {
@@ -4539,11 +4539,11 @@ const getPasswordPolicy = async (req, res) => {
     
     // Override with stored settings
     settings.forEach(setting => {
-      const key = setting.settingKey.replace('password_', '')
+      const key = setting.key.replace('password_', '')
       if (key in passwordPolicy) {
-        passwordPolicy[key] = setting.settingValue === 'true' ? true : 
-                              setting.settingValue === 'false' ? false : 
-                              parseInt(setting.settingValue) || setting.settingValue
+        passwordPolicy[key] = setting.value === 'true' ? true : 
+                              setting.value === 'false' ? false : 
+                              parseInt(setting.value) || setting.value
       }
     })
     
@@ -4560,15 +4560,15 @@ const updatePasswordPolicy = async (req, res) => {
     
     for (const [key, value] of Object.entries(policy)) {
       await prisma.systemSetting.upsert({
-        where: { settingKey: `password_${key}` },
+        where: { key: `password_${key}` },
         update: { 
-          settingValue: value.toString(),
+          value: value.toString(),
           updatedAt: new Date(),
           updatedById: req.user?.id
         },
         create: { 
-          settingKey: `password_${key}`, 
-          settingValue: value.toString(),
+          key: `password_${key}`, 
+          value: value.toString(),
           description: `Password policy for ${key}`,
           updatedById: req.user?.id
         }
@@ -22475,29 +22475,29 @@ const seed = async () => {
     // Create system settings (use upsert to avoid duplicates)
     const settings = await Promise.all([
       prisma.systemSetting.upsert({
-        where: { settingKey: 'app_name' },
+        where: { key: 'app_name' },
         update: {},
         create: {
-          settingKey: 'app_name',
-          settingValue: 'Event Manager',
+          key: 'app_name',
+          value: 'Event Manager',
           description: 'Application name'
         }
       }),
       prisma.systemSetting.upsert({
-        where: { settingKey: 'app_version' },
+        where: { key: 'app_version' },
         update: {},
         create: {
-          settingKey: 'app_version',
-          settingValue: '1.0.0',
+          key: 'app_version',
+          value: '1.0.0',
           description: 'Application version'
         }
       }),
       prisma.systemSetting.upsert({
-        where: { settingKey: 'max_file_size' },
+        where: { key: 'max_file_size' },
         update: {},
         create: {
-          settingKey: 'max_file_size',
-          settingValue: '10485760',
+          key: 'max_file_size',
+          value: '10485760',
           description: 'Maximum file upload size in bytes'
         }
       })
