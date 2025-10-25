@@ -21482,12 +21482,12 @@ model User {
   contestant Contestant? @relation(fields: [contestantId], references: [id])
   logs       ActivityLog[]
   updatedSettings SystemSetting[] @relation("UserUpdatedSettings")
-  backupLogs BackupLog[]
-  categoryTypes CategoryType[]
-  reportInstances ReportInstance[]
-  deductionRequests DeductionRequest[]
-  deductionApprovals DeductionApproval[]
-  eventTemplates EventTemplate[]
+  backupLogs BackupLog[] @relation("UserBackupLogs")
+  categoryTypes CategoryType[] @relation("UserCategoryTypes")
+  reportInstances ReportInstance[] @relation("UserReportInstances")
+  deductionRequests DeductionRequest[] @relation("UserDeductionRequests")
+  deductionApprovals DeductionApproval[] @relation("UserDeductionApprovals")
+  eventTemplates EventTemplate[] @relation("UserEventTemplates")
   
   // New relations
   assignments     Assignment[]
@@ -21596,6 +21596,8 @@ model SystemSetting {
   updatedAt   DateTime @updatedAt
   updatedBy   String?
 
+  updatedByUser User? @relation("UserUpdatedSettings", fields: [updatedBy], references: [id])
+
   @@map("system_settings")
 }
 
@@ -21690,7 +21692,7 @@ model EventTemplate {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
-  creator     User     @relation(fields: [createdBy], references: [id])
+  creator     User     @relation("UserEventTemplates", fields: [createdBy], references: [id])
   @@map("event_templates")
 }
 
@@ -21959,7 +21961,7 @@ model BackupLog {
   createdAt   DateTime    @default(now())
   errorMessage String?
 
-  createdBy User? @relation(fields: [createdById], references: [id])
+  createdBy User? @relation("UserBackupLogs", fields: [createdById], references: [id])
 
   @@map("backup_logs")
 }
@@ -21987,7 +21989,7 @@ model ReportInstance {
   data         String?  // JSON string
 
   template   ReportTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
-  generatedBy User          @relation(fields: [generatedById], references: [id])
+  generatedBy User @relation("UserReportInstances", fields: [generatedById], references: [id])
 
   @@map("report_instances")
 }
@@ -22000,7 +22002,7 @@ model CategoryType {
   createdById String?
   createdAt   DateTime @default(now())
 
-  createdBy User? @relation(fields: [createdById], references: [id])
+  createdBy User? @relation("UserCategoryTypes", fields: [createdById], references: [id])
 
   @@map("category_types")
 }
@@ -22036,7 +22038,7 @@ model DeductionRequest {
   status       DeductionStatus  @default(PENDING)
   createdAt    DateTime         @default(now())
 
-  requestedBy User                @relation(fields: [requestedById], references: [id])
+  requestedBy User @relation("UserDeductionRequests", fields: [requestedById], references: [id])
   approvals   DeductionApproval[]
 
   @@map("deduction_requests")
@@ -22051,7 +22053,7 @@ model DeductionApproval {
   approvedAt   DateTime        @default(now())
 
   request    DeductionRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
-  approvedBy User             @relation(fields: [approvedById], references: [id])
+  approvedBy User @relation("UserDeductionApprovals", fields: [approvedById], references: [id])
 
   @@unique([requestId, approvedById])
   @@map("deduction_approvals")
