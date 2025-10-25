@@ -4639,6 +4639,127 @@ const getJWTConfig = async (req, res) => {
   }
 }
 
+// Theme settings
+const getThemeSettings = async (req, res) => {
+  try {
+    const settings = await prisma.systemSetting.findMany({
+      where: { key: { startsWith: 'theme_' } }
+    })
+    
+    const themeSettings = {
+      primaryColor: '#3b82f6',
+      secondaryColor: '#1e40af',
+      logoPath: null,
+      faviconPath: null,
+      customCSS: null
+    }
+    
+    // Override with stored settings
+    settings.forEach(setting => {
+      const key = setting.key.replace('theme_', '')
+      if (key in themeSettings) {
+        themeSettings[key] = setting.value
+      }
+    })
+    
+    res.json(themeSettings)
+  } catch (error) {
+    console.error('Get theme settings error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const updateThemeSettings = async (req, res) => {
+  try {
+    const settings = req.body
+    
+    for (const [key, value] of Object.entries(settings)) {
+      await prisma.systemSetting.upsert({
+        where: { key: `theme_${key}` },
+        update: { 
+          value: value,
+          updatedAt: new Date(),
+          updatedById: req.user?.id
+        },
+        create: { 
+          key: `theme_${key}`, 
+          value: value,
+          category: 'theme',
+          description: `Theme setting for ${key}`,
+          updatedById: req.user?.id
+        }
+      })
+    }
+    
+    res.json({ message: 'Theme settings updated successfully' })
+  } catch (error) {
+    console.error('Update theme settings error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const uploadThemeLogo = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No logo file provided' })
+    }
+    
+    const logoPath = `/uploads/theme/${req.file.filename}`
+    
+    await prisma.systemSetting.upsert({
+      where: { key: 'theme_logoPath' },
+      update: { 
+        value: logoPath,
+        updatedAt: new Date(),
+        updatedById: req.user?.id
+      },
+      create: { 
+        key: 'theme_logoPath', 
+        value: logoPath,
+        category: 'theme',
+        description: 'Theme logo path',
+        updatedById: req.user?.id
+      }
+    })
+    
+    res.json({ message: 'Logo uploaded successfully', logoPath })
+  } catch (error) {
+    console.error('Upload theme logo error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const uploadThemeFavicon = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No favicon file provided' })
+    }
+    
+    const faviconPath = `/uploads/theme/${req.file.filename}`
+    
+    await prisma.systemSetting.upsert({
+      where: { key: 'theme_faviconPath' },
+      update: { 
+        value: faviconPath,
+        updatedAt: new Date(),
+        updatedById: req.user?.id
+      },
+      create: { 
+        key: 'theme_faviconPath', 
+        value: faviconPath,
+        category: 'theme',
+        description: 'Theme favicon path',
+        updatedById: req.user?.id
+      }
+    })
+    
+    res.json({ message: 'Favicon uploaded successfully', faviconPath })
+  } catch (error) {
+    console.error('Upload theme favicon error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
 module.exports = {
   getAllSettings,
   getSettings,
@@ -4655,7 +4776,11 @@ module.exports = {
   getEmailSettings,
   updateEmailSettings,
   getPasswordPolicy,
-  updatePasswordPolicy
+  updatePasswordPolicy,
+  getThemeSettings,
+  updateThemeSettings,
+  uploadThemeLogo,
+  uploadThemeFavicon
 }
 EOF
 
