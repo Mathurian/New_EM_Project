@@ -18587,9 +18587,7 @@ module.exports = {
   generateEventReport,
   generateJudgePerformanceReport,
   generateSystemAnalyticsReport,
-  generateContestResultsReport,
-  generateAuditReport,
-  generatePerformanceReport
+  generateContestResultsReport
 }
 EOF
 
@@ -18600,9 +18598,7 @@ const {
   generateEventReport,
   generateJudgePerformanceReport,
   generateSystemAnalyticsReport,
-  generateContestResultsReport,
-  generateAuditReport,
-  generatePerformanceReport
+  generateContestResultsReport
 } = require('../controllers/advancedReportingController')
 const { authenticateToken, requireRole } = require('../middleware/auth')
 const { logActivity } = require('../middleware/errorHandler')
@@ -18613,12 +18609,10 @@ const router = express.Router()
 router.use(authenticateToken)
 
 // Advanced reporting endpoints
-router.get('/event/:eventId', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), logActivity('GENERATE_EVENT_REPORT', 'REPORT'), generateEventReport)
+router.get('/event', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), logActivity('GENERATE_EVENT_REPORT', 'REPORT'), generateEventReport)
 router.get('/judge-performance', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), logActivity('GENERATE_JUDGE_REPORT', 'REPORT'), generateJudgePerformanceReport)
 router.get('/system-analytics', requireRole(['ADMIN']), logActivity('GENERATE_SYSTEM_REPORT', 'REPORT'), generateSystemAnalyticsReport)
 router.get('/contest-results', requireRole(['ADMIN', 'BOARD', 'EMCEE']), logActivity('GENERATE_CONTEST_RESULTS_REPORT', 'REPORT'), generateContestResultsReport)
-router.get('/audit', requireRole(['ADMIN']), logActivity('GENERATE_AUDIT_REPORT', 'REPORT'), generateAuditReport)
-router.get('/performance', requireRole(['ADMIN', 'BOARD']), logActivity('GENERATE_PERFORMANCE_REPORT', 'REPORT'), generatePerformanceReport)
 
 module.exports = router
 EOF
