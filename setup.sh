@@ -1548,14 +1548,19 @@ const getCategoriesByContest = async (req, res) => {
 
 const createCategory = async (req, res) => {
   try {
-    const { name, description, maxScore, contestId } = req.body
+    const { name, description, maxScore, contestId, categoryType } = req.body
+
+    if (!name || !contestId) {
+      return res.status(400).json({ error: 'Name and contest ID are required' })
+    }
 
     const category = await prisma.category.create({
       data: {
         name,
-        description,
-        maxScore,
+        description: description || null,
+        maxScore: maxScore || null,
         contestId,
+        categoryType: categoryType || 'OTHER',
         createdBy: req.user.id
       }
     })
@@ -3417,7 +3422,7 @@ const getStats = async (req, res) => {
     ])
 
     // Get database size
-    let databaseSize = 0
+    let databaseSize = '0 bytes'
     try {
       const dbSizeResult = await prisma.$queryRaw`
         SELECT pg_size_pretty(pg_database_size(current_database())) as size
@@ -5330,17 +5335,25 @@ const createBackup = async (req, res) => {
       }
     })
 
-    // Create backup based on type
+    // Parse DATABASE_URL to extract connection details
+    const dbUrl = new URL(process.env.DATABASE_URL)
+    const host = dbUrl.hostname
+    const port = dbUrl.port || 5432
+    const database = dbUrl.pathname.slice(1).split('?')[0]
+    const username = dbUrl.username
+    const password = dbUrl.password
+
+    // Create backup based on type using proper pg_dump syntax
     let command
     switch (type) {
       case 'FULL':
-        command = `pg_dump ${process.env.DATABASE_URL} > ${filepath}`
+        command = `PGPASSWORD="${password}" pg_dump -h ${host} -p ${port} -U ${username} -d ${database} -f ${filepath}`
         break
       case 'SCHEMA':
-        command = `pg_dump --schema-only ${process.env.DATABASE_URL} > ${filepath}`
+        command = `PGPASSWORD="${password}" pg_dump --schema-only -h ${host} -p ${port} -U ${username} -d ${database} -f ${filepath}`
         break
       case 'DATA':
-        command = `pg_dump --data-only ${process.env.DATABASE_URL} > ${filepath}`
+        command = `PGPASSWORD="${password}" pg_dump --data-only -h ${host} -p ${port} -U ${username} -d ${database} -f ${filepath}`
         break
       default:
         await prisma.backupLog.update({
@@ -17145,7 +17158,10 @@ const { logActivity } = require('../middleware/errorHandler')
 
 const router = express.Router()
 
-// Apply authentication to all routes
+// Public routes (no auth required)
+router.get('/password-policy', getPasswordPolicy)
+
+// Apply authentication to all other routes
 router.use(authenticateToken)
 
 // Settings endpoints
@@ -17171,8 +17187,7 @@ router.put('/backup', requireRole(['ORGANIZER', 'BOARD']), logActivity('UPDATE_B
 router.get('/email', getEmailSettings)
 router.put('/email', requireRole(['ORGANIZER', 'BOARD']), logActivity('UPDATE_EMAIL_SETTINGS', 'SETTINGS'), updateEmailSettings)
 
-// Password policy (no auth required for reading)
-router.get('/password-policy', getPasswordPolicy)
+// Password policy (update requires auth)
 router.put('/password-policy', requireRole(['ORGANIZER', 'BOARD']), logActivity('UPDATE_PASSWORD_POLICY', 'SETTINGS'), updatePasswordPolicy)
 
 // JWT configuration routes
@@ -21583,7 +21598,7 @@ model ActivityLog {
   action       String
   resourceType String?
   resourceId   String?
-  details      String?
+  details      Json?    // Changed from String? to Json?
   ipAddress    String?
   userAgent    String?
   logLevel     LogLevel @default(INFO)
@@ -25816,10 +25831,30 @@ const EmceeScripts: React.FC = () => {
     <div className="space-y-6">
       <div className="card">
         <div className="card-header">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Emcee Scripts</h1>
-          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-            Manage scripts for event announcements and presentations
-          </p>
+          <div className="flex justify-between items-start">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Emcee Scripts</h1>
+              <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                Manage scripts for event announcements and presentations
+              </p>
+            </div>
+            <div className="flex space-x-3">
+              <button
+                onClick={() => setActiveTab('create')}
+                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+              >
+                <PlusIcon className="h-4 w-4 mr-2" />
+                Upload Script
+              </button>
+              <button
+                onClick={() => setActiveTab('manage')}
+                className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+              >
+                <PencilIcon className="h-4 w-4 mr-2" />
+                Manage Scripts
+              </button>
+            </div>
+          </div>
         </div>
         <div className="card-body">
           <div className="border-b border-gray-200 dark:border-gray-700">
@@ -26732,6 +26767,7 @@ const CategoryTemplates: React.FC = () => {
     name: '',
     description: '',
     categoryType: 'PERFORMANCE' as 'PERFORMANCE' | 'TECHNICAL' | 'CREATIVE' | 'SCHOLARSHIP' | 'CUSTOM',
+    customType: '',
     criteria: [] as Array<{ id: string; name: string; description: string; maxScore: number; weight: number }>,
     tags: [] as string[],
   })
@@ -26824,10 +26860,15 @@ const CategoryTemplates: React.FC = () => {
   }
 
   const handleSave = () => {
+    const dataToSave = {
+      ...formData,
+      categoryType: formData.categoryType === 'CUSTOM' ? formData.customType : formData.categoryType
+    }
+    
     if (isEditing && selectedTemplate) {
-      updateTemplateMutation.mutate({ id: selectedTemplate.id, data: formData })
+      updateTemplateMutation.mutate({ id: selectedTemplate.id, data: dataToSave })
     } else {
-      createTemplateMutation.mutate(formData)
+      createTemplateMutation.mutate(dataToSave)
     }
   }
 
@@ -27140,15 +27181,32 @@ const CategoryTemplates: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Category Type</label>
                   <select
                     value={formData.categoryType}
-                    onChange={(e) => setFormData(prev => ({ ...prev, categoryType: e.target.value as any }))}
+                    onChange={(e) => {
+                      const value = e.target.value as any
+                      setFormData(prev => ({ 
+                        ...prev, 
+                        categoryType: value,
+                        customType: value === 'CUSTOM' ? prev.customType : ''
+                      }))
+                    }}
                     className="input mt-1"
                   >
                     <option value="PERFORMANCE">Performance</option>
                     <option value="TECHNICAL">Technical</option>
                     <option value="CREATIVE">Creative</option>
                     <option value="SCHOLARSHIP">Scholarship</option>
-                    <option value="CUSTOM">Custom</option>
+                    <option value="CUSTOM">Add Custom Type...</option>
                   </select>
+                  
+                  {formData.categoryType === 'CUSTOM' && (
+                    <input
+                      type="text"
+                      placeholder="Enter custom category type"
+                      value={formData.customType}
+                      onChange={(e) => setFormData(prev => ({ ...prev, customType: e.target.value }))}
+                      className="input mt-2"
+                    />
+                  )}
                 </div>
                 
                 <div>
@@ -41522,7 +41580,6 @@ interface User {
   // Judge-specific fields
   judgeNumber?: string
   judgeLevel?: string
-  judgeExperience?: number
   // Contestant-specific fields
   contestantNumber?: string
   age?: number
@@ -41549,7 +41606,6 @@ interface CreateUserData {
   pronouns?: string
   judgeNumber?: string
   judgeLevel?: string
-  judgeExperience?: number
   contestantNumber?: string
   age?: number
   parentGuardian?: string
@@ -41725,10 +41781,6 @@ const UsersPage: React.FC = () => {
                 <option value="ADVANCED">Advanced</option>
                 <option value="EXPERT">Expert</option>
               </select>
-            </div>
-            <div>
-              <label className="label">Years of Experience</label>
-              <input name="judgeExperience" type="number" className="input" min="0" />
             </div>
           </>
         )
@@ -42012,12 +42064,6 @@ const UsersPage: React.FC = () => {
                                 <div className="font-medium">{user.judgeLevel}</div>
                               </div>
                             )}
-                            {user.judgeExperience && (
-                              <div>
-                                <span className="text-gray-500 dark:text-gray-400">Experience:</span>
-                                <div className="font-medium">{user.judgeExperience} years</div>
-                              </div>
-                            )}
                           </>
                         )}
                         {user.role === 'CONTESTANT' && (
@@ -42100,12 +42146,10 @@ const UsersPage: React.FC = () => {
                 emergencyContact: formData.get('emergencyContact') as string,
                 emergencyPhone: formData.get('emergencyPhone') as string,
                 bio: formData.get('bio') as string,
-                experience: formData.get('experience') as string,
                 preferredName: formData.get('preferredName') as string,
                 pronouns: formData.get('pronouns') as string,
                 judgeNumber: formData.get('judgeNumber') as string,
                 judgeLevel: formData.get('judgeLevel') as string,
-                judgeExperience: formData.get('judgeExperience') ? Number(formData.get('judgeExperience')) : undefined,
                 contestantNumber: formData.get('contestantNumber') as string,
                 age: formData.get('age') ? Number(formData.get('age')) : undefined,
                 parentGuardian: formData.get('parentGuardian') as string,
@@ -42154,6 +42198,34 @@ const UsersPage: React.FC = () => {
                     <div>
                       <label className="label">Phone</label>
                       <input name="phone" type="tel" className="input" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bio and Profile Image */}
+                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                  <h4 className="font-semibold text-gray-900 dark:text-white mb-4">Bio and Profile</h4>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="label">Bio</label>
+                      <textarea 
+                        name="bio" 
+                        rows={4} 
+                        className="input" 
+                        placeholder="Tell us about yourself..."
+                      />
+                    </div>
+                    <div>
+                      <label className="label">Profile Image</label>
+                      <input 
+                        name="image" 
+                        type="file" 
+                        accept="image/*" 
+                        className="input" 
+                      />
+                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                        Upload a profile image (JPEG, PNG, GIF, WebP - max 5MB)
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -42254,12 +42326,10 @@ const UsersPage: React.FC = () => {
                 emergencyContact: formData.get('emergencyContact') as string,
                 emergencyPhone: formData.get('emergencyPhone') as string,
                 bio: formData.get('bio') as string,
-                experience: formData.get('experience') as string,
                 preferredName: formData.get('preferredName') as string,
                 pronouns: formData.get('pronouns') as string,
                 judgeNumber: formData.get('judgeNumber') as string,
                 judgeLevel: formData.get('judgeLevel') as string,
-                judgeExperience: formData.get('judgeExperience') ? Number(formData.get('judgeExperience')) : undefined,
                 contestantNumber: formData.get('contestantNumber') as string,
                 age: formData.get('age') ? Number(formData.get('age')) : undefined,
                 parentGuardian: formData.get('parentGuardian') as string,
@@ -42376,10 +42446,6 @@ const UsersPage: React.FC = () => {
                               <option value="ADVANCED">Advanced</option>
                               <option value="EXPERT">Expert</option>
                             </select>
-                          </div>
-                          <div>
-                            <label className="label">Years of Experience</label>
-                            <input name="judgeExperience" type="number" className="input" defaultValue={selectedUser.judgeExperience} min="0" />
                           </div>
                         </>
                       )}
@@ -44437,7 +44503,15 @@ const SettingsPage: React.FC = () => {
   }
 
   const handleSettingChange = (key: string, value: string) => {
-    updateMutation.mutate({ [key]: value })
+    updateMutation.mutate({ [key]: value }, {
+      onSuccess: () => {
+        // Show success feedback
+        console.log(`Setting ${key} updated successfully`)
+      },
+      onError: (error) => {
+        console.error('Failed to update setting:', error)
+      }
+    })
   }
 
   const handlePasswordPolicyChange = (field: keyof PasswordPolicy, value: any) => {
@@ -45183,12 +45257,22 @@ const PrintReportsModal: React.FC<PrintReportsModalProps> = ({ isOpen, onClose }
     },
     {
       onSuccess: (response) => {
-        // Handle successful report generation
+        // Handle successful report generation and download
+        if (response.data && response.data.filePath) {
+          // Create download link
+          const link = document.createElement('a')
+          link.href = response.data.filePath
+          link.download = `report-${Date.now()}.${formData.format}`
+          document.body.appendChild(link)
+          link.click()
+          document.body.removeChild(link)
+        }
         console.log('Report generated:', response)
         onClose()
       },
       onError: (error) => {
         console.error('Failed to generate report:', error)
+        alert('Failed to generate report. Please try again.')
       }
     }
   )
