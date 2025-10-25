@@ -42638,6 +42638,9 @@ evaluate_setup_completeness() {
     # Check for common configuration issues
     echo "[DEBUG] Checking configuration issues..."
     echo "[DEBUG] About to check VITE_API_URL in $APP_DIR/frontend/.env"
+    
+    # Temporarily disable set -e to prevent script exit on warning
+    set +e
     if grep -q "VITE_API_URL" "$APP_DIR/frontend/.env" 2>/dev/null; then
         echo "[DEBUG] VITE_API_URL found in frontend .env"
         print_success "Frontend API URL configured"
@@ -42650,47 +42653,58 @@ evaluate_setup_completeness() {
         issues_found=$((issues_found + 1))
         echo "[DEBUG] issues_found incremented to: $issues_found"
     fi
+    # Re-enable set -e
+    set -e
     echo "[DEBUG] Frontend API URL check completed"
     
     echo "[DEBUG] Checking DATABASE_URL..."
+    set +e
     if grep -q "DATABASE_URL" "$APP_DIR/.env" 2>/dev/null; then
         print_success "Database URL configured"
     else
         print_warning "Database URL not configured"
         issues_found=$((issues_found + 1))
     fi
+    set -e
     echo "[DEBUG] DATABASE_URL check completed"
     
     echo "[DEBUG] Checking JWT_SECRET..."
+    set +e
     if grep -q "JWT_SECRET" "$APP_DIR/.env" 2>/dev/null; then
         print_success "JWT secret configured"
     else
         print_warning "JWT secret not configured"
         issues_found=$((issues_found + 1))
     fi
+    set -e
     echo "[DEBUG] JWT_SECRET check completed"
     
     # Check for common permission issues
     echo "[DEBUG] Checking permission issues..."
+    set +e
     if [[ -w "$APP_DIR" ]]; then
         print_success "Application directory is writable"
     else
         print_warning "Application directory is not writable"
         issues_found=$((issues_found + 1))
     fi
+    set -e
     echo "[DEBUG] Application directory writable check completed"
     
     echo "[DEBUG] Checking frontend dist writable..."
+    set +e
     if [[ -w "$APP_DIR/frontend/dist" ]]; then
         print_success "Frontend dist directory is writable"
     else
         print_warning "Frontend dist directory is not writable"
         issues_found=$((issues_found + 1))
     fi
+    set -e
     echo "[DEBUG] Frontend dist writable check completed"
     
     # Check for common dependency issues
     echo "[DEBUG] Checking dependency issues..."
+    set +e
     if command -v node >/dev/null 2>&1; then
         local node_version=$(node --version)
         print_success "Node.js found: $node_version"
@@ -42698,9 +42712,11 @@ evaluate_setup_completeness() {
         print_error "Node.js not found!"
         issues_found=$((issues_found + 1))
     fi
+    set -e
     echo "[DEBUG] Node.js check completed"
     
     echo "[DEBUG] Checking npm..."
+    set +e
     if command -v npm >/dev/null 2>&1; then
         local npm_version=$(npm --version)
         print_success "npm found: $npm_version"
@@ -42708,34 +42724,41 @@ evaluate_setup_completeness() {
         print_error "npm not found!"
         issues_found=$((issues_found + 1))
     fi
+    set -e
     echo "[DEBUG] npm check completed"
     
     echo "[DEBUG] Checking nginx..."
+    set +e
     if command -v nginx >/dev/null 2>&1; then
         print_success "Nginx found"
     else
         print_warning "Nginx not found"
         issues_found=$((issues_found + 1))
     fi
+    set -e
     echo "[DEBUG] nginx check completed"
     
     echo "[DEBUG] Checking postgres..."
+    set +e
     if command -v postgres >/dev/null 2>&1; then
         print_success "PostgreSQL found"
     else
         print_warning "PostgreSQL not found"
         issues_found=$((issues_found + 1))
     fi
+    set -e
     echo "[DEBUG] postgres check completed"
     
     # Summary
     echo "[DEBUG] Starting summary section..."
     echo ""
+    set +e
     if [[ $issues_found -eq 0 ]]; then
         print_success "No issues found! Setup appears to be complete."
     else
         print_warning "Found $issues_found potential issues. Please review the warnings above."
     fi
+    set -e
     echo "[DEBUG] Summary section completed"
     echo "[DEBUG] About to return from evaluate_setup_completeness function"
     return 0
