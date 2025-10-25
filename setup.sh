@@ -42686,11 +42686,6 @@ evaluate_setup_completeness() {
     else
         print_warning "Found $issues_found potential issues. Please review the warnings above."
     fi
-    
-    print_status "Setup evaluation completed"
-    print_status "Added missing admin endpoints: /api/admin/logs, /api/admin/active-users, /api/admin/settings, /api/admin/backup"
-    print_status "Added missing endpoints: /api/categories, /api/results"
-    print_status "Fixed double /api/ issue in frontend"
 }
 
 # Run main function
