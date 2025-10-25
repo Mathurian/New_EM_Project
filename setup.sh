@@ -42641,7 +42641,9 @@ evaluate_setup_completeness() {
         print_success "Frontend API URL configured"
     else
         print_warning "Frontend API URL not configured"
+        echo "[DEBUG] Warning printed, incrementing issues_found..."
         ((issues_found++))
+        echo "[DEBUG] issues_found incremented to: $issues_found"
     fi
     echo "[DEBUG] Frontend API URL check completed"
     
