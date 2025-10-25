@@ -42637,11 +42637,16 @@ evaluate_setup_completeness() {
     
     # Check for common configuration issues
     echo "[DEBUG] Checking configuration issues..."
+    echo "[DEBUG] About to check VITE_API_URL in $APP_DIR/frontend/.env"
     if grep -q "VITE_API_URL" "$APP_DIR/frontend/.env" 2>/dev/null; then
+        echo "[DEBUG] VITE_API_URL found in frontend .env"
         print_success "Frontend API URL configured"
     else
+        echo "[DEBUG] VITE_API_URL NOT found in frontend .env"
+        echo "[DEBUG] About to print warning message"
         print_warning "Frontend API URL not configured"
-        echo "[DEBUG] Warning printed, incrementing issues_found..."
+        echo "[DEBUG] Warning message printed successfully"
+        echo "[DEBUG] About to increment issues_found"
         issues_found=$((issues_found + 1))
         echo "[DEBUG] issues_found incremented to: $issues_found"
     fi
