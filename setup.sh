@@ -10087,7 +10087,7 @@ const emailReport = async (req, res) => {
     const emailController = require('./emailController')
     
     // Create email content
-    const emailContent = \`
+    const emailContent = `
       <h2>Report: \${reportInstance.name}</h2>
       <p>\${message || 'Please find the attached report.'}</p>
       <hr>
@@ -10098,15 +10098,15 @@ const emailReport = async (req, res) => {
         <li><strong>Generated At:</strong> \${new Date(reportInstance.createdAt).toLocaleString()}</li>
       </ul>
       <p>This report was generated from the Event Manager system.</p>
-    \`
+    `
 
     // Send email with report attachment
     await emailController.sendReportEmail({
       to: recipients,
-      subject: subject || \`Report: \${reportInstance.name}\`,
+      subject: subject || `Report: \${reportInstance.name}`,
       html: emailContent,
       attachments: reportInstance.fileUrl ? [{
-        filename: \`\${reportInstance.name}.pdf\`,
+        filename: `\${reportInstance.name}.pdf`,
         path: reportInstance.fileUrl
       }] : []
     })
