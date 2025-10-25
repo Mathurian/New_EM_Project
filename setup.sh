@@ -21031,6 +21031,15 @@ import {\
         sed -i 's/TrendingDownIcon/ArrowTrendingDownIcon/g' "src/pages/TallyMasterPage.tsx"
         # Fix API call signature
         sed -i 's/tallyMasterAPI\.certifyTotals(data)/tallyMasterAPI.certifyTotalsData(data)/g' "src/pages/TallyMasterPage.tsx"
+        print_status "Fixed TallyMasterPage.tsx API calls"
+    fi
+    
+    # Fix ArchiveManager.tsx API calls
+    if [[ -f "src/components/ArchiveManager.tsx" ]]; then
+        sed -i 's/archiveAPI\.archive(eventId, reason)/archiveAPI.archiveEvent(eventId, reason)/g' "src/components/ArchiveManager.tsx"
+        sed -i 's/archiveAPI\.restore(eventId)/archiveAPI.restoreEvent(eventId)/g' "src/components/ArchiveManager.tsx"
+        sed -i 's/archiveAPI\.delete(eventId)/archiveAPI.deleteEvent(eventId)/g' "src/components/ArchiveManager.tsx"
+        print_status "Fixed ArchiveManager.tsx API calls"
     fi
     
     # Fix ProfilePage.tsx - Fix role type casting
