@@ -42539,118 +42539,151 @@ main() {
 
 evaluate_setup_completeness() {
     print_status "Evaluating setup completeness and checking for remaining issues..."
+    echo "[DEBUG] Starting evaluate_setup_completeness function..."
     
     local issues_found=0
+    echo "[DEBUG] Initialized issues_found variable"
     
     # Check for common installation issues
+    echo "[DEBUG] Checking backend package.json..."
     if [[ -f "$APP_DIR/package.json" ]]; then
         print_success "Backend package.json found"
     else
         print_error "Backend package.json missing!"
         ((issues_found++))
     fi
+    echo "[DEBUG] Backend package.json check completed"
     
+    echo "[DEBUG] Checking frontend package.json..."
     if [[ -f "$APP_DIR/frontend/package.json" ]]; then
         print_success "Frontend package.json found"
     else
         print_error "Frontend package.json missing!"
         ((issues_found++))
     fi
+    echo "[DEBUG] Frontend package.json check completed"
     
+    echo "[DEBUG] Checking server.js..."
     if [[ -f "$APP_DIR/src/server.js" ]]; then
         print_success "Server.js found"
     else
         print_error "Server.js missing!"
         ((issues_found++))
     fi
+    echo "[DEBUG] Server.js check completed"
     
+    echo "[DEBUG] Checking frontend build..."
     if [[ -f "$APP_DIR/frontend/dist/index.html" ]]; then
         print_success "Frontend build found"
     else
         print_error "Frontend build missing!"
         ((issues_found++))
     fi
+    echo "[DEBUG] Frontend build check completed"
     
+    echo "[DEBUG] Checking backend .env..."
     if [[ -f "$APP_DIR/.env" ]]; then
         print_success "Backend .env found"
     else
         print_error "Backend .env missing!"
         ((issues_found++))
     fi
+    echo "[DEBUG] Backend .env check completed"
     
+    echo "[DEBUG] Checking frontend .env..."
     if [[ -f "$APP_DIR/frontend/.env" ]]; then
         print_success "Frontend .env found"
     else
         print_error "Frontend .env missing!"
         ((issues_found++))
     fi
+    echo "[DEBUG] Frontend .env check completed"
     
+    echo "[DEBUG] Checking Prisma schema..."
     if [[ -f "$APP_DIR/prisma/schema.prisma" ]]; then
         print_success "Prisma schema found"
     else
         print_error "Prisma schema missing!"
         ((issues_found++))
     fi
+    echo "[DEBUG] Prisma schema check completed"
     
+    echo "[DEBUG] Checking backend node_modules..."
     if [[ -d "$APP_DIR/node_modules" ]]; then
         print_success "Backend node_modules found"
     else
         print_error "Backend node_modules missing!"
         ((issues_found++))
     fi
+    echo "[DEBUG] Backend node_modules check completed"
     
+    echo "[DEBUG] Checking frontend node_modules..."
     if [[ -d "$APP_DIR/frontend/node_modules" ]]; then
         print_success "Frontend node_modules found"
     else
         print_error "Frontend node_modules missing!"
         ((issues_found++))
     fi
+    echo "[DEBUG] Frontend node_modules check completed"
     
+    echo "[DEBUG] Checking frontend dist directory..."
     if [[ -d "$APP_DIR/frontend/dist" ]]; then
         print_success "Frontend dist directory found"
     else
         print_error "Frontend dist directory missing!"
         ((issues_found++))
     fi
+    echo "[DEBUG] Frontend dist directory check completed"
     
     # Check for common configuration issues
+    echo "[DEBUG] Checking configuration issues..."
     if grep -q "VITE_API_URL" "$APP_DIR/frontend/.env" 2>/dev/null; then
         print_success "Frontend API URL configured"
     else
         print_warning "Frontend API URL not configured"
         ((issues_found++))
     fi
+    echo "[DEBUG] Frontend API URL check completed"
     
+    echo "[DEBUG] Checking DATABASE_URL..."
     if grep -q "DATABASE_URL" "$APP_DIR/.env" 2>/dev/null; then
         print_success "Database URL configured"
     else
         print_warning "Database URL not configured"
         ((issues_found++))
     fi
+    echo "[DEBUG] DATABASE_URL check completed"
     
+    echo "[DEBUG] Checking JWT_SECRET..."
     if grep -q "JWT_SECRET" "$APP_DIR/.env" 2>/dev/null; then
         print_success "JWT secret configured"
     else
         print_warning "JWT secret not configured"
         ((issues_found++))
     fi
+    echo "[DEBUG] JWT_SECRET check completed"
     
     # Check for common permission issues
+    echo "[DEBUG] Checking permission issues..."
     if [[ -w "$APP_DIR" ]]; then
         print_success "Application directory is writable"
     else
         print_warning "Application directory is not writable"
         ((issues_found++))
     fi
+    echo "[DEBUG] Application directory writable check completed"
     
+    echo "[DEBUG] Checking frontend dist writable..."
     if [[ -w "$APP_DIR/frontend/dist" ]]; then
         print_success "Frontend dist directory is writable"
     else
         print_warning "Frontend dist directory is not writable"
         ((issues_found++))
     fi
+    echo "[DEBUG] Frontend dist writable check completed"
     
     # Check for common dependency issues
+    echo "[DEBUG] Checking dependency issues..."
     if command -v node >/dev/null 2>&1; then
         local node_version=$(node --version)
         print_success "Node.js found: $node_version"
@@ -42658,7 +42691,9 @@ evaluate_setup_completeness() {
         print_error "Node.js not found!"
         ((issues_found++))
     fi
+    echo "[DEBUG] Node.js check completed"
     
+    echo "[DEBUG] Checking npm..."
     if command -v npm >/dev/null 2>&1; then
         local npm_version=$(npm --version)
         print_success "npm found: $npm_version"
@@ -42666,28 +42701,37 @@ evaluate_setup_completeness() {
         print_error "npm not found!"
         ((issues_found++))
     fi
+    echo "[DEBUG] npm check completed"
     
+    echo "[DEBUG] Checking nginx..."
     if command -v nginx >/dev/null 2>&1; then
         print_success "Nginx found"
     else
         print_warning "Nginx not found"
         ((issues_found++))
     fi
+    echo "[DEBUG] nginx check completed"
     
+    echo "[DEBUG] Checking postgres..."
     if command -v postgres >/dev/null 2>&1; then
         print_success "PostgreSQL found"
     else
         print_warning "PostgreSQL not found"
         ((issues_found++))
     fi
+    echo "[DEBUG] postgres check completed"
     
     # Summary
+    echo "[DEBUG] Starting summary section..."
     echo ""
     if [[ $issues_found -eq 0 ]]; then
         print_success "No issues found! Setup appears to be complete."
     else
         print_warning "Found $issues_found potential issues. Please review the warnings above."
     fi
+    echo "[DEBUG] Summary section completed"
+    echo "[DEBUG] About to return from evaluate_setup_completeness function"
+    return 0
 }
 
 # Run main function
