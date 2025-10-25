@@ -825,10 +825,10 @@ EOF
     # Validation middleware
     cat > "$APP_DIR/src/middleware/validation.js" << 'EOF'
 const validateEvent = (req, res, next) => {
-  const { name, description, startDate, endDate, location, maxContestants } = req.body
+  const { name, description, startDate, endDate, maxContestants } = req.body
   
-  if (!name || !description || !startDate || !endDate || !location) {
-    return res.status(400).json({ error: 'Missing required fields' })
+  if (!name || !startDate || !endDate) {
+    return res.status(400).json({ error: 'Name, start date, and end date are required' })
   }
   
   if (new Date(startDate) >= new Date(endDate)) {
@@ -924,6 +924,124 @@ module.exports = {
 }
 EOF
 
+    # Permissions Middleware
+    cat > "$APP_DIR/src/middleware/permissions.js" << 'EOF'
+// Permission matrix for role-based access control
+const PERMISSIONS = {
+  ADMIN: ['*'], // All permissions
+  ORGANIZER: [
+    'events:*', 'contests:*', 'categories:*', 'users:*', 'reports:*',
+    'templates:*', 'settings:*', 'backup:*', 'emcee:*', 'category-types:*'
+  ],
+  BOARD: [
+    'events:read', 'contests:read', 'results:*', 'reports:*', 'approvals:*',
+    'users:read', 'settings:read', 'emcee:read', 'category-types:read'
+  ],
+  JUDGE: [
+    'scores:write', 'scores:read', 'results:read', 'commentary:write',
+    'events:read', 'contests:read', 'categories:read'
+  ],
+  TALLY_MASTER: [
+    'results:read', 'certifications:*', 'approvals:*', 'events:read',
+    'contests:read', 'categories:read'
+  ],
+  AUDITOR: [
+    'results:read', 'certifications:*', 'approvals:*', 'audit:*',
+    'events:read', 'contests:read', 'categories:read'
+  ],
+  EMCEE: [
+    'emcee:read', 'events:read', 'contests:read', 'categories:read',
+    'contestants:read', 'judges:read'
+  ],
+  CONTESTANT: [
+    'results:read:own', 'events:read', 'contests:read', 'categories:read'
+  ]
+}
+
+// Check if user has specific permission
+const hasPermission = (userRole, permission) => {
+  if (!userRole || !permission) return false
+  
+  const rolePermissions = PERMISSIONS[userRole] || []
+  
+  // Check for wildcard permission
+  if (rolePermissions.includes('*')) return true
+  
+  // Check for exact permission match
+  if (rolePermissions.includes(permission)) return true
+  
+  // Check for wildcard permission (e.g., 'events:*' matches 'events:read')
+  const [resource, action] = permission.split(':')
+  const wildcardPermission = `${resource}:*`
+  
+  return rolePermissions.includes(wildcardPermission)
+}
+
+// Middleware to check permissions
+const requirePermission = (permission) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' })
+    }
+    
+    if (!hasPermission(req.user.role, permission)) {
+      return res.status(403).json({ error: 'Insufficient permissions' })
+    }
+    
+    next()
+  }
+}
+
+// Enhanced role requirement middleware
+const requireRole = (roles) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' })
+    }
+    
+    const userRole = req.user.role
+    const allowedRoles = Array.isArray(roles) ? roles : [roles]
+    
+    if (!allowedRoles.includes(userRole)) {
+      return res.status(403).json({ error: 'Insufficient role permissions' })
+    }
+    
+    next()
+  }
+}
+
+// Check if user can uncertify scores (BOARD, ORGANIZER, ADMIN only)
+const canUncertifyScores = (userRole) => {
+  return ['BOARD', 'ORGANIZER', 'ADMIN'].includes(userRole)
+}
+
+// Check if user can certify final winners (BOARD, ORGANIZER, ADMIN only)
+const canCertifyWinners = (userRole) => {
+  return ['BOARD', 'ORGANIZER', 'ADMIN'].includes(userRole)
+}
+
+// Check if user can approve deductions
+const canApproveDeductions = (userRole) => {
+  return ['BOARD', 'ORGANIZER', 'ADMIN', 'TALLY_MASTER', 'AUDITOR'].includes(userRole)
+}
+
+// Check if user can remove judge scores (requires specific multi-role approval)
+const canRemoveJudgeScores = (userRole) => {
+  return ['BOARD', 'ORGANIZER', 'ADMIN', 'TALLY_MASTER', 'AUDITOR', 'JUDGE'].includes(userRole)
+}
+
+module.exports = {
+  PERMISSIONS,
+  hasPermission,
+  requirePermission,
+  requireRole,
+  canUncertifyScores,
+  canCertifyWinners,
+  canApproveDeductions,
+  canRemoveJudgeScores
+}
+EOF
+
     print_success "Middleware files created successfully"
 }
 
@@ -959,6 +1077,12 @@ const login = async (req, res) => {
     if (!user || !await bcrypt.compare(password, user.password)) {
       return res.status(401).json({ error: 'Invalid credentials' })
     }
+
+    // Update last login timestamp
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() }
+    })
 
     const token = jwt.sign(
       { userId: user.id, email: user.email, role: user.role },
@@ -2169,6 +2293,198 @@ const getUserStats = async (req, res) => {
   }
 }
 
+// Upload user profile image
+const uploadUserImage = async (req, res) => {
+  try {
+    const { id } = req.params
+    
+    if (!req.file) {
+      return res.status(400).json({ error: 'No image file provided' })
+    }
+
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+    if (!allowedTypes.includes(req.file.mimetype)) {
+      return res.status(400).json({ error: 'Invalid file type. Only JPEG, PNG, GIF, and WebP are allowed.' })
+    }
+
+    // Validate file size (max 5MB)
+    const maxSize = 5 * 1024 * 1024 // 5MB
+    if (req.file.size > maxSize) {
+      return res.status(400).json({ error: 'File size too large. Maximum size is 5MB.' })
+    }
+
+    const imagePath = `/uploads/users/${req.file.filename}`
+
+    await prisma.user.update({
+      where: { id },
+      data: { imagePath }
+    })
+
+    res.json({ 
+      message: 'Image uploaded successfully',
+      imagePath 
+    })
+  } catch (error) {
+    console.error('Upload user image error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Bulk upload users from CSV
+const bulkUploadUsers = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'CSV file is required' })
+    }
+
+    const results = []
+    const errors = []
+    const csv = require('csv-parser')
+    const fs = require('fs')
+
+    // Parse CSV file
+    const csvData = []
+    const stream = fs.createReadStream(req.file.path)
+      .pipe(csv())
+      .on('data', (data) => csvData.push(data))
+      .on('end', async () => {
+        try {
+          for (let i = 0; i < csvData.length; i++) {
+            const row = csvData[i]
+            const { name, email, password, role, phone, bio } = row
+
+            // Validate required fields
+            if (!name || !email || !password || !role) {
+              errors.push({
+                row: i + 1,
+                error: 'Missing required fields: name, email, password, role'
+              })
+              continue
+            }
+
+            // Check if user already exists
+            const existingUser = await prisma.user.findUnique({
+              where: { email }
+            })
+
+            if (existingUser) {
+              errors.push({
+                row: i + 1,
+                email,
+                error: 'User with this email already exists'
+              })
+              continue
+            }
+
+            // Hash password
+            const hashedPassword = await bcrypt.hash(password, 10)
+
+            // Create user
+            const user = await prisma.user.create({
+              data: {
+                name,
+                email,
+                password: hashedPassword,
+                role,
+                phone: phone || null,
+                bio: bio || null
+              },
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                role: true,
+                phone: true,
+                bio: true
+              }
+            })
+
+            results.push(user)
+          }
+
+          // Clean up uploaded file
+          fs.unlinkSync(req.file.path)
+
+          res.json({
+            message: 'Bulk upload completed',
+            imported: results.length,
+            errors: errors.length,
+            results,
+            errors
+          })
+        } catch (error) {
+          console.error('Bulk upload processing error:', error)
+          res.status(500).json({ error: 'Internal server error' })
+        }
+      })
+      .on('error', (error) => {
+        console.error('CSV parsing error:', error)
+        res.status(500).json({ error: 'Failed to parse CSV file' })
+      })
+  } catch (error) {
+    console.error('Bulk upload users error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Bulk delete users
+const bulkDeleteUsers = async (req, res) => {
+  try {
+    const { userIds } = req.body
+
+    if (!userIds || !Array.isArray(userIds) || userIds.length === 0) {
+      return res.status(400).json({ error: 'User IDs array is required' })
+    }
+
+    // Verify all users exist
+    const users = await prisma.user.findMany({
+      where: { id: { in: userIds } },
+      select: { id: true, name: true, email: true }
+    })
+
+    if (users.length !== userIds.length) {
+      return res.status(400).json({ 
+        error: 'Some users not found',
+        found: users.length,
+        requested: userIds.length
+      })
+    }
+
+    // Delete users
+    await prisma.user.deleteMany({
+      where: { id: { in: userIds } }
+    })
+
+    res.json({
+      message: 'Users deleted successfully',
+      deletedCount: users.length,
+      deletedUsers: users.map(u => ({ id: u.id, name: u.name, email: u.email }))
+    })
+  } catch (error) {
+    console.error('Bulk delete users error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Get bulk upload template
+const getBulkUploadTemplate = async (req, res) => {
+  try {
+    const { userType } = req.params
+
+    const template = `name,email,password,role,phone,bio
+John Doe,john.doe@example.com,password123,${userType},+1234567890,User bio here
+Jane Smith,jane.smith@example.com,password123,${userType},+1234567891,Another user bio`
+
+    res.setHeader('Content-Type', 'text/csv')
+    res.setHeader('Content-Disposition', `attachment; filename="${userType}_bulk_template.csv"`)
+    res.send(template)
+  } catch (error) {
+    console.error('Get bulk upload template error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
 module.exports = {
   getAllUsers,
   getUserById,
@@ -2182,7 +2498,11 @@ module.exports = {
   bulkRemoveUsers,
   getUsersByRole,
   updateUserRoleFields,
-  getUserStats
+  getUserStats,
+  uploadUserImage,
+  bulkUploadUsers,
+  bulkDeleteUsers,
+  getBulkUploadTemplate
 }
 EOF
 
@@ -2622,20 +2942,115 @@ const prisma = new PrismaClient()
 
 const getAllResults = async (req, res) => {
   try {
-    const results = await prisma.score.groupBy({
-      by: ['categoryId', 'contestantId'],
-      _sum: {
-        score: true
+    const userRole = req.user.role
+    const userId = req.user.id
+
+    let whereClause = {}
+    let includeClause = {
+      category: {
+        include: {
+          contest: {
+            include: {
+              event: true
+            }
+          }
+        }
       },
-      _count: {
-        score: true
+      contestant: true,
+      judge: true
+    }
+
+    // Role-based filtering
+    switch (userRole) {
+      case 'ADMIN':
+      case 'ORGANIZER':
+        // Full access to all results
+        break
+      
+      case 'BOARD':
+        // All results with certification status indicators
+        includeClause.certifications = true
+        break
+      
+      case 'JUDGE':
+        // Results for assigned categories/contests with certification status
+        whereClause = {
+          OR: [
+            { judgeId: userId },
+            { category: { judges: { some: { userId: userId } } } }
+          ]
+        }
+        includeClause.certifications = true
+        break
+      
+      case 'TALLY_MASTER':
+        // All results with certification workflow access
+        includeClause.certifications = true
+        break
+      
+      case 'AUDITOR':
+        // All results with audit trail access
+        includeClause.certifications = true
+        includeClause.auditLogs = true
+        break
+      
+      case 'CONTESTANT':
+        // Own results only
+        whereClause = { contestantId: userId }
+        break
+      
+      default:
+        return res.status(403).json({ error: 'Insufficient permissions' })
+    }
+
+    const results = await prisma.score.findMany({
+      where: whereClause,
+      include: includeClause,
+      orderBy: [
+        { category: { contest: { event: { startDate: 'desc' } } } },
+        { category: { name: 'asc' } },
+        { contestant: { name: 'asc' } }
+      ]
+    })
+
+    // Add certification status to results
+    const resultsWithStatus = results.map(result => {
+      const certifications = result.certifications || []
+      const certificationStatus = determineCertificationStatus(certifications)
+      
+      return {
+        ...result,
+        certificationStatus,
+        certifiedBy: certifications.map(c => c.userId),
+        certifiedAt: certifications.length > 0 ? certifications[certifications.length - 1].createdAt : null
       }
     })
 
-    res.json(results)
+    res.json(resultsWithStatus)
   } catch (error) {
     console.error('Get results error:', error)
     res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Helper function to determine certification status
+const determineCertificationStatus = (certifications) => {
+  if (!certifications || certifications.length === 0) {
+    return 'pending'
+  }
+
+  const hasAuditorCert = certifications.some(c => c.type === 'AUDITOR')
+  const hasTallyCert = certifications.some(c => c.type === 'TALLY_MASTER')
+  const hasFinalCert = certifications.some(c => c.type === 'FINAL')
+
+  if (hasFinalCert) {
+    return 'final_certified'
+  } else if (hasAuditorCert && hasTallyCert) {
+    return 'ready_for_final'
+  } else if (hasAuditorCert || hasTallyCert) {
+    return 'partially_certified'
+  } else {
+    return 'pending'
   }
 }
 
@@ -2771,6 +3186,219 @@ module.exports = {
 }
 EOF
 
+    # Commentary Controller
+    cat > "$APP_DIR/src/controllers/commentaryController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+const createComment = async (req, res) => {
+  try {
+    const { scoreId, criterionId, contestantId, comment, isPrivate } = req.body
+    const judgeId = req.user.id
+
+    if (!scoreId || !criterionId || !contestantId || !comment) {
+      return res.status(400).json({ error: 'Score ID, criterion ID, contestant ID, and comment are required' })
+    }
+
+    const scoreComment = await prisma.scoreComment.create({
+      data: {
+        scoreId,
+        criterionId,
+        contestantId,
+        judgeId,
+        comment,
+        isPrivate: isPrivate || false
+      },
+      include: {
+        judge: {
+          select: {
+            name: true,
+            email: true
+          }
+        }
+      }
+    })
+
+    res.status(201).json(scoreComment)
+  } catch (error) {
+    console.error('Create comment error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getCommentsForScore = async (req, res) => {
+  try {
+    const { scoreId } = req.params
+    const userRole = req.user.role
+
+    let whereClause = { scoreId }
+
+    // Filter private comments based on role
+    if (!['ADMIN', 'ORGANIZER', 'BOARD'].includes(userRole)) {
+      whereClause.isPrivate = false
+    }
+
+    const comments = await prisma.scoreComment.findMany({
+      where: whereClause,
+      include: {
+        judge: {
+          select: {
+            name: true,
+            email: true
+          }
+        },
+        criterion: {
+          select: {
+            name: true,
+            description: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'asc' }
+    })
+
+    res.json(comments)
+  } catch (error) {
+    console.error('Get comments error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const updateComment = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { comment, isPrivate } = req.body
+    const userId = req.user.id
+
+    // Check if user owns the comment or has admin privileges
+    const existingComment = await prisma.scoreComment.findUnique({
+      where: { id }
+    })
+
+    if (!existingComment) {
+      return res.status(404).json({ error: 'Comment not found' })
+    }
+
+    if (existingComment.judgeId !== userId && !['ADMIN', 'ORGANIZER'].includes(req.user.role)) {
+      return res.status(403).json({ error: 'Insufficient permissions' })
+    }
+
+    const updatedComment = await prisma.scoreComment.update({
+      where: { id },
+      data: {
+        comment,
+        isPrivate: isPrivate !== undefined ? isPrivate : existingComment.isPrivate
+      },
+      include: {
+        judge: {
+          select: {
+            name: true,
+            email: true
+          }
+        }
+      }
+    })
+
+    res.json(updatedComment)
+  } catch (error) {
+    console.error('Update comment error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const deleteComment = async (req, res) => {
+  try {
+    const { id } = req.params
+    const userId = req.user.id
+
+    // Check if user owns the comment or has admin privileges
+    const existingComment = await prisma.scoreComment.findUnique({
+      where: { id }
+    })
+
+    if (!existingComment) {
+      return res.status(404).json({ error: 'Comment not found' })
+    }
+
+    if (existingComment.judgeId !== userId && !['ADMIN', 'ORGANIZER'].includes(req.user.role)) {
+      return res.status(403).json({ error: 'Insufficient permissions' })
+    }
+
+    await prisma.scoreComment.delete({
+      where: { id }
+    })
+
+    res.status(204).send()
+  } catch (error) {
+    console.error('Delete comment error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const getCommentsByContestant = async (req, res) => {
+  try {
+    const { contestantId } = req.params
+    const userRole = req.user.role
+
+    let whereClause = { contestantId }
+
+    // Filter private comments based on role
+    if (!['ADMIN', 'ORGANIZER', 'BOARD'].includes(userRole)) {
+      whereClause.isPrivate = false
+    }
+
+    const comments = await prisma.scoreComment.findMany({
+      where: whereClause,
+      include: {
+        judge: {
+          select: {
+            name: true,
+            email: true
+          }
+        },
+        criterion: {
+          select: {
+            name: true,
+            description: true
+          }
+        },
+        score: {
+          include: {
+            category: {
+              include: {
+                contest: {
+                  include: {
+                    event: true
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      orderBy: [
+        { score: { category: { contest: { event: { startDate: 'desc' } } } } },
+        { createdAt: 'asc' }
+      ]
+    })
+
+    res.json(comments)
+  } catch (error) {
+    console.error('Get comments by contestant error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+module.exports = {
+  createComment,
+  getCommentsForScore,
+  updateComment,
+  deleteComment,
+  getCommentsByContestant
+}
+EOF
+
     # Admin Controller
     cat > "$APP_DIR/src/controllers/adminController.js" << 'EOF'
 const { PrismaClient } = require('@prisma/client')
@@ -2779,12 +3407,52 @@ const prisma = new PrismaClient()
 
 const getStats = async (req, res) => {
   try {
+    // Get basic counts
+    const [users, events, contests, categories, scores] = await Promise.all([
+      prisma.user.count(),
+      prisma.event.count(),
+      prisma.contest.count(),
+      prisma.category.count(),
+      prisma.score.count()
+    ])
+
+    // Get database size
+    let databaseSize = 0
+    try {
+      const dbSizeResult = await prisma.$queryRaw`
+        SELECT pg_size_pretty(pg_database_size(current_database())) as size
+      `
+      databaseSize = dbSizeResult[0]?.size || '0 bytes'
+    } catch (error) {
+      console.warn('Could not get database size:', error)
+    }
+
+    // Get certifications count
+    const [judgeCertifications, tallyCertifications, auditorCertifications] = await Promise.all([
+      prisma.judgeCertification.count(),
+      prisma.tallyMasterCertification.count(),
+      prisma.auditorCertification.count()
+    ])
+
+    const totalCertifications = judgeCertifications + tallyCertifications + auditorCertifications
+
     const stats = {
-      users: await prisma.user.count(),
-      events: await prisma.event.count(),
-      contests: await prisma.contest.count(),
-      categories: await prisma.category.count(),
-      scores: await prisma.score.count()
+      users,
+      events,
+      contests,
+      categories,
+      scores,
+      database: {
+        size: databaseSize,
+        tables: 15 // Approximate number of tables
+      },
+      certifications: {
+        total: totalCertifications,
+        judge: judgeCertifications,
+        tally: tallyCertifications,
+        auditor: auditorCertifications
+      },
+      lastUpdated: new Date().toISOString()
     }
 
     res.json(stats)
@@ -3572,20 +4240,347 @@ const testSettings = async (req, res) => {
   }
 }
 
-// JWT/Session timeout configuration
-const updateJWTConfig = async (req, res) => {
+// Logging levels settings
+const getLoggingLevels = async (req, res) => {
   try {
-    const { jwtExpiresIn, sessionTimeout, refreshTokenExpiresIn } = req.body
-
-    if (!jwtExpiresIn) {
-      return res.status(400).json({ error: 'JWT expiration time is required' })
+    const settings = await prisma.systemSetting.findMany({
+      where: { settingKey: { startsWith: 'logging_' } }
+    })
+    
+    const loggingLevels = {
+      default: 'INFO',
+      api: 'INFO',
+      database: 'WARN',
+      auth: 'INFO',
+      backup: 'INFO'
     }
+    
+    // Override with stored settings
+    settings.forEach(setting => {
+      const key = setting.settingKey.replace('logging_', '')
+      loggingLevels[key] = setting.settingValue
+    })
+    
+    res.json(loggingLevels)
+  } catch (error) {
+    console.error('Get logging levels error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
 
-    // Validate JWT expiration format (e.g., "24h", "7d", "30m")
-    const jwtExpirationRegex = /^\d+[hdm]$/
-    if (!jwtExpirationRegex.test(jwtExpiresIn)) {
-      return res.status(400).json({ error: 'Invalid JWT expiration format. Use format like "24h", "7d", "30m"' })
+const updateLoggingLevel = async (req, res) => {
+  try {
+    const { level, category } = req.body
+    
+    if (!level || !category) {
+      return res.status(400).json({ error: 'Level and category are required' })
     }
+    
+    const validLevels = ['ERROR', 'WARN', 'INFO', 'DEBUG']
+    if (!validLevels.includes(level)) {
+      return res.status(400).json({ error: 'Invalid logging level' })
+    }
+    
+    await prisma.systemSetting.upsert({
+      where: { settingKey: `logging_${category}` },
+      update: { 
+        settingValue: level,
+        updatedAt: new Date(),
+        updatedById: req.user?.id
+      },
+      create: { 
+        settingKey: `logging_${category}`, 
+        settingValue: level,
+        description: `Logging level for ${category}`,
+        updatedById: req.user?.id
+      }
+    })
+    
+    res.json({ message: 'Logging level updated successfully' })
+  } catch (error) {
+    console.error('Update logging level error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Security settings
+const getSecuritySettings = async (req, res) => {
+  try {
+    const settings = await prisma.systemSetting.findMany({
+      where: { settingKey: { startsWith: 'security_' } }
+    })
+    
+    const securitySettings = {
+      passwordMinLength: 8,
+      passwordRequireUppercase: true,
+      passwordRequireLowercase: true,
+      passwordRequireNumbers: true,
+      passwordRequireSpecialChars: false,
+      sessionTimeout: 3600, // 1 hour in seconds
+      maxLoginAttempts: 5,
+      lockoutDuration: 900, // 15 minutes in seconds
+      requireTwoFactor: false
+    }
+    
+    // Override with stored settings
+    settings.forEach(setting => {
+      const key = setting.settingKey.replace('security_', '')
+      if (key in securitySettings) {
+        securitySettings[key] = setting.settingValue === 'true' ? true : 
+                               setting.settingValue === 'false' ? false : 
+                               parseInt(setting.settingValue) || setting.settingValue
+      }
+    })
+    
+    res.json(securitySettings)
+  } catch (error) {
+    console.error('Get security settings error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const updateSecuritySettings = async (req, res) => {
+  try {
+    const settings = req.body
+    
+    for (const [key, value] of Object.entries(settings)) {
+      await prisma.systemSetting.upsert({
+        where: { settingKey: `security_${key}` },
+        update: { 
+          settingValue: value.toString(),
+          updatedAt: new Date(),
+          updatedById: req.user?.id
+        },
+        create: { 
+          settingKey: `security_${key}`, 
+          settingValue: value.toString(),
+          description: `Security setting for ${key}`,
+          updatedById: req.user?.id
+        }
+      })
+    }
+    
+    res.json({ message: 'Security settings updated successfully' })
+  } catch (error) {
+    console.error('Update security settings error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Backup settings
+const getBackupSettings = async (req, res) => {
+  try {
+    const settings = await prisma.backupSetting.findMany()
+    
+    const backupSettings = {
+      schema: {
+        enabled: false,
+        frequency: 'DAILY',
+        frequencyValue: 1,
+        retentionDays: 30
+      },
+      full: {
+        enabled: false,
+        frequency: 'WEEKLY',
+        frequencyValue: 1,
+        retentionDays: 90
+      }
+    }
+    
+    // Override with stored settings
+    settings.forEach(setting => {
+      backupSettings[setting.backupType.toLowerCase()] = {
+        enabled: setting.enabled,
+        frequency: setting.frequency,
+        frequencyValue: setting.frequencyValue,
+        retentionDays: setting.retentionDays
+      }
+    })
+    
+    res.json(backupSettings)
+  } catch (error) {
+    console.error('Get backup settings error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const updateBackupSettings = async (req, res) => {
+  try {
+    const { schema, full } = req.body
+    
+    // Update schema backup settings
+    if (schema) {
+      await prisma.backupSetting.upsert({
+        where: { backupType: 'SCHEMA' },
+        update: {
+          enabled: schema.enabled,
+          frequency: schema.frequency,
+          frequencyValue: schema.frequencyValue,
+          retentionDays: schema.retentionDays,
+          updatedAt: new Date()
+        },
+        create: {
+          backupType: 'SCHEMA',
+          enabled: schema.enabled,
+          frequency: schema.frequency,
+          frequencyValue: schema.frequencyValue,
+          retentionDays: schema.retentionDays
+        }
+      })
+    }
+    
+    // Update full backup settings
+    if (full) {
+      await prisma.backupSetting.upsert({
+        where: { backupType: 'FULL' },
+        update: {
+          enabled: full.enabled,
+          frequency: full.frequency,
+          frequencyValue: full.frequencyValue,
+          retentionDays: full.retentionDays,
+          updatedAt: new Date()
+        },
+        create: {
+          backupType: 'FULL',
+          enabled: full.enabled,
+          frequency: full.frequency,
+          frequencyValue: full.frequencyValue,
+          retentionDays: full.retentionDays
+        }
+      })
+    }
+    
+    res.json({ message: 'Backup settings updated successfully' })
+  } catch (error) {
+    console.error('Update backup settings error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Email settings
+const getEmailSettings = async (req, res) => {
+  try {
+    const settings = await prisma.systemSetting.findMany({
+      where: { settingKey: { startsWith: 'email_' } }
+    })
+    
+    const emailSettings = {
+      smtpHost: '',
+      smtpPort: 587,
+      smtpSecure: false,
+      smtpUser: '',
+      smtpPassword: '',
+      fromEmail: '',
+      fromName: 'Event Manager',
+      testEmail: ''
+    }
+    
+    // Override with stored settings
+    settings.forEach(setting => {
+      const key = setting.settingKey.replace('email_', '')
+      if (key in emailSettings) {
+        emailSettings[key] = setting.settingValue === 'true' ? true : 
+                            setting.settingValue === 'false' ? false : 
+                            parseInt(setting.settingValue) || setting.settingValue
+      }
+    })
+    
+    res.json(emailSettings)
+  } catch (error) {
+    console.error('Get email settings error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const updateEmailSettings = async (req, res) => {
+  try {
+    const settings = req.body
+    
+    for (const [key, value] of Object.entries(settings)) {
+      await prisma.systemSetting.upsert({
+        where: { settingKey: `email_${key}` },
+        update: { 
+          settingValue: value.toString(),
+          updatedAt: new Date(),
+          updatedById: req.user?.id
+        },
+        create: { 
+          settingKey: `email_${key}`, 
+          settingValue: value.toString(),
+          description: `Email setting for ${key}`,
+          updatedById: req.user?.id
+        }
+      })
+    }
+    
+    res.json({ message: 'Email settings updated successfully' })
+  } catch (error) {
+    console.error('Update email settings error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Password policy
+const getPasswordPolicy = async (req, res) => {
+  try {
+    const settings = await prisma.systemSetting.findMany({
+      where: { settingKey: { startsWith: 'password_' } }
+    })
+    
+    const passwordPolicy = {
+      minLength: 8,
+      requireUppercase: true,
+      requireLowercase: true,
+      requireNumbers: true,
+      requireSpecialChars: false,
+      preventCommonPasswords: true,
+      preventUserInfo: true
+    }
+    
+    // Override with stored settings
+    settings.forEach(setting => {
+      const key = setting.settingKey.replace('password_', '')
+      if (key in passwordPolicy) {
+        passwordPolicy[key] = setting.settingValue === 'true' ? true : 
+                              setting.settingValue === 'false' ? false : 
+                              parseInt(setting.settingValue) || setting.settingValue
+      }
+    })
+    
+    res.json(passwordPolicy)
+  } catch (error) {
+    console.error('Get password policy error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const updatePasswordPolicy = async (req, res) => {
+  try {
+    const policy = req.body
+    
+    for (const [key, value] of Object.entries(policy)) {
+      await prisma.systemSetting.upsert({
+        where: { settingKey: `password_${key}` },
+        update: { 
+          settingValue: value.toString(),
+          updatedAt: new Date(),
+          updatedById: req.user?.id
+        },
+        create: { 
+          settingKey: `password_${key}`, 
+          settingValue: value.toString(),
+          description: `Password policy for ${key}`,
+          updatedById: req.user?.id
+        }
+      })
+    }
+    
+    res.json({ message: 'Password policy updated successfully' })
+  } catch (error) {
+    console.error('Update password policy error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
 
     // Update JWT settings
     await prisma.systemSetting.upsert({
@@ -3835,7 +4830,9 @@ module.exports = {
   getBackupSettings,
   updateBackupSettings,
   getEmailSettings,
-  updateEmailSettings
+  updateEmailSettings,
+  getPasswordPolicy,
+  updatePasswordPolicy
 }
 EOF
 
@@ -4373,6 +5370,18 @@ const createBackup = async (req, res) => {
       fs.mkdirSync('backups', { recursive: true })
     }
 
+    // Create backup log entry
+    const backupLog = await prisma.backupLog.create({
+      data: {
+        backupType: type,
+        filePath: filepath,
+        fileSize: 0, // Will be updated after backup
+        status: 'IN_PROGRESS',
+        createdById: req.user?.id,
+        errorMessage: null
+      }
+    })
+
     // Create backup based on type
     let command
     switch (type) {
@@ -4386,23 +5395,50 @@ const createBackup = async (req, res) => {
         command = `pg_dump --data-only ${process.env.DATABASE_URL} > ${filepath}`
         break
       default:
+        await prisma.backupLog.update({
+          where: { id: backupLog.id },
+          data: { 
+            status: 'FAILED',
+            errorMessage: 'Invalid backup type'
+          }
+        })
         return res.status(400).json({ error: 'Invalid backup type' })
     }
 
     exec(command, async (error, stdout, stderr) => {
       if (error) {
         console.error('Backup error:', error)
+        await prisma.backupLog.update({
+          where: { id: backupLog.id },
+          data: { 
+            status: 'FAILED',
+            errorMessage: error.message
+          }
+        })
         return res.status(500).json({ error: 'Backup failed' })
       }
 
-      // Return backup information (no database record needed)
+      // Update backup log with success
+      const stats = fs.statSync(filepath)
+      await prisma.backupLog.update({
+        where: { id: backupLog.id },
+        data: { 
+          status: 'SUCCESS',
+          fileSize: stats.size,
+          errorMessage: null
+        }
+      })
+
+      // Return backup information
       res.json({
-        id: filename,
+        id: backupLog.id,
         filename,
         type,
         filepath,
+        size: stats.size,
+        status: 'SUCCESS',
         createdBy: req.user.id,
-        createdAt: new Date()
+        createdAt: backupLog.createdAt
       })
     })
   } catch (error) {
@@ -4413,29 +5449,18 @@ const createBackup = async (req, res) => {
 
 const listBackups = async (req, res) => {
   try {
-    // List backup files from the file system instead of database
-    const backupDir = path.join(process.cwd(), 'backups')
-    
-    if (!fs.existsSync(backupDir)) {
-      return res.json([])
-    }
-    
-    const files = fs.readdirSync(backupDir)
-    const backups = files
-      .filter(file => file.endsWith('.sql') || file.endsWith('.backup'))
-      .map(file => {
-        const filePath = path.join(backupDir, file)
-        const stats = fs.statSync(filePath)
-        return {
-          id: file,
-          filename: file,
-          filepath: filePath,
-          size: stats.size,
-          createdAt: stats.birthtime,
-          updatedAt: stats.mtime
+    const backups = await prisma.backupLog.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: {
+        createdBy: {
+          select: {
+            id: true,
+            name: true,
+            email: true
+          }
         }
-      })
-      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      }
+    })
 
     res.json(backups)
   } catch (error) {
@@ -4448,15 +5473,20 @@ const downloadBackup = async (req, res) => {
   try {
     const { backupId } = req.params
     
-    // Find backup file in the file system
-    const backupDir = path.join(process.cwd(), 'backups')
-    const filePath = path.join(backupDir, backupId)
+    // Find backup in database
+    const backup = await prisma.backupLog.findUnique({
+      where: { id: backupId }
+    })
     
-    if (!fs.existsSync(filePath)) {
+    if (!backup) {
+      return res.status(404).json({ error: 'Backup not found' })
+    }
+    
+    if (!fs.existsSync(backup.filePath)) {
       return res.status(404).json({ error: 'Backup file not found' })
     }
 
-    res.download(filePath, backupId)
+    res.download(backup.filePath, path.basename(backup.filePath))
   } catch (error) {
     console.error('Download backup error:', error)
     res.status(500).json({ error: 'Internal server error' })
@@ -4500,16 +5530,24 @@ const deleteBackup = async (req, res) => {
   try {
     const { backupId } = req.params
     
-    // Find backup file in the file system
-    const backupDir = path.join(process.cwd(), 'backups')
-    const filePath = path.join(backupDir, backupId)
+    // Find backup in database
+    const backup = await prisma.backupLog.findUnique({
+      where: { id: backupId }
+    })
     
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({ error: 'Backup file not found' })
+    if (!backup) {
+      return res.status(404).json({ error: 'Backup not found' })
     }
-
-    // Delete physical file
-    fs.unlinkSync(filePath)
+    
+    // Delete physical file if it exists
+    if (fs.existsSync(backup.filePath)) {
+      fs.unlinkSync(backup.filePath)
+    }
+    
+    // Delete database record
+    await prisma.backupLog.delete({
+      where: { id: backupId }
+    })
     
     res.json({ message: 'Backup deleted successfully' })
   } catch (error) {
@@ -9103,6 +10141,117 @@ const getEmceeHistory = async (req, res) => {
   }
 }
 
+// Upload script file
+const uploadScript = async (req, res) => {
+  try {
+    const { title, content, eventId, contestId, categoryId, order } = req.body
+    
+    if (!title || !content) {
+      return res.status(400).json({ error: 'Title and content are required' })
+    }
+
+    const script = await prisma.emceeScript.create({
+      data: {
+        title,
+        content,
+        eventId: eventId || null,
+        contestId: contestId || null,
+        categoryId: categoryId || null,
+        order: order || 0,
+        uploadedBy: req.user.id
+      },
+      include: {
+        uploadedBy: {
+          select: {
+            name: true,
+            email: true
+          }
+        }
+      }
+    })
+
+    res.status(201).json(script)
+  } catch (error) {
+    console.error('Upload script error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Update script
+const updateScript = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { title, content, eventId, contestId, categoryId, order, isActive } = req.body
+
+    const script = await prisma.emceeScript.update({
+      where: { id },
+      data: {
+        title,
+        content,
+        eventId: eventId || null,
+        contestId: contestId || null,
+        categoryId: categoryId || null,
+        order: order || 0,
+        isActive: isActive !== undefined ? isActive : true
+      },
+      include: {
+        uploadedBy: {
+          select: {
+            name: true,
+            email: true
+          }
+        }
+      }
+    })
+
+    res.json(script)
+  } catch (error) {
+    console.error('Update script error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Delete script
+const deleteScript = async (req, res) => {
+  try {
+    const { id } = req.params
+
+    await prisma.emceeScript.delete({
+      where: { id }
+    })
+
+    res.status(204).send()
+  } catch (error) {
+    console.error('Delete script error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Toggle script active status
+const toggleScript = async (req, res) => {
+  try {
+    const { id } = req.params
+
+    const script = await prisma.emceeScript.findUnique({
+      where: { id }
+    })
+
+    if (!script) {
+      return res.status(404).json({ error: 'Script not found' })
+    }
+
+    const updatedScript = await prisma.emceeScript.update({
+      where: { id },
+      data: { isActive: !script.isActive }
+    })
+
+    res.json(updatedScript)
+  } catch (error) {
+    console.error('Toggle script error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
 module.exports = {
   getStats,
   getScripts,
@@ -9113,7 +10262,106 @@ module.exports = {
   getEvent,
   getContests,
   getContest,
-  getEmceeHistory
+  getEmceeHistory,
+  uploadScript,
+  updateScript,
+  deleteScript,
+  toggleScript
+}
+EOF
+
+    # Category Types Controller
+    cat > "$APP_DIR/src/controllers/categoryTypeController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
+
+const getAllCategoryTypes = async (req, res) => {
+  try {
+    const categoryTypes = await prisma.categoryType.findMany({
+      orderBy: { name: 'asc' }
+    })
+
+    res.json(categoryTypes)
+  } catch (error) {
+    console.error('Get category types error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const createCategoryType = async (req, res) => {
+  try {
+    const { name, description } = req.body
+    
+    if (!name) {
+      return res.status(400).json({ error: 'Name is required' })
+    }
+
+    const categoryType = await prisma.categoryType.create({
+      data: {
+        name,
+        description: description || null,
+        isSystem: false,
+        createdById: req.user.id
+      }
+    })
+
+    res.status(201).json(categoryType)
+  } catch (error) {
+    console.error('Create category type error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const updateCategoryType = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { name, description } = req.body
+
+    const categoryType = await prisma.categoryType.update({
+      where: { id },
+      data: {
+        name,
+        description: description || null
+      }
+    })
+
+    res.json(categoryType)
+  } catch (error) {
+    console.error('Update category type error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const deleteCategoryType = async (req, res) => {
+  try {
+    const { id } = req.params
+
+    // Check if it's a system category type
+    const categoryType = await prisma.categoryType.findUnique({
+      where: { id }
+    })
+
+    if (categoryType.isSystem) {
+      return res.status(400).json({ error: 'Cannot delete system category types' })
+    }
+
+    await prisma.categoryType.delete({
+      where: { id }
+    })
+
+    res.status(204).send()
+  } catch (error) {
+    console.error('Delete category type error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+module.exports = {
+  getAllCategoryTypes,
+  createCategoryType,
+  updateCategoryType,
+  deleteCategoryType
 }
 EOF
     cat > "$APP_DIR/src/controllers/reportsController.js" << 'EOF'
@@ -9224,17 +10472,17 @@ const generateReport = async (req, res) => {
 
 const getHistory = async (req, res) => {
   try {
-    const history = await prisma.reportHistory.findMany({
+    const history = await prisma.reportInstance.findMany({
       include: {
         template: true,
-        user: {
+        generatedBy: {
           select: {
             name: true,
             email: true
           }
         }
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { generatedAt: 'desc' },
       take: 100
     })
 
@@ -10123,6 +11371,59 @@ const emailReport = async (req, res) => {
   }
 }
 
+const getReportInstances = async (req, res) => {
+  try {
+    const { search, type, status } = req.query
+    
+    const where = {}
+    if (search) {
+      where.template = {
+        name: { contains: search, mode: 'insensitive' }
+      }
+    }
+    if (type) {
+      where.template = {
+        ...where.template,
+        type: type
+      }
+    }
+    
+    const instances = await prisma.reportInstance.findMany({
+      where,
+      include: {
+        template: true,
+        generatedBy: {
+          select: {
+            name: true,
+            email: true
+          }
+        }
+      },
+      orderBy: { generatedAt: 'desc' }
+    })
+
+    res.json(instances)
+  } catch (error) {
+    console.error('Get report instances error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+const deleteReportInstance = async (req, res) => {
+  try {
+    const { id } = req.params
+
+    await prisma.reportInstance.delete({
+      where: { id }
+    })
+
+    res.status(204).send()
+  } catch (error) {
+    console.error('Delete report instance error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
 module.exports = {
   getTemplates,
   createTemplate,
@@ -10131,7 +11432,12 @@ module.exports = {
   generateReport,
   sendReportEmail,
   getReportInstances,
-  deleteReportInstance
+  deleteReportInstance,
+  getHistory,
+  generateEventReport,
+  generateJudgePerformanceReport,
+  generateSystemAnalyticsReport,
+  generateContestResultsReport
 }
 EOF
 
@@ -14892,7 +16198,7 @@ EOF
     # Users Routes
     cat > "$APP_DIR/src/routes/usersRoutes.js" << 'EOF'
 const express = require('express')
-const { getAllUsers, getUserById, createUser, updateUser, deleteUser, resetPassword, importUsersFromCSV, getCSVTemplate, updateLastLogin, bulkRemoveUsers, getUsersByRole, updateUserRoleFields, getUserStats } = require('../controllers/usersController')
+const { getAllUsers, getUserById, createUser, updateUser, deleteUser, resetPassword, importUsersFromCSV, getCSVTemplate, updateLastLogin, bulkRemoveUsers, getUsersByRole, updateUserRoleFields, getUserStats, uploadUserImage, bulkUploadUsers, bulkDeleteUsers, getBulkUploadTemplate } = require('../controllers/usersController')
 const { authenticateToken, requireRole } = require('../middleware/auth')
 const { validateUser, validateUserUpdate } = require('../middleware/validation')
 const { logActivity } = require('../middleware/errorHandler')
@@ -14921,6 +16227,13 @@ router.post('/bulk-remove', requireRole(['ORGANIZER', 'BOARD']), logActivity('BU
 router.get('/role/:role', requireRole(['ORGANIZER', 'BOARD']), getUsersByRole)
 router.put('/:id/role-fields', requireRole(['ORGANIZER', 'BOARD']), logActivity('UPDATE_USER_ROLE_FIELDS', 'USER'), updateUserRoleFields)
 router.get('/stats', requireRole(['ORGANIZER', 'BOARD']), getUserStats)
+
+// Image upload route
+router.post('/:id/image', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), uploadUserImage)
+// Bulk operations routes
+router.post('/bulk-upload', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), logActivity('BULK_UPLOAD_USERS', 'USERS'), bulkUploadUsers)
+router.post('/bulk-delete', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), logActivity('BULK_DELETE_USERS', 'USERS'), bulkDeleteUsers)
+router.get('/bulk-template/:userType', getBulkUploadTemplate)
 
 module.exports = router
 EOF
@@ -14978,11 +16291,713 @@ router.get('/event/:eventId', getEventResults)
 module.exports = router
 EOF
 
+    # Commentary Routes
+    cat > "$APP_DIR/src/routes/commentaryRoutes.js" << 'EOF'
+const express = require('express')
+const { 
+  createComment,
+  getCommentsForScore,
+  updateComment,
+  deleteComment,
+  getCommentsByContestant
+} = require('../controllers/commentaryController')
+const { authenticateToken, requireRole } = require('../middleware/auth')
+const { logActivity } = require('../middleware/errorHandler')
+
+const router = express.Router()
+
+// Apply authentication to all routes
+router.use(authenticateToken)
+
+// Commentary endpoints
+router.post('/', requireRole(['JUDGE', 'ORGANIZER', 'BOARD', 'ADMIN']), logActivity('CREATE_COMMENT', 'COMMENTARY'), createComment)
+router.get('/score/:scoreId', getCommentsForScore)
+router.put('/:id', requireRole(['JUDGE', 'ORGANIZER', 'BOARD', 'ADMIN']), logActivity('UPDATE_COMMENT', 'COMMENTARY'), updateComment)
+router.delete('/:id', requireRole(['JUDGE', 'ORGANIZER', 'BOARD', 'ADMIN']), logActivity('DELETE_COMMENT', 'COMMENTARY'), deleteComment)
+router.get('/contestant/:contestantId', getCommentsByContestant)
+
+module.exports = router
+EOF
+
+    # Database Browser Controller
+    cat > "$APP_DIR/src/controllers/databaseBrowserController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+const prisma = new PrismaClient()
+
+// Get all database tables
+const getTables = async (req, res) => {
+  try {
+    // Get table information from PostgreSQL system tables
+    const tables = await prisma.$queryRaw`
+      SELECT 
+        schemaname,
+        tablename,
+        tableowner,
+        hasindexes,
+        hasrules,
+        hastriggers
+      FROM pg_tables 
+      WHERE schemaname = 'public'
+      ORDER BY tablename
+    `
+
+    // Get table row counts
+    const tableCounts = await Promise.all(
+      tables.map(async (table) => {
+        try {
+          const countResult = await prisma.$queryRaw`
+            SELECT COUNT(*) as count FROM ${prisma.$queryRawUnsafe(`"${table.tablename}"`)}
+          `
+          return {
+            ...table,
+            rowCount: parseInt(countResult[0].count)
+          }
+        } catch (error) {
+          return {
+            ...table,
+            rowCount: 0,
+            error: 'Unable to count rows'
+          }
+        }
+      })
+    )
+
+    res.json({
+      tables: tableCounts,
+      totalTables: tables.length
+    })
+  } catch (error) {
+    console.error('Get tables error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Execute read-only query
+const executeQuery = async (req, res) => {
+  try {
+    const { query, limit = 100 } = req.body
+
+    if (!query || typeof query !== 'string') {
+      return res.status(400).json({ error: 'Query is required' })
+    }
+
+    // Security checks for read-only queries
+    const sanitizedQuery = query.trim().toLowerCase()
+    
+    // Block dangerous operations
+    const dangerousKeywords = [
+      'insert', 'update', 'delete', 'drop', 'create', 'alter', 
+      'truncate', 'grant', 'revoke', 'exec', 'execute', 'call'
+    ]
+    
+    for (const keyword of dangerousKeywords) {
+      if (sanitizedQuery.includes(keyword)) {
+        return res.status(400).json({ 
+          error: `Operation '${keyword}' is not allowed. Only SELECT queries are permitted.` 
+        })
+      }
+    }
+
+    // Ensure query starts with SELECT
+    if (!sanitizedQuery.startsWith('select')) {
+      return res.status(400).json({ 
+        error: 'Only SELECT queries are allowed' 
+      })
+    }
+
+    // Add LIMIT if not present
+    let finalQuery = query
+    if (!sanitizedQuery.includes('limit')) {
+      finalQuery = `${query} LIMIT ${Math.min(limit, 1000)}`
+    }
+
+    // Execute query
+    const results = await prisma.$queryRawUnsafe(finalQuery)
+    
+    res.json({
+      results,
+      rowCount: results.length,
+      query: finalQuery,
+      executedAt: new Date().toISOString()
+    })
+  } catch (error) {
+    console.error('Execute query error:', error)
+    res.status(500).json({ 
+      error: 'Query execution failed',
+      details: error.message 
+    })
+  }
+}
+
+// Get table structure
+const getTableStructure = async (req, res) => {
+  try {
+    const { tableName } = req.params
+
+    if (!tableName) {
+      return res.status(400).json({ error: 'Table name is required' })
+    }
+
+    // Get column information
+    const columns = await prisma.$queryRaw`
+      SELECT 
+        column_name,
+        data_type,
+        is_nullable,
+        column_default,
+        character_maximum_length,
+        numeric_precision,
+        numeric_scale
+      FROM information_schema.columns 
+      WHERE table_name = ${tableName}
+      AND table_schema = 'public'
+      ORDER BY ordinal_position
+    `
+
+    // Get foreign key information
+    const foreignKeys = await prisma.$queryRaw`
+      SELECT 
+        kcu.column_name,
+        ccu.table_name AS foreign_table_name,
+        ccu.column_name AS foreign_column_name
+      FROM information_schema.table_constraints AS tc 
+      JOIN information_schema.key_column_usage AS kcu
+        ON tc.constraint_name = kcu.constraint_name
+        AND tc.table_schema = kcu.table_schema
+      JOIN information_schema.constraint_column_usage AS ccu
+        ON ccu.constraint_name = tc.constraint_name
+        AND ccu.table_schema = tc.table_schema
+      WHERE tc.constraint_type = 'FOREIGN KEY' 
+        AND tc.table_name = ${tableName}
+        AND tc.table_schema = 'public'
+    `
+
+    // Get primary key information
+    const primaryKeys = await prisma.$queryRaw`
+      SELECT column_name
+      FROM information_schema.table_constraints tc
+      JOIN information_schema.key_column_usage kcu
+        ON tc.constraint_name = kcu.constraint_name
+        AND tc.table_schema = kcu.table_schema
+      WHERE tc.constraint_type = 'PRIMARY KEY'
+        AND tc.table_name = ${tableName}
+        AND tc.table_schema = 'public'
+    `
+
+    res.json({
+      tableName,
+      columns,
+      foreignKeys,
+      primaryKeys: primaryKeys.map(pk => pk.column_name),
+      columnCount: columns.length
+    })
+  } catch (error) {
+    console.error('Get table structure error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Get table data with pagination
+const getTableData = async (req, res) => {
+  try {
+    const { tableName } = req.params
+    const { page = 1, limit = 50, orderBy, orderDirection = 'asc' } = req.query
+
+    if (!tableName) {
+      return res.status(400).json({ error: 'Table name is required' })
+    }
+
+    const offset = (parseInt(page) - 1) * parseInt(limit)
+    const safeLimit = Math.min(parseInt(limit), 100) // Max 100 rows per page
+
+    // Build ORDER BY clause
+    let orderClause = ''
+    if (orderBy) {
+      const safeOrderBy = orderBy.replace(/[^a-zA-Z0-9_]/g, '') // Sanitize
+      const safeDirection = orderDirection.toLowerCase() === 'desc' ? 'DESC' : 'ASC'
+      orderClause = `ORDER BY "${safeOrderBy}" ${safeDirection}`
+    }
+
+    // Get total count
+    const countResult = await prisma.$queryRawUnsafe(
+      `SELECT COUNT(*) as count FROM "${tableName}"`
+    )
+    const totalRows = parseInt(countResult[0].count)
+
+    // Get data
+    const data = await prisma.$queryRawUnsafe(
+      `SELECT * FROM "${tableName}" ${orderClause} LIMIT ${safeLimit} OFFSET ${offset}`
+    )
+
+    res.json({
+      data,
+      pagination: {
+        page: parseInt(page),
+        limit: safeLimit,
+        totalRows,
+        totalPages: Math.ceil(totalRows / safeLimit),
+        hasNext: offset + safeLimit < totalRows,
+        hasPrev: page > 1
+      },
+      tableName
+    })
+  } catch (error) {
+    console.error('Get table data error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+module.exports = {
+  getTables,
+  executeQuery,
+  getTableStructure,
+  getTableData
+}
+EOF
+
+    # Deduction Controller
+    cat > "$APP_DIR/src/controllers/deductionController.js" << 'EOF'
+const { PrismaClient } = require('@prisma/client')
+const prisma = new PrismaClient()
+
+// Create deduction request
+const createDeductionRequest = async (req, res) => {
+  try {
+    const { contestantId, categoryId, amount, reason } = req.body
+    const requestedBy = req.user.id
+
+    if (!contestantId || !categoryId || !amount || !reason) {
+      return res.status(400).json({ error: 'Contestant ID, category ID, amount, and reason are required' })
+    }
+
+    if (amount <= 0) {
+      return res.status(400).json({ error: 'Deduction amount must be greater than 0' })
+    }
+
+    // Verify contestant and category exist
+    const [contestant, category] = await Promise.all([
+      prisma.contestant.findUnique({ where: { id: contestantId } }),
+      prisma.category.findUnique({ where: { id: categoryId } })
+    ])
+
+    if (!contestant) {
+      return res.status(404).json({ error: 'Contestant not found' })
+    }
+
+    if (!category) {
+      return res.status(404).json({ error: 'Category not found' })
+    }
+
+    // Create deduction request
+    const deductionRequest = await prisma.deductionRequest.create({
+      data: {
+        contestantId,
+        categoryId,
+        amount: parseFloat(amount),
+        reason,
+        requestedBy,
+        status: 'PENDING'
+      },
+      include: {
+        contestant: {
+          select: { id: true, name: true, email: true }
+        },
+        category: {
+          select: { id: true, name: true }
+        },
+        requestedByUser: {
+          select: { id: true, name: true, email: true, role: true }
+        }
+      }
+    })
+
+    res.status(201).json(deductionRequest)
+  } catch (error) {
+    console.error('Create deduction request error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Get pending deductions (role-filtered)
+const getPendingDeductions = async (req, res) => {
+  try {
+    const userRole = req.user.role
+    const userId = req.user.id
+
+    let whereClause = { status: 'PENDING' }
+
+    // Role-based filtering
+    switch (userRole) {
+      case 'ADMIN':
+      case 'ORGANIZER':
+        // Can see all pending deductions
+        break
+
+      case 'BOARD':
+        // Can see all pending deductions
+        break
+
+      case 'JUDGE':
+        // Can see deductions for categories they're assigned to
+        const judgeCategories = await prisma.judge.findMany({
+          where: { userId },
+          select: { categoryId: true }
+        })
+        whereClause.categoryId = { in: judgeCategories.map(j => j.categoryId) }
+        break
+
+      case 'TALLY_MASTER':
+        // Can see all pending deductions
+        break
+
+      case 'AUDITOR':
+        // Can see all pending deductions
+        break
+
+      default:
+        return res.status(403).json({ error: 'Insufficient permissions' })
+    }
+
+    const deductions = await prisma.deductionRequest.findMany({
+      where: whereClause,
+      include: {
+        contestant: {
+          select: { id: true, name: true, email: true }
+        },
+        category: {
+          select: { id: true, name: true }
+        },
+        requestedByUser: {
+          select: { id: true, name: true, email: true, role: true }
+        },
+        approvals: {
+          include: {
+            approvedByUser: {
+              select: { id: true, name: true, email: true, role: true }
+            }
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    // Add approval status for each deduction
+    const deductionsWithStatus = deductions.map(deduction => {
+      const approvals = deduction.approvals || []
+      const hasHeadJudgeApproval = approvals.some(a => a.isHeadJudge)
+      const hasTallyMasterApproval = approvals.some(a => a.role === 'TALLY_MASTER')
+      const hasAuditorApproval = approvals.some(a => a.role === 'AUDITOR')
+      const hasBoardApproval = approvals.some(a => ['BOARD', 'ORGANIZER', 'ADMIN'].includes(a.role))
+
+      const canApprove = !approvals.some(a => a.approvedBy === userId)
+      const isFullyApproved = hasHeadJudgeApproval && hasTallyMasterApproval && hasAuditorApproval && hasBoardApproval
+
+      return {
+        ...deduction,
+        approvalStatus: {
+          hasHeadJudgeApproval,
+          hasTallyMasterApproval,
+          hasAuditorApproval,
+          hasBoardApproval,
+          isFullyApproved,
+          canApprove,
+          approvalCount: approvals.length,
+          requiredApprovals: 4
+        }
+      }
+    })
+
+    res.json(deductionsWithStatus)
+  } catch (error) {
+    console.error('Get pending deductions error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Approve deduction
+const approveDeduction = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { signature, notes } = req.body
+    const approvedBy = req.user.id
+    const userRole = req.user.role
+
+    if (!signature) {
+      return res.status(400).json({ error: 'Digital signature is required' })
+    }
+
+    // Find deduction request
+    const deductionRequest = await prisma.deductionRequest.findUnique({
+      where: { id },
+      include: {
+        approvals: true
+      }
+    })
+
+    if (!deductionRequest) {
+      return res.status(404).json({ error: 'Deduction request not found' })
+    }
+
+    if (deductionRequest.status !== 'PENDING') {
+      return res.status(400).json({ error: 'Deduction request is not pending' })
+    }
+
+    // Check if user has already approved
+    const existingApproval = deductionRequest.approvals.find(a => a.approvedBy === approvedBy)
+    if (existingApproval) {
+      return res.status(400).json({ error: 'You have already approved this deduction' })
+    }
+
+    // Check if user can approve based on role
+    let isHeadJudge = false
+    if (userRole === 'JUDGE') {
+      const judge = await prisma.judge.findFirst({
+        where: { userId: approvedBy }
+      })
+      isHeadJudge = judge?.isHeadJudge || false
+    }
+
+    // Create approval
+    const approval = await prisma.deductionApproval.create({
+      data: {
+        requestId: id,
+        approvedBy,
+        role: userRole,
+        isHeadJudge,
+        signature,
+        notes: notes || null,
+        approvedAt: new Date()
+      },
+      include: {
+        approvedByUser: {
+          select: { id: true, name: true, email: true, role: true }
+        }
+      }
+    })
+
+    // Check if all required approvals are met
+    const allApprovals = await prisma.deductionApproval.findMany({
+      where: { requestId: id }
+    })
+
+    const hasHeadJudgeApproval = allApprovals.some(a => a.isHeadJudge)
+    const hasTallyMasterApproval = allApprovals.some(a => a.role === 'TALLY_MASTER')
+    const hasAuditorApproval = allApprovals.some(a => a.role === 'AUDITOR')
+    const hasBoardApproval = allApprovals.some(a => ['BOARD', 'ORGANIZER', 'ADMIN'].includes(a.role))
+
+    if (hasHeadJudgeApproval && hasTallyMasterApproval && hasAuditorApproval && hasBoardApproval) {
+      // All approvals received, apply deduction
+      await prisma.deductionRequest.update({
+        where: { id },
+        data: { status: 'APPROVED' }
+      })
+
+      // Apply deduction to contestant's score
+      await prisma.score.updateMany({
+        where: {
+          contestantId: deductionRequest.contestantId,
+          categoryId: deductionRequest.categoryId
+        },
+        data: {
+          deduction: deductionRequest.amount,
+          deductionReason: deductionRequest.reason,
+          deductionApprovedAt: new Date()
+        }
+      })
+    }
+
+    res.json({
+      message: 'Deduction approved successfully',
+      approval,
+      isFullyApproved: hasHeadJudgeApproval && hasTallyMasterApproval && hasAuditorApproval && hasBoardApproval
+    })
+  } catch (error) {
+    console.error('Approve deduction error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Reject deduction
+const rejectDeduction = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { reason } = req.body
+    const rejectedBy = req.user.id
+
+    if (!reason) {
+      return res.status(400).json({ error: 'Rejection reason is required' })
+    }
+
+    // Find deduction request
+    const deductionRequest = await prisma.deductionRequest.findUnique({
+      where: { id }
+    })
+
+    if (!deductionRequest) {
+      return res.status(404).json({ error: 'Deduction request not found' })
+    }
+
+    if (deductionRequest.status !== 'PENDING') {
+      return res.status(400).json({ error: 'Deduction request is not pending' })
+    }
+
+    // Update status to rejected
+    await prisma.deductionRequest.update({
+      where: { id },
+      data: {
+        status: 'REJECTED',
+        rejectionReason: reason,
+        rejectedBy,
+        rejectedAt: new Date()
+      }
+    })
+
+    res.json({ message: 'Deduction rejected successfully' })
+  } catch (error) {
+    console.error('Reject deduction error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Get approval status for a deduction
+const getApprovalStatus = async (req, res) => {
+  try {
+    const { id } = req.params
+
+    const deductionRequest = await prisma.deductionRequest.findUnique({
+      where: { id },
+      include: {
+        approvals: {
+          include: {
+            approvedByUser: {
+              select: { id: true, name: true, email: true, role: true }
+            }
+          },
+          orderBy: { approvedAt: 'asc' }
+        },
+        contestant: {
+          select: { id: true, name: true, email: true }
+        },
+        category: {
+          select: { id: true, name: true }
+        },
+        requestedByUser: {
+          select: { id: true, name: true, email: true, role: true }
+        }
+      }
+    })
+
+    if (!deductionRequest) {
+      return res.status(404).json({ error: 'Deduction request not found' })
+    }
+
+    const approvals = deductionRequest.approvals || []
+    const hasHeadJudgeApproval = approvals.some(a => a.isHeadJudge)
+    const hasTallyMasterApproval = approvals.some(a => a.role === 'TALLY_MASTER')
+    const hasAuditorApproval = approvals.some(a => a.role === 'AUDITOR')
+    const hasBoardApproval = approvals.some(a => ['BOARD', 'ORGANIZER', 'ADMIN'].includes(a.role))
+
+    const approvalStatus = {
+      hasHeadJudgeApproval,
+      hasTallyMasterApproval,
+      hasAuditorApproval,
+      hasBoardApproval,
+      isFullyApproved: hasHeadJudgeApproval && hasTallyMasterApproval && hasAuditorApproval && hasBoardApproval,
+      approvalCount: approvals.length,
+      requiredApprovals: 4,
+      approvals: approvals.map(approval => ({
+        id: approval.id,
+        approvedBy: approval.approvedByUser,
+        role: approval.role,
+        isHeadJudge: approval.isHeadJudge,
+        signature: approval.signature,
+        notes: approval.notes,
+        approvedAt: approval.approvedAt
+      }))
+    }
+
+    res.json({
+      ...deductionRequest,
+      approvalStatus
+    })
+  } catch (error) {
+    console.error('Get approval status error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Get deduction history
+const getDeductionHistory = async (req, res) => {
+  try {
+    const { page = 1, limit = 50, status, categoryId, contestantId } = req.query
+    const skip = (parseInt(page) - 1) * parseInt(limit)
+    const take = parseInt(limit)
+
+    const whereClause = {}
+    if (status) whereClause.status = status
+    if (categoryId) whereClause.categoryId = categoryId
+    if (contestantId) whereClause.contestantId = contestantId
+
+    const [deductions, total] = await Promise.all([
+      prisma.deductionRequest.findMany({
+        where: whereClause,
+        skip,
+        take,
+        include: {
+          contestant: {
+            select: { id: true, name: true, email: true }
+          },
+          category: {
+            select: { id: true, name: true }
+          },
+          requestedByUser: {
+            select: { id: true, name: true, email: true, role: true }
+          },
+          approvals: {
+            include: {
+              approvedByUser: {
+                select: { id: true, name: true, email: true, role: true }
+              }
+            }
+          }
+        },
+        orderBy: { createdAt: 'desc' }
+      }),
+      prisma.deductionRequest.count({ where: whereClause })
+    ])
+
+    res.json({
+      deductions,
+      pagination: {
+        page: parseInt(page),
+        limit: take,
+        total,
+        totalPages: Math.ceil(total / take),
+        hasNext: skip + take < total,
+        hasPrev: page > 1
+      }
+    })
+  } catch (error) {
+    console.error('Get deduction history error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+module.exports = {
+  createDeductionRequest,
+  getPendingDeductions,
+  approveDeduction,
+  rejectDeduction,
+  getApprovalStatus,
+  getDeductionHistory
+}
+EOF
+
     # Admin Routes
     cat > "$APP_DIR/src/routes/adminRoutes.js" << 'EOF'
 const express = require('express')
 const { getStats, getLogs, getActiveUsers, getUsers, getEvents, getContests, getCategories, getScores, getActivityLogs, getAuditLogs, exportAuditLogs, testConnection } = require('../controllers/adminController')                             
-const { getDatabaseTables, getTableData, getTableSchema, executeQuery, getDatabaseStats, insertRecord, updateRecord, deleteRecord, executeCustomQuery } = require('../controllers/databaseBrowserController')                 
+const { getTables, executeQuery, getTableStructure, getTableData } = require('../controllers/databaseBrowserController')                 
 const { getSettings, updateSettings, testSettings, updateJWTConfig, getJWTConfig, getLoggingLevels, updateLoggingLevel, getSecuritySettings, updateSecuritySettings, getBackupSettings, updateBackupSettings, getEmailSettings, updateEmailSettings } = require('../controllers/settingsController')
 const { authenticateToken, requireRole } = require('../middleware/auth')
 
@@ -15017,18 +17032,41 @@ router.put('/settings/backup', updateBackupSettings)
 router.get('/settings/email', getEmailSettings)
 router.put('/settings/email', updateEmailSettings)
 
-// Database browser routes
-router.get('/database/tables', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), getDatabaseTables)
-router.get('/database/tables/:tableName', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), getTableData)
-router.get('/database/tables/:tableName/schema', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), getTableSchema)
-router.post('/database/query', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), executeQuery)
-router.get('/database/stats', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), getDatabaseStats)
+// Database browser routes (ADMIN only)
+router.get('/database/tables', requireRole(['ADMIN']), getTables)
+router.post('/database/query', requireRole(['ADMIN']), executeQuery)
+router.get('/database/tables/:tableName/structure', requireRole(['ADMIN']), getTableStructure)
+router.get('/database/tables/:tableName/data', requireRole(['ADMIN']), getTableData)
 
-// Database CRUD operations
-router.post('/database/insert', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), insertRecord)
-router.put('/database/update', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), updateRecord)
-router.delete('/database/delete', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), deleteRecord)
-router.post('/database/custom-query', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), executeCustomQuery)
+module.exports = router
+EOF
+
+    # Deduction Routes
+    cat > "$APP_DIR/src/routes/deductionRoutes.js" << 'EOF'
+const express = require('express')
+const { 
+  createDeductionRequest,
+  getPendingDeductions,
+  approveDeduction,
+  rejectDeduction,
+  getApprovalStatus,
+  getDeductionHistory
+} = require('../controllers/deductionController')
+const { authenticateToken, requireRole } = require('../middleware/auth')
+const { logActivity } = require('../middleware/errorHandler')
+
+const router = express.Router()
+
+// Apply authentication to all routes
+router.use(authenticateToken)
+
+// Deduction endpoints
+router.post('/request', requireRole(['JUDGE', 'ORGANIZER', 'BOARD', 'ADMIN']), logActivity('CREATE_DEDUCTION_REQUEST', 'DEDUCTION'), createDeductionRequest)
+router.get('/pending', getPendingDeductions)
+router.post('/:id/approve', requireRole(['JUDGE', 'TALLY_MASTER', 'AUDITOR', 'BOARD', 'ORGANIZER', 'ADMIN']), logActivity('APPROVE_DEDUCTION', 'DEDUCTION'), approveDeduction)
+router.post('/:id/reject', requireRole(['BOARD', 'ORGANIZER', 'ADMIN']), logActivity('REJECT_DEDUCTION', 'DEDUCTION'), rejectDeduction)
+router.get('/:id/approvals', getApprovalStatus)
+router.get('/history', getDeductionHistory)
 
 module.exports = router
 EOF
@@ -15087,7 +17125,13 @@ const {
   getBackupSettings,
   updateBackupSettings,
   getEmailSettings,
-  updateEmailSettings
+  updateEmailSettings,
+  getPasswordPolicy,
+  updatePasswordPolicy,
+  getThemeSettings,
+  updateThemeSettings,
+  uploadThemeLogo,
+  uploadThemeFavicon
 } = require('../controllers/settingsController')
 const { authenticateToken, requireRole } = require('../middleware/auth')
 const { logActivity } = require('../middleware/errorHandler')
@@ -15120,9 +17164,19 @@ router.put('/backup', requireRole(['ORGANIZER', 'BOARD']), logActivity('UPDATE_B
 router.get('/email', getEmailSettings)
 router.put('/email', requireRole(['ORGANIZER', 'BOARD']), logActivity('UPDATE_EMAIL_SETTINGS', 'SETTINGS'), updateEmailSettings)
 
+// Password policy (no auth required for reading)
+router.get('/password-policy', getPasswordPolicy)
+router.put('/password-policy', requireRole(['ORGANIZER', 'BOARD']), logActivity('UPDATE_PASSWORD_POLICY', 'SETTINGS'), updatePasswordPolicy)
+
 // JWT configuration routes
 router.get('/jwt-config', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), getJWTConfig)
 router.put('/jwt-config', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), logActivity('UPDATE_JWT_CONFIG', 'SETTINGS'), updateJWTConfig)
+
+// Theme configuration routes
+router.get('/theme', getThemeSettings)
+router.put('/theme', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), logActivity('UPDATE_THEME_SETTINGS', 'SETTINGS'), updateThemeSettings)
+router.post('/theme/logo', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), logActivity('UPLOAD_THEME_LOGO', 'SETTINGS'), uploadThemeLogo)
+router.post('/theme/favicon', requireRole(['ORGANIZER', 'BOARD', 'ADMIN']), logActivity('UPLOAD_THEME_FAVICON', 'SETTINGS'), uploadThemeFavicon)
 
 module.exports = router
 EOF
@@ -15463,6 +17517,7 @@ router.put('/templates/:id', requireRole(['ORGANIZER', 'BOARD']), logActivity('U
 router.delete('/templates/:id', requireRole(['ORGANIZER', 'BOARD']), logActivity('DELETE_REPORT_TEMPLATE', 'REPORT'), deleteTemplate)
 
 // Report generation and management
+router.get('/', getReportInstances) // Main reports endpoint
 router.post('/generate', requireRole(['ORGANIZER', 'BOARD', 'JUDGE']), logActivity('GENERATE_REPORT', 'REPORT'), generateReport)
 router.get('/instances', getReportInstances)
 router.delete('/instances/:id', requireRole(['ORGANIZER', 'BOARD']), logActivity('DELETE_REPORT_INSTANCE', 'REPORT'), deleteReportInstance)
@@ -18755,7 +20810,11 @@ const {
   getEvent,
   getContests,
   getContest,
-  getEmceeHistory
+  getEmceeHistory,
+  uploadScript,
+  updateScript,
+  deleteScript,
+  toggleScript
 } = require('../controllers/emceeController')
 const { authenticateToken, requireRole } = require('../middleware/auth')
 const { logActivity } = require('../middleware/errorHandler')
@@ -18774,6 +20833,12 @@ router.get('/history', getEmceeHistory)
 router.get('/scripts', getScripts)
 router.get('/scripts/:scriptId', getScript)
 
+// Script management (upload/manage)
+router.post('/scripts', requireRole(['ORGANIZER', 'BOARD']), logActivity('UPLOAD_EMCEE_SCRIPT', 'EMCEE'), uploadScript)
+router.put('/scripts/:id', requireRole(['ORGANIZER', 'BOARD']), logActivity('UPDATE_EMCEE_SCRIPT', 'EMCEE'), updateScript)
+router.delete('/scripts/:id', requireRole(['ORGANIZER', 'BOARD']), logActivity('DELETE_EMCEE_SCRIPT', 'EMCEE'), deleteScript)
+router.patch('/scripts/:id/toggle', requireRole(['ORGANIZER', 'BOARD']), logActivity('TOGGLE_EMCEE_SCRIPT', 'EMCEE'), toggleScript)
+
 // Contestant bios
 router.get('/contestant-bios', getContestantBios)
 
@@ -18787,6 +20852,32 @@ router.get('/events/:eventId', getEvent)
 // Contest management
 router.get('/contests', getContests)
 router.get('/contests/:contestId', getContest)
+
+module.exports = router
+EOF
+
+    # Category Types Routes
+    cat > "$APP_DIR/src/routes/categoryTypeRoutes.js" << 'EOF'
+const express = require('express')
+const { 
+  getAllCategoryTypes,
+  createCategoryType,
+  updateCategoryType,
+  deleteCategoryType
+} = require('../controllers/categoryTypeController')
+const { authenticateToken, requireRole } = require('../middleware/auth')
+const { logActivity } = require('../middleware/errorHandler')
+
+const router = express.Router()
+
+// Apply authentication to all routes
+router.use(authenticateToken)
+
+// Category types endpoints
+router.get('/', getAllCategoryTypes)
+router.post('/', requireRole(['ORGANIZER', 'BOARD']), logActivity('CREATE_CATEGORY_TYPE', 'CATEGORY_TYPE'), createCategoryType)
+router.put('/:id', requireRole(['ORGANIZER', 'BOARD']), logActivity('UPDATE_CATEGORY_TYPE', 'CATEGORY_TYPE'), updateCategoryType)
+router.delete('/:id', requireRole(['ORGANIZER', 'BOARD']), logActivity('DELETE_CATEGORY_TYPE', 'CATEGORY_TYPE'), deleteCategoryType)
 
 module.exports = router
 EOF
@@ -18940,6 +21031,8 @@ const categoriesRoutes = require('./routes/categoriesRoutes')
 const usersRoutes = require('./routes/usersRoutes')
 const scoringRoutes = require('./routes/scoringRoutes')
 const resultsRoutes = require('./routes/resultsRoutes')
+const commentaryRoutes = require('./routes/commentaryRoutes')
+const deductionRoutes = require('./routes/deductionRoutes')
 const adminRoutes = require('./routes/adminRoutes')
 const uploadRoutes = require('./routes/uploadRoutes')
 const settingsRoutes = require('./routes/settingsRoutes')
@@ -18965,6 +21058,7 @@ const templatesRoutes = require('./routes/templatesRoutes')
 const eventTemplateRoutes = require('./routes/eventTemplateRoutes')
 const notificationsRoutes = require('./routes/notificationsRoutes')
 const emceeRoutes = require('./routes/emceeRoutes')
+const categoryTypeRoutes = require('./routes/categoryTypeRoutes')
 const navigationRoutes = require('./routes/navigationRoutes')
 const advancedReportingRoutes = require('./routes/advancedReportingRoutes')
 const winnersRoutes = require('./routes/winnersRoutes')
@@ -19020,6 +21114,53 @@ app.use(morgan('combined'))
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true }))
 
+// Configure multer for file uploads
+const multer = require('multer')
+const path = require('path')
+
+// Create uploads directories
+const uploadDirs = ['uploads/users', 'uploads/emcee', 'uploads/theme']
+uploadDirs.forEach(dir => {
+  const fs = require('fs')
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true })
+  }
+})
+
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    let uploadPath = 'uploads/'
+    
+    // Determine upload path based on route
+    if (req.route?.path?.includes('/users/') && req.route?.path?.includes('/image')) {
+      uploadPath = 'uploads/users/'
+    } else if (req.route?.path?.includes('/emcee/')) {
+      uploadPath = 'uploads/emcee/'
+    } else if (req.route?.path?.includes('/theme/')) {
+      uploadPath = 'uploads/theme/'
+    }
+    
+    cb(null, uploadPath)
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9)
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname))
+  }
+})
+
+const upload = multer({ 
+  storage: storage,
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB limit
+  }
+})
+
+// Apply multer middleware to specific routes
+app.use('/api/users/:id/image', upload.single('image'))
+app.use('/api/emcee/scripts', upload.single('script'))
+app.use('/api/settings/theme/logo', upload.single('logo'))
+app.use('/api/settings/theme/favicon', upload.single('favicon'))
+
 // Rate limiting
 app.use('/api/auth/', authLimiter)
 app.use('/api/', generalLimiter)
@@ -19041,6 +21182,8 @@ app.use('/api/categories', categoriesRoutes)
 app.use('/api/users', usersRoutes)
 app.use('/api/scoring', scoringRoutes)
 app.use('/api/results', resultsRoutes)
+app.use('/api/commentary', commentaryRoutes)
+app.use('/api/deductions', deductionRoutes)
 app.use('/api/admin', adminRoutes)
 app.use('/api/upload', uploadRoutes)
 app.use('/api/settings', settingsRoutes)
@@ -19066,6 +21209,7 @@ app.use('/api/templates', templatesRoutes)
 app.use('/api/event-templates', eventTemplateRoutes)
 app.use('/api/notifications', notificationsRoutes)
 app.use('/api/emcee', emceeRoutes)
+app.use('/api/category-types', categoryTypeRoutes)
 app.use('/api/navigation', navigationRoutes)
 app.use('/api/advanced-reports', advancedReportingRoutes)
 app.use('/api/winners', winnersRoutes)
@@ -19317,6 +21461,7 @@ model User {
   
   // Profile fields
   bio                String?
+  imagePath          String?
   phone              String?
   address            String?
   timezone           String?  @default("UTC")
@@ -19337,6 +21482,11 @@ model User {
   contestant Contestant? @relation(fields: [contestantId], references: [id])
   logs       ActivityLog[]
   updatedSettings SystemSetting[] @relation("UserUpdatedSettings")
+  backupLogs BackupLog[]
+  categoryTypes CategoryType[]
+  reportInstances ReportInstance[]
+  deductionRequests DeductionRequest[]
+  deductionApprovals DeductionApproval[]
   eventTemplates EventTemplate[]
   
   // New relations
@@ -19783,13 +21933,14 @@ model Report {
 }
 
 enum UserRole {
+  ADMIN
   ORGANIZER
+  BOARD
   JUDGE
   CONTESTANT
   EMCEE
   TALLY_MASTER
   AUDITOR
-  BOARD
 }
 
 enum LogLevel {
@@ -19799,7 +21950,164 @@ enum LogLevel {
   DEBUG
 }
 
-enum RequestStatus {
+model BackupLog {
+  id          String      @id @default(cuid())
+  backupType  BackupType
+  filePath    String
+  fileSize    Int
+  status      BackupStatus
+  createdById String?
+  createdAt   DateTime    @default(now())
+  errorMessage String?
+
+  createdBy User? @relation(fields: [createdById], references: [id])
+
+  @@map("backup_logs")
+}
+
+model BackupSetting {
+  id             String       @id @default(cuid())
+  backupType     BackupType
+  enabled        Boolean      @default(false)
+  frequency      BackupFrequency
+  frequencyValue Int          @default(1)
+  retentionDays  Int          @default(30)
+  lastRun        DateTime?
+  nextRun        DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@map("backup_settings")
+}
+
+model ReportTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  type        String
+  template    String
+  parameters  String?  // JSON string
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  instances ReportInstance[]
+
+  @@map("report_templates")
+}
+
+model ReportInstance {
+  id           String   @id @default(cuid())
+  templateId   String
+  generatedById String
+  generatedAt  DateTime @default(now())
+  data         String?  // JSON string
+
+  template   ReportTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  generatedBy User          @relation(fields: [generatedById], references: [id])
+
+  @@map("report_instances")
+}
+
+model CategoryType {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  isSystem    Boolean  @default(false)
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  createdBy User? @relation(fields: [createdById], references: [id])
+
+  @@map("category_types")
+}
+
+model UserFieldConfiguration {
+  id         String @id @default(cuid())
+  fieldName  String @unique
+  isVisible  Boolean @default(true)
+  isRequired Boolean @default(false)
+  order      Int    @default(0)
+
+  @@map("user_field_configurations")
+}
+
+model ThemeSetting {
+  id            String   @id @default(cuid())
+  primaryColor  String   @default("#2563eb")
+  secondaryColor String  @default("#1e40af")
+  logoPath      String?
+  faviconPath   String?
+  updatedAt     DateTime @updatedAt
+
+  @@map("theme_settings")
+}
+
+model DeductionRequest {
+  id           String           @id @default(cuid())
+  contestantId String
+  categoryId   String
+  amount       Float
+  reason       String
+  requestedById String
+  status       DeductionStatus  @default(PENDING)
+  createdAt    DateTime         @default(now())
+
+  requestedBy User                @relation(fields: [requestedById], references: [id])
+  approvals   DeductionApproval[]
+
+  @@map("deduction_requests")
+}
+
+model DeductionApproval {
+  id           String          @id @default(cuid())
+  requestId    String
+  approvedById String
+  role         String
+  isHeadJudge  Boolean         @default(false)
+  approvedAt   DateTime        @default(now())
+
+  request    DeductionRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  approvedBy User             @relation(fields: [approvedById], references: [id])
+
+  @@unique([requestId, approvedById])
+  @@map("deduction_approvals")
+}
+
+model ScoreComment {
+  id           String   @id @default(cuid())
+  scoreId      String
+  criterionId  String
+  contestantId String
+  judgeId      String
+  comment      String
+  isPrivate    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([scoreId, criterionId, contestantId, judgeId])
+  @@map("score_comments")
+}
+
+enum BackupType {
+  SCHEMA
+  FULL
+  SCHEDULED
+}
+
+enum BackupStatus {
+  SUCCESS
+  FAILED
+  IN_PROGRESS
+}
+
+enum BackupFrequency {
+  MINUTES
+  HOURS
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+enum DeductionStatus {
   PENDING
   APPROVED
   REJECTED
@@ -21203,6 +23511,23 @@ export const resultsAPI = {
   getEventResults: (eventId: string) => api.get(`/results/event/${eventId}`),
 }
 
+export const commentaryAPI = {
+  createComment: (data: any) => api.post('/commentary', data),
+  getCommentsForScore: (scoreId: string) => api.get(`/commentary/score/${scoreId}`),
+  updateComment: (id: string, data: any) => api.put(`/commentary/${id}`, data),
+  deleteComment: (id: string) => api.delete(`/commentary/${id}`),
+  getCommentsByContestant: (contestantId: string) => api.get(`/commentary/contestant/${contestantId}`),
+}
+
+export const deductionAPI = {
+  createDeductionRequest: (data: any) => api.post('/deductions/request', data),
+  getPendingDeductions: () => api.get('/deductions/pending'),
+  approveDeduction: (id: string, data: any) => api.post(`/deductions/${id}/approve`, data),
+  rejectDeduction: (id: string, data: any) => api.post(`/deductions/${id}/reject`, data),
+  getApprovalStatus: (id: string) => api.get(`/deductions/${id}/approvals`),
+  getDeductionHistory: (params?: any) => api.get('/deductions/history', { params }),
+}
+
 export const usersAPI = {
   getAll: () => api.get('/users'),
   getById: (id: string) => api.get(`/users/${id}`),
@@ -21218,6 +23543,16 @@ export const usersAPI = {
   updateUser: (id: string, data: any) => api.put(`/users/${id}`, data),
   deleteUser: (id: string) => api.delete(`/users/${id}`),
   bulkDeleteUsers: (ids: string[]) => api.post('/users/bulk-delete', { ids }),
+  // Bulk operations
+  bulkUploadUsers: (file: File) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return api.post('/users/bulk-upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+  },
+  bulkDeleteUsers: (userIds: string[]) => api.post('/users/bulk-delete', { userIds }),
+  getBulkUploadTemplate: (userType: string) => api.get(`/users/bulk-template/${userType}`, { responseType: 'blob' })
 }
 
 export const adminAPI = {
@@ -21237,6 +23572,11 @@ export const adminAPI = {
   testConnection: (type: string) => api.post(`/admin/test/${type}`),
   getPasswordPolicy: () => api.get('/admin/password-policy'),
   updatePasswordPolicy: (data: any) => api.put('/admin/password-policy', data),
+  // Database browser methods
+  getDatabaseTables: () => api.get('/admin/database/tables'),
+  executeDatabaseQuery: (query: string, limit?: number) => api.post('/admin/database/query', { query, limit }),
+  getTableStructure: (tableName: string) => api.get(`/admin/database/tables/${tableName}/structure`),
+  getTableData: (tableName: string, params?: any) => api.get(`/admin/database/tables/${tableName}/data`, { params }),
 }
 
 export const uploadAPI = {
@@ -21750,6 +24090,23 @@ export const resultsAPI = {
   getEventResults: (eventId: string) => api.get(`/results/event/${eventId}`),
 }
 
+export const commentaryAPI = {
+  createComment: (data: any) => api.post('/commentary', data),
+  getCommentsForScore: (scoreId: string) => api.get(`/commentary/score/${scoreId}`),
+  updateComment: (id: string, data: any) => api.put(`/commentary/${id}`, data),
+  deleteComment: (id: string) => api.delete(`/commentary/${id}`),
+  getCommentsByContestant: (contestantId: string) => api.get(`/commentary/contestant/${contestantId}`),
+}
+
+export const deductionAPI = {
+  createDeductionRequest: (data: any) => api.post('/deductions/request', data),
+  getPendingDeductions: () => api.get('/deductions/pending'),
+  approveDeduction: (id: string, data: any) => api.post(`/deductions/${id}/approve`, data),
+  rejectDeduction: (id: string, data: any) => api.post(`/deductions/${id}/reject`, data),
+  getApprovalStatus: (id: string) => api.get(`/deductions/${id}/approvals`),
+  getDeductionHistory: (params?: any) => api.get('/deductions/history', { params }),
+}
+
 export const usersAPI = {
   getAll: () => api.get('/users'),
   getById: (id: string) => api.get(`/users/${id}`),
@@ -21765,6 +24122,16 @@ export const usersAPI = {
   updateUser: (id: string, data: any) => api.put(`/users/${id}`, data),
   deleteUser: (id: string) => api.delete(`/users/${id}`),
   bulkDeleteUsers: (ids: string[]) => api.post('/users/bulk-delete', { ids }),
+  // Bulk operations
+  bulkUploadUsers: (file: File) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return api.post('/users/bulk-upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+  },
+  bulkDeleteUsers: (userIds: string[]) => api.post('/users/bulk-delete', { userIds }),
+  getBulkUploadTemplate: (userType: string) => api.get(`/users/bulk-template/${userType}`, { responseType: 'blob' })
 }
 
 export const adminAPI = {
@@ -21784,6 +24151,11 @@ export const adminAPI = {
   testConnection: (type: string) => api.post(`/admin/test/${type}`),
   getPasswordPolicy: () => api.get('/admin/password-policy'),
   updatePasswordPolicy: (data: any) => api.put('/admin/password-policy', data),
+  // Database browser methods
+  getDatabaseTables: () => api.get('/admin/database/tables'),
+  executeDatabaseQuery: (query: string, limit?: number) => api.post('/admin/database/query', { query, limit }),
+  getTableStructure: (tableName: string) => api.get(`/admin/database/tables/${tableName}/structure`),
+  getTableData: (tableName: string, params?: any) => api.get(`/admin/database/tables/${tableName}/data`, { params }),
 }
 
 export const uploadAPI = {
@@ -21889,6 +24261,24 @@ export const settingsAPI = {
   updateEmailSettings: (settings: any) => api.put('/settings/email', settings),
   getLoggingLevels: () => api.get('/settings/logging-levels'),
   updateLoggingLevel: (level: string) => api.put('/settings/logging-level', { level }),
+  getJWTConfig: () => api.get('/settings/jwt-config'),
+  updateJWTConfig: (config: any) => api.put('/settings/jwt-config', config),
+  getThemeSettings: () => api.get('/settings/theme'),
+  updateThemeSettings: (settings: any) => api.put('/settings/theme', settings),
+  uploadThemeLogo: (file: File) => {
+    const formData = new FormData()
+    formData.append('logo', file)
+    return api.post('/settings/theme/logo', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+  },
+  uploadThemeFavicon: (file: File) => {
+    const formData = new FormData()
+    formData.append('favicon', file)
+    return api.post('/settings/theme/favicon', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+  }
 }
 
 export const assignmentsAPI = {
@@ -22977,23 +25367,34 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" />
             </svg>
           </button>
-          <div className="flex-1 px-4 flex justify-between">
-            <div className="flex-1 flex">
-              <div className="w-full flex md:ml-0">
-                <div className="relative w-full text-gray-400 focus-within:text-gray-600 dark:focus-within:text-gray-300">
-                  <div className="absolute inset-y-0 left-0 flex items-center pointer-events-none">
-                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
+            <div className="flex-1 px-4 flex justify-between">
+              <div className="flex-1 flex">
+                {/* Home button */}
+                <div className="flex items-center mr-4">
+                  <Link
+                    to="/"
+                    className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                  >
+                    <HomeIcon className="h-5 w-5 mr-1" />
+                    Home
+                  </Link>
+                </div>
+                
+                <div className="w-full flex md:ml-0">
+                  <div className="relative w-full text-gray-400 focus-within:text-gray-600 dark:focus-within:text-gray-300">
+                    <div className="absolute inset-y-0 left-0 flex items-center pointer-events-none">
+                      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      </svg>
+                    </div>
+                    <input
+                      className="block w-full h-full pl-8 pr-3 py-2 border-transparent text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:placeholder-gray-400 dark:focus:placeholder-gray-500 focus:ring-0 focus:border-transparent sm:text-sm bg-transparent"
+                      placeholder="Search..."
+                      type="search"
+                    />
                   </div>
-                  <input
-                    className="block w-full h-full pl-8 pr-3 py-2 border-transparent text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:placeholder-gray-400 dark:focus:placeholder-gray-500 focus:ring-0 focus:border-transparent sm:text-sm bg-transparent"
-                    placeholder="Search..."
-                    type="search"
-                  />
                 </div>
               </div>
-            </div>
             <div className="ml-4 flex items-center md:ml-6">
               {/* Theme toggle */}
               <div className="relative">
@@ -30931,6 +33332,23 @@ const SettingsPage: React.FC = () => {
   const [formData, setFormData] = useState<any>({})
   const [testResults, setTestResults] = useState<Record<string, any>>({})
   const [isTesting, setIsTesting] = useState(false)
+  const [jwtConfig, setJwtConfig] = useState({
+    expiration: '24h',
+    sessionTimeout: '1h',
+    refreshTokenExpiration: '7d',
+    algorithm: 'HS256'
+  })
+  const [themeSettings, setThemeSettings] = useState({
+    primaryColor: '#3B82F6',
+    secondaryColor: '#6B7280',
+    accentColor: '#10B981',
+    backgroundColor: '#FFFFFF',
+    textColor: '#111827',
+    logoPath: null,
+    faviconPath: null,
+    customCSS: '',
+    darkMode: false
+  })
   const queryClient = useQueryClient()
 
   const { data: settings, isLoading } = useQuery(
@@ -30972,6 +33390,66 @@ const SettingsPage: React.FC = () => {
     }
   )
 
+  // JWT configuration
+  const { data: jwtData, isLoading: jwtLoading } = useQuery(
+    'jwt-config',
+    () => settingsAPI.getJWTConfig().then((res: any) => res.data),
+    {
+      enabled: canManageSettings,
+      onSuccess: (data) => {
+        setJwtConfig(data)
+      }
+    }
+  )
+
+  const updateJwtMutation = useMutation(
+    (config: any) => settingsAPI.updateJWTConfig(config),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('jwt-config')
+      }
+    }
+  )
+
+  // Theme configuration
+  const { data: themeData, isLoading: themeLoading } = useQuery(
+    'theme-settings',
+    () => settingsAPI.getThemeSettings().then((res: any) => res.data),
+    {
+      enabled: canManageSettings,
+      onSuccess: (data) => {
+        setThemeSettings(data)
+      }
+    }
+  )
+
+  const updateThemeMutation = useMutation(
+    (settings: any) => settingsAPI.updateThemeSettings(settings),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('theme-settings')
+      }
+    }
+  )
+
+  const uploadLogoMutation = useMutation(
+    (file: File) => settingsAPI.uploadThemeLogo(file),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('theme-settings')
+      }
+    }
+  )
+
+  const uploadFaviconMutation = useMutation(
+    (file: File) => settingsAPI.uploadThemeFavicon(file),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('theme-settings')
+      }
+    }
+  )
+
   const handleInputChange = (category: string, key: string, value: any) => {
     setFormData((prev: any) => ({
       ...prev,
@@ -30996,6 +33474,44 @@ const SettingsPage: React.FC = () => {
     }
   }
 
+  const handleJwtConfigChange = (key: string, value: string) => {
+    setJwtConfig(prev => ({
+      ...prev,
+      [key]: value
+    }))
+  }
+
+  const handleJwtConfigSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    updateJwtMutation.mutate(jwtConfig)
+  }
+
+  const handleThemeChange = (key: string, value: any) => {
+    setThemeSettings(prev => ({
+      ...prev,
+      [key]: value
+    }))
+  }
+
+  const handleThemeSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    updateThemeMutation.mutate(themeSettings)
+  }
+
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      uploadLogoMutation.mutate(file)
+    }
+  }
+
+  const handleFaviconUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      uploadFaviconMutation.mutate(file)
+    }
+  }
+
   const tabs = [
     { id: 'general', name: 'General', icon: CogIcon },
     { id: 'email', name: 'Email', icon: EnvelopeIcon },
@@ -31003,6 +33519,8 @@ const SettingsPage: React.FC = () => {
     { id: 'database', name: 'Database', icon: CircleStackIcon },
     { id: 'notifications', name: 'Notifications', icon: BellIcon },
     { id: 'backup', name: 'Backup', icon: CloudIcon },
+    { id: 'jwt', name: 'JWT Config', icon: KeyIcon },
+    { id: 'theme', name: 'Theme', icon: GlobeAltIcon },
   ]
 
   const canManageSettings = user?.role === 'ORGANIZER' || user?.role === 'BOARD'
@@ -31511,6 +34029,90 @@ const SettingsPage: React.FC = () => {
                     </div>
                   )}
                 </div>
+              </div>
+            )}
+
+            {activeTab === 'jwt' && (
+              <div className="space-y-6">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white">JWT Configuration</h3>
+                
+                <form onSubmit={handleJwtConfigSubmit} className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Token Expiration
+                      </label>
+                      <select
+                        value={jwtConfig.expiration}
+                        onChange={(e) => handleJwtConfigChange('expiration', e.target.value)}
+                        className="input"
+                      >
+                        <option value="1h">1 Hour</option>
+                        <option value="24h">24 Hours</option>
+                        <option value="7d">7 Days</option>
+                        <option value="30d">30 Days</option>
+                      </select>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Session Timeout
+                      </label>
+                      <select
+                        value={jwtConfig.sessionTimeout}
+                        onChange={(e) => handleJwtConfigChange('sessionTimeout', e.target.value)}
+                        className="input"
+                      >
+                        <option value="15m">15 Minutes</option>
+                        <option value="30m">30 Minutes</option>
+                        <option value="1h">1 Hour</option>
+                        <option value="2h">2 Hours</option>
+                      </select>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Refresh Token Expiration
+                      </label>
+                      <select
+                        value={jwtConfig.refreshTokenExpiration}
+                        onChange={(e) => handleJwtConfigChange('refreshTokenExpiration', e.target.value)}
+                        className="input"
+                      >
+                        <option value="7d">7 Days</option>
+                        <option value="14d">14 Days</option>
+                        <option value="30d">30 Days</option>
+                        <option value="90d">90 Days</option>
+                      </select>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Algorithm
+                      </label>
+                      <select
+                        value={jwtConfig.algorithm}
+                        onChange={(e) => handleJwtConfigChange('algorithm', e.target.value)}
+                        className="input"
+                      >
+                        <option value="HS256">HS256</option>
+                        <option value="HS384">HS384</option>
+                        <option value="HS512">HS512</option>
+                        <option value="RS256">RS256</option>
+                      </select>
+                    </div>
+                  </div>
+                  
+                  <div className="flex justify-end">
+                    <button
+                      type="submit"
+                      className="btn-primary"
+                      disabled={updateJwtMutation.isLoading}
+                    >
+                      {updateJwtMutation.isLoading ? 'Updating...' : 'Update JWT Configuration'}
+                    </button>
+                  </div>
+                </form>
               </div>
             )}
 
@@ -42354,6 +44956,819 @@ const SettingsPage: React.FC = () => {
 }
 
 export default SettingsPage
+EOF
+
+    # Create shared Modal component
+    cat > "$APP_DIR/frontend/src/components/Modal.tsx" << 'EOF'
+import React from 'react'
+import { XMarkIcon } from '@heroicons/react/24/outline'
+
+interface ModalProps {
+  isOpen: boolean
+  onClose: () => void
+  title: string
+  children: React.ReactNode
+  size?: 'sm' | 'md' | 'lg' | 'xl'
+  showCloseButton?: boolean
+}
+
+const Modal: React.FC<ModalProps> = ({
+  isOpen,
+  onClose,
+  title,
+  children,
+  size = 'md',
+  showCloseButton = true
+}) => {
+  if (!isOpen) return null
+
+  const sizeClasses = {
+    sm: 'max-w-md',
+    md: 'max-w-lg',
+    lg: 'max-w-2xl',
+    xl: 'max-w-4xl'
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="flex min-h-screen items-center justify-center px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+        {/* Background overlay */}
+        <div 
+          className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
+          onClick={onClose}
+        />
+
+        {/* Modal panel */}
+        <div className={`inline-block w-full transform overflow-hidden rounded-lg bg-white px-4 pt-5 pb-4 text-left align-bottom shadow-xl transition-all sm:my-8 sm:w-full sm:p-6 sm:align-middle ${sizeClasses[size]}`}>
+          {/* Header */}
+          <div className="flex items-center justify-between border-b border-gray-200 pb-4 mb-4">
+            <h3 className="text-lg font-medium text-gray-900">
+              {title}
+            </h3>
+            {showCloseButton && (
+              <button
+                onClick={onClose}
+                className="rounded-md bg-white text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+              >
+                <span className="sr-only">Close</span>
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+            )}
+          </div>
+
+          {/* Content */}
+          <div className="mt-2">
+            {children}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default Modal
+EOF
+
+    # Create PrintReportsModal component
+    cat > "$APP_DIR/frontend/src/components/PrintReportsModal.tsx" << 'EOF'
+import React, { useState } from 'react'
+import { useMutation } from '@tanstack/react-query'
+import { PrinterIcon, DocumentArrowDownIcon } from '@heroicons/react/24/outline'
+import Modal from './Modal'
+import { reportsAPI } from '../services/api'
+
+interface PrintReportsModalProps {
+  isOpen: boolean
+  onClose: () => void
+}
+
+interface ReportFormData {
+  reportType: string
+  eventId?: string
+  contestId?: string
+  categoryId?: string
+  dateRange: {
+    start: string
+    end: string
+  }
+  format: string
+}
+
+const PrintReportsModal: React.FC<PrintReportsModalProps> = ({ isOpen, onClose }) => {
+  const [formData, setFormData] = useState<ReportFormData>({
+    reportType: 'event',
+    dateRange: {
+      start: '',
+      end: ''
+    },
+    format: 'pdf'
+  })
+
+  const printReportMutation = useMutation(
+    (data: ReportFormData) => reportsAPI.generateReport(data),
+    {
+      onSuccess: (response) => {
+        // Handle successful report generation
+        console.log('Report generated:', response)
+        onClose()
+      },
+      onError: (error) => {
+        console.error('Failed to generate report:', error)
+      }
+    }
+  )
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    printReportMutation.mutate(formData)
+  }
+
+  const handleInputChange = (field: string, value: any) => {
+    setFormData(prev => ({
+      ...prev,
+      [field]: value
+    }))
+  }
+
+  const handleDateRangeChange = (field: 'start' | 'end', value: string) => {
+    setFormData(prev => ({
+      ...prev,
+      dateRange: {
+        ...prev.dateRange,
+        [field]: value
+      }
+    }))
+  }
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="Print Reports" size="lg">
+      <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Report Type */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Report Type
+          </label>
+          <select
+            value={formData.reportType}
+            onChange={(e) => handleInputChange('reportType', e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
+          >
+            <option value="event">Event Report</option>
+            <option value="contest">Contest Results</option>
+            <option value="category">Category Results</option>
+            <option value="judge">Judge Performance</option>
+            <option value="system">System Analytics</option>
+          </select>
+        </div>
+
+        {/* Date Range */}
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Start Date
+            </label>
+            <input
+              type="date"
+              value={formData.dateRange.start}
+              onChange={(e) => handleDateRangeChange('start', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              End Date
+            </label>
+            <input
+              type="date"
+              value={formData.dateRange.end}
+              onChange={(e) => handleDateRangeChange('end', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
+            />
+          </div>
+        </div>
+
+        {/* Format */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Format
+          </label>
+          <div className="flex space-x-4">
+            <label className="flex items-center">
+              <input
+                type="radio"
+                value="pdf"
+                checked={formData.format === 'pdf'}
+                onChange={(e) => handleInputChange('format', e.target.value)}
+                className="mr-2"
+              />
+              PDF
+            </label>
+            <label className="flex items-center">
+              <input
+                type="radio"
+                value="excel"
+                checked={formData.format === 'excel'}
+                onChange={(e) => handleInputChange('format', e.target.value)}
+                className="mr-2"
+              />
+              Excel
+            </label>
+            <label className="flex items-center">
+              <input
+                type="radio"
+                value="csv"
+                checked={formData.format === 'csv'}
+                onChange={(e) => handleInputChange('format', e.target.value)}
+                className="mr-2"
+              />
+              CSV
+            </label>
+          </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200 dark:border-gray-600">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={printReportMutation.isLoading}
+            className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-indigo-600 border border-transparent rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {printReportMutation.isLoading ? (
+              <>
+                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Generating...
+              </>
+            ) : (
+              <>
+                <PrinterIcon className="h-4 w-4 mr-2" />
+                Print Report
+              </>
+            )}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+export default PrintReportsModal
+EOF
+
+    # Create DatabaseBrowser component
+    cat > "$APP_DIR/frontend/src/components/DatabaseBrowser.tsx" << 'EOF'
+import React, { useState, useEffect } from 'react'
+import { useQuery, useMutation } from '@tanstack/react-query'
+import { 
+  TableCellsIcon, 
+  MagnifyingGlassIcon, 
+  PlayIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  DocumentArrowDownIcon,
+  ExclamationTriangleIcon
+} from '@heroicons/react/24/outline'
+import { adminAPI } from '../services/api'
+
+interface DatabaseTable {
+  tablename: string
+  schemaname: string
+  tableowner: string
+  rowCount: number
+  hasindexes: boolean
+  hasrules: boolean
+  hastriggers: boolean
+}
+
+interface TableColumn {
+  column_name: string
+  data_type: string
+  is_nullable: string
+  column_default: string | null
+  character_maximum_length: number | null
+  numeric_precision: number | null
+  numeric_scale: number | null
+}
+
+interface TableStructure {
+  tableName: string
+  columns: TableColumn[]
+  foreignKeys: Array<{
+    column_name: string
+    foreign_table_name: string
+    foreign_column_name: string
+  }>
+  primaryKeys: string[]
+  columnCount: number
+}
+
+interface TableData {
+  data: any[]
+  pagination: {
+    page: number
+    limit: number
+    totalRows: number
+    totalPages: number
+    hasNext: boolean
+    hasPrev: boolean
+  }
+  tableName: string
+}
+
+const DatabaseBrowser: React.FC = () => {
+  const [selectedTable, setSelectedTable] = useState<string | null>(null)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [orderBy, setOrderBy] = useState<string>('')
+  const [orderDirection, setOrderDirection] = useState<'asc' | 'desc'>('asc')
+  const [customQuery, setCustomQuery] = useState('')
+  const [queryResults, setQueryResults] = useState<any[]>([])
+  const [queryError, setQueryError] = useState<string | null>(null)
+
+  // Fetch database tables
+  const { data: tablesData, isLoading: tablesLoading, error: tablesError } = useQuery({
+    queryKey: ['databaseTables'],
+    queryFn: () => adminAPI.getDatabaseTables(),
+    retry: 1
+  })
+
+  // Fetch table structure
+  const { data: structureData, isLoading: structureLoading } = useQuery({
+    queryKey: ['tableStructure', selectedTable],
+    queryFn: () => adminAPI.getTableStructure(selectedTable!),
+    enabled: !!selectedTable
+  })
+
+  // Fetch table data
+  const { data: tableData, isLoading: dataLoading } = useQuery({
+    queryKey: ['tableData', selectedTable, currentPage, orderBy, orderDirection],
+    queryFn: () => adminAPI.getTableData(selectedTable!, {
+      page: currentPage,
+      limit: 50,
+      orderBy,
+      orderDirection
+    }),
+    enabled: !!selectedTable
+  })
+
+  // Execute custom query mutation
+  const executeQueryMutation = useMutation({
+    mutationFn: (query: string) => adminAPI.executeDatabaseQuery(query, 100),
+    onSuccess: (response) => {
+      setQueryResults(response.data.results)
+      setQueryError(null)
+    },
+    onError: (error: any) => {
+      setQueryError(error.response?.data?.error || 'Query execution failed')
+      setQueryResults([])
+    }
+  })
+
+  const handleExecuteQuery = () => {
+    if (customQuery.trim()) {
+      executeQueryMutation.mutate(customQuery.trim())
+    }
+  }
+
+  const handleExportData = () => {
+    if (!tableData?.data) return
+    
+    const csvContent = [
+      Object.keys(tableData.data.data[0] || {}).join(','),
+      ...tableData.data.data.map(row => 
+        Object.values(row).map(value => 
+          typeof value === 'string' && value.includes(',') ? `"${value}"` : value
+        ).join(',')
+      )
+    ].join('\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv' })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${selectedTable}_data.csv`
+    a.click()
+    window.URL.revokeObjectURL(url)
+  }
+
+  const handleSort = (column: string) => {
+    if (orderBy === column) {
+      setOrderDirection(orderDirection === 'asc' ? 'desc' : 'asc')
+    } else {
+      setOrderBy(column)
+      setOrderDirection('asc')
+    }
+    setCurrentPage(1)
+  }
+
+  if (tablesError) {
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-md p-4">
+        <div className="flex">
+          <ExclamationTriangleIcon className="h-5 w-5 text-red-400" />
+          <div className="ml-3">
+            <h3 className="text-sm font-medium text-red-800">
+              Database Access Error
+            </h3>
+            <div className="mt-2 text-sm text-red-700">
+              Unable to connect to database. Please check your permissions.
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="bg-white shadow rounded-lg p-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Database Browser</h1>
+            <p className="mt-1 text-sm text-gray-500">
+              Browse and query database tables (Admin only)
+            </p>
+          </div>
+          <div className="flex items-center space-x-2 text-sm text-gray-500">
+            <TableCellsIcon className="h-5 w-5" />
+            <span>{tablesData?.data?.totalTables || 0} tables</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Tables List */}
+        <div className="lg:col-span-1">
+          <div className="bg-white shadow rounded-lg">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h3 className="text-lg font-medium text-gray-900">Database Tables</h3>
+            </div>
+            <div className="divide-y divide-gray-200">
+              {tablesLoading ? (
+                <div className="p-6 text-center text-gray-500">
+                  Loading tables...
+                </div>
+              ) : (
+                tablesData?.data?.tables?.map((table: DatabaseTable) => (
+                  <button
+                    key={table.tablename}
+                    onClick={() => {
+                      setSelectedTable(table.tablename)
+                      setCurrentPage(1)
+                      setOrderBy('')
+                    }}
+                    className={`w-full px-6 py-4 text-left hover:bg-gray-50 ${
+                      selectedTable === table.tablename ? 'bg-blue-50 border-r-2 border-blue-500' : ''
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">
+                          {table.tablename}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {table.rowCount.toLocaleString()} rows
+                        </p>
+                      </div>
+                      <div className="flex space-x-1">
+                        {table.hasindexes && (
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            I
+                          </span>
+                        )}
+                        {table.hastriggers && (
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                            T
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Main Content */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Custom Query */}
+          <div className="bg-white shadow rounded-lg">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h3 className="text-lg font-medium text-gray-900">Custom Query</h3>
+            </div>
+            <div className="p-6">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    SQL Query (SELECT only)
+                  </label>
+                  <textarea
+                    value={customQuery}
+                    onChange={(e) => setCustomQuery(e.target.value)}
+                    placeholder="SELECT * FROM users LIMIT 10;"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                    rows={4}
+                  />
+                </div>
+                <div className="flex justify-between items-center">
+                  <div className="text-sm text-gray-500">
+                    Only SELECT queries are allowed for security
+                  </div>
+                  <button
+                    onClick={handleExecuteQuery}
+                    disabled={!customQuery.trim() || executeQueryMutation.isPending}
+                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {executeQueryMutation.isPending ? (
+                      <>
+                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Executing...
+                      </>
+                    ) : (
+                      <>
+                        <PlayIcon className="h-4 w-4 mr-2" />
+                        Execute Query
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Query Results */}
+              {queryError && (
+                <div className="mt-4 bg-red-50 border border-red-200 rounded-md p-4">
+                  <div className="flex">
+                    <ExclamationTriangleIcon className="h-5 w-5 text-red-400" />
+                    <div className="ml-3">
+                      <h3 className="text-sm font-medium text-red-800">
+                        Query Error
+                      </h3>
+                      <div className="mt-2 text-sm text-red-700">
+                        {queryError}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {queryResults.length > 0 && (
+                <div className="mt-4">
+                  <div className="flex justify-between items-center mb-2">
+                    <h4 className="text-sm font-medium text-gray-900">
+                      Query Results ({queryResults.length} rows)
+                    </h4>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          {Object.keys(queryResults[0] || {}).map((key) => (
+                            <th
+                              key={key}
+                              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                            >
+                              {key}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {queryResults.slice(0, 20).map((row, index) => (
+                          <tr key={index}>
+                            {Object.values(row).map((value, cellIndex) => (
+                              <td
+                                key={cellIndex}
+                                className="px-6 py-4 whitespace-nowrap text-sm text-gray-900"
+                              >
+                                {value === null ? (
+                                  <span className="text-gray-400 italic">null</span>
+                                ) : typeof value === 'object' ? (
+                                  <span className="text-gray-500">{JSON.stringify(value)}</span>
+                                ) : (
+                                  String(value)
+                                )}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {queryResults.length > 20 && (
+                      <div className="px-6 py-3 text-sm text-gray-500">
+                        Showing first 20 of {queryResults.length} results
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Table Structure */}
+          {structureData && (
+            <div className="bg-white shadow rounded-lg">
+              <div className="px-6 py-4 border-b border-gray-200">
+                <h3 className="text-lg font-medium text-gray-900">
+                  Table Structure: {structureData.data.tableName}
+                </h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Column
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Type
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Nullable
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Default
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {structureData.data.columns.map((column: TableColumn) => (
+                      <tr key={column.column_name}>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {column.column_name}
+                          {structureData.data.primaryKeys.includes(column.column_name) && (
+                            <span className="ml-2 inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                              PK
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {column.data_type}
+                          {column.character_maximum_length && (
+                            <span className="text-gray-500">({column.character_maximum_length})</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {column.is_nullable === 'YES' ? (
+                            <span className="text-green-600">Yes</span>
+                          ) : (
+                            <span className="text-red-600">No</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {column.column_default || (
+                            <span className="text-gray-400 italic">None</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Table Data */}
+          {tableData && (
+            <div className="bg-white shadow rounded-lg">
+              <div className="px-6 py-4 border-b border-gray-200">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-lg font-medium text-gray-900">
+                    Table Data: {tableData.data.tableName}
+                  </h3>
+                  <button
+                    onClick={handleExportData}
+                    className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                  >
+                    <DocumentArrowDownIcon className="h-4 w-4 mr-2" />
+                    Export CSV
+                  </button>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      {Object.keys(tableData.data.data[0] || {}).map((key) => (
+                        <th
+                          key={key}
+                          onClick={() => handleSort(key)}
+                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                        >
+                          {key}
+                          {orderBy === key && (
+                            <span className="ml-1">
+                              {orderDirection === 'asc' ? '↑' : '↓'}
+                            </span>
+                          )}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {tableData.data.data.map((row: any, index: number) => (
+                      <tr key={index}>
+                        {Object.values(row).map((value: any, cellIndex: number) => (
+                          <td
+                            key={cellIndex}
+                            className="px-6 py-4 whitespace-nowrap text-sm text-gray-900"
+                          >
+                            {value === null ? (
+                              <span className="text-gray-400 italic">null</span>
+                            ) : typeof value === 'object' ? (
+                              <span className="text-gray-500">{JSON.stringify(value)}</span>
+                            ) : (
+                              String(value)
+                            )}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              
+              {/* Pagination */}
+              <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
+                <div className="flex-1 flex justify-between sm:hidden">
+                  <button
+                    onClick={() => setCurrentPage(currentPage - 1)}
+                    disabled={!tableData.data.pagination.hasPrev}
+                    className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage(currentPage + 1)}
+                    disabled={!tableData.data.pagination.hasNext}
+                    className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Next
+                  </button>
+                </div>
+                <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm text-gray-700">
+                      Showing{' '}
+                      <span className="font-medium">
+                        {(tableData.data.pagination.page - 1) * tableData.data.pagination.limit + 1}
+                      </span>{' '}
+                      to{' '}
+                      <span className="font-medium">
+                        {Math.min(
+                          tableData.data.pagination.page * tableData.data.pagination.limit,
+                          tableData.data.pagination.totalRows
+                        )}
+                      </span>{' '}
+                      of{' '}
+                      <span className="font-medium">{tableData.data.pagination.totalRows}</span>{' '}
+                      results
+                    </p>
+                  </div>
+                  <div>
+                    <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
+                      <button
+                        onClick={() => setCurrentPage(currentPage - 1)}
+                        disabled={!tableData.data.pagination.hasPrev}
+                        className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <ChevronLeftIcon className="h-5 w-5" />
+                      </button>
+                      <span className="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700">
+                        Page {tableData.data.pagination.page} of {tableData.data.pagination.totalPages}
+                      </span>
+                      <button
+                        onClick={() => setCurrentPage(currentPage + 1)}
+                        disabled={!tableData.data.pagination.hasNext}
+                        className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <ChevronRightIcon className="h-5 w-5" />
+                      </button>
+                    </nav>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default DatabaseBrowser
 EOF
 
     print_success "Frontend files created successfully"
