@@ -10129,16 +10129,9 @@ module.exports = {
   updateTemplate,
   deleteTemplate,
   generateReport,
-  getHistory,
-  generateEventReport,
-  generateContestResultsReport,
-  generateJudgePerformanceReport,
-  generateSystemAnalyticsReport,
-  getAllReports,
-  getReportById,
-  deleteReport,
-  exportReport,
-  emailReport
+  sendReportEmail,
+  getReportInstances,
+  deleteReportInstance
 }
 EOF
 
@@ -15447,17 +15440,13 @@ EOF
 const express = require('express')
 const { 
   getTemplates, 
-  generateReport, 
-  getHistory,
-  generateEventReport,
-  generateContestResultsReport,
-  generateJudgePerformanceReport,
-  generateSystemAnalyticsReport,
-  getAllReports,
-  getReportById,
-  deleteReport,
-  exportReport,
-  emailReport
+  createTemplate,
+  updateTemplate,
+  deleteTemplate,
+  generateReport,
+  sendReportEmail,
+  getReportInstances,
+  deleteReportInstance
 } = require('../controllers/reportsController')
 const { authenticateToken, requireRole } = require('../middleware/auth')
 const { logActivity } = require('../middleware/errorHandler')
@@ -15467,23 +15456,17 @@ const router = express.Router()
 // Apply authentication to all routes
 router.use(authenticateToken)
 
-// Report templates and basic reports
+// Report templates
 router.get('/templates', getTemplates)
+router.post('/templates', requireRole(['ORGANIZER', 'BOARD']), logActivity('CREATE_REPORT_TEMPLATE', 'REPORT'), createTemplate)
+router.put('/templates/:id', requireRole(['ORGANIZER', 'BOARD']), logActivity('UPDATE_REPORT_TEMPLATE', 'REPORT'), updateTemplate)
+router.delete('/templates/:id', requireRole(['ORGANIZER', 'BOARD']), logActivity('DELETE_REPORT_TEMPLATE', 'REPORT'), deleteTemplate)
+
+// Report generation and management
 router.post('/generate', requireRole(['ORGANIZER', 'BOARD', 'JUDGE']), logActivity('GENERATE_REPORT', 'REPORT'), generateReport)
-router.get('/history', getHistory)
-
-// Advanced reporting endpoints
-router.post('/event', requireRole(['ORGANIZER', 'BOARD']), logActivity('GENERATE_EVENT_REPORT', 'REPORT'), generateEventReport)
-router.post('/contest-results', requireRole(['ORGANIZER', 'BOARD', 'AUDITOR']), logActivity('GENERATE_CONTEST_RESULTS_REPORT', 'REPORT'), generateContestResultsReport)
-router.post('/judge-performance', requireRole(['ORGANIZER', 'BOARD', 'AUDITOR']), logActivity('GENERATE_JUDGE_PERFORMANCE_REPORT', 'REPORT'), generateJudgePerformanceReport)
-router.post('/system-analytics', requireRole(['ORGANIZER', 'BOARD']), logActivity('GENERATE_SYSTEM_ANALYTICS_REPORT', 'REPORT'), generateSystemAnalyticsReport)
-
-// Report management
-router.get('/', getAllReports)
-router.get('/:id', getReportById)
-router.delete('/:id', requireRole(['ORGANIZER', 'BOARD']), logActivity('DELETE_REPORT', 'REPORT'), deleteReport)
-router.post('/:id/export', requireRole(['ORGANIZER', 'BOARD', 'AUDITOR']), logActivity('EXPORT_REPORT', 'REPORT'), exportReport)
-router.post('/:id/email', requireRole(['ORGANIZER', 'BOARD', 'AUDITOR']), logActivity('EMAIL_REPORT', 'REPORT'), emailReport)
+router.get('/instances', getReportInstances)
+router.delete('/instances/:id', requireRole(['ORGANIZER', 'BOARD']), logActivity('DELETE_REPORT_INSTANCE', 'REPORT'), deleteReportInstance)
+router.post('/send-email', requireRole(['ORGANIZER', 'BOARD', 'AUDITOR']), logActivity('EMAIL_REPORT', 'REPORT'), sendReportEmail)
 
 module.exports = router
 EOF
