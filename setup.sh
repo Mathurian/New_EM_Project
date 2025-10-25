@@ -23535,7 +23535,6 @@ export const usersAPI = {
   createUser: (data: any) => api.post('/users', data),
   updateUser: (id: string, data: any) => api.put(`/users/${id}`, data),
   deleteUser: (id: string) => api.delete(`/users/${id}`),
-  bulkDeleteUsers: (ids: string[]) => api.post('/users/bulk-delete', { ids }),
   // Bulk operations
   bulkUploadUsers: (file: File) => {
     const formData = new FormData()
@@ -24114,7 +24113,6 @@ export const usersAPI = {
   createUser: (data: any) => api.post('/users', data),
   updateUser: (id: string, data: any) => api.put(`/users/${id}`, data),
   deleteUser: (id: string) => api.delete(`/users/${id}`),
-  bulkDeleteUsers: (ids: string[]) => api.post('/users/bulk-delete', { ids }),
   // Bulk operations
   bulkUploadUsers: (file: File) => {
     const formData = new FormData()
@@ -45025,7 +45023,7 @@ EOF
     # Create PrintReportsModal component
     cat > "$APP_DIR/frontend/src/components/PrintReportsModal.tsx" << 'EOF'
 import React, { useState } from 'react'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation } from 'react-query'
 import { PrinterIcon, DocumentArrowDownIcon } from '@heroicons/react/24/outline'
 import Modal from './Modal'
 import { reportsAPI } from '../services/api'
@@ -45058,7 +45056,23 @@ const PrintReportsModal: React.FC<PrintReportsModalProps> = ({ isOpen, onClose }
   })
 
   const printReportMutation = useMutation(
-    (data: ReportFormData) => reportsAPI.generateReport(data),
+    (data: ReportFormData) => {
+      // Create a report template first, then generate it
+      return reportsAPI.createReport({
+        name: `${data.reportType} Report`,
+        type: data.reportType,
+        parameters: {
+          eventId: data.eventId,
+          contestId: data.contestId,
+          categoryId: data.categoryId,
+          dateRange: data.dateRange,
+          format: data.format
+        }
+      }).then(response => {
+        // Generate the report using the created template ID
+        return reportsAPI.generateReport(response.data.id)
+      })
+    },
     {
       onSuccess: (response) => {
         // Handle successful report generation
@@ -45220,7 +45234,7 @@ EOF
     # Create DatabaseBrowser component
     cat > "$APP_DIR/frontend/src/components/DatabaseBrowser.tsx" << 'EOF'
 import React, { useState, useEffect } from 'react'
-import { useQuery, useMutation } from '@tanstack/react-query'
+import { useQuery, useMutation } from 'react-query'
 import { 
   TableCellsIcon, 
   MagnifyingGlassIcon, 
