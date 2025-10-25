@@ -42426,6 +42426,11 @@ main() {
     
     # Check prerequisites
     check_root
+    detect_os
+    check_node_version
+    
+    # Install prerequisites
+    install_prerequisites
     
     # Setup application directory
     setup_application_directory
@@ -42444,6 +42449,15 @@ main() {
     
     # Check for PM2
     check_pm2
+    
+    # Setup process management
+    setup_systemd_service
+    
+    # Configure Nginx
+    configure_nginx
+    
+    # Setup SSL certificate
+    setup_ssl
     
     # Evaluate setup completeness
     evaluate_setup_completeness
