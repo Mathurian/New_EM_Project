@@ -19135,9 +19135,9 @@ const generateEventReport = async (req, res) => {
       case 'pdf':
         return await generateEventPDFReport(res, event, stats, includeDetails)
       case 'excel':
-        return await generateExcelReport(res, event, stats, includeDetails)
+        return await generateEventExcelReport(res, event, stats, includeDetails)
       case 'csv':
-        return await generateCSVReport(res, event, stats, includeDetails)
+        return await generateEventCSVReport(res, event, stats, includeDetails)
       case 'xml':
         return await generateXMLReport(res, event, stats, includeDetails)
       case 'json':
@@ -19274,7 +19274,7 @@ const generateEventPDFReport = async (res, event, stats, includeDetails) => {
 }
 
 // Generate Excel report
-const generateExcelReport = async (res, event, stats, includeDetails) => {
+const generateEventExcelReport = async (res, event, stats, includeDetails) => {
   try {
     const workbook = XLSX.utils.book_new()
 
@@ -19363,7 +19363,7 @@ const generateExcelReport = async (res, event, stats, includeDetails) => {
 }
 
 // Generate CSV report
-const generateCSVReport = async (res, event, stats, includeDetails) => {
+const generateEventCSVReport = async (res, event, stats, includeDetails) => {
   try {
     const csvData = []
     
