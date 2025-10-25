@@ -42462,6 +42462,9 @@ main() {
     # Evaluate setup completeness
     evaluate_setup_completeness
     
+    # Debug: Confirm we've returned from evaluate_setup_completeness
+    echo "[DEBUG] Returned from evaluate_setup_completeness, continuing with completion output..."
+    
     # Display completion information
     echo ""
     echo "🎉 Complete Event Manager Application Deployed!"
@@ -42685,7 +42688,6 @@ evaluate_setup_completeness() {
     else
         print_warning "Found $issues_found potential issues. Please review the warnings above."
     fi
-    return 0
 }
 
 # Run main function
