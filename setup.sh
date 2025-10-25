@@ -26828,6 +26828,7 @@ const CategoryTemplates: React.FC = () => {
       name: '',
       description: '',
       categoryType: 'PERFORMANCE',
+      customType: '',
       criteria: [],
       tags: [],
     })
@@ -26845,6 +26846,7 @@ const CategoryTemplates: React.FC = () => {
       name: template.name,
       description: template.description,
       categoryType: template.categoryType,
+      customType: template.categoryType === 'CUSTOM' ? template.categoryType : '',
       criteria: template.criteria.map(c => ({ 
         id: c.id, 
         name: c.name, 
@@ -26862,7 +26864,7 @@ const CategoryTemplates: React.FC = () => {
   const handleSave = () => {
     const dataToSave = {
       ...formData,
-      categoryType: formData.categoryType === 'CUSTOM' ? formData.customType : formData.categoryType
+      categoryType: (formData.categoryType === 'CUSTOM' ? formData.customType : formData.categoryType) as 'PERFORMANCE' | 'TECHNICAL' | 'CREATIVE' | 'SCHOLARSHIP' | 'CUSTOM'
     }
     
     if (isEditing && selectedTemplate) {
