@@ -21289,9 +21289,33 @@ export const archiveAPI = {
   getAll: () => api.get('/archive'),
   getActiveEvents: () => api.get('/events'),
   getArchivedEvents: () => api.get('/archive/events'),
-  archive: (type: string, id: string, reason: string) => api.post(`/archive/${type}/${id}`, { reason }),
-  restore: (type: string, id: string) => api.post(`/archive/${type}/${id}/restore`),
-  delete: (type: string, id: string) => api.delete(`/archive/${type}/${id}`),
+  archive: (eventIdOrType: string, reasonOrId?: string, reason?: string) => {
+    if (reason !== undefined) {
+      // Called with (type, id, reason)
+      return api.post(`/archive/${eventIdOrType}/${reasonOrId}`, { reason })
+    } else {
+      // Called with (eventId, reason) - treat as event archive
+      return api.post(`/archive/event/${eventIdOrType}`, { reason: reasonOrId })
+    }
+  },
+  restore: (eventIdOrType: string, id?: string) => {
+    if (id !== undefined) {
+      // Called with (type, id)
+      return api.post(`/archive/${eventIdOrType}/${id}/restore`)
+    } else {
+      // Called with (eventId) - treat as event restore
+      return api.post(`/archive/event/${eventIdOrType}/restore`)
+    }
+  },
+  delete: (eventIdOrType: string, id?: string) => {
+    if (id !== undefined) {
+      // Called with (type, id)
+      return api.delete(`/archive/${eventIdOrType}/${id}`)
+    } else {
+      // Called with (eventId) - treat as event delete
+      return api.delete(`/archive/event/${eventIdOrType}`)
+    }
+  },
   archiveEvent: (eventId: string, reason: string) => api.post(`/archive/event/${eventId}`, { reason }),
   restoreEvent: (eventId: string) => api.post(`/archive/event/${eventId}/restore`),
   deleteEvent: (eventId: string) => api.delete(`/archive/event/${eventId}`),
@@ -21365,7 +21389,16 @@ export const auditorAPI = {
   getStats: () => api.get('/auditor/stats'),
   getPendingAudits: () => api.get('/auditor/pending'),
   getCompletedAudits: () => api.get('/auditor/completed'),
-  finalCertification: (categoryId: string, data: any) => api.post(`/auditor/category/${categoryId}/final-certification`, data),
+  finalCertification: (categoryIdOrData: string | any, data?: any) => {
+    if (typeof categoryIdOrData === 'string') {
+      // Called with (categoryId, data)
+      return api.post(`/auditor/category/${categoryIdOrData}/final-certification`, data)
+    } else {
+      // Called with (data) - extract categoryId from data
+      const { categoryId, ...certificationData } = categoryIdOrData
+      return api.post(`/auditor/category/${categoryId}/final-certification`, certificationData)
+    }
+  },
   rejectAudit: (categoryId: string, reason: string) => api.post(`/auditor/category/${categoryId}/reject`, { reason }),
   finalizeCertification: (data: any) => api.post('/auditor/finalize-certification', data),
   // Backward compatibility method
@@ -21386,7 +21419,16 @@ export const tallyMasterAPI = {
   getCertifications: () => api.get('/tally-master/certifications'),
   getCertificationQueue: () => api.get('/tally-master/queue'),
   getPendingCertifications: () => api.get('/tally-master/pending'),
-  certifyTotals: (categoryId: string, data: any) => api.post(`/tally-master/category/${categoryId}/certify-totals`, data),
+  certifyTotals: (categoryIdOrData: string | any, data?: any) => {
+    if (typeof categoryIdOrData === 'string') {
+      // Called with (categoryId, data)
+      return api.post(`/tally-master/category/${categoryIdOrData}/certify-totals`, data)
+    } else {
+      // Called with (data) - extract categoryId from data
+      const { categoryId, ...totalsData } = categoryIdOrData
+      return api.post(`/tally-master/category/${categoryId}/certify-totals`, totalsData)
+    }
+  },
   certifyTotalsData: (data: any) => api.post('/tally-master/certify-totals', data),
   // Backward compatibility method
   certifyTotalsSimple: (data: any) => api.post('/tally-master/certify-totals', data),
@@ -21798,9 +21840,33 @@ export const archiveAPI = {
   getAll: () => api.get('/archive'),
   getActiveEvents: () => api.get('/events'),
   getArchivedEvents: () => api.get('/archive/events'),
-  archive: (type: string, id: string, reason: string) => api.post(`/archive/${type}/${id}`, { reason }),
-  restore: (type: string, id: string) => api.post(`/archive/${type}/${id}/restore`),
-  delete: (type: string, id: string) => api.delete(`/archive/${type}/${id}`),
+  archive: (eventIdOrType: string, reasonOrId?: string, reason?: string) => {
+    if (reason !== undefined) {
+      // Called with (type, id, reason)
+      return api.post(`/archive/${eventIdOrType}/${reasonOrId}`, { reason })
+    } else {
+      // Called with (eventId, reason) - treat as event archive
+      return api.post(`/archive/event/${eventIdOrType}`, { reason: reasonOrId })
+    }
+  },
+  restore: (eventIdOrType: string, id?: string) => {
+    if (id !== undefined) {
+      // Called with (type, id)
+      return api.post(`/archive/${eventIdOrType}/${id}/restore`)
+    } else {
+      // Called with (eventId) - treat as event restore
+      return api.post(`/archive/event/${eventIdOrType}/restore`)
+    }
+  },
+  delete: (eventIdOrType: string, id?: string) => {
+    if (id !== undefined) {
+      // Called with (type, id)
+      return api.delete(`/archive/${eventIdOrType}/${id}`)
+    } else {
+      // Called with (eventId) - treat as event delete
+      return api.delete(`/archive/event/${eventIdOrType}`)
+    }
+  },
   archiveEvent: (eventId: string, reason: string) => api.post(`/archive/event/${eventId}`, { reason }),
   restoreEvent: (eventId: string) => api.post(`/archive/event/${eventId}/restore`),
   deleteEvent: (eventId: string) => api.delete(`/archive/event/${eventId}`),
@@ -21863,7 +21929,16 @@ export const auditorAPI = {
   getStats: () => api.get('/auditor/stats'),
   getPendingAudits: () => api.get('/auditor/pending'),
   getCompletedAudits: () => api.get('/auditor/completed'),
-  finalCertification: (categoryId: string, data: any) => api.post(`/auditor/category/${categoryId}/final-certification`, data),
+  finalCertification: (categoryIdOrData: string | any, data?: any) => {
+    if (typeof categoryIdOrData === 'string') {
+      // Called with (categoryId, data)
+      return api.post(`/auditor/category/${categoryIdOrData}/final-certification`, data)
+    } else {
+      // Called with (data) - extract categoryId from data
+      const { categoryId, ...certificationData } = categoryIdOrData
+      return api.post(`/auditor/category/${categoryId}/final-certification`, certificationData)
+    }
+  },
   rejectAudit: (categoryId: string, reason: string) => api.post(`/auditor/category/${categoryId}/reject`, { reason }),
   finalizeCertification: (data: any) => api.post('/auditor/finalize-certification', data),
   // Backward compatibility method
@@ -21884,7 +21959,16 @@ export const tallyMasterAPI = {
   getCertifications: () => api.get('/tally-master/certifications'),
   getCertificationQueue: () => api.get('/tally-master/queue'),
   getPendingCertifications: () => api.get('/tally-master/pending'),
-  certifyTotals: (categoryId: string, data: any) => api.post(`/tally-master/category/${categoryId}/certify-totals`, data),
+  certifyTotals: (categoryIdOrData: string | any, data?: any) => {
+    if (typeof categoryIdOrData === 'string') {
+      // Called with (categoryId, data)
+      return api.post(`/tally-master/category/${categoryIdOrData}/certify-totals`, data)
+    } else {
+      // Called with (data) - extract categoryId from data
+      const { categoryId, ...totalsData } = categoryIdOrData
+      return api.post(`/tally-master/category/${categoryId}/certify-totals`, totalsData)
+    }
+  },
   certifyTotalsData: (data: any) => api.post('/tally-master/certify-totals', data),
   // Backward compatibility method
   certifyTotalsSimple: (data: any) => api.post('/tally-master/certify-totals', data),
