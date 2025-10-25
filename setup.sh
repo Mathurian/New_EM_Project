@@ -21589,13 +21589,12 @@ model ActivityLog {
 
 model SystemSetting {
   id          String   @id @default(cuid())
-  settingKey  String   @unique
-  settingValue String
+  key         String   @unique
+  value       String
   description String?
+  category    String?
   updatedAt   DateTime @updatedAt
-  updatedById String?
-
-  updatedBy User? @relation("UserUpdatedSettings", fields: [updatedById], references: [id])
+  updatedBy   String?
 
   @@map("system_settings")
 }
@@ -21965,20 +21964,6 @@ model BackupLog {
   @@map("backup_logs")
 }
 
-model BackupSetting {
-  id             String       @id @default(cuid())
-  backupType     BackupType
-  enabled        Boolean      @default(false)
-  frequency      BackupFrequency
-  frequencyValue Int          @default(1)
-  retentionDays  Int          @default(30)
-  lastRun        DateTime?
-  nextRun        DateTime?
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-
-  @@map("backup_settings")
-}
 
 model ReportTemplate {
   id          String   @id @default(cuid())
@@ -22190,6 +22175,12 @@ enum FileCategory {
   REPORT
   BACKUP
   OTHER
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 EOF
     
