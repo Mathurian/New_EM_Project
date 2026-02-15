@@ -1,0 +1,362 @@
+[
+  {
+    "id": "TC-CORE-001",
+    "area": "CORE",
+    "role": "Any authenticated role",
+    "action": "Open /dashboard without slug",
+    "expected": "Redirects to /{tenantSlug}/dashboard",
+    "priority": "P0",
+    "blocking": true
+  },
+  {
+    "id": "TC-CORE-002",
+    "area": "CORE",
+    "role": "Any authenticated role",
+    "action": "Hard refresh /{tenantSlug}/bios",
+    "expected": "Loads with correct tenant context",
+    "priority": "P0",
+    "blocking": true
+  },
+  {
+    "id": "TC-CORE-003",
+    "area": "CORE",
+    "role": "Any authenticated role",
+    "action": "Use 404 page Go Back/Go to Dashboard",
+    "expected": "Returns to working app shell",
+    "priority": "P0",
+    "blocking": true
+  },
+  {
+    "id": "TC-CORE-004",
+    "area": "CORE",
+    "role": "Any",
+    "action": "Navigate across 5 normal pages",
+    "expected": "No dynamic import/module-load failures",
+    "priority": "P0",
+    "blocking": true
+  },
+  {
+    "id": "TC-NAV-001",
+    "area": "NAV",
+    "role": "Organizer",
+    "action": "Open menu + command palette",
+    "expected": "Only allowed routes/actions visible",
+    "priority": "P1",
+    "blocking": true
+  },
+  {
+    "id": "TC-NAV-002",
+    "area": "NAV",
+    "role": "Organizer",
+    "action": "Select menu item then click outside drawer",
+    "expected": "Drawer closes in both cases",
+    "priority": "P2",
+    "blocking": false
+  },
+  {
+    "id": "TC-NAV-003",
+    "area": "NAV",
+    "role": "Super admin",
+    "action": "Open admin-only pages from nav/command palette",
+    "expected": "Access allowed and data loads",
+    "priority": "P1",
+    "blocking": true
+  },
+  {
+    "id": "TC-JUDGE-001",
+    "area": "JUDGE",
+    "role": "Judge",
+    "action": "Open /scoring",
+    "expected": "Only assigned categories listed",
+    "priority": "P0",
+    "blocking": true
+  },
+  {
+    "id": "TC-JUDGE-002",
+    "area": "JUDGE",
+    "role": "Judge with no active assignment",
+    "action": "Open /scoring",
+    "expected": "No categories shown and no error",
+    "priority": "P0",
+    "blocking": true
+  },
+  {
+    "id": "TC-JUDGE-003",
+    "area": "JUDGE",
+    "role": "Judge",
+    "action": "Score one contestant and submit with certification",
+    "expected": "Submit succeeds and score locks immediately",
+    "priority": "P0",
+    "blocking": true
+  },
+  {
+    "id": "TC-JUDGE-004",
+    "area": "JUDGE",
+    "role": "Judge",
+    "action": "Edit comments after certification",
+    "expected": "Comments remain editable",
+    "priority": "P1",
+    "blocking": true
+  },
+  {
+    "id": "TC-JUDGE-005",
+    "area": "JUDGE",
+    "role": "Judge",
+    "action": "Upload commentary file",
+    "expected": "File persists and appears in downstream views",
+    "priority": "P1",
+    "blocking": true
+  },
+  {
+    "id": "TC-BIO-001",
+    "area": "BIO",
+    "role": "Judge",
+    "action": "Open /bios",
+    "expected": "Scoped contestant bios/images/files shown",
+    "priority": "P0",
+    "blocking": true
+  },
+  {
+    "id": "TC-BIO-002",
+    "area": "BIO",
+    "role": "Emcee",
+    "action": "Open /bios and filter by contest",
+    "expected": "Contestant + judge records shown per scope",
+    "priority": "P1",
+    "blocking": true
+  },
+  {
+    "id": "TC-BIO-003",
+    "area": "BIO",
+    "role": "Organizer",
+    "action": "Open bio file and image links",
+    "expected": "HTTP 200 and valid render (no 404)",
+    "priority": "P0",
+    "blocking": true
+  },
+  {
+    "id": "TC-CERT-001",
+    "area": "CERT",
+    "role": "Judge->Tally->Auditor->Board/Organizer",
+    "action": "Complete full flow for one category",
+    "expected": "Each stage unlocks only after prior stage completion",
+    "priority": "P0",
+    "blocking": true
+  },
+  {
+    "id": "TC-CERT-002",
+    "area": "CERT",
+    "role": "Tally+ views",
+    "action": "Judge certifies only one contestant",
+    "expected": "Stage not shown as fully complete",
+    "priority": "P0",
+    "blocking": true
+  },
+  {
+    "id": "TC-CERT-003",
+    "area": "CERT",
+    "role": "Judge->Tally->Auditor->Board/Organizer",
+    "action": "Run certification flow on 2+ categories",
+    "expected": "Status accurate per category and contest rollup",
+    "priority": "P0",
+    "blocking": true
+  },
+  {
+    "id": "TC-GOV-001",
+    "area": "GOV",
+    "role": "Judge",
+    "action": "Request un-certification",
+    "expected": "Request created; no immediate uncertification",
+    "priority": "P0",
+    "blocking": true
+  },
+  {
+    "id": "TC-GOV-002",
+    "area": "GOV",
+    "role": "Tally/Auditor/Board/Admin",
+    "action": "Request throw-out at judge/category and judge/contest scope",
+    "expected": "Request requires approvals; no immediate deletion",
+    "priority": "P0",
+    "blocking": true
+  },
+  {
+    "id": "TC-GOV-003",
+    "area": "GOV",
+    "role": "Approver chain",
+    "action": "Complete required approvals",
+    "expected": "Governance action executes only after threshold",
+    "priority": "P0",
+    "blocking": true
+  },
+  {
+    "id": "TC-DED-001",
+    "area": "DEDUCTIONS",
+    "role": "Allowed initiator",
+    "action": "Create category-specific deduction",
+    "expected": "Request accepted with required fields",
+    "priority": "P1",
+    "blocking": true
+  },
+  {
+    "id": "TC-DED-002",
+    "area": "DEDUCTIONS",
+    "role": "Allowed initiator",
+    "action": "Create general deduction",
+    "expected": "Request accepted and routed through approvals",
+    "priority": "P1",
+    "blocking": true
+  },
+  {
+    "id": "TC-DED-003",
+    "area": "DEDUCTIONS",
+    "role": "Approvers",
+    "action": "Complete deduction approvals",
+    "expected": "Deduction applied in results and reports",
+    "priority": "P1",
+    "blocking": true
+  },
+  {
+    "id": "TC-RES-001",
+    "area": "RESULTS",
+    "role": "Organizer/Admin",
+    "action": "Open contest-level results",
+    "expected": "Overall contest ordering shown",
+    "priority": "P0",
+    "blocking": true
+  },
+  {
+    "id": "TC-RES-002",
+    "area": "RESULTS",
+    "role": "Organizer/Admin",
+    "action": "Drill into category results",
+    "expected": "Category details shown with correct controls",
+    "priority": "P0",
+    "blocking": true
+  },
+  {
+    "id": "TC-RES-003",
+    "area": "RESULTS",
+    "role": "Contestant with visibility disabled",
+    "action": "Open results",
+    "expected": "Blocked/hidden per visibility flags",
+    "priority": "P0",
+    "blocking": true
+  },
+  {
+    "id": "TC-RPT-001",
+    "area": "REPORTS",
+    "role": "Allowed report role",
+    "action": "Generate report and use View",
+    "expected": "Rendered preview shown (not raw JSON)",
+    "priority": "P1",
+    "blocking": true
+  },
+  {
+    "id": "TC-EMC-001",
+    "area": "EMCEE",
+    "role": "Emcee",
+    "action": "Open script via View",
+    "expected": "File opens without 404",
+    "priority": "P0",
+    "blocking": true
+  },
+  {
+    "id": "TC-FILE-001",
+    "area": "FILES",
+    "role": "Admin/Organizer",
+    "action": "Open /files",
+    "expected": "Table contains real filenames and metadata",
+    "priority": "P1",
+    "blocking": false
+  },
+  {
+    "id": "TC-MFA-001",
+    "area": "MFA",
+    "role": "User under MFA-enforced tenant",
+    "action": "Login",
+    "expected": "MFA challenge required",
+    "priority": "P0",
+    "blocking": true
+  },
+  {
+    "id": "TC-MFA-002",
+    "area": "MFA",
+    "role": "User under MFA-enforced tenant",
+    "action": "Complete TOTP/EMAIL/SMS allowed challenge",
+    "expected": "Session established only after valid MFA",
+    "priority": "P0",
+    "blocking": true
+  },
+  {
+    "id": "TC-LIFE-001",
+    "area": "LIFECYCLE",
+    "role": "Organizer/Admin",
+    "action": "Create event, contest, categories, criteria, and contestants in empty tenant",
+    "expected": "All setup entities persist and are visible in UI",
+    "priority": "P0",
+    "blocking": true
+  },
+  {
+    "id": "TC-LIFE-002",
+    "area": "LIFECYCLE",
+    "role": "Organizer/Admin",
+    "action": "Assign judge/tally/auditor/board users to created scopes",
+    "expected": "Assignments persist with correct scope labels and effective access",
+    "priority": "P0",
+    "blocking": true
+  },
+  {
+    "id": "TC-LIFE-003",
+    "area": "LIFECYCLE",
+    "role": "Judge",
+    "action": "Submit and certify all contestant scores",
+    "expected": "Scores lock on submit and comments remain editable",
+    "priority": "P0",
+    "blocking": true
+  },
+  {
+    "id": "TC-LIFE-004",
+    "area": "LIFECYCLE",
+    "role": "Tally->Auditor->Board/Organizer",
+    "action": "Complete certification chain after prerequisites",
+    "expected": "Stage progression only advances when prior stage is complete",
+    "priority": "P0",
+    "blocking": true
+  },
+  {
+    "id": "TC-LIFE-005",
+    "area": "LIFECYCLE",
+    "role": "Organizer/Admin",
+    "action": "Open contest and category results after full certifications",
+    "expected": "Contest-level ordering and category-level detail both render",
+    "priority": "P0",
+    "blocking": true
+  },
+  {
+    "id": "TC-LIFE-006",
+    "area": "LIFECYCLE",
+    "role": "Board/Organizer",
+    "action": "Validate winners state before and after publish/unlock",
+    "expected": "Pre-publish and post-publish visibility states match policy",
+    "priority": "P0",
+    "blocking": true
+  },
+  {
+    "id": "TC-LIFE-007",
+    "area": "LIFECYCLE",
+    "role": "Contestant+Emcee",
+    "action": "Validate visibility before and after release flags",
+    "expected": "Only permitted data is visible per role and release policy",
+    "priority": "P0",
+    "blocking": true
+  },
+  {
+    "id": "TC-LIFE-008",
+    "area": "LIFECYCLE",
+    "role": "Organizer/Admin",
+    "action": "Validate final-state artifacts (files/reports)",
+    "expected": "Commentary/bio files open and reports reflect certified workflow",
+    "priority": "P1",
+    "blocking": true
+  }
+]
