@@ -1,0 +1,223 @@
+
+================================================================================
+Starting UAT Test Run - 40 test cases
+Base URL: https://conmgr.com
+Tenant: febtest1
+Execution Mode: MULTI_USER_PER_ROLE
+================================================================================
+
+
+[1/40] Running TC-CORE-001 - CORE - Any authenticated role
+  → Navigating to https://conmgr.com/login
+  ✓ Logged in as judge1@febtest1.com - URL: https://conmgr.com/febtest1/dashboard
+  ✓ PASS - judge1@febtest1.com - Redirected to https://conmgr.com/febtest1/dashboard
+  → Navigating to https://conmgr.com/login
+  ✗ Login may have failed for judge2@febtest1.com - URL: https://conmgr.com/login
+  ✗ FAIL - judge2@febtest1.com - Login failed
+
+[2/40] Running TC-CORE-002 - CORE - Any authenticated role
+  → Navigating to https://conmgr.com/login
+  ✗ Login may have failed for judge1@febtest1.com - URL: https://conmgr.com/login
+  ✗ FAIL - judge1@febtest1.com - Login failed
+  → Navigating to https://conmgr.com/login
+  ✗ Login may have failed for judge2@febtest1.com - URL: https://conmgr.com/login
+  ✗ FAIL - judge2@febtest1.com - Login failed
+
+[3/40] Running TC-CORE-003 - CORE - Any authenticated role
+  → Navigating to https://conmgr.com/login
+  ✗ Login may have failed for judge1@febtest1.com - URL: https://conmgr.com/login
+  ✗ FAIL - judge1@febtest1.com - Login failed
+  → Navigating to https://conmgr.com/login
+  ✗ Login may have failed for judge2@febtest1.com - URL: https://conmgr.com/login
+  ✗ FAIL - judge2@febtest1.com - Login failed
+
+[4/40] Running TC-CORE-004 - CORE - Any
+  → Navigating to https://conmgr.com/login
+  ✓ Logged in as judge1@febtest1.com - URL: https://conmgr.com/febtest1/dashboard
+  ✓ PASS - judge1@febtest1.com - All pages loaded successfully
+  → Navigating to https://conmgr.com/login
+  ✗ Login may have failed for judge2@febtest1.com - URL: https://conmgr.com/login
+  ✗ FAIL - judge2@febtest1.com - Login failed
+
+[5/40] Running TC-NAV-001 - NAV - Organizer
+  → Navigating to https://conmgr.com/login
+  ✓ Logged in as organizer1@febtest1.com - URL: https://conmgr.com/febtest1/dashboard
+  ✗ FAIL - organizer1@febtest1.com - Could not find menu button
+
+[6/40] Running TC-NAV-002 - NAV - Organizer
+  → Navigating to https://conmgr.com/login
+  ✗ Login may have failed for organizer1@febtest1.com - URL: https://conmgr.com/login
+  ✗ FAIL - organizer1@febtest1.com - Login failed
+
+[7/40] Running TC-NAV-003 - NAV - Super admin
+  → Navigating to https://conmgr.com/login
+  ✗ Login may have failed for organizer1@febtest1.com - URL: https://conmgr.com/login
+  ✗ FAIL - organizer1@febtest1.com - Login failed
+
+[8/40] Running TC-JUDGE-001 - JUDGE - Judge
+  → Navigating to https://conmgr.com/login
+  ✗ Login may have failed for judge1@febtest1.com - URL: https://conmgr.com/login
+  ✗ FAIL - judge1@febtest1.com - Login failed
+  → Navigating to https://conmgr.com/login
+  ✗ Login may have failed for judge2@febtest1.com - URL: https://conmgr.com/login
+  ✗ FAIL - judge2@febtest1.com - Login failed
+
+[9/40] Running TC-JUDGE-002 - JUDGE - Judge with no active assignment
+  ⊗ SKIPPED - No users for role: Judge with no active assignment
+
+[10/40] Running TC-JUDGE-003 - JUDGE - Judge
+  → Navigating to https://conmgr.com/login
+  ✗ Login may have failed for judge1@febtest1.com - URL: https://conmgr.com/login
+  ✗ FAIL - judge1@febtest1.com - Login failed
+  → Navigating to https://conmgr.com/login
+  ✗ Login may have failed for judge2@febtest1.com - URL: https://conmgr.com/login
+  ✗ FAIL - judge2@febtest1.com - Login failed
+
+[11/40] Running TC-JUDGE-004 - JUDGE - Judge
+  → Navigating to https://conmgr.com/login
+  ✗ Login may have failed for judge1@febtest1.com - URL: https://conmgr.com/login
+  ✗ FAIL - judge1@febtest1.com - Login failed
+  → Navigating to https://conmgr.com/login
+  ✗ Login may have failed for judge2@febtest1.com - URL: https://conmgr.com/login
+  ✗ FAIL - judge2@febtest1.com - Login failed
+
+[12/40] Running TC-JUDGE-005 - JUDGE - Judge
+  → Navigating to https://conmgr.com/login
+  ✗ Login may have failed for judge1@febtest1.com - URL: https://conmgr.com/login
+  ✗ FAIL - judge1@febtest1.com - Login failed
+  → Navigating to https://conmgr.com/login
+  ✗ Login may have failed for judge2@febtest1.com - URL: https://conmgr.com/login
+  ✗ FAIL - judge2@febtest1.com - Login failed
+
+[13/40] Running TC-BIO-001 - BIO - Judge
+  → Navigating to https://conmgr.com/login
+  ✗ Login may have failed for judge1@febtest1.com - URL: https://conmgr.com/login
+  ✗ FAIL - judge1@febtest1.com - Login failed
+  → Navigating to https://conmgr.com/login
+  ✗ Login may have failed for judge2@febtest1.com - URL: https://conmgr.com/login
+  ✗ FAIL - judge2@febtest1.com - Login failed
+
+[14/40] Running TC-BIO-002 - BIO - Emcee
+  → Navigating to https://conmgr.com/login
+  ✗ Login may have failed for emcee1@febtest1.com - URL: https://conmgr.com/login
+  ✗ FAIL - emcee1@febtest1.com - Login failed
+
+[15/40] Running TC-BIO-003 - BIO - Organizer
+  → Navigating to https://conmgr.com/login
+  ✗ Login may have failed for organizer1@febtest1.com - URL: https://conmgr.com/login
+  ✗ FAIL - organizer1@febtest1.com - Login failed
+
+[16/40] Running TC-CERT-001 - CERT - Judge->Tally->Auditor->Board/Organizer
+  ⊗ SKIPPED - No users for role: Judge->Tally->Auditor->Board/Organizer
+
+[17/40] Running TC-CERT-002 - CERT - Tally+ views
+  ⊗ SKIPPED - No users for role: Tally+ views
+
+[18/40] Running TC-CERT-003 - CERT - Judge->Tally->Auditor->Board/Organizer
+  ⊗ SKIPPED - No users for role: Judge->Tally->Auditor->Board/Organizer
+
+[19/40] Running TC-GOV-001 - GOV - Judge
+  → Navigating to https://conmgr.com/login
+  ✗ Login may have failed for judge1@febtest1.com - URL: https://conmgr.com/login
+  ✗ FAIL - judge1@febtest1.com - Login failed
+  → Navigating to https://conmgr.com/login
+  ✗ Login may have failed for judge2@febtest1.com - URL: https://conmgr.com/login
+  ✗ FAIL - judge2@febtest1.com - Login failed
+
+[20/40] Running TC-GOV-002 - GOV - Tally/Auditor/Board/Admin
+  ⊗ SKIPPED - No users for role: Tally/Auditor/Board/Admin
+
+[21/40] Running TC-GOV-003 - GOV - Approver chain
+  ⊗ SKIPPED - No users for role: Approver chain
+
+[22/40] Running TC-DED-001 - DEDUCTIONS - Allowed initiator
+  ⊗ SKIPPED - No users for role: Allowed initiator
+
+[23/40] Running TC-DED-002 - DEDUCTIONS - Allowed initiator
+  ⊗ SKIPPED - No users for role: Allowed initiator
+
+[24/40] Running TC-DED-003 - DEDUCTIONS - Approvers
+  ⊗ SKIPPED - No users for role: Approvers
+
+[25/40] Running TC-RES-001 - RESULTS - Organizer/Admin
+  ⊗ SKIPPED - No users for role: Organizer/Admin
+
+[26/40] Running TC-RES-002 - RESULTS - Organizer/Admin
+  ⊗ SKIPPED - No users for role: Organizer/Admin
+
+[27/40] Running TC-RES-003 - RESULTS - Contestant with visibility disabled
+  ⊗ SKIPPED - No users for role: Contestant with visibility disabled
+
+[28/40] Running TC-RPT-001 - REPORTS - Allowed report role
+  ⊗ SKIPPED - No users for role: Allowed report role
+
+[29/40] Running TC-EMC-001 - EMCEE - Emcee
+  → Navigating to https://conmgr.com/login
+  ✗ Login may have failed for emcee1@febtest1.com - URL: https://conmgr.com/login
+  ✗ FAIL - emcee1@febtest1.com - Login failed
+
+[30/40] Running TC-FILE-001 - FILES - Admin/Organizer
+  ⊗ SKIPPED - No users for role: Admin/Organizer
+
+[31/40] Running TC-MFA-001 - MFA - User under MFA-enforced tenant
+  ⊗ SKIPPED - No users for role: User under MFA-enforced tenant
+
+[32/40] Running TC-MFA-002 - MFA - User under MFA-enforced tenant
+  ⊗ SKIPPED - No users for role: User under MFA-enforced tenant
+
+[33/40] Running TC-LIFE-001 - LIFECYCLE - Organizer/Admin
+  ⊗ SKIPPED - No users for role: Organizer/Admin
+
+[34/40] Running TC-LIFE-002 - LIFECYCLE - Organizer/Admin
+  ⊗ SKIPPED - No users for role: Organizer/Admin
+
+[35/40] Running TC-LIFE-003 - LIFECYCLE - Judge
+  → Navigating to https://conmgr.com/login
+  ✗ Login may have failed for judge1@febtest1.com - URL: https://conmgr.com/login
+  ✗ FAIL - judge1@febtest1.com - Login failed
+  → Navigating to https://conmgr.com/login
+  ✗ Login may have failed for judge2@febtest1.com - URL: https://conmgr.com/login
+  ✗ FAIL - judge2@febtest1.com - Login failed
+
+[36/40] Running TC-LIFE-004 - LIFECYCLE - Tally->Auditor->Board/Organizer
+  ⊗ SKIPPED - No users for role: Tally->Auditor->Board/Organizer
+
+[37/40] Running TC-LIFE-005 - LIFECYCLE - Organizer/Admin
+  ⊗ SKIPPED - No users for role: Organizer/Admin
+
+[38/40] Running TC-LIFE-006 - LIFECYCLE - Board/Organizer
+  ⊗ SKIPPED - No users for role: Board/Organizer
+
+[39/40] Running TC-LIFE-007 - LIFECYCLE - Contestant+Emcee
+  ⊗ SKIPPED - No users for role: Contestant+Emcee
+
+[40/40] Running TC-LIFE-008 - LIFECYCLE - Organizer/Admin
+  ⊗ SKIPPED - No users for role: Organizer/Admin
+
+================================================================================
+TEST EXECUTION SUMMARY
+================================================================================
+Total Cases:  51
+Passed:       2 (3.9%)
+Failed:       26
+Skipped:      23
+Blockers:     25
+
+Report saved: /workspace/automation/results/test_report_20260215_110215.json
+================================================================================
+
+Exception ignored in: <function BaseSubprocessTransport.__del__ at 0x7fe6f08d3060>
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/asyncio/base_subprocess.py", line 126, in __del__
+    self.close()
+  File "/usr/lib/python3.12/asyncio/base_subprocess.py", line 104, in close
+    proto.pipe.close()
+  File "/usr/lib/python3.12/asyncio/unix_events.py", line 767, in close
+    self.write_eof()
+  File "/usr/lib/python3.12/asyncio/unix_events.py", line 753, in write_eof
+    self._loop.call_soon(self._call_connection_lost, None)
+  File "/usr/lib/python3.12/asyncio/base_events.py", line 795, in call_soon
+    self._check_closed()
+  File "/usr/lib/python3.12/asyncio/base_events.py", line 541, in _check_closed
+    raise RuntimeError('Event loop is closed')
+RuntimeError: Event loop is closed

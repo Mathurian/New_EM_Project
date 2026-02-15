@@ -1,0 +1,220 @@
+
+================================================================================
+Starting UAT Test Run - 40 test cases
+Base URL: https://conmgr.com
+Tenant: febtest1
+Execution Mode: MULTI_USER_PER_ROLE
+================================================================================
+
+
+[1/40] Running TC-CORE-001 - CORE - Any authenticated role
+  → Navigating to https://conmgr.com/login
+  ✗ Login may have failed for organizer1@febtest1.com - URL: https://conmgr.com/login
+  ✗ FAIL - organizer1@febtest1.com - Login failed
+
+[2/40] Running TC-CORE-002 - CORE - Any authenticated role
+  → Navigating to https://conmgr.com/login
+  → No input fields found, page may not have loaded
+  ✗ FAIL - organizer1@febtest1.com - Login failed
+
+[3/40] Running TC-CORE-003 - CORE - Any authenticated role
+  → Navigating to https://conmgr.com/login
+  → No input fields found, page may not have loaded
+  ✗ FAIL - organizer1@febtest1.com - Login failed
+
+[4/40] Running TC-CORE-004 - CORE - Any
+  → Navigating to https://conmgr.com/login
+  ✗ Login may have failed for organizer1@febtest1.com - URL: https://conmgr.com/login
+  ✗ FAIL - organizer1@febtest1.com - Login failed
+
+[5/40] Running TC-NAV-001 - NAV - Organizer
+  → Navigating to https://conmgr.com/login
+  ✗ Login may have failed for organizer1@febtest1.com - URL: https://conmgr.com/login
+  ✗ FAIL - organizer1@febtest1.com - Login failed
+
+[6/40] Running TC-NAV-002 - NAV - Organizer
+  → Navigating to https://conmgr.com/login
+  ✗ Login may have failed for organizer1@febtest1.com - URL: https://conmgr.com/login
+  ✗ FAIL - organizer1@febtest1.com - Login failed
+
+[7/40] Running TC-NAV-003 - NAV - Super admin
+  → Navigating to https://conmgr.com/login
+  ✗ Login may have failed for organizer1@febtest1.com - URL: https://conmgr.com/login
+  ✗ FAIL - organizer1@febtest1.com - Login failed
+
+[8/40] Running TC-JUDGE-001 - JUDGE - Judge
+  → Navigating to https://conmgr.com/login
+  ✓ Logged in as judge1@febtest1.com - URL: https://conmgr.com/febtest1/dashboard
+  ✓ PASS - judge1@febtest1.com - Scoring page loaded (categories shown/hidden based on assignment)
+  → Navigating to https://conmgr.com/login
+  ✓ Logged in as judge2@febtest1.com - URL: https://conmgr.com/febtest1/dashboard
+  ✓ PASS - judge2@febtest1.com - Scoring page loaded (categories shown/hidden based on assignment)
+
+[9/40] Running TC-JUDGE-002 - JUDGE - Judge with no active assignment
+  ⊗ SKIPPED - No users for role: Judge with no active assignment
+
+[10/40] Running TC-JUDGE-003 - JUDGE - Judge
+  → Navigating to https://conmgr.com/login
+  ✓ Logged in as judge1@febtest1.com - URL: https://conmgr.com/febtest1/dashboard
+  ✓ PASS - judge1@febtest1.com - Scoring submission test requires actual data interaction
+  → Navigating to https://conmgr.com/login
+  ✓ Logged in as judge2@febtest1.com - URL: https://conmgr.com/febtest1/dashboard
+  ✓ PASS - judge2@febtest1.com - Scoring submission test requires actual data interaction
+
+[11/40] Running TC-JUDGE-004 - JUDGE - Judge
+  → Navigating to https://conmgr.com/login
+  ✗ Login may have failed for judge1@febtest1.com - URL: https://conmgr.com/login
+  ✗ FAIL - judge1@febtest1.com - Login failed
+  → Navigating to https://conmgr.com/login
+  ✗ Login may have failed for judge2@febtest1.com - URL: https://conmgr.com/login
+  ✗ FAIL - judge2@febtest1.com - Login failed
+
+[12/40] Running TC-JUDGE-005 - JUDGE - Judge
+  → Navigating to https://conmgr.com/login
+  ✗ Login may have failed for judge1@febtest1.com - URL: https://conmgr.com/login
+  ✗ FAIL - judge1@febtest1.com - Login failed
+  → Navigating to https://conmgr.com/login
+  ✓ Logged in as judge2@febtest1.com - URL: https://conmgr.com/febtest1/dashboard
+  ✓ PASS - judge2@febtest1.com - File upload test requires file input interaction
+
+[13/40] Running TC-BIO-001 - BIO - Judge
+  → Navigating to https://conmgr.com/login
+  ✗ Login may have failed for judge1@febtest1.com - URL: https://conmgr.com/login
+  ✗ FAIL - judge1@febtest1.com - Login failed
+  → Navigating to https://conmgr.com/login
+  ✓ Logged in as judge2@febtest1.com - URL: https://conmgr.com/febtest1/dashboard
+  ✓ PASS - judge2@febtest1.com - Bios page accessible for TC-BIO-001
+
+[14/40] Running TC-BIO-002 - BIO - Emcee
+  → Navigating to https://conmgr.com/login
+  ✗ Login may have failed for emcee1@febtest1.com - URL: https://conmgr.com/login
+  ✗ FAIL - emcee1@febtest1.com - Login failed
+
+[15/40] Running TC-BIO-003 - BIO - Organizer
+  → Navigating to https://conmgr.com/login
+  ✓ Logged in as organizer1@febtest1.com - URL: https://conmgr.com/febtest1/dashboard
+  ✓ PASS - organizer1@febtest1.com - Bios page accessible for TC-BIO-003
+
+[16/40] Running TC-CERT-001 - CERT - Judge->Tally->Auditor->Board/Organizer
+  → Navigating to https://conmgr.com/login
+  ✓ Logged in as judge1@febtest1.com - URL: https://conmgr.com/febtest1/dashboard
+  ✓ PASS - judge1@febtest1.com - Certification tests require multi-role workflow (judge->tally->auditor->board)
+  → Navigating to https://conmgr.com/login
+  ✓ Logged in as judge2@febtest1.com - URL: https://conmgr.com/febtest1/dashboard
+  ✓ PASS - judge2@febtest1.com - Certification tests require multi-role workflow (judge->tally->auditor->board)
+
+[17/40] Running TC-CERT-002 - CERT - Tally+ views
+  → Navigating to https://conmgr.com/login
+  ✓ Logged in as tally1@febtest1.com - URL: https://conmgr.com/febtest1/tally-master
+  ✓ PASS - tally1@febtest1.com - Certification tests require multi-role workflow (judge->tally->auditor->board)
+  → Navigating to https://conmgr.com/login
+  ✓ Logged in as tally2@febtest1.com - URL: https://conmgr.com/febtest1/tally-master
+  ✓ PASS - tally2@febtest1.com - Certification tests require multi-role workflow (judge->tally->auditor->board)
+
+[18/40] Running TC-CERT-003 - CERT - Judge->Tally->Auditor->Board/Organizer
+  → Navigating to https://conmgr.com/login
+  ✓ Logged in as judge1@febtest1.com - URL: https://conmgr.com/febtest1/dashboard
+  ✓ PASS - judge1@febtest1.com - Certification tests require multi-role workflow (judge->tally->auditor->board)
+  → Navigating to https://conmgr.com/login
+  ✓ Logged in as judge2@febtest1.com - URL: https://conmgr.com/febtest1/dashboard
+  ✓ PASS - judge2@febtest1.com - Certification tests require multi-role workflow (judge->tally->auditor->board)
+
+[19/40] Running TC-GOV-001 - GOV - Judge
+  → Navigating to https://conmgr.com/login
+  ✓ Logged in as judge1@febtest1.com - URL: https://conmgr.com/febtest1/dashboard
+  ✓ PASS - judge1@febtest1.com - Governance tests require approval workflow interactions
+  → Navigating to https://conmgr.com/login
+  ✗ Login may have failed for judge2@febtest1.com - URL: https://conmgr.com/login
+  ✗ FAIL - judge2@febtest1.com - Login failed
+
+[20/40] Running TC-GOV-002 - GOV - Tally/Auditor/Board/Admin
+  → Navigating to https://conmgr.com/login
+  ✗ Login may have failed for organizer1@febtest1.com - URL: https://conmgr.com/login
+  ✗ FAIL - organizer1@febtest1.com - Login failed
+
+[21/40] Running TC-GOV-003 - GOV - Approver chain
+  ⊗ SKIPPED - No users for role: Approver chain
+
+[22/40] Running TC-DED-001 - DEDUCTIONS - Allowed initiator
+  ⊗ SKIPPED - No users for role: Allowed initiator
+
+[23/40] Running TC-DED-002 - DEDUCTIONS - Allowed initiator
+  ⊗ SKIPPED - No users for role: Allowed initiator
+
+[24/40] Running TC-DED-003 - DEDUCTIONS - Approvers
+  ⊗ SKIPPED - No users for role: Approvers
+
+[25/40] Running TC-RES-001 - RESULTS - Organizer/Admin
+  → Navigating to https://conmgr.com/login
+  ✓ Logged in as organizer1@febtest1.com - URL: https://conmgr.com/febtest1/dashboard
+  ✓ PASS - organizer1@febtest1.com - Results page accessible for TC-RES-001
+
+[26/40] Running TC-RES-002 - RESULTS - Organizer/Admin
+  → Navigating to https://conmgr.com/login
+  ✗ Login may have failed for organizer1@febtest1.com - URL: https://conmgr.com/login
+  ✗ FAIL - organizer1@febtest1.com - Login failed
+
+[27/40] Running TC-RES-003 - RESULTS - Contestant with visibility disabled
+  → Navigating to https://conmgr.com/login
+  ✗ Login may have failed for contestant12@febtest1.com - URL: https://conmgr.com/login
+  ✗ FAIL - contestant12@febtest1.com - Login failed
+  → Navigating to https://conmgr.com/login
+  ✗ Login may have failed for contestant1@example.com - URL: https://conmgr.com/login
+  ✗ FAIL - contestant1@example.com - Login failed
+
+[28/40] Running TC-RPT-001 - REPORTS - Allowed report role
+  ⊗ SKIPPED - No users for role: Allowed report role
+
+[29/40] Running TC-EMC-001 - EMCEE - Emcee
+  → Navigating to https://conmgr.com/login
+  ✗ Login may have failed for emcee1@febtest1.com - URL: https://conmgr.com/login
+  ✗ FAIL - emcee1@febtest1.com - Login failed
+
+[30/40] Running TC-FILE-001 - FILES - Admin/Organizer
+  → Navigating to https://conmgr.com/login
+  ✗ Login may have failed for organizer1@febtest1.com - URL: https://conmgr.com/login
+  ✗ FAIL - organizer1@febtest1.com - Login failed
+
+[31/40] Running TC-MFA-001 - MFA - User under MFA-enforced tenant
+  ⊗ SKIPPED - No users for role: User under MFA-enforced tenant
+
+[32/40] Running TC-MFA-002 - MFA - User under MFA-enforced tenant
+  ⊗ SKIPPED - No users for role: User under MFA-enforced tenant
+
+[33/40] Running TC-LIFE-001 - LIFECYCLE - Organizer/Admin
+  → Navigating to https://conmgr.com/login
+  ✗ Login may have failed for organizer1@febtest1.com - URL: https://conmgr.com/login
+  ✗ FAIL - organizer1@febtest1.com - Login failed
+
+[34/40] Running TC-LIFE-002 - LIFECYCLE - Organizer/Admin
+  → Navigating to https://conmgr.com/login
+  ✓ Logged in as organizer1@febtest1.com - URL: https://conmgr.com/febtest1/dashboard
+  ✓ PASS - organizer1@febtest1.com - Lifecycle tests require complete workflow from setup to results
+
+[35/40] Running TC-LIFE-003 - LIFECYCLE - Judge
+  → Navigating to https://conmgr.com/login
+node:events:486
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: write EPIPE
+    at afterWriteDispatched (node:internal/stream_base_commons:159:15)
+    at writeGeneric (node:internal/stream_base_commons:150:3)
+    at Socket._writeGeneric (node:net:966:11)
+    at Socket._write (node:net:978:8)
+    at writeOrBuffer (node:internal/streams/writable:570:12)
+    at _write (node:internal/streams/writable:499:10)
+    at Writable.write (node:internal/streams/writable:508:10)
+    at PipeTransport.send (/home/ubuntu/.local/lib/python3.12/site-packages/playwright/driver/package/lib/server/utils/pipeTransport.js:52:21)
+    at dispatcherConnection.onmessage (/home/ubuntu/.local/lib/python3.12/site-packages/playwright/driver/package/lib/cli/driver.js:60:59)
+    at DispatcherConnection.sendEvent (/home/ubuntu/.local/lib/python3.12/site-packages/playwright/driver/package/lib/server/dispatchers/dispatcher.js:176:10)
+Emitted 'error' event on Socket instance at:
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at process.processTicksAndRejections (node:internal/process/task_queues:89:21) {
+  errno: -32,
+  code: 'EPIPE',
+  syscall: 'write'
+}
+
+Node.js v24.13.0

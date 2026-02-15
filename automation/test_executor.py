@@ -121,77 +121,35 @@ class TestExecutor:
             except:
                 pass
             
-            # Try multiple selectors for email field
-            email_selectors = [
-                'input[type="email"]',
-                'input[name="email"]',
-                'input[id="email"]',
-                'input[placeholder*="mail" i]',
-                'input[aria-label*="mail" i]'
-            ]
-            
-            email_filled = False
-            for selector in email_selectors:
-                try:
-                    await self.page.fill(selector, user.email, timeout=2000)
-                    email_filled = True
-                    break
-                except:
-                    continue
-            
-            if not email_filled:
-                print(f"  → Could not find email field")
-                return False
-            
-            # Try multiple selectors for password field
-            password_selectors = [
-                'input[type="password"]',
-                'input[name="password"]',
-                'input[id="password"]'
-            ]
-            
-            password_filled = False
-            for selector in password_selectors:
-                try:
-                    await self.page.fill(selector, user.password, timeout=2000)
-                    password_filled = True
-                    break
-                except:
-                    continue
-            
-            if not password_filled:
-                print(f"  → Could not find password field")
-                return False
-            
-            # Click login button
-            login_button_selectors = [
-                'button[type="submit"]',
-                'button:has-text("Login")',
-                'button:has-text("Sign in")',
-                'button:has-text("Log in")',
-                'input[type="submit"]',
-                '[data-testid="login-button"]'
-            ]
-            
-            button_clicked = False
-            for selector in login_button_selectors:
-                try:
-                    await self.page.click(selector, timeout=2000)
-                    button_clicked = True
-                    break
-                except:
-                    continue
-            
-            if not button_clicked:
-                print(f"  → Could not find login button")
-                return False
-            
-            # Wait for navigation after login
+            # Fill login form using specific selectors from debug
             try:
-                await self.page.wait_for_load_state('domcontentloaded', timeout=30000)
-            except:
-                print(f"  → Post-login navigation timeout")
+                await self.page.fill('#email', user.email, timeout=5000)
+                await self.page.fill('#password', user.password, timeout=5000)
+            except Exception as e:
+                print(f"  → Could not fill login fields: {str(e)}")
+                return False
+            
+            # Small delay for any validation
+            await asyncio.sleep(0.5)
+            
+            # Click login button and wait for response
+            try:
+                # Click submit button
+                await self.page.click('button[type="submit"]', timeout=5000)
+                
+                # Wait for navigation or error
+                try:
+                    await self.page.wait_for_url(lambda url: 'login' not in url.lower(), timeout=10000)
+                except:
+                    # Timeout waiting for redirect, might still be on login page
+                    pass
+                
+                # Additional wait for page to settle
                 await asyncio.sleep(2)
+                
+            except Exception as e:
+                print(f"  → Error clicking login button: {str(e)}")
+                return False
             
             # Check if we're logged in (URL should contain tenant or dashboard)
             current_url = self.page.url
@@ -258,34 +216,38 @@ class TestExecutor:
     
     def get_users_for_role(self, role: str) -> List[UserCredential]:
         """Get users for a given role"""
-        role_upper = role.upper().replace(' ', '_')
+        role_lower = role.lower()
         
-        # Map test case roles to config roles
-        role_mappings = {
-            'ANY': ['JUDGE', 'ORGANIZER', 'ADMIN'],
-            'ANY_AUTHENTICATED_ROLE': ['JUDGE', 'ORGANIZER', 'ADMIN'],
-            'ORGANIZER': ['ORGANIZER'],
-            'ADMIN': ['ORGANIZER'],  # Fallback to organizer if no admin
-            'SUPER_ADMIN': ['ORGANIZER'],  # Fallback to organizer
-            'JUDGE': ['JUDGE'],
-            'EMCEE': ['EMCEE'],
-            'CONTESTANT': ['CONTESTANT'],
-            'TALLY_MASTER': ['TALLY_MASTER'],
-            'AUDITOR': ['AUDITOR'],
-            'BOARD': ['BOARD'],
-        }
+        # Map test case roles to config roles (check for keywords in role description)
+        if 'judge' in role_lower and 'no active' not in role_lower:
+            role_key = 'JUDGE'
+        elif 'organizer' in role_lower or 'admin' in role_lower:
+            role_key = 'ORGANIZER'
+        elif 'emcee' in role_lower:
+            role_key = 'EMCEE'
+        elif 'contestant' in role_lower:
+            role_key = 'CONTESTANT'
+        elif 'tally' in role_lower:
+            role_key = 'TALLY_MASTER'
+        elif 'auditor' in role_lower:
+            role_key = 'AUDITOR'
+        elif 'board' in role_lower:
+            role_key = 'BOARD'
+        elif 'any' in role_lower or 'super admin' in role_lower:
+            # For "Any" or "Super admin", try ORGANIZER first, then JUDGE
+            for key in ['ORGANIZER', 'JUDGE', 'BOARD']:
+                if key in self.config.users_by_role:
+                    return self.config.users_by_role[key]
+            return []
+        else:
+            # Try to match directly
+            role_key = role.upper().replace(' ', '_')
         
-        # Get mapped roles
-        mapped_roles = role_mappings.get(role_upper, [role_upper])
+        # Return users for this role
+        if role_key in self.config.users_by_role:
+            return self.config.users_by_role[role_key]
         
-        # Find users
-        users = []
-        for mapped_role in mapped_roles:
-            if mapped_role in self.config.users_by_role:
-                users.extend(self.config.users_by_role[mapped_role])
-                break
-        
-        return users if users else []
+        return []
     
     async def run_all_tests(self):
         """Execute all test cases"""

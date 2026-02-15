@@ -1,0 +1,60 @@
+Starting test runner...
+Python version: 3.12.3 (main, Nov  6 2025, 13:44:16) [GCC 13.3.0]
+Working directory: /workspace/automation
+Importing modules...
+Running tests...
+
+================================================================================
+Starting UAT Test Run - 40 test cases
+Base URL: https://conmgr.com
+Tenant: febtest1
+Execution Mode: MULTI_USER_PER_ROLE
+================================================================================
+
+
+[1/40] Running TC-CORE-001 - CORE - Any authenticated role
+  → Navigating to https://conmgr.com/login
+  ✓ Logged in as judge1@febtest1.com - URL: https://conmgr.com/febtest1/dashboard
+  ✓ PASS - judge1@febtest1.com - Redirected to https://conmgr.com/febtest1/dashboard
+  → Navigating to https://conmgr.com/login
+  ✓ Logged in as judge2@febtest1.com - URL: https://conmgr.com/febtest1/dashboard
+  ✓ PASS - judge2@febtest1.com - Redirected to https://conmgr.com/febtest1/dashboard
+
+[2/40] Running TC-CORE-002 - CORE - Any authenticated role
+  → Navigating to https://conmgr.com/login
+  ✓ Logged in as judge1@febtest1.com - URL: https://conmgr.com/febtest1/dashboard
+  ✓ PASS - judge1@febtest1.com - Page loaded with correct tenant context
+  → Navigating to https://conmgr.com/login
+  ✓ Logged in as judge2@febtest1.com - URL: https://conmgr.com/febtest1/dashboard
+  ✓ PASS - judge2@febtest1.com - Page loaded with correct tenant context
+
+[3/40] Running TC-CORE-003 - CORE - Any authenticated role
+  → Navigating to https://conmgr.com/login
+  ✓ Logged in as judge1@febtest1.com - URL: https://conmgr.com/febtest1/dashboard
+  ✓ PASS - judge1@febtest1.com - Navigation from 404 works
+  → Navigating to https://conmgr.com/login
+  ✗ Login may have failed for judge2@febtest1.com - URL: https://conmgr.com/login
+  ✗ FAIL - judge2@febtest1.com - Login failed
+
+[4/40] Running TC-CORE-004 - CORE - Any
+  → Navigating to https://conmgr.com/login
+  ✓ Logged in as judge1@febtest1.com - URL: https://conmgr.com/febtest1/dashboard
+  ✓ PASS - judge1@febtest1.com - All pages loaded successfully
+  → Navigating to https://conmgr.com/login
+  ✓ Logged in as judge2@febtest1.com - URL: https://conmgr.com/febtest1/dashboard
+  ✓ PASS - judge2@febtest1.com - All pages loaded successfully
+
+[5/40] Running TC-NAV-001 - NAV - Organizer
+  → Navigating to https://conmgr.com/login
+  ✗ Login may have failed for organizer1@febtest1.com - URL: https://conmgr.com/login
+  ✗ FAIL - organizer1@febtest1.com - Login failed
+
+[6/40] Running TC-NAV-002 - NAV - Organizer
+  → Navigating to https://conmgr.com/login
+  ✗ Login may have failed for organizer1@febtest1.com - URL: https://conmgr.com/login
+  ✗ FAIL - organizer1@febtest1.com - Login failed
+
+[7/40] Running TC-NAV-003 - NAV - Super admin
+  → Navigating to https://conmgr.com/login
+  ✗ Login may have failed for organizer1@febtest1.com - URL: https://conmgr.com/login
+  ✗ FAIL - organizer1@febtest1.com - Login failed
