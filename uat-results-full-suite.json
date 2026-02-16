@@ -1,0 +1,26 @@
+{
+  "runId": "full-1771217080483",
+  "runAt": "2026-02-16T04:44:40.483Z",
+  "tenant": "febtest2",
+  "bootstrapRunId": "run1771216460835",
+  "totalCases": 40,
+  "passCount": 29,
+  "failCount": 6,
+  "skipCount": 5,
+  "blockers": ["TC-LIFE-001"],
+  "failures": [
+    {"id": "TC-NAV-003", "role": "admin", "notes": "Admin pages not accessible"},
+    {"id": "TC-JUDGE-003", "role": "judgeAssigned", "notes": "No category/category link to score"},
+    {"id": "TC-BIO-002", "role": "emcee", "notes": "Modal overlay blocked filter click"},
+    {"id": "TC-CERT-002", "role": "tally", "notes": "Tally/certification UI not found"},
+    {"id": "TC-DED-001", "role": "admin", "notes": "No deduction creation UI"},
+    {"id": "TC-LIFE-001", "role": "admin", "notes": "Setup entities not visible (session/login)"}
+  ],
+  "skipped": [
+    {"id": "TC-JUDGE-004", "notes": "No comment field found; may need prior certification"},
+    {"id": "TC-JUDGE-005", "notes": "No commentary upload control found"},
+    {"id": "TC-BIO-003", "notes": "No bio file/image links on page"},
+    {"id": "TC-MFA-001", "notes": "Tenant does not have MFA enforced"},
+    {"id": "TC-MFA-002", "notes": "Tenant does not have MFA enforced"}
+  ]
+}
